@@ -31,6 +31,7 @@ import (
 	"github.com/uber-go/tally"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/metrics"
 )
 
@@ -84,7 +85,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, isRunning)
 	timerChan := time.NewTimer(time.Second * 2).C
 
-	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(newWorkflowIdentifier(domainID, execution))
+	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()))
 	s.Nil(err)
 
 	go func() {
@@ -94,14 +95,10 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 
 	select {
 	case msg := <-channel:
-		s.Equal(historyEvent.domainID, msg.domainID)
-		s.Equal(historyEvent.workflowID, msg.workflowID)
-		s.Equal(historyEvent.runID, msg.runID)
-		s.Equal(historyEvent.nextEventID, msg.nextEventID)
-		s.Equal(historyEvent.isWorkflowRunning, msg.isWorkflowRunning)
+		s.Equal(historyEvent, msg)
 	}
 
-	err = s.historyEventNotifier.UnwatchHistoryEvent(newWorkflowIdentifier(domainID, execution), subscriberID)
+	err = s.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 	s.Nil(err)
 }
 
@@ -124,22 +121,18 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	waitGroup.Add(subscriberCount)
 
 	watchFunc := func() {
-		subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(newWorkflowIdentifier(domainID, execution))
+		subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()))
 		s.Nil(err)
 
 		timeourChan := time.NewTimer(time.Second * 10).C
 
 		select {
 		case msg := <-channel:
-			s.Equal(historyEvent.domainID, msg.domainID)
-			s.Equal(historyEvent.workflowID, msg.workflowID)
-			s.Equal(historyEvent.runID, msg.runID)
-			s.Equal(historyEvent.nextEventID, msg.nextEventID)
-			s.Equal(historyEvent.isWorkflowRunning, msg.isWorkflowRunning)
+			s.Equal(historyEvent, msg)
 		case <-timeourChan:
 			s.Fail("subscribe to new events timeout")
 		}
-		err = s.historyEventNotifier.UnwatchHistoryEvent(newWorkflowIdentifier(domainID, execution), subscriberID)
+		err = s.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 		s.Nil(err)
 		waitGroup.Done()
 	}

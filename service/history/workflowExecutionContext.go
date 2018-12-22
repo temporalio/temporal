@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
+	"github.com/uber/cadence/common/locks"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -73,7 +74,7 @@ type (
 		logger            bark.Logger
 		metricsClient     metrics.Client
 
-		locker                common.Mutex
+		locker                locks.Mutex
 		msBuilder             mutableState
 		updateCondition       int64
 		deleteTimerTask       persistence.Task
@@ -101,7 +102,7 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		executionManager:  executionManager,
 		logger:            lg,
 		metricsClient:     shard.GetMetricsClient(),
-		locker:            common.NewMutex(),
+		locker:            locks.NewMutex(),
 	}
 }
 

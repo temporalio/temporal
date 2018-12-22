@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -2535,7 +2536,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(currentRunID),
 	}
-	contextCurrentCacheKey := newWorkflowIdentifier(domainID, currentExecution)
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	msBuilderCurrent.On("GetAllBufferedReplicationTasks").Return(map[int64]*persistence.BufferedReplicationTask{})
@@ -2733,7 +2734,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(currentRunID),
 	}
-	contextCurrentCacheKey := newWorkflowIdentifier(domainID, currentExecution)
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(false)
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
@@ -2854,7 +2855,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(currentRunID),
 	}
-	contextCurrentCacheKey := newWorkflowIdentifier(domainID, currentExecution)
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	currentNextEventID := int64(999)

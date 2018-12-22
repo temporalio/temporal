@@ -51,6 +51,10 @@ var (
 	ErrUnknownEncodingType = errors.NewInternalFailureError("unknown encoding type")
 )
 
+const (
+	defaultPageSize = int32(100)
+)
+
 type (
 	// HistoryRereplicator is the interface for resending history events to remote
 	HistoryRereplicator interface {
@@ -68,7 +72,34 @@ type (
 		replicationTimeout time.Duration
 		logger             bark.Logger
 	}
+
+	historyRereplicationContext struct {
+		rpcCalls             int
+		domainID             string
+		workflowID           string
+		beginingRunID        string
+		beginingFirstEventID int64
+		endingRunID          string
+		endingNextEventID    int64
+		rereplicator         *HistoryRereplicatorImpl
+	}
 )
+
+func newHistoryRereplicationContext(domainID string, workflowID string,
+	beginingRunID string, beginingFirstEventID int64,
+	endingRunID string, endingNextEventID int64,
+	rereplicator *HistoryRereplicatorImpl) *historyRereplicationContext {
+	return &historyRereplicationContext{
+		rpcCalls:             0,
+		domainID:             domainID,
+		workflowID:           workflowID,
+		beginingRunID:        beginingRunID,
+		beginingFirstEventID: beginingFirstEventID,
+		endingRunID:          endingRunID,
+		endingNextEventID:    endingNextEventID,
+		rereplicator:         rereplicator,
+	}
+}
 
 // NewHistoryRereplicator create a new HistoryRereplicatorImpl
 func NewHistoryRereplicator(domainCache cache.DomainCache, adminClient a.Client, historyClient h.Client,
@@ -92,18 +123,20 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(domainID string, work
 	// beginingRunID can be empty, if there is no workflow in DB
 	// endingRunID must not be empty, since this function is trigger missing events of endingRunID
 
+	rereplicationContext := newHistoryRereplicationContext(domainID, workflowID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID, h)
+
 	runID := beginingRunID
 	for len(runID) != 0 && runID != endingRunID {
-		firstEventID, nextEventID := h.eventIDRange(runID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID)
-		runID, err = h.sendSingleWorkflowHistory(domainID, workflowID, runID, firstEventID, nextEventID)
+		firstEventID, nextEventID := rereplicationContext.eventIDRange(runID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID)
+		runID, err = rereplicationContext.sendSingleWorkflowHistory(domainID, workflowID, runID, firstEventID, nextEventID)
 		if err != nil {
 			return err
 		}
 	}
 
 	if runID == endingRunID {
-		firstEventID, nextEventID := h.eventIDRange(runID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID)
-		_, err = h.sendSingleWorkflowHistory(domainID, workflowID, runID, firstEventID, nextEventID)
+		firstEventID, nextEventID := rereplicationContext.eventIDRange(runID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID)
+		_, err = rereplicationContext.sendSingleWorkflowHistory(domainID, workflowID, runID, firstEventID, nextEventID)
 		return err
 	}
 
@@ -117,7 +150,7 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(domainID string, work
 	runIDs := []string{endingRunID}
 	runID = endingRunID
 	for len(runID) != 0 {
-		runID, err = h.getPrevRunID(domainID, workflowID, runID)
+		runID, err = rereplicationContext.getPrevRunID(domainID, workflowID, runID)
 		if err != nil {
 			return err
 		}
@@ -128,8 +161,8 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(domainID string, work
 	// for all the runIDs, send the history
 	for index := len(runIDs) - 2; index > -1; index-- {
 		runID = runIDs[index]
-		firstEventID, nextEventID := h.eventIDRange(runID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID)
-		_, err = h.sendSingleWorkflowHistory(domainID, workflowID, runID, firstEventID, nextEventID)
+		firstEventID, nextEventID := rereplicationContext.eventIDRange(runID, beginingRunID, beginingFirstEventID, endingRunID, endingNextEventID)
+		_, err = rereplicationContext.sendSingleWorkflowHistory(domainID, workflowID, runID, firstEventID, nextEventID)
 		if err != nil {
 			return err
 		}
@@ -137,7 +170,7 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(domainID string, work
 	return nil
 }
 
-func (h *HistoryRereplicatorImpl) sendSingleWorkflowHistory(domainID string, workflowID string, runID string,
+func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string, workflowID string, runID string,
 	firstEventID int64, nextEventID int64) (string, error) {
 
 	if firstEventID == nextEventID {
@@ -152,10 +185,9 @@ func (h *HistoryRereplicatorImpl) sendSingleWorkflowHistory(domainID string, wor
 	var eventStoreVersion int32
 	var replicationInfo map[string]*shared.ReplicationInfo
 
-	pageSize := int32(100)
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
-		response, err := h.getHistory(domainID, workflowID, runID, firstEventID, nextEventID, token, pageSize)
+		response, err := c.getHistory(domainID, workflowID, runID, firstEventID, nextEventID, token, defaultPageSize)
 		if err != nil {
 			return "", err
 		}
@@ -168,17 +200,17 @@ func (h *HistoryRereplicatorImpl) sendSingleWorkflowHistory(domainID string, wor
 			// it is intentional that the first request is nil
 			// the reason is, we need to check the last request, if that request contains
 			// continue as new, then new run history shall be included
-			err := h.sendReplicationRawRequest(pendingRequest)
+			err := c.sendReplicationRawRequest(pendingRequest)
 			if err != nil {
 				return "", err
 			}
-			pendingRequest = h.createReplicationRawRequest(domainID, workflowID, runID, batch, eventStoreVersion, replicationInfo)
+			pendingRequest = c.createReplicationRawRequest(domainID, workflowID, runID, batch, eventStoreVersion, replicationInfo)
 		}
 	}
 	// after this for loop, there shall be one request not sent yet
 	// this request contains the last event, possible continue as new event
 	lastBatch := pendingRequest.History
-	nextRunID, err := h.getNextRunID(lastBatch)
+	nextRunID, err := c.getNextRunID(lastBatch)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +219,7 @@ func (h *HistoryRereplicatorImpl) sendSingleWorkflowHistory(domainID string, wor
 		// we need to do something special for that
 		var token []byte
 		pageSize := int32(1)
-		response, err := h.getHistory(domainID, workflowID, nextRunID, common.FirstEventID, common.EndEventID, token, pageSize)
+		response, err := c.getHistory(domainID, workflowID, nextRunID, common.FirstEventID, common.EndEventID, token, pageSize)
 		if err != nil {
 			return "", err
 		}
@@ -198,10 +230,10 @@ func (h *HistoryRereplicatorImpl) sendSingleWorkflowHistory(domainID string, wor
 		pendingRequest.NewRunEventStoreVersion = response.EventStoreVersion
 	}
 
-	return nextRunID, h.sendReplicationRawRequest(pendingRequest)
+	return nextRunID, c.sendReplicationRawRequest(pendingRequest)
 }
 
-func (h *HistoryRereplicatorImpl) eventIDRange(currentRunID string,
+func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 	beginingRunID string, beginingFirstEventID int64,
 	endingRunID string, endingNextEventID int64) (int64, int64) {
 
@@ -225,7 +257,7 @@ func (h *HistoryRereplicatorImpl) eventIDRange(currentRunID string,
 	return common.FirstEventID, common.EndEventID
 }
 
-func (h *HistoryRereplicatorImpl) createReplicationRawRequest(
+func (c *historyRereplicationContext) createReplicationRawRequest(
 	domainID string, workflowID string, runID string,
 	historyBlob *shared.DataBlob,
 	eventStoreVersion int32,
@@ -248,30 +280,66 @@ func (h *HistoryRereplicatorImpl) createReplicationRawRequest(
 	return request
 }
 
-func (h *HistoryRereplicatorImpl) sendReplicationRawRequest(request *history.ReplicateRawEventsRequest) error {
+func (c *historyRereplicationContext) sendReplicationRawRequest(request *history.ReplicateRawEventsRequest) error {
 
 	if request == nil {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), h.replicationTimeout)
-	defer cancel()
-	err := h.historyClient.ReplicateRawEvents(ctx, request)
-	if err != nil {
-		h.logger.WithFields(bark.Fields{
-			logging.TagDomainID:            request.GetDomainUUID(),
-			logging.TagWorkflowExecutionID: request.WorkflowExecution.GetWorkflowId(),
-			logging.TagWorkflowRunID:       request.WorkflowExecution.GetRunId(),
-			logging.TagErr:                 err,
-		}).Error("error sending history")
+	ctx, cancel := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
+	defer func() {
+		cancel()
+		c.rpcCalls++
+	}()
+	err := c.rereplicator.historyClient.ReplicateRawEvents(ctx, request)
+	if err == nil {
+		return nil
 	}
-	return err
+
+	logger := c.rereplicator.logger.WithFields(bark.Fields{
+		logging.TagDomainID:            request.GetDomainUUID(),
+		logging.TagWorkflowExecutionID: request.WorkflowExecution.GetWorkflowId(),
+		logging.TagWorkflowRunID:       request.WorkflowExecution.GetRunId(),
+	})
+
+	// sometimes there can be case when the first re-replication call
+	// trigger an history reset and this reset can leave a hole in target
+	// workflow, we should amend that hole and continue
+	retryErr, ok := err.(*shared.RetryTaskError)
+	if !ok {
+		logger.WithField(logging.TagErr, err).Error("error sending history")
+		return err
+	}
+	if c.rpcCalls > 0 {
+		logger.Error("encounter RetryTaskError not in first call")
+		return err
+	}
+	if retryErr.GetRunId() != c.beginingRunID {
+		logger.Error("encounter RetryTaskError with non expected run ID")
+		return err
+	}
+	if retryErr.GetNextEventId() >= c.beginingFirstEventID {
+		logger.Error("encounter RetryTaskError with larger event ID")
+		return err
+	}
+
+	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryErr.GetRunId(),
+		retryErr.GetNextEventId(), c.beginingFirstEventID)
+	if err != nil {
+		logger.WithField(logging.TagErr, err).Error("error sending history")
+		return err
+	}
+
+	// after the amend of the missing history events after history reset, redo the request
+	ctxAgain, cancelAgain := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
+	defer cancelAgain()
+	return c.rereplicator.historyClient.ReplicateRawEvents(ctxAgain, request)
 }
 
-func (h *HistoryRereplicatorImpl) getHistory(domainID string, workflowID string, runID string,
+func (c *historyRereplicationContext) getHistory(domainID string, workflowID string, runID string,
 	firstEventID int64, nextEventID int64, token []byte, pageSize int32) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
 
-	logger := h.logger.WithFields(bark.Fields{
+	logger := c.rereplicator.logger.WithFields(bark.Fields{
 		logging.TagDomainID:            domainID,
 		logging.TagWorkflowExecutionID: workflowID,
 		logging.TagWorkflowRunID:       runID,
@@ -279,16 +347,16 @@ func (h *HistoryRereplicatorImpl) getHistory(domainID string, workflowID string,
 		logging.TagNextEventID:         nextEventID,
 	})
 
-	domainEntry, err := h.domainCache.GetDomainByID(domainID)
+	domainEntry, err := c.rereplicator.domainCache.GetDomainByID(domainID)
 	if err != nil {
 		logger.WithField(logging.TagErr, err).Error("error getting domain")
 		return nil, err
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := context.WithTimeout(context.Background(), h.replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
 	defer cancel()
-	response, err := h.adminClient.GetWorkflowExecutionRawHistory(ctx, &admin.GetWorkflowExecutionRawHistoryRequest{
+	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &admin.GetWorkflowExecutionRawHistoryRequest{
 		Domain: common.StringPtr(domainName),
 		Execution: &shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -312,11 +380,11 @@ func (h *HistoryRereplicatorImpl) getHistory(domainID string, workflowID string,
 	return response, nil
 }
 
-func (h *HistoryRereplicatorImpl) getPrevRunID(domainID string, workflowID string, runID string) (string, error) {
+func (c *historyRereplicationContext) getPrevRunID(domainID string, workflowID string, runID string) (string, error) {
 
 	var token []byte // use nil since we are only getting the first event batch, for the start event
 	pageSize := int32(1)
-	response, err := h.getHistory(domainID, workflowID, runID, common.FirstEventID, common.EndEventID, token, pageSize)
+	response, err := c.getHistory(domainID, workflowID, runID, common.FirstEventID, common.EndEventID, token, pageSize)
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
 			return "", err
@@ -326,7 +394,7 @@ func (h *HistoryRereplicatorImpl) getPrevRunID(domainID string, workflowID strin
 	}
 
 	blob := response.HistoryBatches[0]
-	historyEvents, err := h.deserializeBlob(blob)
+	historyEvents, err := c.deserializeBlob(blob)
 	if err != nil {
 		return "", err
 	}
@@ -340,9 +408,9 @@ func (h *HistoryRereplicatorImpl) getPrevRunID(domainID string, workflowID strin
 	return attr.GetContinuedExecutionRunId(), nil
 }
 
-func (h *HistoryRereplicatorImpl) getNextRunID(blob *shared.DataBlob) (string, error) {
+func (c *historyRereplicationContext) getNextRunID(blob *shared.DataBlob) (string, error) {
 
-	historyEvents, err := h.deserializeBlob(blob)
+	historyEvents, err := c.deserializeBlob(blob)
 	if err != nil {
 		return "", err
 	}
@@ -356,14 +424,14 @@ func (h *HistoryRereplicatorImpl) getNextRunID(blob *shared.DataBlob) (string, e
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (h *HistoryRereplicatorImpl) deserializeBlob(blob *shared.DataBlob) ([]*shared.HistoryEvent, error) {
+func (c *historyRereplicationContext) deserializeBlob(blob *shared.DataBlob) ([]*shared.HistoryEvent, error) {
 
 	var err error
 	var historyEvents []*shared.HistoryEvent
 
 	switch blob.GetEncodingType() {
 	case shared.EncodingTypeThriftRW:
-		historyEvents, err = h.serializer.DeserializeBatchEvents(&persistence.DataBlob{
+		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&persistence.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		})

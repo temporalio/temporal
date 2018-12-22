@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/definition"
 	ce "github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
@@ -600,11 +601,11 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 	// if caller decide to long poll on workflow execution
 	// and the event ID we are looking for is smaller than current next event ID
 	if expectedNextEventID >= response.GetNextEventId() && response.GetIsWorkflowRunning() {
-		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(newWorkflowIdentifier(domainID, &execution))
+		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()))
 		if err != nil {
 			return nil, err
 		}
-		defer e.historyEventNotifier.UnwatchHistoryEvent(newWorkflowIdentifier(domainID, &execution), subscriberID)
+		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, domainID, execution)

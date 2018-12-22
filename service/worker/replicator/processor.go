@@ -26,6 +26,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	farm "github.com/dgryski/go-farm"
+	"github.com/uber/cadence/common/definition"
+
+	"github.com/uber/cadence/common/locks"
+
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -65,6 +70,8 @@ type (
 		historyRereplicator xdc.HistoryRereplicator
 		historyClient       history.Client
 		msgEncoder          codec.BinaryEncoder
+
+		rereplicationLock locks.IDMutex
 	}
 )
 
@@ -76,6 +83,8 @@ const (
 	replicationTaskInitialRetryInterval = 100 * time.Millisecond
 	replicationTaskMaxRetryInterval     = 2 * time.Second
 	replicationTaskExpirationInterval   = 10 * time.Second
+
+	rereplicationLockShards = uint32(32)
 )
 
 var (
@@ -109,6 +118,13 @@ func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string,
 		historyRereplicator: historyRereplicator,
 		historyClient:       retryableHistoryClient,
 		msgEncoder:          codec.NewThriftRWEncoder(),
+		rereplicationLock: locks.NewIDMutex(rereplicationLockShards, func(key interface{}) uint32 {
+			id, ok := key.(definition.WorkflowIdentifier)
+			if !ok {
+				return 0
+			}
+			return farm.Fingerprint32([]byte(id.DomainID + id.WorkflowID + id.RunID))
+		}),
 	}
 }
 
@@ -423,7 +439,7 @@ Loop:
 
 RetryLoop:
 	for i := 0; i < p.config.ReplicatorBufferRetryCount; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 		err = p.historyClient.ReplicateEvents(ctx, req)
 		cancel()
 
@@ -437,22 +453,31 @@ RetryLoop:
 		break RetryLoop
 	}
 
-	if retryErr, ok := err.(*shared.RetryTaskError); ok {
-		beginRunID := retryErr.GetRunId()
-		beginEventID := retryErr.GetNextEventId()
-		endRunID := attr.GetRunId()
-		endEventID := attr.GetFirstEventId()
+	// here we lock on the current workflow (run ID beging empty) to ensure only one message will actually
+	// try to fix the missing kafka message.
+	workflowIdendifier := definition.NewWorkflowIdentifier(attr.GetDomainId(), attr.GetWorkflowId(), "")
+	p.rereplicationLock.LockID(workflowIdendifier)
+	defer p.rereplicationLock.UnlockID(workflowIdendifier)
 
-		// history service will return RetryTaskError, we can use it as an hint
-		errResend := p.historyRereplicator.SendMultiWorkflowHistory(
-			attr.GetDomainId(), attr.GetWorkflowId(),
-			beginRunID, beginEventID, endRunID, endEventID,
-		)
-		if errResend != nil {
-			logger.WithField(logging.TagErr, err).Error("Error resending history.")
-		}
+	// before actually trying to re-replicate the missing event, try again
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	err = p.historyClient.ReplicateEvents(ctx, req)
+	cancel()
+
+	retryErr, ok := err.(*shared.RetryTaskError)
+	if !ok {
+		return err
 	}
-	return err
+
+	// this is the retry error
+	beginRunID := retryErr.GetRunId()
+	beginEventID := retryErr.GetNextEventId()
+	endRunID := attr.GetRunId()
+	endEventID := attr.GetFirstEventId()
+	return p.historyRereplicator.SendMultiWorkflowHistory(
+		attr.GetDomainId(), attr.GetWorkflowId(),
+		beginRunID, beginEventID, endRunID, endEventID,
+	)
 }
 
 func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {

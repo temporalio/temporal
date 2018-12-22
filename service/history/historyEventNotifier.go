@@ -28,6 +28,7 @@ import (
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/metrics"
 )
 
@@ -60,11 +61,11 @@ var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 func newHistoryEventNotification(domainID string, workflowExecution *gen.WorkflowExecution,
 	lastFirstEventID int64, nextEventID int64, previousStartedEventID int64, isWorkflowRunning bool) *historyEventNotification {
 	return &historyEventNotification{
-		workflowIdentifier: workflowIdentifier{
-			domainID:   domainID,
-			workflowID: *workflowExecution.WorkflowId,
-			runID:      *workflowExecution.RunId,
-		},
+		id: definition.NewWorkflowIdentifier(
+			domainID,
+			workflowExecution.GetWorkflowId(),
+			workflowExecution.GetRunId(),
+		),
 		lastFirstEventID:       lastFirstEventID,
 		nextEventID:            nextEventID,
 		previousStartedEventID: previousStartedEventID,
@@ -74,11 +75,11 @@ func newHistoryEventNotification(domainID string, workflowExecution *gen.Workflo
 
 func newHistoryEventNotifier(metrics metrics.Client, workflowIDToShardID func(string) int) *historyEventNotifierImpl {
 	hashFn := func(key interface{}) uint32 {
-		id, ok := key.(historyEventNotification)
+		notification, ok := key.(historyEventNotification)
 		if !ok {
 			return 0
 		}
-		return uint32(workflowIDToShardID(id.workflowID))
+		return uint32(workflowIDToShardID(notification.id.WorkflowID))
 	}
 	return &historyEventNotifierImpl{
 		metrics:    metrics,
@@ -93,7 +94,7 @@ func newHistoryEventNotifier(metrics metrics.Client, workflowIDToShardID func(st
 }
 
 func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
-	identifier workflowIdentifier) (string, chan *historyEventNotification, error) {
+	identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error) {
 
 	channel := make(chan *historyEventNotification, 1)
 	subscriberID := uuid.New()
@@ -122,7 +123,7 @@ func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
 }
 
 func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
-	identifier workflowIdentifier, subscriberID string) error {
+	identifier definition.WorkflowIdentifier, subscriberID string) error {
 
 	success := true
 	notifier.eventsPubsubs.RemoveIf(identifier, func(key interface{}, value interface{}) bool {
@@ -149,7 +150,7 @@ func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
 }
 
 func (notifier *historyEventNotifierImpl) dispatchHistoryEventNotification(event *historyEventNotification) {
-	identifier := event.workflowIdentifier
+	identifier := event.id
 
 	timer := notifier.metrics.StartTimer(metrics.HistoryEventNotificationScope, metrics.HistoryEventNotificationFanoutLatency)
 	defer timer.Stop()

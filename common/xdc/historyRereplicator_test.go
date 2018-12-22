@@ -123,7 +123,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 	runID := uuid.New()
 	firstEventID := int64(123)
 	nextEventID := firstEventID + 100
-	pageSize := int32(100)
+	pageSize := defaultPageSize
 	replicationInfo := map[string]*shared.ReplicationInfo{
 		"random data center": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(777),
@@ -186,7 +186,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 
 func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Continued() {
 	workflowID := "some random workflow ID"
-	pageSize := int32(100)
+	pageSize := defaultPageSize
 	beginingEventID := int64(133)
 	endingEventID := int64(20)
 
@@ -455,7 +455,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	nextToken := []byte("some random next token")
-	pageSize := int32(100)
+	pageSize := defaultPageSize
 	replicationInfo := map[string]*shared.ReplicationInfo{
 		"random data center": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(777),
@@ -568,7 +568,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		NewRunEventStoreVersion: nil,
 	}).Return(nil).Once()
 
-	nextRunID, err := s.rereplicator.sendSingleWorkflowHistory(s.domainID, workflowID, runID, common.FirstEventID, common.EndEventID)
+	nextRunID, err := s.getDummyRereplicationContext().sendSingleWorkflowHistory(s.domainID, workflowID, runID, common.FirstEventID, common.EndEventID)
 	s.Nil(err)
 	s.Equal("", nextRunID)
 }
@@ -578,7 +578,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	runID := uuid.New()
 	newRunID := uuid.New()
 	nextToken := []byte("some random next token")
-	pageSize := int32(100)
+	pageSize := defaultPageSize
 	replicationInfo := map[string]*shared.ReplicationInfo{
 		"random data center": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(777),
@@ -734,7 +734,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		NewRunEventStoreVersion: common.Int32Ptr(eventStoreVersionNew),
 	}).Return(nil).Once()
 
-	nextRunID, err := s.rereplicator.sendSingleWorkflowHistory(s.domainID, workflowID, runID, common.FirstEventID, common.EndEventID)
+	nextRunID, err := s.getDummyRereplicationContext().sendSingleWorkflowHistory(s.domainID, workflowID, runID, common.FirstEventID, common.EndEventID)
 	s.Nil(err)
 	s.Equal(newRunID, nextRunID)
 }
@@ -747,17 +747,17 @@ func (s *historyRereplicatorSuite) TestEventIDRange() {
 	endingEventID := int64(1)
 
 	runID := beginingRunID
-	firstEventID, nextEventID := s.rereplicator.eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
+	firstEventID, nextEventID := s.getDummyRereplicationContext().eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
 	s.Equal(beginingEventID, firstEventID)
 	s.Equal(common.EndEventID, nextEventID)
 
 	runID = uuid.New()
-	firstEventID, nextEventID = s.rereplicator.eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
+	firstEventID, nextEventID = s.getDummyRereplicationContext().eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
 	s.Equal(common.FirstEventID, firstEventID)
 	s.Equal(common.EndEventID, nextEventID)
 
 	runID = endingRunID
-	firstEventID, nextEventID = s.rereplicator.eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
+	firstEventID, nextEventID = s.getDummyRereplicationContext().eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
 	s.Equal(common.FirstEventID, firstEventID)
 	s.Equal(endingEventID, nextEventID)
 
@@ -767,7 +767,7 @@ func (s *historyRereplicatorSuite) TestEventIDRange() {
 	endingRunID = beginingRunID
 	endingEventID = endingEventID + 100
 	runID = beginingRunID
-	firstEventID, nextEventID = s.rereplicator.eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
+	firstEventID, nextEventID = s.getDummyRereplicationContext().eventIDRange(runID, beginingRunID, beginingEventID, endingRunID, endingEventID)
 	s.Equal(beginingEventID, firstEventID)
 	s.Equal(endingEventID, nextEventID)
 }
@@ -798,12 +798,12 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
 		NewRunHistory:           nil,
 		NewRunEventStoreVersion: nil,
-	}, s.rereplicator.createReplicationRawRequest(s.domainID, workflowID, runID, blob, eventStoreVersion, replicationInfo))
+	}, s.getDummyRereplicationContext().createReplicationRawRequest(s.domainID, workflowID, runID, blob, eventStoreVersion, replicationInfo))
 }
 
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 	// test that nil request will be a no op
-	s.Nil(s.rereplicator.sendReplicationRawRequest(nil))
+	s.Nil(s.getDummyRereplicationContext().sendReplicationRawRequest(nil))
 
 	request := &history.ReplicateRawEventsRequest{
 		DomainUUID: common.StringPtr(s.domainID),
@@ -830,8 +830,133 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 	}
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, request).Return(nil).Once()
-	err := s.rereplicator.sendReplicationRawRequest(request)
+	err := s.getDummyRereplicationContext().sendReplicationRawRequest(request)
 	s.Nil(err)
+}
+
+func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_MissingHistory() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	replicationInfo := map[string]*shared.ReplicationInfo{
+		"random data center": &shared.ReplicationInfo{
+			Version:     common.Int64Ptr(777),
+			LastEventId: common.Int64Ptr(999),
+		},
+	}
+	eventStoreVersion := int32(0)
+	request := &history.ReplicateRawEventsRequest{
+		DomainUUID: common.StringPtr(s.domainID),
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		ReplicationInfo: replicationInfo,
+		History: &shared.DataBlob{
+			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+			Data:         []byte("some random history blob"),
+		},
+		NewRunHistory: &shared.DataBlob{
+			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+			Data:         []byte("some random new run history blob"),
+		},
+		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
+		NewRunEventStoreVersion: common.Int32Ptr(2),
+	}
+
+	rereplicationContext := newHistoryRereplicationContext(s.domainID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
+	retryErr := &shared.RetryTaskError{
+		DomainId:    common.StringPtr(s.domainID),
+		WorkflowId:  common.StringPtr(workflowID),
+		RunId:       common.StringPtr(runID),
+		NextEventId: common.Int64Ptr(rereplicationContext.beginingFirstEventID - 10),
+	}
+	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, request).Return(retryErr).Once()
+
+	missingEventBatch := []*shared.HistoryEvent{
+		&shared.HistoryEvent{
+			EventId:   common.Int64Ptr(1),
+			Version:   common.Int64Ptr(123),
+			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+			EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
+		},
+	}
+	missingBlob := s.serializeEvents(missingEventBatch)
+	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
+		Domain: common.StringPtr(s.domainName),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		FirstEventId:    common.Int64Ptr(retryErr.GetNextEventId()),
+		NextEventId:     common.Int64Ptr(rereplicationContext.beginingFirstEventID),
+		MaximumPageSize: common.Int32Ptr(defaultPageSize),
+		NextPageToken:   nil,
+	}).Return(&admin.GetWorkflowExecutionRawHistoryResponse{
+		HistoryBatches:    []*shared.DataBlob{missingBlob},
+		NextPageToken:     nil,
+		ReplicationInfo:   replicationInfo,
+		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
+	}, nil).Once()
+	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
+		DomainUUID: common.StringPtr(s.domainID),
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		ReplicationInfo:         replicationInfo,
+		History:                 missingBlob,
+		NewRunHistory:           nil,
+		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
+		NewRunEventStoreVersion: nil,
+	}).Return(nil).Once()
+
+	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, request).Return(nil).Once()
+
+	err := rereplicationContext.sendReplicationRawRequest(request)
+	s.Nil(err)
+}
+
+func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	replicationInfo := map[string]*shared.ReplicationInfo{
+		"random data center": &shared.ReplicationInfo{
+			Version:     common.Int64Ptr(777),
+			LastEventId: common.Int64Ptr(999),
+		},
+	}
+	eventStoreVersion := int32(0)
+	request := &history.ReplicateRawEventsRequest{
+		DomainUUID: common.StringPtr(s.domainID),
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		ReplicationInfo: replicationInfo,
+		History: &shared.DataBlob{
+			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+			Data:         []byte("some random history blob"),
+		},
+		NewRunHistory: &shared.DataBlob{
+			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+			Data:         []byte("some random new run history blob"),
+		},
+		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
+		NewRunEventStoreVersion: common.Int32Ptr(2),
+	}
+
+	rereplicationContext := newHistoryRereplicationContext(s.domainID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
+	rereplicationContext.rpcCalls = 1 // so this will be the second API call for rereplication
+	retryErr := &shared.RetryTaskError{
+		DomainId:    common.StringPtr(s.domainID),
+		WorkflowId:  common.StringPtr(workflowID),
+		RunId:       common.StringPtr(runID),
+		NextEventId: common.Int64Ptr(rereplicationContext.beginingFirstEventID - 10),
+	}
+	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, request).Return(retryErr).Once()
+
+	err := rereplicationContext.sendReplicationRawRequest(request)
+	s.Equal(retryErr, err)
 }
 
 func (s *historyRereplicatorSuite) TestGetHistory() {
@@ -870,7 +995,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 		NextPageToken:   nextTokenIn,
 	}).Return(response, nil).Once()
 
-	out, err := s.rereplicator.getHistory(s.domainID, workflowID, runID, firstEventID, nextEventID, nextTokenIn, pageSize)
+	out, err := s.getDummyRereplicationContext().getHistory(s.domainID, workflowID, runID, firstEventID, nextEventID, nextTokenIn, pageSize)
 	s.Nil(err)
 	s.Equal(response, out)
 }
@@ -921,13 +1046,13 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 	// has prev run
 	prevRunID := uuid.New()
 	prepareFn(common.StringPtr(prevRunID))
-	runID, err := s.rereplicator.getPrevRunID(s.domainID, workflowID, currentRunID)
+	runID, err := s.getDummyRereplicationContext().getPrevRunID(s.domainID, workflowID, currentRunID)
 	s.Nil(err)
 	s.Equal(prevRunID, runID)
 
 	// no prev run
 	prepareFn(nil)
-	runID, err = s.rereplicator.getPrevRunID(s.domainID, workflowID, currentRunID)
+	runID, err = s.getDummyRereplicationContext().getPrevRunID(s.domainID, workflowID, currentRunID)
 	s.Nil(err)
 	s.Equal("", runID)
 }
@@ -954,7 +1079,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
 	s.Nil(err)
 
-	runID, err := s.rereplicator.getNextRunID(&shared.DataBlob{
+	runID, err := s.getDummyRereplicationContext().getNextRunID(&shared.DataBlob{
 		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 		Data:         blob.Data,
 	})
@@ -981,7 +1106,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
 	s.Nil(err)
 
-	runID, err := s.rereplicator.getNextRunID(&shared.DataBlob{
+	runID, err := s.getDummyRereplicationContext().getNextRunID(&shared.DataBlob{
 		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 		Data:         blob.Data,
 	})
@@ -1008,7 +1133,7 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
 	s.Nil(err)
 
-	eventBatchOut, err := s.rereplicator.deserializeBlob(&shared.DataBlob{
+	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&shared.DataBlob{
 		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 		Data:         blob.Data,
 	})
@@ -1022,5 +1147,11 @@ func (s *historyRereplicatorSuite) serializeEvents(events []*shared.HistoryEvent
 	return &shared.DataBlob{
 		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 		Data:         blob.Data,
+	}
+}
+
+func (s *historyRereplicatorSuite) getDummyRereplicationContext() *historyRereplicationContext {
+	return &historyRereplicationContext{
+		rereplicator: s.rereplicator,
 	}
 }

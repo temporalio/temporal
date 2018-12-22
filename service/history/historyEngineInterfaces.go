@@ -27,18 +27,13 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/persistence"
 )
 
 type (
-	workflowIdentifier struct {
-		domainID   string
-		workflowID string
-		runID      string
-	}
-
 	historyEventNotification struct {
-		workflowIdentifier
+		id                     definition.WorkflowIdentifier
 		lastFirstEventID       int64
 		nextEventID            int64
 		previousStartedEventID int64
@@ -148,15 +143,7 @@ type (
 	historyEventNotifier interface {
 		common.Daemon
 		NotifyNewHistoryEvent(event *historyEventNotification)
-		WatchHistoryEvent(identifier workflowIdentifier) (string, chan *historyEventNotification, error)
-		UnwatchHistoryEvent(identifier workflowIdentifier, subscriberID string) error
+		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error)
+		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
 	}
 )
-
-func newWorkflowIdentifier(domainID string, execution *workflow.WorkflowExecution) workflowIdentifier {
-	return workflowIdentifier{
-		domainID:   domainID,
-		workflowID: execution.GetWorkflowId(),
-		runID:      execution.GetRunId(),
-	}
-}

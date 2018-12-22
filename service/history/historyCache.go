@@ -27,6 +27,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -115,7 +116,7 @@ func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Cont
 		return nil, nil, nil, false, err
 	}
 
-	key := newWorkflowIdentifier(domainID, &execution)
+	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())
 	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
 	releaseFunc := func(error) {}
 	// If cache hit, we need to lock the cache to prevent race condition
@@ -153,7 +154,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), func(error) {}, nil
 	}
 
-	key := newWorkflowIdentifier(domainID, &execution)
+	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())
 	workflowCtx, cacheHit := c.Get(key).(workflowExecutionContext)
 	if !cacheHit {
 		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.CacheMissCounter)
@@ -181,7 +182,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *historyCache) makeReleaseFunc(key workflowIdentifier, status int32, context workflowExecutionContext) func(error) {
+func (c *historyCache) makeReleaseFunc(key definition.WorkflowIdentifier, status int32, context workflowExecutionContext) func(error) {
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if err != nil {
