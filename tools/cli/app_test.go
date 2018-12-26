@@ -21,6 +21,10 @@
 package cli
 
 import (
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/golang/mock/gomock"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
@@ -36,9 +40,6 @@ import (
 	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	clientFrontendTest "go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
 	"go.uber.org/cadence/.gen/go/shared"
-	"strings"
-	"testing"
-	"time"
 )
 
 type cliAppSuite struct {
@@ -476,8 +477,9 @@ var describeTaskListResponse = &shared.DescribeTaskListResponse{
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	resp := &admin.DescribeWorkflowExecutionResponse{
-		ShardId:     common.StringPtr("test-shard-id"),
-		HistoryAddr: common.StringPtr("ip:port"),
+		ShardId:                common.StringPtr("test-shard-id"),
+		HistoryAddr:            common.StringPtr("ip:port"),
+		MutableStateInDatabase: common.StringPtr("{}"),
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)

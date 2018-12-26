@@ -23,11 +23,13 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/persistence"
 	cassp "github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/tools/cassandra"
@@ -130,6 +132,24 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	}
 
 	prettyPrintJSONObject(resp)
+
+	if resp != nil {
+		msStr := resp.GetMutableStateInDatabase()
+		ms := persistence.WorkflowMutableState{}
+		err = json.Unmarshal([]byte(msStr), &ms)
+		if err != nil {
+			ErrorAndExit("json.Unmarshal err", err)
+		}
+		if ms.ExecutionInfo != nil && ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
+			branchInfo := shared.HistoryBranch{}
+			thriftrwEncoder := codec.NewThriftRWEncoder()
+			err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
+			if err != nil {
+				ErrorAndExit("thriftrwEncoder.Decode err", err)
+			}
+			prettyPrintJSONObject(branchInfo)
+		}
+	}
 }
 
 // AdminDeleteWorkflow describe a new workflow execution for admin
