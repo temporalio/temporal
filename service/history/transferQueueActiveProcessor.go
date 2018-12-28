@@ -377,7 +377,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 	workflowCloseTimestamp := msBuilder.GetLastUpdatedTimestamp()
 	workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
-	workflowHistoryLength := msBuilder.GetNextEventID()
+	workflowHistoryLength := msBuilder.GetNextEventID() - 1
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.

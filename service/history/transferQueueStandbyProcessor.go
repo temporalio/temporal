@@ -277,7 +277,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 		workflowCloseTimestamp := msBuilder.GetLastUpdatedTimestamp()
 		workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
-		workflowHistoryLength := msBuilder.GetNextEventID()
+		workflowHistoryLength := msBuilder.GetNextEventID() - 1
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
 		if err != nil {
