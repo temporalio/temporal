@@ -4385,29 +4385,30 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 
 func (s *engineSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
 	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
-	err := validateSignalExternalWorkflowExecutionAttributes(attributes)
+	maxIDLengthLimit := 1000
+	err := validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.EqualError(err, "BadRequestError{Message: SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.}")
 
 	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.EqualError(err, "BadRequestError{Message: Execution is nil on decision.}")
 
 	attributes.Execution = &workflow.WorkflowExecution{}
 	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.EqualError(err, "BadRequestError{Message: SignalName is not set on decision.}")
 
 	attributes.Execution.RunId = common.StringPtr("run-id")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
 	attributes.Execution.RunId = common.StringPtr(validRunID)
 
 	attributes.SignalName = common.StringPtr("my signal name")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.EqualError(err, "BadRequestError{Message: Input is not set on decision.}")
 
 	attributes.Input = []byte("test input")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.Nil(err)
 }
 

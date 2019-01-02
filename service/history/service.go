@@ -36,6 +36,7 @@ type Config struct {
 
 	EnableSyncActivityHeartbeat dynamicconfig.BoolPropertyFn
 	RPS                         dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS           dynamicconfig.IntPropertyFn
 	EnableVisibilitySampling    dynamicconfig.BoolPropertyFn
 	VisibilityOpenMaxQPS        dynamicconfig.IntPropertyFnWithDomainFilter
@@ -137,6 +138,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		NumberOfShards:                                        numberOfShards,
 		EnableSyncActivityHeartbeat:                           dc.GetBoolProperty(dynamicconfig.EnableSyncActivityHeartbeat, false),
 		RPS:                                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
+		MaxIDLengthLimit:                                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                                     dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		EnableVisibilitySampling:                              dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		VisibilityOpenMaxQPS:                                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),

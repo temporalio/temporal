@@ -60,6 +60,7 @@ var keys = map[Key]string{
 	HistorySizeLimitWarn:   "limit.historySize.warn",
 	HistoryCountLimitError: "limit.historyCount.error",
 	HistoryCountLimitWarn:  "limit.historyCount.warn",
+	MaxIDLengthLimit:       "limit.maxIDLength",
 
 	// frontend settings
 	FrontendPersistenceMaxQPS:      "frontend.persistenceMaxQPS",
@@ -192,6 +193,10 @@ const (
 	HistoryCountLimitError
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn
+
+	// MaxIDLengthLimit is the length limit for various IDs, including: Domain, TaskList, WorkflowID, ActivityID, TimerID,
+	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
+	MaxIDLengthLimit
 
 	// key for frontend
 

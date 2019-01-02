@@ -37,6 +37,7 @@ type Config struct {
 	VisibilityListMaxQPS     dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryMaxPageSize       dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                      dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit         dynamicconfig.IntPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -62,6 +63,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		VisibilityListMaxQPS:           dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
 		HistoryMaxPageSize:             dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                            dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
+		MaxIDLengthLimit:               dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		HistoryMgrNumConns:             dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxDecisionStartToCloseTimeout: dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
 		EnableAdminProtection:          dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
