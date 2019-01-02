@@ -1,11 +1,12 @@
 {
   "CurrVersion": "0.12",
   "MinCompatibleVersion": "0.12",
-  "Description": "Support history events v2, system workflow domain bootstrap",
+  "Description": "Support history events v2, system workflow domain bootstrap, add archival config to domain config",
   "SchemaUpdateCqlFiles": [
     "events_v2.cql",
     "signal_count.cql",
     "system_domain_bootstrap.cql",
-    "cron.cql"
+    "cron.cql",
+    "add_archival_config.cql"
   ]
 }

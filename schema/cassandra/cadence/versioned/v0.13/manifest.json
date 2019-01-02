@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "0.13",
-  "MinCompatibleVersion": "0.13",
-  "Description": "Add archival config to domain config",
-  "SchemaUpdateCqlFiles": [
-    "add_archival_config.cql"
-  ]
-}

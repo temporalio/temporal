@@ -87,8 +87,6 @@ func NewMetadata(enableGlobalDomain dynamicconfig.BoolPropertyFn, failoverVersio
 		panic("Master cluster name is empty")
 	} else if len(currentClusterName) == 0 {
 		panic("Current cluster name is empty")
-	} else if len(deploymentGroup) == 0 {
-		panic("Deployment group name is empty")
 	}
 	initialFailoverVersionClusters := make(map[int64]string)
 	for clusterName, initialFailoverVersion := range clusterInitialFailoverVersions {
