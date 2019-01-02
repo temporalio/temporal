@@ -121,7 +121,6 @@ type Config struct {
 	// whether or not using eventsV2
 	EnableEventsV2 dynamicconfig.BoolPropertyFnWithDomainFilter
 
-	EnableArchival  dynamicconfig.BoolPropertyFnWithDomainFilter
 	NumSysWorkflows dynamicconfig.IntPropertyFn
 
 	BlobSizeLimitError     dynamicconfig.IntPropertyFnWithDomainFilter
@@ -199,7 +198,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		EventEncodingType:          dc.GetStringPropertyFnWithDomainFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeJSON)),
 		EnableEventsV2:             dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, false),
 
-		EnableArchival:  dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchival, false),
 		NumSysWorkflows: dc.GetIntProperty(dynamicconfig.NumSystemWorkflows, 1000),
 
 		BlobSizeLimitError:     dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),

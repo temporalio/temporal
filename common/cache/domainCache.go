@@ -319,7 +319,7 @@ func (c *domainCache) refreshDomains() error {
 	prevEntries := []*DomainCacheEntry{}
 	nextEntries := []*DomainCacheEntry{}
 
-	// make a copy of the existing domain cache, so we can calaulate diff and do compare and swap
+	// make a copy of the existing domain cache, so we can calculate diff and do compare and swap
 	newCacheNameToID := newDomainCache()
 	newCacheByID := newDomainCache()
 	for _, domain := range c.GetAllDomain() {
@@ -539,8 +539,10 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 		result.info.Data[k] = v
 	}
 	result.config = &persistence.DomainConfig{
-		Retention:  entry.config.Retention,
-		EmitMetric: entry.config.EmitMetric,
+		Retention:      entry.config.Retention,
+		EmitMetric:     entry.config.EmitMetric,
+		ArchivalBucket: entry.config.ArchivalBucket,
+		ArchivalStatus: entry.config.ArchivalStatus,
 	}
 	result.replicationConfig = &persistence.DomainReplicationConfig{
 		ActiveClusterName: entry.replicationConfig.ActiveClusterName,

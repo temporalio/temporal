@@ -22,6 +22,7 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/uber/cadence/common/blobstore/filestore"
 	"time"
 
 	"github.com/uber-go/tally/m3"
@@ -45,6 +46,8 @@ type (
 		Services map[string]Service `yaml:"services"`
 		// Kafka is the config for connecting to kafka
 		Kafka messaging.KafkaConfig `yaml:"kafka"`
+		// Archival is the config for archival
+		Archival Archival `yaml:"archival"`
 	}
 
 	// Service contains the service specific config items
@@ -170,8 +173,7 @@ type (
 	}
 
 	// Replicator describes the configuration of replicator
-	Replicator struct {
-	}
+	Replicator struct{}
 
 	// Logger contains the config items for logger
 	Logger struct {
@@ -199,8 +201,6 @@ type (
 		ClusterInitialFailoverVersions map[string]int64 `yaml:"clusterInitialFailoverVersion"`
 		// ClusterAddress contains all cluster names to corresponding address
 		ClusterAddress map[string]Address `yaml:"clusterAddress"`
-		// DeploymentGroup contains the deployment group name
-		DeploymentGroup string `yaml:"deploymentGroup"`
 	}
 
 	// Address indicate the remote cluster's service name and address
@@ -235,6 +235,14 @@ type (
 		// If FlushBytes is unspecified, it defaults  to 1432 bytes, which is
 		// considered safe for local traffic.
 		FlushBytes int `yaml:"flushBytes"`
+	}
+
+	// Archival contains the config for archival
+	Archival struct {
+		// Enabled whether archival is enabled
+		Enabled bool `yaml:"enabled"`
+		// Filestore the configuration for file based blobstore
+		Filestore filestore.Config `yaml:"filestore"`
 	}
 
 	// BootstrapMode is an enum type for ringpop bootstrap mode

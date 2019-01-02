@@ -26,7 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/archival"
 	"github.com/uber/cadence/common/blobstore"
 
 	"github.com/uber/cadence/client"
@@ -69,7 +68,6 @@ type (
 		MessagingClient    messaging.Client
 		DynamicConfig      dynamicconfig.Client
 		DispatcherProvider client.DispatcherProvider
-		ArchivalClient     archival.Client
 		BlobstoreClient    blobstore.Client
 	}
 

@@ -52,6 +52,7 @@ var keys = map[Key]string{
 	EnableNewKafkaClient:     "system.enableNewKafkaClient",
 	EnableVisibilitySampling: "system.enableVisibilitySampling",
 	EnableVisibilityToKafka:  "system.enableVisibilityToKafka",
+	EnableArchival:           "system.enableArchival",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -147,7 +148,6 @@ var keys = map[Key]string{
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
-	EnableArchival:                                        "history.enableArchival",
 	NumSystemWorkflows:                                    "history.numSystemWorkflows",
 
 	WorkerPersistenceMaxQPS:       "worker.persistenceMaxQPS",
@@ -180,6 +180,8 @@ const (
 	EnableVisibilityToKafka
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
+	// EnableArchival is key for enable archival
+	EnableArchival
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
@@ -358,8 +360,6 @@ const (
 	ShardSyncMinInterval
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding
-	// EnableArchival is key for enable archival of workflows in a domain
-	EnableArchival
 	// NumSystemWorkflows is key for number of system workflows running in total
 	NumSystemWorkflows
 

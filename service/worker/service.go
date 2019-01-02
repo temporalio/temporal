@@ -117,6 +117,10 @@ func (s *Service) Start() {
 		s.startReplicator(params, base, log)
 	}
 
+	if params.ClusterMetadata.IsArchivalEnabled() {
+		s.startSysWorker(base, log, params.MetricScope)
+	}
+
 	log.Infof("%v started", common.WorkerServiceName)
 	<-s.stopC
 	base.Stop()
@@ -132,7 +136,6 @@ func (s *Service) Stop() {
 }
 
 func (s *Service) startReplicator(params *service.BootstrapParams, base service.Service, log bark.Logger) {
-
 	history, err := base.GetClientFactory().NewHistoryClient()
 	if err != nil {
 		log.Fatalf("failed to create history service client: %v", err)
@@ -155,7 +158,7 @@ func (s *Service) startSysWorker(base service.Service, log bark.Logger, scope ta
 		common.IsWhitelistServiceTransientError)
 
 	s.waitForFrontendStart(frontendClient, log)
-	sysWorker := sysworkflow.NewSysWorker(frontendClient, scope, s.params.ArchivalClient)
+	sysWorker := sysworkflow.NewSysWorker(frontendClient, scope, s.params.BlobstoreClient)
 	if err := sysWorker.Start(); err != nil {
 		sysWorker.Stop()
 		log.Fatalf("failed to start sysworker: %v", err)

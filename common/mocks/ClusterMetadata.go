@@ -171,3 +171,32 @@ func (_m *ClusterMetadata) GetAllClientAddress() map[string]config.Address {
 
 	return r0
 }
+
+// IsArchivalEnabled provides a mock function with given fields:
+func (_m *ClusterMetadata) IsArchivalEnabled() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
+// GetDefaultArchivalBucket provides a mock function with given fields:
+func (_m *ClusterMetadata) GetDefaultArchivalBucket() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+

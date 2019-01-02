@@ -73,7 +73,6 @@ func (s *workflowHandlerSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
-
 }
 
 func (s *workflowHandlerSuite) TearDownSuite() {
@@ -510,7 +509,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_CustomBucketAndArchiva
 	err := wh.RegisterDomain(context.Background(), req)
 	assert.NoError(s.T(), err)
 	mMetadataManager.AssertCalled(s.T(), "CreateDomain", mock.Anything)
-	clusterMetadata.AssertNotCalled(s.T(), "GetDeploymentGroup")
+	clusterMetadata.AssertNotCalled(s.T(), "GetDefaultArchivalBucket")
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Success_ArchivalEnabledWithoutCustomBucket() {
@@ -519,7 +518,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ArchivalEnabledWithout
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	clusterMetadata.On("GetCurrentClusterName").Return("active")
 	clusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
-	clusterMetadata.On("GetDeploymentGroup").Return("test-deployment-group")
+	clusterMetadata.On("GetDefaultArchivalBucket").Return("test-archival-bucket")
 	mMetadataManager := &mocks.MetadataManager{}
 	mMetadataManager.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
 	mMetadataManager.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
@@ -536,7 +535,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ArchivalEnabledWithout
 	err := wh.RegisterDomain(context.Background(), req)
 	assert.NoError(s.T(), err)
 	mMetadataManager.AssertCalled(s.T(), "CreateDomain", mock.Anything)
-	clusterMetadata.AssertCalled(s.T(), "GetDeploymentGroup")
+	clusterMetadata.AssertCalled(s.T(), "GetDefaultArchivalBucket")
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Success_ArchivalNotEnabled() {
@@ -561,7 +560,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ArchivalNotEnabled() {
 	err := wh.RegisterDomain(context.Background(), req)
 	assert.NoError(s.T(), err)
 	mMetadataManager.AssertCalled(s.T(), "CreateDomain", mock.Anything)
-	clusterMetadata.AssertNotCalled(s.T(), "GetDeploymentGroup")
+	clusterMetadata.AssertNotCalled(s.T(), "GetDefaultArchivalBucket")
 }
 
 func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalNeverEnabled() {
@@ -864,7 +863,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("", shared.ArchivalStatusNeverEnabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	clusterMetadata.On("GetDeploymentGroup").Return("test-deployment-group")
+	clusterMetadata.On("GetDefaultArchivalBucket").Return("test-archival-bucket")
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.logger)
 	mBlobstore := &mocks.Client{}
 	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
@@ -879,7 +878,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 	assert.NotNil(s.T(), result)
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusEnabled)
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "cadence_test-deployment-group")
+	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "test-archival-bucket")
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
 	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
 }
@@ -910,7 +909,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "custom-bucket")
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
 	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
-	clusterMetadata.AssertNotCalled(s.T(), "GetDeploymentGroup")
+	clusterMetadata.AssertNotCalled(s.T(), "GetDefaultArchivalBucket")
 }
 
 func bucketMetadataResponse(owner string, retentionDays int) *blobstore.BucketMetadataResponse {

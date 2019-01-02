@@ -72,4 +72,19 @@ clustersInfo:
     active:
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:7933"
-  deploymentGroup: "development"
+
+archival:
+  enableArchival: true
+  blobstore:
+    storeDirectory: "/tmp/blobstore/"
+    defaultBucket:
+      name: "cadence-development"
+      owner: "cadence"
+      retentionDays: 10
+    customBuckets:
+      - name: "custom-bucket-1"
+        owner: "custom-owner-1"
+        retentionDays: 10
+      - name: "custom-bucket-2"
+        owner: "custom-owner-2"
+        retentionDays: 5

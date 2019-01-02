@@ -3074,7 +3074,7 @@ func (wh *WorkflowHandler) bucketName(customBucketName *string) string {
 	if wh.customBucketNameProvided(customBucketName) {
 		return *customBucketName
 	}
-	return fmt.Sprintf("cadence_%v", wh.Service.GetClusterMetadata().GetDeploymentGroup())
+	return wh.Service.GetClusterMetadata().GetDefaultArchivalBucket()
 }
 
 func (wh *WorkflowHandler) customBucketNameProvided(customBucketName *string) bool {

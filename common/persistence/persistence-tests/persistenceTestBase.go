@@ -62,7 +62,7 @@ type (
 			DriverName string
 		}
 		// TODO this is used for global domain test
-		// when crtoss DC is public, remove EnableGlobalDomain
+		// when cross DC is public, remove EnableGlobalDomain
 		EnableGlobalDomain bool // is global domain enabled
 		IsMasterCluster    bool // is master cluster
 		ClusterMetadata    cluster.Metadata

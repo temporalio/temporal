@@ -280,36 +280,33 @@ func AdminDescribeDomain(c *cli.Context) {
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
 			ErrorAndExit("Operation DescribeDomain failed.", err)
-		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
 		}
-	} else {
-		archivalStatus := resp.Configuration.GetArchivalStatus()
-		bucketName := ""
-		retention := ""
-		owner := ""
-		if archivalStatus != shared.ArchivalStatusNeverEnabled {
-			bucketName = resp.Configuration.GetArchivalBucketName()
-			retention = fmt.Sprintf("%v", resp.Configuration.GetArchivalRetentionPeriodInDays())
-			owner = resp.Configuration.GetArchivalBucketOwner()
-		}
-		fmt.Printf("Name: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n"+
-			"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nArchivalStatus: %v\n"+
-			"BucketName: %v\nArchivalRetentionInDays: %v\nBucketOwner: %v\n",
-			resp.DomainInfo.GetName(),
-			resp.DomainInfo.GetDescription(),
-			resp.DomainInfo.GetOwnerEmail(),
-			resp.DomainInfo.Data,
-			resp.DomainInfo.GetStatus(),
-			resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
-			resp.Configuration.GetEmitMetric(),
-			resp.ReplicationConfiguration.GetActiveClusterName(),
-			serverClustersToString(resp.ReplicationConfiguration.Clusters),
-			archivalStatus.String(),
-			bucketName,
-			retention,
-			owner)
+		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
 	}
+
+	archivalStatus := resp.Configuration.GetArchivalStatus()
+	var formatStr = "Name: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
+		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nArchivalStatus: %v\n"
+	descValues := []interface{}{
+		resp.DomainInfo.GetName(),
+		resp.DomainInfo.GetDescription(),
+		resp.DomainInfo.GetOwnerEmail(),
+		resp.DomainInfo.Data,
+		resp.DomainInfo.GetStatus(),
+		resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
+		resp.Configuration.GetEmitMetric(),
+		resp.ReplicationConfiguration.GetActiveClusterName(),
+		serverClustersToString(resp.ReplicationConfiguration.Clusters),
+		archivalStatus.String(),
+	}
+	if archivalStatus != shared.ArchivalStatusNeverEnabled {
+		formatStr = formatStr + "BucketName: %v\nArchivalRetentionInDays: %v\nBucketOwner: %v\n"
+		descValues = append(descValues,
+			resp.Configuration.GetArchivalBucketName(),
+			fmt.Sprintf("%v", resp.Configuration.GetArchivalRetentionPeriodInDays()),
+			resp.Configuration.GetArchivalBucketOwner())
+	}
+	fmt.Printf(formatStr, descValues...)
 }
 
 func serverClustersToString(clusters []*shared.ClusterReplicationConfiguration) string {

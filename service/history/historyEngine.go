@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/uber/cadence/service/worker/sysworkflow"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -71,6 +72,7 @@ type (
 		metricsClient        metrics.Client
 		logger               bark.Logger
 		config               *Config
+		archivalClient       sysworkflow.ArchivalClient
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -163,6 +165,7 @@ func NewEngineWithShardContext(
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
+		archivalClient:       sysworkflow.NewArchivalClient(frontendClient, shard.GetConfig().NumSysWorkflows),
 	}
 	var visibilityProducer messaging.Producer
 	if config.EnableVisibilityToKafka() {
@@ -1708,6 +1711,22 @@ Update_History_Loop:
 			}
 			transferTasks = append(transferTasks, tranT)
 			timerTasks = append(timerTasks, timerT)
+
+			domainCfg := domainEntry.GetConfig()
+			if e.shard.GetService().GetClusterMetadata().IsArchivalEnabled() && domainCfg.ArchivalStatus == workflow.ArchivalStatusEnabled {
+				request := &sysworkflow.ArchiveRequest{
+					DomainName: domainEntry.GetInfo().Name,
+					DomainID:   domainEntry.GetInfo().ID,
+					WorkflowID: workflowExecution.GetWorkflowId(),
+					RunID:      workflowExecution.GetRunId(),
+					Bucket:     domainCfg.ArchivalBucket,
+				}
+
+				// TODO: this will actually be scheduling a timer to do archival
+				if err := e.archivalClient.Archive(request); err != nil {
+					return nil, err
+				}
+			}
 		}
 
 		// Generate a transaction ID for appending events to history

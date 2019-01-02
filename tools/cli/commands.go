@@ -180,6 +180,7 @@ const (
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
 )
 
+// SetFactory is used to set the ClientFactory global
 func SetFactory(factory ClientFactory) {
 	cFactory = factory
 }

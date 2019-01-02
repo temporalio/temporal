@@ -25,11 +25,10 @@ import (
 	"github.com/robfig/cron"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
-	"sync"
-	"time"
-
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
+	"sync"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
