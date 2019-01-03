@@ -277,6 +277,16 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		pageSize,
 	)
 	if err != nil {
+		if _, ok := err.(*gen.EntityNotExistsError); ok {
+			// when no events can be returned from DB, DB layer will return
+			// EntityNotExistsError, this API shall return empty response
+			return &admin.GetWorkflowExecutionRawHistoryResponse{
+				HistoryBatches:    []*gen.DataBlob{},
+				ReplicationInfo:   token.ReplicationInfo,
+				EventStoreVersion: common.Int32Ptr(token.EventStoreVersion),
+				NextPageToken:     nil, // no further pagination
+			}, nil
+		}
 		return nil, err
 	}
 

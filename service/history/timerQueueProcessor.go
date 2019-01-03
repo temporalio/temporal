@@ -74,6 +74,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
 			historyRereplicator := xdc.NewHistoryRereplicator(
+				currentClusterName,
 				shard.GetDomainCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {

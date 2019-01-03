@@ -75,6 +75,8 @@ var (
 	ErrRetrySyncActivity = &shared.RetryTaskError{Message: "retry on applying sync activity"}
 	// ErrRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
 	ErrRetryBufferEventsMsg = "retry on applying buffer events"
+	// ErrRetryEmptyEventsMsg is returned when events size is 0
+	ErrRetryEmptyEventsMsg = "retry on applying empty events"
 	// ErrWorkflowNotFoundMsg is returned when workflow not found
 	ErrWorkflowNotFoundMsg = "retry on workflow not found"
 	// ErrRetryExistingWorkflowMsg is returned when events are arriving out of order, and there is another workflow with same version running

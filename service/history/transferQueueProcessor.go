@@ -79,6 +79,7 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != currentClusterName {
 			historyRereplicator := xdc.NewHistoryRereplicator(
+				currentClusterName,
 				shard.GetDomainCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {

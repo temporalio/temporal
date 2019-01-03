@@ -413,6 +413,10 @@ func (p *replicationTaskProcessor) handleActivityTask(task *replicator.Replicati
 	err = p.historyClient.SyncActivity(ctx, req)
 	cancel()
 
+	if !p.config.EnableHistoryRereplication() {
+		return err
+	}
+
 	retryErr, ok := err.(*shared.RetryTaskError)
 	if !ok {
 		return err
@@ -473,7 +477,7 @@ Loop:
 	}
 
 RetryLoop:
-	for i := 0; i < p.config.ReplicatorBufferRetryCount; i++ {
+	for i := 0; i < p.config.ReplicatorBufferRetryCount(); i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 		err = p.historyClient.ReplicateEvents(ctx, req)
 		cancel()
@@ -498,6 +502,10 @@ RetryLoop:
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	err = p.historyClient.ReplicateEvents(ctx, req)
 	cancel()
+
+	if !p.config.EnableHistoryRereplication() {
+		return err
+	}
 
 	retryErr, ok := err.(*shared.RetryTaskError)
 	if !ok {

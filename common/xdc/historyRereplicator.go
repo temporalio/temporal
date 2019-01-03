@@ -67,6 +67,7 @@ type (
 
 	// HistoryRereplicatorImpl is the implementation of HistoryRereplicator
 	HistoryRereplicatorImpl struct {
+		targetClusterName    string
 		domainCache          cache.DomainCache
 		adminClient          a.Client
 		historyReplicationFn historyReplicationFn
@@ -104,10 +105,11 @@ func newHistoryRereplicationContext(domainID string, workflowID string,
 }
 
 // NewHistoryRereplicator create a new HistoryRereplicatorImpl
-func NewHistoryRereplicator(domainCache cache.DomainCache, adminClient a.Client, historyReplicationFn historyReplicationFn,
+func NewHistoryRereplicator(targetClusterName string, domainCache cache.DomainCache, adminClient a.Client, historyReplicationFn historyReplicationFn,
 	serializer persistence.HistorySerializer, replicationTimeout time.Duration, logger bark.Logger) *HistoryRereplicatorImpl {
 
 	return &HistoryRereplicatorImpl{
+		targetClusterName:    targetClusterName,
 		domainCache:          domainCache,
 		adminClient:          adminClient,
 		historyReplicationFn: historyReplicationFn,
@@ -198,6 +200,13 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 		eventStoreVersion = response.GetEventStoreVersion()
 		replicationInfo = response.ReplicationInfo
 		token = response.NextPageToken
+
+		if len(response.HistoryBatches) == 0 {
+			// this case can happen if standby side try to fetch history events
+			// from active while active's history length < standby's history length
+			// due to standby containing stale history
+			return "", c.handleEmptyHistory(domainID, workflowID, runID, replicationInfo)
+		}
 
 		for _, batch := range response.HistoryBatches {
 			// it is intentional that the first request is nil
@@ -337,6 +346,34 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	ctxAgain, cancelAgain := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
 	defer cancelAgain()
 	return c.rereplicator.historyReplicationFn(ctxAgain, request)
+}
+
+func (c *historyRereplicationContext) handleEmptyHistory(domainID string, workfloID string, runID string,
+	replicationInfo map[string]*shared.ReplicationInfo) error {
+
+	ri, ok := replicationInfo[c.rereplicator.targetClusterName]
+	var firstEventID int64
+	if !ok {
+		firstEventID = common.FirstEventID
+	} else {
+		firstEventID = ri.GetLastEventId() + 1
+	}
+	_, err := c.sendSingleWorkflowHistory(
+		domainID,
+		workfloID,
+		runID,
+		firstEventID,
+		common.EndEventID,
+	)
+	if err != nil {
+		c.rereplicator.logger.WithFields(bark.Fields{
+			logging.TagDomainID:            domainID,
+			logging.TagWorkflowExecutionID: workfloID,
+			logging.TagWorkflowRunID:       runID,
+			logging.TagErr:                 err,
+		}).Error("error sending history")
+	}
+	return err
 }
 
 func (c *historyRereplicationContext) getHistory(domainID string, workflowID string, runID string,

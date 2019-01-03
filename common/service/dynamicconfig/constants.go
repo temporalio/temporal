@@ -88,6 +88,7 @@ var keys = map[Key]string{
 
 	// history settings
 	EnableSyncActivityHeartbeat:                           "history.enableSyncActivityHeartbeat",
+	EnableHistoryRereplication:                            "history.enableHistoryRereplication",
 	HistoryRPS:                                            "history.rps",
 	HistoryPersistenceMaxQPS:                              "history.persistenceMaxQPS",
 	HistoryVisibilityOpenMaxQPS:                           "history.historyVisibilityOpenMaxQPS",
@@ -150,9 +151,10 @@ var keys = map[Key]string{
 	EnableEventsV2:                                        "history.enableEventsV2",
 	NumSystemWorkflows:                                    "history.numSystemWorkflows",
 
-	WorkerPersistenceMaxQPS:       "worker.persistenceMaxQPS",
-	WorkerReplicatorConcurrency:   "worker.replicatorConcurrency",
-	WorkerReplicationTaskMaxRetry: "worker.replicationTaskMaxRetry",
+	WorkerPersistenceMaxQPS:          "worker.persistenceMaxQPS",
+	WorkerReplicatorConcurrency:      "worker.replicatorConcurrency",
+	WorkerReplicatorBufferRetryCount: "worker.replicatorBufferRetryCount",
+	WorkerReplicationTaskMaxRetry:    "worker.replicationTaskMaxRetry",
 }
 
 const (
@@ -246,6 +248,8 @@ const (
 
 	// EnableSyncActivityHeartbeat whether enable sending out sync activity heartbeat replication task
 	EnableSyncActivityHeartbeat
+	// EnableHistoryRereplication whether enable history re-replication
+	EnableHistoryRereplication
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS
 	// HistoryPersistenceMaxQPS is the max qps history host can query DB
@@ -370,12 +374,15 @@ const (
 
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2
-	// key for histoworkerry
+
+	// key for history worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS
 	// WorkerReplicatorConcurrency is the max concurrenct tasks to be processed at any given time
 	WorkerReplicatorConcurrency
+	// WorkerReplicatorBufferRetryCount is the retry attempt when encounter retry error
+	WorkerReplicatorBufferRetryCount
 	// WorkerReplicationTaskMaxRetry is the max retry for any task
 	WorkerReplicationTaskMaxRetry
 

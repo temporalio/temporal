@@ -61,9 +61,11 @@ type (
 
 	// Config contains all the replication config for worker
 	Config struct {
+		EnableHistoryRereplication dynamicconfig.BoolPropertyFn
+
 		PersistenceMaxQPS          dynamicconfig.IntPropertyFn
 		ReplicatorConcurrency      dynamicconfig.IntPropertyFn
-		ReplicatorBufferRetryCount int
+		ReplicatorBufferRetryCount dynamicconfig.IntPropertyFn
 		ReplicationTaskMaxRetry    dynamicconfig.IntPropertyFn
 	}
 )
@@ -117,6 +119,7 @@ func (r *Replicator) Start() error {
 				logging.TagConsumerName:      consumerName,
 			})
 			historyRereplicator := xdc.NewHistoryRereplicator(
+				currentClusterName,
 				r.domainCache,
 				adminClient,
 				func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {

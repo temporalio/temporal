@@ -506,6 +506,10 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(timerTask *pe
 }
 
 func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(timerTask *persistence.TimerTaskInfo, nextEventID int64) error {
+	if !t.shard.GetConfig().EnableHistoryRereplication() {
+		return nil
+	}
+
 	err := t.historyRereplicator.SendMultiWorkflowHistory(
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,

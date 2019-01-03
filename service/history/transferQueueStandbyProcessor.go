@@ -471,6 +471,9 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(transferTa
 }
 
 func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(transferTask *persistence.TransferTaskInfo, nextEventID int64) error {
+	if !t.shard.GetConfig().EnableHistoryRereplication() {
+		return nil
+	}
 	err := t.historyRereplicator.SendMultiWorkflowHistory(
 		transferTask.DomainID, transferTask.WorkflowID,
 		transferTask.RunID, nextEventID,
