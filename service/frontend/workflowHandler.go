@@ -166,16 +166,10 @@ func (wh *WorkflowHandler) Start() error {
 	wh.Service.GetDispatcher().Register(metaserver.New(wh))
 	wh.Service.Start()
 	wh.domainCache.Start()
-	var err error
-	wh.history, err = wh.Service.GetClientFactory().NewHistoryClient()
-	if err != nil {
-		return err
-	}
-	wh.matchingRawClient, err = wh.Service.GetClientFactory().NewMatchingClient()
-	if err != nil {
-		return err
-	}
-	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingRetryPolicy(),
+
+	wh.history = wh.Service.GetClientBean().GetHistoryClient()
+	wh.matchingRawClient = wh.Service.GetClientBean().GetMatchingClient()
+	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()

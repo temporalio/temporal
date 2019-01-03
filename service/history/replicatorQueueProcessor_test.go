@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -53,6 +54,7 @@ type (
 		mockProducer        *mocks.KafkaProducer
 		mockMetadataMgr     *mocks.MetadataManager
 		mockClusterMetadata *mocks.ClusterMetadata
+		mockClientBean      *client.MockClientBean
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 
@@ -74,10 +76,7 @@ func (s *replicatorQueueProcessorSuite) SetupSuite() {
 }
 
 func (s *replicatorQueueProcessorSuite) TearDownSuite() {
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
+
 }
 
 func (s *replicatorQueueProcessorSuite) SetupTest() {
@@ -93,7 +92,8 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
@@ -117,6 +117,11 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 }
 
 func (s *replicatorQueueProcessorSuite) TearDownTest() {
+	s.mockExecutionMgr.AssertExpectations(s.T())
+	s.mockHistoryMgr.AssertExpectations(s.T())
+	s.mockHistoryV2Mgr.AssertExpectations(s.T())
+	s.mockProducer.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {

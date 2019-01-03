@@ -35,6 +35,7 @@ import (
 
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -55,6 +56,7 @@ type (
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
 		mockMessagingClient messaging.Client
+		mockClientBean      *client.MockClientBean
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		cache               *historyCache
@@ -85,7 +87,8 @@ func (s *historyCacheSuite) SetupTest() {
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
@@ -105,6 +108,8 @@ func (s *historyCacheSuite) SetupTest() {
 
 func (s *historyCacheSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
+	s.mockProducer.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 func (s *historyCacheSuite) TestHistoryCacheBasic() {

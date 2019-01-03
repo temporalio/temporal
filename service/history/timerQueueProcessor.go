@@ -21,16 +21,19 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/uber-common/bark"
+	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/xdc"
 )
 
 var (
@@ -70,7 +73,20 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
-			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(shard, historyService, clusterName, taskAllocator, logger)
+			historyRereplicator := xdc.NewHistoryRereplicator(
+				shard.GetDomainCache(),
+				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
+					return historyService.ReplicateRawEvents(ctx, request)
+				},
+				persistence.NewHistorySerializer(),
+				historyRereplicationTimeout,
+				logger,
+			)
+			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
+				shard, historyService, clusterName,
+				taskAllocator, historyRereplicator, logger,
+			)
 		}
 	}
 

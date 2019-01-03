@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/xdc"
 )
 
 type (
@@ -45,16 +46,14 @@ type (
 		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
+		historyRereplicator xdc.HistoryRereplicator
 	}
-)
-
-var (
-	postActionNoOp = func() error { return nil }
 )
 
 func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer,
-	matchingClient matching.Client, taskAllocator taskAllocator, logger bark.Logger) *transferQueueStandbyProcessorImpl {
+	matchingClient matching.Client, taskAllocator taskAllocator, historyRereplicator xdc.HistoryRereplicator,
+	logger bark.Logger) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorStartDelay,
@@ -99,6 +98,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 			shard, options, visibilityMgr, visibilityProducer, matchingClient,
 			maxReadAckLevel, updateClusterAckLevel, transferQueueShutdown, logger,
 		),
+		historyRereplicator: historyRereplicator,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
@@ -125,6 +125,7 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) (int, e
 		return metrics.TransferStandbyQueueProcessorScope, nil
 	}
 
+	lastAttempt := false
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
 		return metrics.TransferStandbyTaskActivityScope, t.processActivityTask(task)
@@ -136,13 +137,13 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) (int, e
 		return metrics.TransferStandbyTaskCloseExecutionScope, t.processCloseExecution(task)
 
 	case persistence.TransferTaskTypeCancelExecution:
-		return metrics.TransferStandbyTaskCancelExecutionScope, t.processCancelExecution(task)
+		return metrics.TransferStandbyTaskCancelExecutionScope, t.processCancelExecution(task, lastAttempt)
 
 	case persistence.TransferTaskTypeSignalExecution:
-		return metrics.TransferStandbyTaskSignalExecutionScope, t.processSignalExecution(task)
+		return metrics.TransferStandbyTaskSignalExecutionScope, t.processSignalExecution(task, lastAttempt)
 
 	case persistence.TransferTaskTypeStartChildExecution:
-		return metrics.TransferStandbyTaskStartChildExecutionScope, t.processStartChildExecution(task)
+		return metrics.TransferStandbyTaskStartChildExecutionScope, t.processStartChildExecution(task, lastAttempt)
 
 	default:
 		return metrics.TransferStandbyQueueProcessorScope, errUnknownTransferTask
@@ -259,7 +260,6 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *persistence.TransferTaskInfo) error {
 
 	processTaskIfClosed := true
-
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(transferTask.WorkflowID),
 		RunId:      common.StringPtr(transferTask.RunID),
@@ -292,10 +292,20 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		return t.recordWorkflowClosed(
 			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength,
 		)
-	}, postActionNoOp)
+	}, standbyTaskPostActionNoOp) // no op post action, since the entire workflow is finished
 }
 
-func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask *persistence.TransferTaskInfo) error {
+func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask *persistence.TransferTaskInfo, lastAttempt bool) error {
+
+	var nextEventID *int64
+	postProcessingFn := func() error {
+		return t.fetchHistoryAndVerifyOnce(transferTask, nextEventID, t.processCancelExecution)
+	}
+	if lastAttempt {
+		postProcessingFn = func() error {
+			return standbyTrensferTaskPostActionTaskDiscarded(nextEventID, transferTask, t.logger)
+		}
+	}
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
@@ -312,14 +322,26 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 		}
 
 		if t.discardTask(transferTask) {
-			return ErrTaskDiscarded
+			// returning nil and set next event ID
+			// the post action function below shall take over
+			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			return nil
 		}
-
 		return ErrTaskRetry
-	}, postActionNoOp)
+	}, postProcessingFn)
 }
 
-func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask *persistence.TransferTaskInfo) error {
+func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask *persistence.TransferTaskInfo, lastAttempt bool) error {
+
+	var nextEventID *int64
+	postProcessingFn := func() error {
+		return t.fetchHistoryAndVerifyOnce(transferTask, nextEventID, t.processSignalExecution)
+	}
+	if lastAttempt {
+		postProcessingFn = func() error {
+			return standbyTrensferTaskPostActionTaskDiscarded(nextEventID, transferTask, t.logger)
+		}
+	}
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
@@ -336,14 +358,26 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 		}
 
 		if t.discardTask(transferTask) {
-			return ErrTaskDiscarded
+			// returning nil and set next event ID
+			// the post action function below shall take over
+			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			return nil
 		}
-
 		return ErrTaskRetry
-	}, postActionNoOp)
+	}, postProcessingFn)
 }
 
-func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferTask *persistence.TransferTaskInfo) error {
+func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferTask *persistence.TransferTaskInfo, lastAttempt bool) error {
+
+	var nextEventID *int64
+	postProcessingFn := func() error {
+		return t.fetchHistoryAndVerifyOnce(transferTask, nextEventID, t.processStartChildExecution)
+	}
+	if lastAttempt {
+		postProcessingFn = func() error {
+			return standbyTrensferTaskPostActionTaskDiscarded(nextEventID, transferTask, t.logger)
+		}
+	}
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
@@ -359,16 +393,18 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 			return nil
 		}
 
-		if childWorkflowInfo.StartedID == common.EmptyEventID {
-
-			if t.discardTask(transferTask) {
-				return ErrTaskDiscarded
-			}
-
-			return ErrTaskRetry
+		if childWorkflowInfo.StartedID != common.EmptyEventID {
+			return nil
 		}
-		return nil
-	}, postActionNoOp)
+
+		if t.discardTask(transferTask) {
+			// returning nil and set next event ID
+			// the post action function below shall take over
+			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			return nil
+		}
+		return ErrTaskRetry
+	}, postProcessingFn)
 }
 
 func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo,
@@ -414,22 +450,47 @@ func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(tran
 	}
 }
 
-func (t *transferQueueStandbyProcessorImpl) discardTask(transferTask *persistence.TransferTaskInfo) bool {
-	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
-	// so discard will be true if task is delayed by 2*t.shard.GetConfig().StandbyClusterDelay()
-	now := t.shard.GetCurrentTime(t.clusterName)
-	discard := now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
-	if discard {
+func (t *transferQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(transferTask *persistence.TransferTaskInfo, nextEventID *int64,
+	verifyFn func(*persistence.TransferTaskInfo, bool) error) error {
+
+	if nextEventID == nil {
+		return nil
+	}
+	err := t.fetchHistoryFromRemote(transferTask, *nextEventID)
+	if err != nil {
+		// fail to fetch events from remote, just discard the task
+		return ErrTaskDiscarded
+	}
+	lastAttempt := true
+	err = verifyFn(transferTask, lastAttempt)
+	if err != nil {
+		// task still pending, just discard the task
+		return ErrTaskDiscarded
+	}
+	return nil
+}
+
+func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(transferTask *persistence.TransferTaskInfo, nextEventID int64) error {
+	err := t.historyRereplicator.SendMultiWorkflowHistory(
+		transferTask.DomainID, transferTask.WorkflowID,
+		transferTask.RunID, nextEventID,
+		transferTask.RunID, common.EndEventID, // use common.EndEventID since we do not know where is the end
+	)
+	if err != nil {
 		t.logger.WithFields(bark.Fields{
 			logging.TagDomainID:            transferTask.DomainID,
 			logging.TagWorkflowExecutionID: transferTask.WorkflowID,
 			logging.TagWorkflowRunID:       transferTask.RunID,
-			logging.TagTaskID:              transferTask.GetTaskID(),
-			logging.TagTaskType:            transferTask.GetTaskType(),
-			logging.TagVersion:             transferTask.GetVersion(),
-			logging.TagTimestamp:           transferTask.VisibilityTimestamp,
-			logging.TagEventID:             transferTask.ScheduleID,
-		}).Error("Discarding standby transfer task due to task being pending for too long.")
+			logging.TagNextEventID:         nextEventID,
+			logging.TagSourceCluster:       t.clusterName,
+		}).Error("Error re-replicating history from remote.")
 	}
-	return discard
+	return err
+}
+
+func (t *transferQueueStandbyProcessorImpl) discardTask(transferTask *persistence.TransferTaskInfo) bool {
+	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
+	// so discard will be true if task is delayed by 2*t.shard.GetConfig().StandbyClusterDelay()
+	now := t.shard.GetCurrentTime(t.clusterName)
+	return now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
 }

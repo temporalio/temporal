@@ -255,6 +255,8 @@ func init() {
 			return true
 		case *shared.ServiceBusyError:
 			return true
+		case *shared.RetryTaskError:
+			return true
 		default:
 			return false
 		}
@@ -291,6 +293,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_SyncActivity_Result.ServiceBusyError")
 			}
 			return &HistoryService_SyncActivity_Result{ServiceBusyError: e}, nil
+		case *shared.RetryTaskError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_SyncActivity_Result.RetryTaskError")
+			}
+			return &HistoryService_SyncActivity_Result{RetryTaskError: e}, nil
 		}
 
 		return nil, err
@@ -316,6 +323,10 @@ func init() {
 			err = result.ServiceBusyError
 			return
 		}
+		if result.RetryTaskError != nil {
+			err = result.RetryTaskError
+			return
+		}
 		return
 	}
 
@@ -330,6 +341,7 @@ type HistoryService_SyncActivity_Result struct {
 	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
 	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
 	ServiceBusyError        *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+	RetryTaskError          *shared.RetryTaskError       `json:"retryTaskError,omitempty"`
 }
 
 // ToWire translates a HistoryService_SyncActivity_Result struct into a Thrift-level intermediate
@@ -349,7 +361,7 @@ type HistoryService_SyncActivity_Result struct {
 //   }
 func (v *HistoryService_SyncActivity_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -393,6 +405,14 @@ func (v *HistoryService_SyncActivity_Result) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.RetryTaskError != nil {
+		w, err = v.RetryTaskError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
 
@@ -465,6 +485,14 @@ func (v *HistoryService_SyncActivity_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.RetryTaskError, err = _RetryTaskError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -484,6 +512,9 @@ func (v *HistoryService_SyncActivity_Result) FromWire(w wire.Value) error {
 	if v.ServiceBusyError != nil {
 		count++
 	}
+	if v.RetryTaskError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("HistoryService_SyncActivity_Result should have at most one field: got %v fields", count)
 	}
@@ -498,7 +529,7 @@ func (v *HistoryService_SyncActivity_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -518,6 +549,10 @@ func (v *HistoryService_SyncActivity_Result) String() string {
 	}
 	if v.ServiceBusyError != nil {
 		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.RetryTaskError != nil {
+		fields[i] = fmt.Sprintf("RetryTaskError: %v", v.RetryTaskError)
 		i++
 	}
 
@@ -549,6 +584,9 @@ func (v *HistoryService_SyncActivity_Result) Equals(rhs *HistoryService_SyncActi
 	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
 		return false
 	}
+	if !((v.RetryTaskError == nil && rhs.RetryTaskError == nil) || (v.RetryTaskError != nil && rhs.RetryTaskError != nil && v.RetryTaskError.Equals(rhs.RetryTaskError))) {
+		return false
+	}
 
 	return true
 }
@@ -573,6 +611,9 @@ func (v *HistoryService_SyncActivity_Result) MarshalLogObject(enc zapcore.Object
 	}
 	if v.ServiceBusyError != nil {
 		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	if v.RetryTaskError != nil {
+		err = multierr.Append(err, enc.AddObject("retryTaskError", v.RetryTaskError))
 	}
 	return err
 }
@@ -622,6 +663,16 @@ func (v *HistoryService_SyncActivity_Result) GetShardOwnershipLostError() (o *Sh
 func (v *HistoryService_SyncActivity_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
 	if v.ServiceBusyError != nil {
 		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// GetRetryTaskError returns the value of RetryTaskError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_SyncActivity_Result) GetRetryTaskError() (o *shared.RetryTaskError) {
+	if v.RetryTaskError != nil {
+		return v.RetryTaskError
 	}
 
 	return

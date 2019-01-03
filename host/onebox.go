@@ -420,17 +420,13 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	service := service.New(params)
 	service.Start()
 
-	historyClient, err := service.GetClientFactory().NewHistoryClient()
-	if err != nil {
-		c.logger.WithField("error", err).Fatal("Failed to create history service client when start worker")
-	}
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
 	domainCache := cache.NewDomainCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
 	domainCache.Start()
 
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
 	workerConfig.ReplicationCfg.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	c.replicator = replicator.NewReplicator(c.clusterMetadata, metadataManager, domainCache, service.GetClientBean(), historyClient,
+	c.replicator = replicator.NewReplicator(c.clusterMetadata, metadataManager, domainCache, service.GetClientBean(),
 		workerConfig.ReplicationCfg, c.messagingClient, c.logger, service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()

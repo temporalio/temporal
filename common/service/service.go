@@ -89,7 +89,6 @@ type (
 		membershipMonitor      membership.Monitor
 		rpcFactory             common.RPCFactory
 		pprofInitializer       common.PProfInitializer
-		clientFactory          client.Factory
 		clientBean             client.Bean
 		numberOfHistoryShards  int
 		logger                 bark.Logger
@@ -192,10 +191,11 @@ func (h *serviceImpl) Start() {
 	}
 	h.hostInfo = hostInfo
 
-	h.clientFactory = client.NewRPCClientFactory(h.rpcFactory, h.membershipMonitor, h.metricsClient,
-		h.numberOfHistoryShards)
-
-	h.clientBean, err = client.NewClientBean(h.clientFactory, h.dispatcherProvider, h.clusterMetadata)
+	h.clientBean, err = client.NewClientBean(
+		client.NewRPCClientFactory(h.rpcFactory, h.membershipMonitor, h.metricsClient, h.numberOfHistoryShards),
+		h.dispatcherProvider,
+		h.clusterMetadata,
+	)
 	if err != nil {
 		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("fail to initialize client bean")
 	}
@@ -235,10 +235,6 @@ func (h *serviceImpl) GetLogger() bark.Logger {
 
 func (h *serviceImpl) GetMetricsClient() metrics.Client {
 	return h.metricsClient
-}
-
-func (h *serviceImpl) GetClientFactory() client.Factory {
-	return h.clientFactory
 }
 
 func (h *serviceImpl) GetClientBean() client.Bean {

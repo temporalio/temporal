@@ -136,13 +136,9 @@ func (s *Service) Stop() {
 }
 
 func (s *Service) startReplicator(params *service.BootstrapParams, base service.Service, log bark.Logger) {
-	history, err := base.GetClientFactory().NewHistoryClient()
-	if err != nil {
-		log.Fatalf("failed to create history service client: %v", err)
-	}
-	clientBean := base.GetClientBean()
-	replicator := replicator.NewReplicator(params.ClusterMetadata, s.metadataV2Mgr, s.domainCache, clientBean,
-		history, s.config.ReplicationCfg, params.MessagingClient, log, s.metricsClient)
+
+	replicator := replicator.NewReplicator(params.ClusterMetadata, s.metadataV2Mgr, s.domainCache, base.GetClientBean(),
+		s.config.ReplicationCfg, params.MessagingClient, log, s.metricsClient)
 	if err := replicator.Start(); err != nil {
 		replicator.Stop()
 		log.Fatalf("Fail to start replicator: %v", err)
@@ -150,12 +146,12 @@ func (s *Service) startReplicator(params *service.BootstrapParams, base service.
 }
 
 func (s *Service) startSysWorker(base service.Service, log bark.Logger, scope tally.Scope) {
-	frontendClient, err := base.GetClientFactory().NewFrontendClient()
-	if err != nil {
-		log.Fatalf("failed to create frontend client: %v", err)
-	}
-	frontendClient = frontend.NewRetryableClient(frontendClient, common.CreateFrontendServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
+
+	frontendClient := frontend.NewRetryableClient(
+		base.GetClientBean().GetFrontendClient(),
+		common.CreateFrontendServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
 
 	s.waitForFrontendStart(frontendClient, log)
 	sysWorker := sysworkflow.NewSysWorker(frontendClient, scope, s.params.BlobstoreClient)

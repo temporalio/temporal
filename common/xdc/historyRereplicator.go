@@ -29,7 +29,6 @@ import (
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	a "github.com/uber/cadence/client/admin"
-	h "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/errors"
@@ -56,6 +55,9 @@ const (
 )
 
 type (
+	// historyReplicationFn provides the functionality to deliver replication raw history request to history
+	historyReplicationFn func(ctx context.Context, request *history.ReplicateRawEventsRequest) error
+
 	// HistoryRereplicator is the interface for resending history events to remote
 	HistoryRereplicator interface {
 		// SendMultiWorkflowHistory sends multiple run IDs's history events to remote
@@ -65,12 +67,12 @@ type (
 
 	// HistoryRereplicatorImpl is the implementation of HistoryRereplicator
 	HistoryRereplicatorImpl struct {
-		domainCache        cache.DomainCache
-		adminClient        a.Client
-		historyClient      h.Client
-		serializer         persistence.HistorySerializer
-		replicationTimeout time.Duration
-		logger             bark.Logger
+		domainCache          cache.DomainCache
+		adminClient          a.Client
+		historyReplicationFn historyReplicationFn
+		serializer           persistence.HistorySerializer
+		replicationTimeout   time.Duration
+		logger               bark.Logger
 	}
 
 	historyRereplicationContext struct {
@@ -102,15 +104,16 @@ func newHistoryRereplicationContext(domainID string, workflowID string,
 }
 
 // NewHistoryRereplicator create a new HistoryRereplicatorImpl
-func NewHistoryRereplicator(domainCache cache.DomainCache, adminClient a.Client, historyClient h.Client,
+func NewHistoryRereplicator(domainCache cache.DomainCache, adminClient a.Client, historyReplicationFn historyReplicationFn,
 	serializer persistence.HistorySerializer, replicationTimeout time.Duration, logger bark.Logger) *HistoryRereplicatorImpl {
 
 	return &HistoryRereplicatorImpl{
-		domainCache:   domainCache,
-		adminClient:   adminClient,
-		historyClient: historyClient,
-		serializer:    serializer,
-		logger:        logger,
+		domainCache:          domainCache,
+		adminClient:          adminClient,
+		historyReplicationFn: historyReplicationFn,
+		serializer:           serializer,
+		replicationTimeout:   replicationTimeout,
+		logger:               logger,
 	}
 }
 
@@ -291,7 +294,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		cancel()
 		c.rpcCalls++
 	}()
-	err := c.rereplicator.historyClient.ReplicateRawEvents(ctx, request)
+	err := c.rereplicator.historyReplicationFn(ctx, request)
 	if err == nil {
 		return nil
 	}
@@ -333,7 +336,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// after the amend of the missing history events after history reset, redo the request
 	ctxAgain, cancelAgain := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
 	defer cancelAgain()
-	return c.rereplicator.historyClient.ReplicateRawEvents(ctxAgain, request)
+	return c.rereplicator.historyReplicationFn(ctxAgain, request)
 }
 
 func (c *historyRereplicationContext) getHistory(domainID string, workflowID string, runID string,

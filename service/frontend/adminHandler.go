@@ -88,11 +88,8 @@ func (adh *AdminHandler) Start() error {
 	adh.domainCache.Start()
 	adh.Service.GetDispatcher().Register(adminserviceserver.New(adh))
 	adh.Service.Start()
-	var err error
-	adh.history, err = adh.Service.GetClientFactory().NewHistoryClient()
-	if err != nil {
-		return err
-	}
+
+	adh.history = adh.Service.GetClientBean().GetHistoryClient()
 	adh.metricsClient = adh.Service.GetMetricsClient()
 	adh.startWG.Done()
 	return nil

@@ -74,15 +74,12 @@ func NewHandler(sVice service.Service, config *Config, taskPersistence persisten
 func (h *Handler) Start() error {
 	h.Service.GetDispatcher().Register(matchingserviceserver.New(h))
 	h.Service.Start()
-	history, err := h.Service.GetClientFactory().NewHistoryClient()
-	if err != nil {
-		return err
-	}
+
 	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
 	h.domainCache.Start()
 	h.metricsClient = h.Service.GetMetricsClient()
 	h.engine = NewEngine(
-		h.taskPersistence, history, h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
+		h.taskPersistence, h.Service.GetClientBean().GetHistoryClient(), h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
 	)
 	h.startWG.Done()
 	return nil

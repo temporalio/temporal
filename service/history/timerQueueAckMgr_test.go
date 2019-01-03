@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
@@ -54,6 +55,7 @@ type (
 		mockMessagingClient messaging.Client
 		mockProducer        *mocks.KafkaProducer
 		mockClusterMetadata *mocks.ClusterMetadata
+		mockClientBean      *client.MockClientBean
 		metricsClient       metrics.Client
 		logger              bark.Logger
 		clusterName         string
@@ -72,6 +74,7 @@ type (
 		mockMessagingClient      messaging.Client
 		mockProducer             *mocks.KafkaProducer
 		mockClusterMetadata      *mocks.ClusterMetadata
+		mockClientBean           *client.MockClientBean
 		metricsClient            metrics.Client
 		logger                   bark.Logger
 		domainID                 string
@@ -112,7 +115,8 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, s.logger)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
 		shardInfo: copyShardInfo(&persistence.ShardInfo{
@@ -161,7 +165,7 @@ func (s *timerQueueAckMgrSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClusterMetadata.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 // Test for normal ack manager
@@ -561,7 +565,8 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, s.logger)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
 		shardInfo: copyShardInfo(&persistence.ShardInfo{
@@ -621,6 +626,7 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestIsProcessNow() {

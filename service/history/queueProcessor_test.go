@@ -27,6 +27,7 @@ import (
 	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
@@ -53,6 +54,7 @@ type (
 		mockMessagingClient messaging.Client
 		mockProcessor       *MockProcessor
 		mockQueueAckMgr     *MockQueueAckMgr
+		mockClientBean      *client.MockClientBean
 
 		scope            int
 		notificationChan chan struct{}
@@ -75,10 +77,7 @@ func (s *queueProcessorSuite) SetupSuite() {
 }
 
 func (s *queueProcessorSuite) TearDownSuite() {
-	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockClusterMetadata.AssertExpectations(s.T())
-	s.mockProcessor.AssertExpectations(s.T())
-	s.mockQueueAckMgr.AssertExpectations(s.T())
+
 }
 
 func (s *queueProcessorSuite) SetupTest() {
@@ -92,7 +91,8 @@ func (s *queueProcessorSuite) SetupTest() {
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.logger)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
@@ -123,6 +123,10 @@ func (s *queueProcessorSuite) SetupTest() {
 }
 
 func (s *queueProcessorSuite) TearDownTest() {
+	s.mockMetadataMgr.AssertExpectations(s.T())
+	s.mockProcessor.AssertExpectations(s.T())
+	s.mockQueueAckMgr.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 func (s *queueProcessorSuite) TestProcessTaskAndAck_ShutDown() {

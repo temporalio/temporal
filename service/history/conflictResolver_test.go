@@ -32,6 +32,7 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -58,6 +59,7 @@ type (
 		mockShard           *shardContextImpl
 		mockContext         *workflowExecutionContextImpl
 		mockDomainCache     *cache.DomainCacheMock
+		mockClientBean      *client.MockClientBean
 
 		conflictResolver *conflictResolverImpl
 	}
@@ -92,7 +94,8 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockShard = &shardContextImpl{
@@ -118,6 +121,14 @@ func (s *conflictResolverSuite) SetupTest() {
 }
 
 func (s *conflictResolverSuite) TearDownTest() {
+	s.mockHistoryMgr.AssertExpectations(s.T())
+	s.mockHistoryV2Mgr.AssertExpectations(s.T())
+	s.mockExecutionMgr.AssertExpectations(s.T())
+	s.mockShardManager.AssertExpectations(s.T())
+	s.mockProducer.AssertExpectations(s.T())
+	s.mockMetadataMgr.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
+	s.mockDomainCache.AssertExpectations(s.T())
 }
 
 func (s *conflictResolverSuite) TestGetHistory() {
@@ -283,21 +294,6 @@ func (s *conflictResolverSuite) TestReset() {
 		Execution: execution,
 	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{},
-			Config: &persistence.DomainConfig{},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
-				},
-			},
-			IsGlobalDomain: true,
-		},
-		nil,
-	)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryWithInfo(&persistence.DomainInfo{}), nil)
 
 	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, executionInfo)

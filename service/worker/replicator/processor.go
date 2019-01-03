@@ -394,9 +394,44 @@ func (p *replicationTaskProcessor) handleActivityTask(task *replicator.Replicati
 		Details:           attr.Details,
 		Attempt:           attr.Attempt,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return p.historyClient.SyncActivity(ctx, req)
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	err := p.historyClient.SyncActivity(ctx, req)
+	cancel()
+
+	if !p.isRetryTaskError(err) {
+		return err
+	}
+
+	// here we lock on the current workflow (run ID being empty) to ensure only one message will actually
+	// try to fix the missing kafka message.
+	workflowIdendifier := definition.NewWorkflowIdentifier(attr.GetDomainId(), attr.GetWorkflowId(), "")
+	p.rereplicationLock.LockID(workflowIdendifier)
+	defer p.rereplicationLock.UnlockID(workflowIdendifier)
+
+	// before actually trying to re-replicate the missing event, try again
+	ctx, cancel = context.WithTimeout(context.Background(), replicationTimeout)
+	err = p.historyClient.SyncActivity(ctx, req)
+	cancel()
+
+	retryErr, ok := err.(*shared.RetryTaskError)
+	if !ok {
+		return err
+	}
+
+	// this is the retry error
+	beginRunID := retryErr.GetRunId()
+	beginEventID := retryErr.GetNextEventId()
+	endRunID := attr.GetRunId()
+	endEventID := attr.GetScheduledId() + 1 // the next event ID should be at least schedule ID + 1
+	resendErr := p.historyRereplicator.SendMultiWorkflowHistory(
+		attr.GetDomainId(), attr.GetWorkflowId(),
+		beginRunID, beginEventID, endRunID, endEventID,
+	)
+	if resendErr != nil {
+		logger.WithField(logging.TagErr, resendErr).Error("error resend history")
+	}
+	// should return the replication error, not the resending error
+	return err
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, logger bark.Logger, inRetry bool) error {
@@ -453,7 +488,7 @@ RetryLoop:
 		break RetryLoop
 	}
 
-	// here we lock on the current workflow (run ID beging empty) to ensure only one message will actually
+	// here we lock on the current workflow (run ID being empty) to ensure only one message will actually
 	// try to fix the missing kafka message.
 	workflowIdendifier := definition.NewWorkflowIdentifier(attr.GetDomainId(), attr.GetWorkflowId(), "")
 	p.rereplicationLock.LockID(workflowIdendifier)
@@ -474,10 +509,15 @@ RetryLoop:
 	beginEventID := retryErr.GetNextEventId()
 	endRunID := attr.GetRunId()
 	endEventID := attr.GetFirstEventId()
-	return p.historyRereplicator.SendMultiWorkflowHistory(
+	resendErr := p.historyRereplicator.SendMultiWorkflowHistory(
 		attr.GetDomainId(), attr.GetWorkflowId(),
 		beginRunID, beginEventID, endRunID, endEventID,
 	)
+	if resendErr != nil {
+		logger.WithField(logging.TagErr, resendErr).Error("error resend history")
+	}
+	// should return the replication error, not the resending error
+	return err
 }
 
 func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {

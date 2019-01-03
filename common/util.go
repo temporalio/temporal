@@ -22,15 +22,16 @@ package common
 
 import (
 	"encoding/json"
+	"sync"
+	"time"
+
 	"github.com/robfig/cron"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
-	"sync"
-	"time"
 
-	"github.com/dgryski/go-farm"
+	farm "github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
 	"math/rand"
@@ -50,13 +51,17 @@ const (
 	historyServiceOperationMaxInterval        = 10 * time.Second
 	historyServiceOperationExpirationInterval = 30 * time.Second
 
+	matchingServiceOperationInitialInterval    = 1000 * time.Millisecond
+	matchingServiceOperationMaxInterval        = 10 * time.Second
+	matchingServiceOperationExpirationInterval = 30 * time.Second
+
 	frontendServiceOperationInitialInterval    = 200 * time.Millisecond
 	frontendServiceOperationMaxInterval        = 5 * time.Second
 	frontendServiceOperationExpirationInterval = 15 * time.Second
 
-	matchingServiceOperationInitialInterval    = 1000 * time.Millisecond
-	matchingServiceOperationMaxInterval        = 10 * time.Second
-	matchingServiceOperationExpirationInterval = 30 * time.Second
+	adminServiceOperationInitialInterval    = 200 * time.Millisecond
+	adminServiceOperationMaxInterval        = 5 * time.Second
+	adminServiceOperationExpirationInterval = 15 * time.Second
 
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "COMPLETE_RESULT_EXCEEDS_LIMIT"
@@ -121,6 +126,15 @@ func CreateHistoryServiceRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
+// CreateMatchingServiceRetryPolicy creates a retry policy for calls to matching service
+func CreateMatchingServiceRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(matchingServiceOperationInitialInterval)
+	policy.SetMaximumInterval(matchingServiceOperationMaxInterval)
+	policy.SetExpirationInterval(matchingServiceOperationExpirationInterval)
+
+	return policy
+}
+
 // CreateFrontendServiceRetryPolicy creates a retry policy for calls to frontend service
 func CreateFrontendServiceRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(frontendServiceOperationInitialInterval)
@@ -130,11 +144,11 @@ func CreateFrontendServiceRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
-// CreateMatchingRetryPolicy creates a retry policy for calls to matching service
-func CreateMatchingRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(matchingServiceOperationInitialInterval)
-	policy.SetMaximumInterval(matchingServiceOperationMaxInterval)
-	policy.SetExpirationInterval(matchingServiceOperationExpirationInterval)
+// CreateAdminServiceRetryPolicy creates a retry policy for calls to matching service
+func CreateAdminServiceRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(adminServiceOperationInitialInterval)
+	policy.SetMaximumInterval(adminServiceOperationMaxInterval)
+	policy.SetExpirationInterval(adminServiceOperationExpirationInterval)
 
 	return policy
 }

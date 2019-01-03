@@ -39,7 +39,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		messagingClient   messaging.Client
 		kafkaClient       messaging.Client
-		clientFactory     client.Factory
+		clientBean        client.Bean
 		membershipMonitor membership.Monitor
 
 		metrics metrics.Client
@@ -59,12 +59,13 @@ var (
 
 // NewTestService is the new service instance created for testing
 func NewTestService(clusterMetadata cluster.Metadata, messagingClient messaging.Client, metrics metrics.Client,
-	logger bark.Logger) Service {
+	clientBean client.Bean, logger bark.Logger) Service {
 	return &serviceTestBase{
 		hostInfo:        testHostInfo,
 		clusterMetadata: clusterMetadata,
 		messagingClient: messagingClient,
 		metrics:         metrics,
+		clientBean:      clientBean,
 		logger:          logger,
 	}
 }
@@ -92,14 +93,9 @@ func (s *serviceTestBase) GetMetricsClient() metrics.Client {
 	return s.metrics
 }
 
-// GetClientFactory returns the ClientFactory for service
-func (s *serviceTestBase) GetClientFactory() client.Factory {
-	return s.clientFactory
-}
-
 // GetClientBean returns the client bean used by service
 func (s *serviceTestBase) GetClientBean() client.Bean {
-	return nil
+	return s.clientBean
 }
 
 // GetDispatcher returns the dispatcher used by service

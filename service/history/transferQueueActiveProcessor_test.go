@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -64,6 +65,7 @@ type (
 		mockProducer               *mocks.KafkaProducer
 		mockMessagingClient        messaging.Client
 		mockQueueAckMgr            *MockQueueAckMgr
+		mockClientBean             *client.MockClientBean
 		mockTransferQueueProcessor *MockTransferQueueProcessor
 		mockTimerQueueProcessor    *MockTimerQueueProcessor
 		mockService                service.Service
@@ -121,7 +123,8 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockProducer = &mocks.KafkaProducer{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -170,6 +173,7 @@ func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 	s.mockTransferQueueProcessor.AssertExpectations(s.T())
 	s.mockTimerQueueProcessor.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {

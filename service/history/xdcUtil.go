@@ -23,8 +23,49 @@ package history
 import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+)
+
+var (
+	standbyTaskPostActionNoOp = func() error { return nil }
+
+	standbyTrensferTaskPostActionTaskDiscarded = func(nextEventID *int64, transferTask *persistence.TransferTaskInfo, logger bark.Logger) error {
+		if nextEventID == nil {
+			return nil
+		}
+		logger.WithFields(bark.Fields{
+			logging.TagDomainID:            transferTask.DomainID,
+			logging.TagWorkflowExecutionID: transferTask.WorkflowID,
+			logging.TagWorkflowRunID:       transferTask.RunID,
+			logging.TagTaskID:              transferTask.GetTaskID(),
+			logging.TagTaskType:            transferTask.GetTaskType(),
+			logging.TagVersion:             transferTask.GetVersion(),
+			logging.TagTimestamp:           transferTask.VisibilityTimestamp,
+			logging.TagEventID:             transferTask.ScheduleID,
+		}).Error("Discarding standby transfer task due to task being pending for too long.")
+		return ErrTaskDiscarded
+	}
+
+	standbyTimerTaskPostActionTaskDiscarded = func(nextEventID *int64, timerTask *persistence.TimerTaskInfo, logger bark.Logger) error {
+		if nextEventID == nil {
+			return nil
+		}
+		logger.WithFields(bark.Fields{
+			logging.TagDomainID:            timerTask.DomainID,
+			logging.TagWorkflowExecutionID: timerTask.WorkflowID,
+			logging.TagWorkflowRunID:       timerTask.RunID,
+			logging.TagTaskID:              timerTask.GetTaskID(),
+			logging.TagTaskType:            timerTask.GetTaskType(),
+			logging.TagVersion:             timerTask.GetVersion(),
+			logging.TagTimeoutType:         timerTask.TimeoutType,
+			logging.TagTimestamp:           timerTask.VisibilityTimestamp,
+			logging.TagEventID:             timerTask.EventID,
+			logging.TagAttempt:             timerTask.ScheduleAttempt,
+		}).Error("Discarding standby timer task due to task being pending for too long.")
+		return ErrTaskDiscarded
+	}
 )
 
 // verifyTaskVersion, will return true if failover version check is successful

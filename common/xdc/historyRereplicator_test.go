@@ -21,6 +21,7 @@
 package xdc
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -106,7 +107,9 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.rereplicator = NewHistoryRereplicator(
 		domainCache,
 		s.mockAdminClient,
-		s.mockHistoryClient,
+		func(ctx context.Context, request *history.ReplicateRawEventsRequest) error {
+			return s.mockHistoryClient.ReplicateRawEvents(ctx, request)
+		},
 		persistence.NewHistorySerializer(),
 		30*time.Second,
 		s.logger,

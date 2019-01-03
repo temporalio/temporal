@@ -37,6 +37,15 @@ type retryableClient struct {
 	isRetryable backoff.IsRetryable
 }
 
+// NewRetryableClient creates a new instance of Client with retry policy
+func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) Client {
+	return &retryableClient{
+		client:      client,
+		policy:      policy,
+		isRetryable: isRetryable,
+	}
+}
+
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *shared.DescribeHistoryHostRequest,

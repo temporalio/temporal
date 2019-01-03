@@ -638,6 +638,7 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.ServiceBusyError serviceBusyError,
+      6: shared.RetryTaskError retryTaskError,
     )
 
   /**

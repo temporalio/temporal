@@ -117,26 +117,24 @@ func (h *Handler) Start() error {
 	h.Service.GetDispatcher().Register(historyserviceserver.New(h))
 	h.Service.GetDispatcher().Register(metaserver.New(h))
 	h.Service.Start()
-	matchingServiceClient, err0 := h.Service.GetClientFactory().NewMatchingClient()
-	if err0 != nil {
-		return err0
-	}
-	h.matchingServiceClient = matching.NewRetryableClient(matchingServiceClient, common.CreateMatchingRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
 
-	historyServiceClient, err0 := h.Service.GetClientFactory().NewHistoryClient()
-	if err0 != nil {
-		return err0
-	}
-	h.historyServiceClient = hc.NewRetryableClient(historyServiceClient, common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
+	h.matchingServiceClient = matching.NewRetryableClient(
+		h.Service.GetClientBean().GetMatchingClient(),
+		common.CreateMatchingServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
 
-	frontendServiceClient, err0 := h.Service.GetClientFactory().NewFrontendClient()
-	if err0 != nil {
-		return err0
-	}
-	h.frontendServiceClient = frontend.NewRetryableClient(frontendServiceClient,
-		common.CreateFrontendServiceRetryPolicy(), common.IsWhitelistServiceTransientError)
+	h.historyServiceClient = hc.NewRetryableClient(
+		h.Service.GetClientBean().GetHistoryClient(),
+		common.CreateHistoryServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
+
+	h.frontendServiceClient = frontend.NewRetryableClient(
+		h.Service.GetClientBean().GetFrontendClient(),
+		common.CreateFrontendServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
 
 	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver(common.HistoryServiceName)
 	if err1 != nil {

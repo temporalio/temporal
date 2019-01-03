@@ -37,6 +37,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -66,6 +67,7 @@ type (
 		mockMutableState    *mockMutableState
 		mockTxProcessor     *MockTransferQueueProcessor
 		mockTimerProcessor  *MockTimerQueueProcessor
+		mockClientBean      *client.MockClientBean
 
 		historyReplicator *historyReplicator
 	}
@@ -100,7 +102,8 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -149,6 +152,7 @@ func (s *historyReplicatorSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
+	s.mockClientBean.AssertExpectations(s.T())
 }
 
 func (s *historyReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
