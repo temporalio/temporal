@@ -149,7 +149,7 @@ func (s *testCluster) setupCluster(no int, enableEventsV2 bool) {
 	messagingClient := s.createMessagingClient()
 	testNumberOfHistoryShards := 1 // use 1 shard so we can be sure when failover completed in standby cluster
 	s.host = host.NewCadence(s.ClusterMetadata, client.NewIPYarpcDispatcherProvider(), messagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, no, true, enableEventsV2)
+		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, no, true, enableEventsV2, false)
 	s.host.Start()
 }
 
@@ -191,7 +191,7 @@ func (s *testCluster) createMessagingClient() messaging.Client {
 		Topics:         topics,
 		ClusterToTopic: clusterToTopic,
 	}
-	return messaging.NewKafkaClient(&kafkaConfig, nil, zap.NewNop(), s.logger, tally.NoopScope, true)
+	return messaging.NewKafkaClient(&kafkaConfig, nil, zap.NewNop(), s.logger, tally.NoopScope, true, false)
 }
 
 func getTopicList(topicName string) messaging.TopicList {

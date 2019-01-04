@@ -30,6 +30,7 @@ type (
 		Clusters       map[string]ClusterConfig `yaml:"clusters"`
 		Topics         map[string]TopicConfig   `yaml:"topics"`
 		ClusterToTopic map[string]TopicList     `yaml:"cadence-cluster-topics"`
+		Applications   map[string]TopicList     `yaml:"applications"`
 	}
 
 	// ClusterConfig describes the configuration for a single Kafka cluster
@@ -50,11 +51,8 @@ type (
 	}
 )
 
-// VisibilityTopicName for visibility data to kafka
-const VisibilityTopicName = "visibility-topic"
-
 // Validate will validate config for kafka
-func (k *KafkaConfig) Validate(checkCluster bool) {
+func (k *KafkaConfig) Validate(checkCluster bool, checkApp bool) {
 	if len(k.Clusters) == 0 {
 		panic("Empty Kafka Cluster Config")
 	}
@@ -83,8 +81,15 @@ func (k *KafkaConfig) Validate(checkCluster bool) {
 			validateTopicsFn(topics.RetryTopic)
 			validateTopicsFn(topics.DLQTopic)
 		}
-	} else {
-		validateTopicsFn(VisibilityTopicName)
+	}
+	if checkApp {
+		if len(k.Applications) == 0 {
+			panic("Empty Applications Config")
+		}
+		for _, topics := range k.Applications {
+			validateTopicsFn(topics.Topic)
+			validateTopicsFn(topics.DLQTopic)
+		}
 	}
 }
 
@@ -98,4 +103,8 @@ func (k *KafkaConfig) getKafkaClusterForTopic(topic string) string {
 
 func (k *KafkaConfig) getBrokersForKafkaCluster(kafkaCluster string) []string {
 	return k.Clusters[kafkaCluster].Brokers
+}
+
+func (k *KafkaConfig) getTopicsForApplication(app string) TopicList {
+	return k.Applications[app]
 }

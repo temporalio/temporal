@@ -79,6 +79,9 @@ const (
 	TagCursorTimestamp            = "cursor-timestamp"
 	TagHistorySize                = "history-size"
 	TagEventCount                 = "event-count"
+	TagESRequest                  = "es-request"
+	TagESKey                      = "es-mapping-key"
+	TagESField                    = "es-field"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values
@@ -93,6 +96,9 @@ const (
 	TagValueReplicatorComponent               = "replicator"
 	TagValueReplicationTaskProcessorComponent = "replication-task-processor"
 	TagValueHistoryReplicatorComponent        = "history-replicator"
+	TagValueIndexerComponent                  = "indexer"
+	TagValueIndexerProcessorComponent         = "indexer-processor"
+	TagValueIndexerESProcessorComponent       = "indexer-es-processor"
 
 	// TagHistoryBuilderAction values
 	TagValueActionWorkflowStarted                 = "add-workflowexecution-started-event"

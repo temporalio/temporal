@@ -155,6 +155,11 @@ var keys = map[Key]string{
 	WorkerReplicatorConcurrency:      "worker.replicatorConcurrency",
 	WorkerReplicatorBufferRetryCount: "worker.replicatorBufferRetryCount",
 	WorkerReplicationTaskMaxRetry:    "worker.replicationTaskMaxRetry",
+	WorkerIndexerConcurrency:         "worker.indexerConcurrency",
+	WorkerESProcessorNumOfWorkers:    "worker.ESProcessorNumOfWorkers",
+	WorkerESProcessorBulkActions:     "worker.ESProcessorBulkActions",
+	WorkerESProcessorBulkSize:        "worker.ESProcessorBulkSize",
+	WorkerESProcessorFlushInterval:   "worker.ESProcessorFlushInterval",
 }
 
 const (
@@ -375,16 +380,26 @@ const (
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2
 
-	// key for history worker
+	// key for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS
-	// WorkerReplicatorConcurrency is the max concurrenct tasks to be processed at any given time
+	// WorkerReplicatorConcurrency is the max concurrent tasks to be processed at any given time
 	WorkerReplicatorConcurrency
 	// WorkerReplicatorBufferRetryCount is the retry attempt when encounter retry error
 	WorkerReplicatorBufferRetryCount
 	// WorkerReplicationTaskMaxRetry is the max retry for any task
 	WorkerReplicationTaskMaxRetry
+	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
+	WorkerIndexerConcurrency
+	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
+	WorkerESProcessorNumOfWorkers
+	// WorkerESProcessorBulkActions is max number of requests in bulk for esProcessor
+	WorkerESProcessorBulkActions
+	// WorkerESProcessorBulkSize is max total size of bulk in bytes for esProcessor
+	WorkerESProcessorBulkSize
+	// WorkerESProcessorFlushInterval is flush interval for esProcessor
+	WorkerESProcessorFlushInterval
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest
@@ -443,6 +458,3 @@ func TaskTypeFilter(taskType int) FilterOption {
 		filterMap[TaskType] = taskType
 	}
 }
-
-// DefaultEnableVisibilityToKafka default value for config EnableVisibilityToKafka
-const DefaultEnableVisibilityToKafka = false

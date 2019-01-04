@@ -24,6 +24,7 @@ import (
 	"errors"
 	"github.com/Shopify/sarama"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/codec/gob"
@@ -103,12 +104,12 @@ func (p *kafkaProducer) Close() error {
 	return p.producer.Close()
 }
 
-func (p *kafkaProducer) serializeTask(task *replicator.ReplicationTask) ([]byte, error) {
-	payload, err := p.msgEncoder.Encode(task)
+func (p *kafkaProducer) serializeThrift(input codec.ThriftObject) ([]byte, error) {
+	payload, err := p.msgEncoder.Encode(input)
 	if err != nil {
 		p.logger.WithFields(bark.Fields{
 			logging.TagErr: err,
-		}).Error("Failed to serialize replication task")
+		}).Error("Failed to serialize thrift object")
 
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func (p *kafkaProducer) serializeTask(task *replicator.ReplicationTask) ([]byte,
 	return payload, nil
 }
 
-func (p *kafkaProducer) getKey(task *replicator.ReplicationTask) sarama.Encoder {
+func (p *kafkaProducer) getKeyForReplicationTask(task *replicator.ReplicationTask) sarama.Encoder {
 	if task == nil {
 		return nil
 	}
@@ -143,26 +144,26 @@ func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.Produce
 	switch message.(type) {
 	case *replicator.ReplicationTask:
 		task := message.(*replicator.ReplicationTask)
-		payload, err := p.serializeTask(task)
+		payload, err := p.serializeThrift(task)
 		if err != nil {
 			return nil, err
 		}
-		partitionKey := p.getKey(task)
+		partitionKey := p.getKeyForReplicationTask(task)
 		msg := &sarama.ProducerMessage{
 			Topic: p.topic,
 			Key:   partitionKey,
 			Value: sarama.ByteEncoder(payload),
 		}
 		return msg, nil
-	case *OpenWorkflowMsg:
-		openRecord := message.(*OpenWorkflowMsg)
-		payload, err := p.gobEncoder.Encode(openRecord)
+	case *indexer.Message:
+		indexMsg := message.(*indexer.Message)
+		payload, err := p.serializeThrift(indexMsg)
 		if err != nil {
 			return nil, err
 		}
 		msg := &sarama.ProducerMessage{
-			Topic: VisibilityTopicName,
-			Key:   sarama.StringEncoder(openRecord.WorkflowID),
+			Topic: p.topic,
+			Key:   sarama.StringEncoder(indexMsg.GetWorkflowID()),
 			Value: sarama.ByteEncoder(payload),
 		}
 		return msg, nil

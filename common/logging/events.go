@@ -88,6 +88,12 @@ const (
 	ReplicationTaskProcessorShutdown         = 7104
 	ReplicationTaskProcessorShutdownTimedout = 7105
 	ReplicationTaskProcessingFailed          = 7106
+	IndexProcessorStarting                   = 7200
+	IndexProcessorStarted                    = 7201
+	IndexProcessorStartFailed                = 7202
+	IndexProcessorShuttingDown               = 7203
+	IndexProcessorShutDown                   = 7204
+	IndexProcessorShuttingDownTimedout       = 7205
 
 	// General purpose events
 	OperationFailed   = 9000

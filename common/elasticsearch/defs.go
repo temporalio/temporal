@@ -18,12 +18,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package messaging
+package elasticsearch
 
-// OpenWorkflowMsg is visibility data for open workflow
-type OpenWorkflowMsg struct {
-	Domain     string
-	WorkflowID string
-	RunID      string
-	StartTime  int64
+import "github.com/uber/cadence/.gen/go/indexer"
+
+// All legal fields allowed in elastic search index
+const (
+	DomainID      = "DomainID"
+	WorkflowID    = "WorkflowID"
+	RunID         = "RunID"
+	WorkflowType  = "WorkflowType"
+	StartTime     = "StartTime"
+	CloseTime     = "CloseTime"
+	CloseStatus   = "CloseStatus"
+	HistoryLength = "HistoryLength"
+
+	KafkaKey = "KafkaKey"
+)
+
+// Supported field types
+var (
+	FieldTypeString = indexer.FieldTypeString
+	FieldTypeInt    = indexer.FieldTypeInt
+	FieldTypeBool   = indexer.FieldTypeBool
+)
+
+var (
+	validFieldName = map[string]interface{}{
+		DomainID:      struct{}{},
+		WorkflowID:    struct{}{},
+		RunID:         struct{}{},
+		WorkflowType:  struct{}{},
+		StartTime:     struct{}{},
+		CloseTime:     struct{}{},
+		CloseStatus:   struct{}{},
+		HistoryLength: struct{}{},
+		KafkaKey:      struct{}{},
+	}
+)
+
+// IsFieldNameValid return true if given field name are allowed to index in elastic search
+func IsFieldNameValid(name string) bool {
+	_, ok := validFieldName[name]
+	return ok
 }

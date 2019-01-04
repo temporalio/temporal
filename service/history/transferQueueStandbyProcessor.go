@@ -214,7 +214,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 
 		if !isPending {
 			if markWorkflowAsOpen {
-				err := t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout)
+				err := t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, executionInfo.NextEventID)
 				if err != nil {
 					return err
 				}
@@ -230,7 +230,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 		}
 
 		if markWorkflowAsOpen {
-			err = t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout)
+			err = t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, executionInfo.NextEventID)
 		}
 
 		now := t.shard.GetCurrentTime(t.clusterName)
@@ -290,7 +290,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		// since event replication should be done by active cluster
 
 		return t.recordWorkflowClosed(
-			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength,
+			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, executionInfo.NextEventID,
 		)
 	}, standbyTaskPostActionNoOp) // no op post action, since the entire workflow is finished
 }

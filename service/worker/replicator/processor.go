@@ -134,7 +134,7 @@ func (p *replicationTaskProcessor) Start() error {
 	}
 
 	logging.LogReplicationTaskProcessorStartingEvent(p.logger)
-	consumer, err := p.client.NewConsumer(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorConcurrency())
+	consumer, err := p.client.NewConsumerWithClusterName(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorConcurrency())
 	if err != nil {
 		logging.LogReplicationTaskProcessorStartFailedEvent(p.logger, err)
 		return err

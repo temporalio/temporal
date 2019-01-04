@@ -379,7 +379,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Pending() {
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Return(nil)
-	s.mockProducer.On("Publish", mock.Anything).Return(nil)
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 	_, err := s.transferQueueStandbyProcessor.process(transferTask)
 	s.Equal(ErrTaskRetry, err)
 }
@@ -428,7 +428,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Pending_Pus
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Return(nil)
 	s.mockMatchingClient.On("AddDecisionTask", mock.Anything, mock.Anything).Return(nil).Once()
-	s.mockProducer.On("Publish", mock.Anything).Return(nil)
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	_, err := s.transferQueueStandbyProcessor.process(transferTask)
 	s.Nil(nil, err)
@@ -489,7 +489,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Success_Fir
 		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 	}).Return(nil).Once()
-	s.mockProducer.On("Publish", mock.Anything).Return(nil)
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	_, err := s.transferQueueStandbyProcessor.process(transferTask)
 	s.Nil(err)
@@ -597,6 +597,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessCloseExecution() {
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	_, err := s.transferQueueStandbyProcessor.process(transferTask)
 	s.Nil(err)

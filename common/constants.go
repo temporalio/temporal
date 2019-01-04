@@ -73,3 +73,8 @@ const (
 	// GetHistoryMaxPageSize is the max page size for get history
 	GetHistoryMaxPageSize = 1000
 )
+
+const (
+	// VisibilityAppName is used to find kafka topics and ES indexName for visibility
+	VisibilityAppName = "visibility"
+)

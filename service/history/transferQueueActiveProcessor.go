@@ -318,7 +318,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	if task.ScheduleID <= common.FirstEventID+2 {
-		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout)
+		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, executionInfo.NextEventID)
 		if err != nil {
 			return err
 		}
@@ -383,7 +383,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
-		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength,
+		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, executionInfo.NextEventID,
 	)
 	if err != nil {
 		return err

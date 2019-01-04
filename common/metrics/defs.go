@@ -618,6 +618,10 @@ const (
 	SyncShardTaskScope
 	// SyncActivityTaskScope is the scope used by sync activity information processing
 	SyncActivityTaskScope
+	// ESProcessorScope is scope used by all metric emitted by esProcessor
+	ESProcessorScope
+	// IndexProcessorScope is scope used by all metric emitted by index processor
+	IndexProcessorScope
 
 	NumWorkerScopes
 )
@@ -875,6 +879,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReplicationTaskScope: {operation: "HistoryReplicationTask"},
 		SyncShardTaskScope:          {operation: "SyncShardTask"},
 		SyncActivityTaskScope:       {operation: "SyncActivityTask"},
+		ESProcessorScope:            {operation: "ESProcessor"},
+		IndexProcessorScope:         {operation: "IndexProcessor"},
 	},
 }
 
@@ -1055,6 +1061,9 @@ const (
 	ReplicatorMessages = iota + NumCommonMetrics
 	ReplicatorFailures
 	ReplicatorLatency
+	ESProcessorFailures
+	ESProcessorCorruptedData
+	IndexProcessorCorruptedData
 
 	NumWorkerMetrics
 )
@@ -1219,9 +1228,12 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SyncMatchLatency:              {metricName: "syncmatch.latency", metricType: Timer},
 	},
 	Worker: {
-		ReplicatorMessages: {metricName: "replicator.messages"},
-		ReplicatorFailures: {metricName: "replicator.errors"},
-		ReplicatorLatency:  {metricName: "replicator.latency"},
+		ReplicatorMessages:          {metricName: "replicator.messages"},
+		ReplicatorFailures:          {metricName: "replicator.errors"},
+		ReplicatorLatency:           {metricName: "replicator.latency"},
+		ESProcessorFailures:         {metricName: "es-processor.errors"},
+		ESProcessorCorruptedData:    {metricName: "es-processor.corrupted-data"},
+		IndexProcessorCorruptedData: {metricName: "index-processor.corrupted-data"},
 	},
 }
 

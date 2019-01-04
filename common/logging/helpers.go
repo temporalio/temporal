@@ -488,3 +488,45 @@ func LogListClosedWorkflowByFilter(logger bark.Logger, domain, filter string) {
 		"FilterType": filter,
 	}).Info("List closed workflow with filter")
 }
+
+// LogIndexProcessorStartingEvent is used to log index processor starting
+func LogIndexProcessorStartingEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: IndexProcessorStarting,
+	}).Info("Index processor starting.")
+}
+
+// LogIndexProcessorStartedEvent is used to log index processor starting
+func LogIndexProcessorStartedEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: IndexProcessorStarted,
+	}).Info("Index processor started.")
+}
+
+// LogIndexProcessorStartFailedEvent is used to log index processor started
+func LogIndexProcessorStartFailedEvent(logger bark.Logger, err error) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: IndexProcessorStartFailed,
+	}).WithError(err).Warn("Index processor failed to start.")
+}
+
+// LogIndexProcessorShuttingDownEvent is used to log index processing shutting down
+func LogIndexProcessorShuttingDownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: IndexProcessorShuttingDown,
+	}).Info("Index processor shutting down.")
+}
+
+// LogIndexProcessorShutDownEvent is used to log index processing shutting down
+func LogIndexProcessorShutDownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: IndexProcessorShutDown,
+	}).Info("Index processor shut down.")
+}
+
+// LogIndexProcessorShutDownTimedoutEvent is used to log index processing shutting down
+func LogIndexProcessorShutDownTimedoutEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: IndexProcessorShuttingDownTimedout,
+	}).Info("Index processor shut down timedout.")
+}

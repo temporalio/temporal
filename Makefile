@@ -16,6 +16,7 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/history.thrift \
   idl/github.com/uber/cadence/matching.thrift \
   idl/github.com/uber/cadence/replicator.thrift \
+  idl/github.com/uber/cadence/indexer.thrift \
   idl/github.com/uber/cadence/shared.thrift \
   idl/github.com/uber/cadence/admin.thrift \
 

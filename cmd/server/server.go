@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/service/matching"
 	"github.com/uber/cadence/service/worker"
 
+	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/messaging"
 	"go.uber.org/zap"
 )
@@ -133,11 +134,12 @@ func (s *server) startService() common.Daemon {
 	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop
 
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
-	enableVisibilityToKafka := dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, dynamicconfig.DefaultEnableVisibilityToKafka)
+	params.ESConfig = &s.cfg.ElasticSearch
+	enableVisibilityToKafka := dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)()
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true)
-	} else if enableVisibilityToKafka() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false)
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, enableVisibilityToKafka)
+	} else if enableVisibilityToKafka {
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, enableVisibilityToKafka)
 	} else {
 		params.MessagingClient = nil
 	}
@@ -147,6 +149,22 @@ func (s *server) startService() common.Daemon {
 		if err != nil {
 			log.Fatalf("error creating blobstore: %v", err)
 		}
+	}
+
+	// enable visibility to kafka and enable visibility to elastic search are using one config
+	if enableVisibilityToKafka {
+		esFactory := elasticsearch.NewFactory(&s.cfg.ElasticSearch)
+		esClient, err := esFactory.NewClient()
+		if err != nil {
+			log.Fatalf("error creating elastic search client: %v", err)
+		}
+		params.ESClient = esClient
+
+		indexName, ok := params.ESConfig.Indices[common.VisibilityAppName]
+		if !ok || len(indexName) == 0 {
+			log.Fatalf("elastic search config missing visibility index")
+		}
+		params.ESConfig.Enable = enableVisibilityToKafka // force to use dynamic config
 	}
 
 	params.Logger.Info("Starting service " + s.name)

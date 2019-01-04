@@ -84,31 +84,32 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		adminHandler          *frontend.AdminHandler
-		frontendHandler       *frontend.WorkflowHandler
-		matchingHandler       *matching.Handler
-		historyHandlers       []*history.Handler
-		numberOfHistoryShards int
-		numberOfHistoryHosts  int
-		logger                bark.Logger
-		clusterMetadata       cluster.Metadata
-		dispatcherProvider    client.DispatcherProvider
-		messagingClient       messaging.Client
-		metadataMgr           persistence.MetadataManager
-		metadataMgrV2         persistence.MetadataManager
-		shardMgr              persistence.ShardManager
-		historyMgr            persistence.HistoryManager
-		historyV2Mgr          persistence.HistoryV2Manager
-		taskMgr               persistence.TaskManager
-		visibilityMgr         persistence.VisibilityManager
-		executionMgrFactory   persistence.ExecutionManagerFactory
-		shutdownCh            chan struct{}
-		shutdownWG            sync.WaitGroup
-		frontEndService       service.Service
-		clusterNo             int // cluster number
-		replicator            *replicator.Replicator
-		enableWorkerService   bool // tmp flag used to tell if onbox should create worker service
-		enableEventsV2        bool
+		adminHandler            *frontend.AdminHandler
+		frontendHandler         *frontend.WorkflowHandler
+		matchingHandler         *matching.Handler
+		historyHandlers         []*history.Handler
+		numberOfHistoryShards   int
+		numberOfHistoryHosts    int
+		logger                  bark.Logger
+		clusterMetadata         cluster.Metadata
+		dispatcherProvider      client.DispatcherProvider
+		messagingClient         messaging.Client
+		metadataMgr             persistence.MetadataManager
+		metadataMgrV2           persistence.MetadataManager
+		shardMgr                persistence.ShardManager
+		historyMgr              persistence.HistoryManager
+		historyV2Mgr            persistence.HistoryV2Manager
+		taskMgr                 persistence.TaskManager
+		visibilityMgr           persistence.VisibilityManager
+		executionMgrFactory     persistence.ExecutionManagerFactory
+		shutdownCh              chan struct{}
+		shutdownWG              sync.WaitGroup
+		frontEndService         service.Service
+		clusterNo               int // cluster number
+		replicator              *replicator.Replicator
+		enableWorkerService     bool // tmp flag used to tell if onebox should create worker service
+		enableEventsV2          bool
+		enableVisibilityToKafka bool
 	}
 
 	ringpopFactoryImpl struct {
@@ -121,27 +122,28 @@ func NewCadence(clusterMetadata cluster.Metadata, dispatcherProvider client.Disp
 	metadataMgrV2 persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
 	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
-	logger bark.Logger, clusterNo int, enableWorker, enableEventsV2 bool) Cadence {
+	logger bark.Logger, clusterNo int, enableWorker, enableEventsV2, enableVisibilityToKafka bool) Cadence {
 
 	return &cadenceImpl{
-		numberOfHistoryShards: numberOfHistoryShards,
-		numberOfHistoryHosts:  numberOfHistoryHosts,
-		logger:                logger,
-		clusterMetadata:       clusterMetadata,
-		dispatcherProvider:    dispatcherProvider,
-		messagingClient:       messagingClient,
-		metadataMgr:           metadataMgr,
-		metadataMgrV2:         metadataMgrV2,
-		visibilityMgr:         visibilityMgr,
-		shardMgr:              shardMgr,
-		historyMgr:            historyMgr,
-		historyV2Mgr:          historyV2Mgr,
-		taskMgr:               taskMgr,
-		executionMgrFactory:   executionMgrFactory,
-		shutdownCh:            make(chan struct{}),
-		clusterNo:             clusterNo,
-		enableWorkerService:   enableWorker,
-		enableEventsV2:        enableEventsV2,
+		numberOfHistoryShards:   numberOfHistoryShards,
+		numberOfHistoryHosts:    numberOfHistoryHosts,
+		logger:                  logger,
+		clusterMetadata:         clusterMetadata,
+		dispatcherProvider:      dispatcherProvider,
+		messagingClient:         messagingClient,
+		metadataMgr:             metadataMgr,
+		metadataMgrV2:           metadataMgrV2,
+		visibilityMgr:           visibilityMgr,
+		shardMgr:                shardMgr,
+		historyMgr:              historyMgr,
+		historyV2Mgr:            historyV2Mgr,
+		taskMgr:                 taskMgr,
+		executionMgrFactory:     executionMgrFactory,
+		shutdownCh:              make(chan struct{}),
+		clusterNo:               clusterNo,
+		enableWorkerService:     enableWorker,
+		enableEventsV2:          enableEventsV2,
+		enableVisibilityToKafka: enableVisibilityToKafka,
 	}
 }
 
@@ -356,7 +358,7 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, en
 		}
 		params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 		service := service.New(params)
-		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards)
+		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards, c.enableVisibilityToKafka)
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
 		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
 		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)

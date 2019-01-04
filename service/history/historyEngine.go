@@ -169,7 +169,7 @@ func NewEngineWithShardContext(
 	}
 	var visibilityProducer messaging.Producer
 	if config.EnableVisibilityToKafka() {
-		visibilityProducer = getVisibilityProducer(messagingClient)
+		visibilityProducer = getVisibilityProducer(messagingClient, shard.GetMetricsClient())
 	}
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, visibilityProducer, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
@@ -3314,13 +3314,16 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 	}
 }
 
-func getVisibilityProducer(messagingClient messaging.Client) messaging.Producer {
+func getVisibilityProducer(messagingClient messaging.Client, metricsClient metrics.Client) messaging.Producer {
 	if messagingClient == nil {
 		return nil
 	}
-	visibilityProducer, err := messagingClient.NewProducer(messaging.VisibilityTopicName)
+	visibilityProducer, err := messagingClient.NewProducer(common.VisibilityAppName)
 	if err != nil {
 		panic(err)
+	}
+	if metricsClient != nil {
+		visibilityProducer = messaging.NewMetricProducer(visibilityProducer, metricsClient)
 	}
 	return visibilityProducer
 }

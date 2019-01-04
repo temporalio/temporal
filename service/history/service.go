@@ -23,6 +23,7 @@ package history
 import (
 	"time"
 
+	"fmt"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
@@ -133,7 +134,7 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilityToKafka bool) *Config {
 	return &Config{
 		NumberOfShards:                                        numberOfShards,
 		EnableSyncActivityHeartbeat:                           dc.GetBoolProperty(dynamicconfig.EnableSyncActivityHeartbeat, false),
@@ -144,7 +145,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		EnableVisibilitySampling:                              dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		VisibilityOpenMaxQPS:                                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:                                dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
-		EnableVisibilityToKafka:                               dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, dynamicconfig.DefaultEnableVisibilityToKafka),
+		EnableVisibilityToKafka:                               dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
 		HistoryCacheInitialSize:                               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
@@ -227,12 +228,14 @@ type Service struct {
 // NewService builds a new cadence-history service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
+	fmt.Println(params.ESConfig)
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),
 		config: NewConfig(
 			dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 			params.PersistenceConfig.NumHistoryShards,
+			params.ESConfig.Enable,
 		),
 	}
 }
