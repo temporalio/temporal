@@ -2998,6 +2998,8 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context
 				NextEventID:       nextEventID,
 				PersistenceToken:  persistenceToken,
 				TransientDecision: matchingResp.DecisionInfo,
+				EventStoreVersion: eventStoreVersion,
+				BranchToken:       branchToken,
 			})
 			if err != nil {
 				return nil, err
