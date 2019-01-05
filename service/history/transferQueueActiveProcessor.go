@@ -314,11 +314,13 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 		tasklist.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
 		decisionTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
+	nextEventID := executionInfo.NextEventID
+
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	if task.ScheduleID <= common.FirstEventID+2 {
-		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, executionInfo.NextEventID)
+		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, nextEventID)
 		if err != nil {
 			return err
 		}
