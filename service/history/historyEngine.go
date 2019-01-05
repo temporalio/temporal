@@ -25,8 +25,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/uber/cadence/service/worker/sysworkflow"
 	"time"
+
+	"github.com/uber/cadence/service/worker/sysworkflow"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -794,7 +795,10 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 		},
 		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
-			Execution:     request.Request.Execution,
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+				RunId:      common.StringPtr(executionInfo.RunID),
+			},
 			Type:          &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
 			StartTime:     common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
 			HistoryLength: common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
