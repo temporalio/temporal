@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.13",
+  "MinCompatibleVersion": "0.13",
+  "Description": "Support workflow reset",
+  "SchemaUpdateCqlFiles": [
+    "reset.cql"
+  ]
+}

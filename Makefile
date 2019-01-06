@@ -101,7 +101,6 @@ test: dep-ensured bins
 		go test -timeout 20m -race -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
-# need to run xdc tests with race detector off because of ringpop bug causing data race issue
 test_eventsV2: dep-ensured bins
 	@rm -f test_eventsV2
 	@rm -f test_eventsV2.log
@@ -118,6 +117,7 @@ test_eventsV2_xdc: dep-ensured bins
 		go test -timeout 20m -coverprofile=$@ "$$dir" -v -eventsV2xdc=true | tee -a test_eventsV2_xdc.log; \
 	done;
 
+# need to run xdc tests with race detector off because of ringpop bug causing data race issue
 test_xdc: dep-ensured bins
 	@rm -f test
 	@rm -f test.log

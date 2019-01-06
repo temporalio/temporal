@@ -457,6 +457,10 @@ Loop:
 		return nil
 	}
 
+	if attr.GetResetWorkflow() {
+		// TODO will implement it in next PR
+		return ErrUnknownReplicationTask
+	}
 	var err error
 	req := &h.ReplicateEventsRequest{
 		SourceCluster: common.StringPtr(p.sourceCluster),
@@ -474,6 +478,7 @@ Loop:
 		ForceBufferEvents:       common.BoolPtr(inRetry),
 		EventStoreVersion:       attr.EventStoreVersion,
 		NewRunEventStoreVersion: attr.NewRunEventStoreVersion,
+		ResetWorkflow:           attr.ResetWorkflow,
 	}
 
 RetryLoop:

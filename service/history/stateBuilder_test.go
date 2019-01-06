@@ -110,6 +110,7 @@ func (s *stateBuilderSuite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.mockMutableState = &mockMutableState{}
+	s.mockMutableState.On("GetReplicationState").Return(&persistence.ReplicationState{})
 	s.stateBuilder = newStateBuilder(s.mockShard, s.mockMutableState, s.logger)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)

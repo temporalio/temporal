@@ -386,6 +386,29 @@ func (_m *MockHistoryEngine) TerminateWorkflowExecution(ctx context.Context, req
 	return r0
 }
 
+// ResetWorkflowExecution is mock implementation for TerminateWorkflowExecution of HistoryEngine
+func (_m *MockHistoryEngine) ResetWorkflowExecution(ctx context.Context, request *gohistory.ResetWorkflowExecutionRequest) (*shared.ResetWorkflowExecutionResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *shared.ResetWorkflowExecutionResponse
+	if rf, ok := ret.Get(0).(func(*gohistory.ResetWorkflowExecutionRequest) *shared.ResetWorkflowExecutionResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.ResetWorkflowExecutionResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*gohistory.ResetWorkflowExecutionRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(0)
+	}
+
+	return r0, r1
+}
+
 // ScheduleDecisionTask is mock implementation for ScheduleDecisionTask of HistoryEngine
 func (_m *MockHistoryEngine) ScheduleDecisionTask(ctx context.Context, request *gohistory.ScheduleDecisionTaskRequest) error {
 	ret := _m.Called(request)

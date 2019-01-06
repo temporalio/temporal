@@ -119,8 +119,10 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 		resetMutableStateBuilder.IncrementHistorySize(size)
 	}
 
-	// reset branchToken to the original one(they will be set to a wrong version in applyEvents for startEvent
+	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)
 	resetMutableStateBuilder.executionInfo.BranchToken = branchToken
+	// similarly, in case of resetWF, the runID in startEvent is incorrect
+	resetMutableStateBuilder.executionInfo.RunID = info.RunID
 	// Applying events to mutableState does not move the nextEventID.  Explicitly set nextEventID to new value
 	resetMutableStateBuilder.executionInfo.SetNextEventID(replayNextEventID)
 	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime
@@ -131,7 +133,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 	resetMutableStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
 
 	r.logger.WithField(logging.TagResetNextEventID, resetMutableStateBuilder.GetNextEventID()).Info("All events applied for execution.")
-	msBuilder, err := r.context.resetWorkflowExecution(prevRunID, resetMutableStateBuilder)
+	msBuilder, err := r.context.resetMutableState(prevRunID, resetMutableStateBuilder)
 	if err != nil {
 		r.logError("Conflict resolution err reset workflow.", err)
 	}

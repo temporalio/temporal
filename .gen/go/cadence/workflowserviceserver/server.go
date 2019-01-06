@@ -114,6 +114,11 @@ type Interface interface {
 		ResetRequest *shared.ResetStickyTaskListRequest,
 	) (*shared.ResetStickyTaskListResponse, error)
 
+	ResetWorkflowExecution(
+		ctx context.Context,
+		ResetRequest *shared.ResetWorkflowExecutionRequest,
+	) (*shared.ResetWorkflowExecutionResponse, error)
+
 	RespondActivityTaskCanceled(
 		ctx context.Context,
 		CanceledRequest *shared.RespondActivityTaskCanceledRequest,
@@ -373,6 +378,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "ResetWorkflowExecution",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ResetWorkflowExecution),
+				},
+				Signature:    "ResetWorkflowExecution(ResetRequest *shared.ResetWorkflowExecutionRequest) (*shared.ResetWorkflowExecutionResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RespondActivityTaskCanceled",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -528,7 +544,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 30)
+	procedures := make([]transport.Procedure, 0, 31)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -830,6 +846,25 @@ func (h handler) ResetStickyTaskList(ctx context.Context, body wire.Value) (thri
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_ResetStickyTaskList_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ResetWorkflowExecution(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_ResetWorkflowExecution_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.ResetWorkflowExecution(ctx, args.ResetRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_ResetWorkflowExecution_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

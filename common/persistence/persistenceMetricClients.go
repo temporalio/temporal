@@ -277,6 +277,20 @@ func (p *workflowExecutionPersistenceClient) ResetMutableState(request *ResetMut
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceResetWorkflowExecutionScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceResetWorkflowExecutionScope, metrics.PersistenceLatency)
+	err := p.persistence.ResetWorkflowExecution(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceResetWorkflowExecutionScope, err)
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceRequests)
 
@@ -993,6 +1007,18 @@ func (p *historyV2PersistenceClient) DeleteHistoryBranch(request *DeleteHistoryB
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceDeleteHistoryBranchScope, err)
+	}
+	return err
+}
+
+// CompleteForkBranch complete forking process
+func (p *historyV2PersistenceClient) CompleteForkBranch(request *CompleteForkBranchRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceCompleteForkBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteForkBranchScope, metrics.PersistenceLatency)
+	err := p.persistence.CompleteForkBranch(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceCompleteForkBranchScope, err)
 	}
 	return err
 }

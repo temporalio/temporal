@@ -147,10 +147,22 @@ func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
 }
 
-// NewDomainCacheEntryWithInfo returns an entry with domainInfo
-func NewDomainCacheEntryWithInfo(info *persistence.DomainInfo) *DomainCacheEntry {
+// NewDomainCacheEntryWithReplicationForTest returns an entry with test data
+func NewDomainCacheEntryWithReplicationForTest(info *persistence.DomainInfo, config *persistence.DomainConfig, repConfig *persistence.DomainReplicationConfig, clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{
-		info: info,
+		info:              info,
+		config:            config,
+		isGlobalDomain:    true,
+		replicationConfig: repConfig,
+		clusterMetadata:   clusterMetadata,
+	}
+}
+
+// NewDomainCacheEntryForTest returns an entry with domainInfo
+func NewDomainCacheEntryForTest(info *persistence.DomainInfo, config *persistence.DomainConfig) *DomainCacheEntry {
+	return &DomainCacheEntry{
+		info:   info,
+		config: config,
 	}
 }
 

@@ -119,10 +119,8 @@ func (b *historyBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64,
-	cause workflow.DecisionTaskFailedCause, details []byte, identity string) *workflow.HistoryEvent {
-	event := b.newDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, details, identity)
-
+func (b *historyBuilder) AddDecisionTaskFailedEvent(attr workflow.DecisionTaskFailedEventAttributes) *workflow.HistoryEvent {
+	event := b.newDecisionTaskFailedEvent(attr)
 	return b.addEventToHistory(event)
 }
 
@@ -533,17 +531,9 @@ func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, sta
 	return historyEvent
 }
 
-func (b *historyBuilder) newDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64,
-	cause workflow.DecisionTaskFailedCause, details []byte, identity string) *workflow.HistoryEvent {
+func (b *historyBuilder) newDecisionTaskFailedEvent(attr workflow.DecisionTaskFailedEventAttributes) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(workflow.EventTypeDecisionTaskFailed)
-	attributes := &workflow.DecisionTaskFailedEventAttributes{}
-	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
-	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.Cause = common.DecisionTaskFailedCausePtr(cause)
-	attributes.Details = details
-	attributes.Identity = common.StringPtr(identity)
-	historyEvent.DecisionTaskFailedEventAttributes = attributes
-
+	historyEvent.DecisionTaskFailedEventAttributes = &attr
 	return historyEvent
 }
 

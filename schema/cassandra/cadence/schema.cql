@@ -101,6 +101,7 @@ CREATE TYPE transfer_task (
   type                       int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution, StartChildExecution, ReplicationTask}
   schedule_id                bigint,
   version                    bigint, -- the failover version when this task is created, used to compare against the mutable state, in case the events got overwritten
+  record_visibility          boolean, -- indicates whether or not to create a visibility record
 );
 
 CREATE TYPE replication_task (
@@ -118,6 +119,9 @@ CREATE TYPE replication_task (
   branch_token               blob, -- if eventV2, then query with this token
   new_run_event_store_version        int, -- indiciates which version of event store to query for new run(continueAsNew)
   new_run_branch_token               blob, -- if eventV2, then query with this token for new run(continueAsNew)
+  reset_workflow             boolean, -- whether the task is for resetWorkflowExecution
+  new_run_first_event_id     bigint,  -- Used by ReplicationTask to set the first event ID of the new run (current only for reset)
+  new_run_next_event_id      bigint,  -- Used by ReplicationTask to set the next event ID of the new run (current only for reset)
 );
 
 CREATE TYPE timer_task (
@@ -332,11 +336,13 @@ CREATE TABLE history_node (
     };
 
 CREATE TABLE history_tree (
-tree_id           uuid,
-branch_id         uuid,
-ancestors         list<frozen<branch_range>>,
-in_progress       boolean, -- For fork operation to prevent race condition to leak event data when forking branches
-PRIMARY KEY ((tree_id), branch_id )
+  tree_id           uuid,
+  branch_id         uuid,
+  ancestors         list<frozen<branch_range>>,
+  in_progress       boolean, -- For fork operation to prevent race condition to leak event data when forking branches
+  fork_time         timestamp, -- For fork operation to prevent race condition to leak event data when forking branches
+  info              text, -- For background cleanup when fork operation cannot finish self cleanup due to crash
+  PRIMARY KEY ((tree_id), branch_id )
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };

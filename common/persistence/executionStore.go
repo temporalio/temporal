@@ -534,6 +534,52 @@ func (m *executionManagerImpl) ResetMutableState(request *ResetMutableStateReque
 	return m.persistence.ResetMutableState(newRequest)
 }
 
+func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error {
+
+	currExecution, err := m.SerializeExecutionInfo(request.CurrExecutionInfo, request.Encoding)
+	if err != nil {
+		return err
+	}
+
+	executionInfo, err := m.SerializeExecutionInfo(request.InsertExecutionInfo, request.Encoding)
+	if err != nil {
+		return err
+	}
+	insertActivityInfos, err := m.SerializeUpsertActivityInfos(request.InsertActivityInfos, request.Encoding)
+	if err != nil {
+		return err
+	}
+	insertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(request.InsertChildExecutionInfos, request.Encoding)
+	if err != nil {
+		return err
+	}
+
+	newRequest := &InternalResetWorkflowExecutionRequest{
+		PrevRunID: request.PrevRunID,
+		Condition: request.Condition,
+		RangeID:   request.RangeID,
+
+		UpdateCurr:           request.UpdateCurr,
+		CurrExecutionInfo:    currExecution,
+		CurrReplicationState: request.CurrReplicationState,
+		CurrTimerTasks:       request.CurrTimerTasks,
+		CurrTransferTasks:    request.CurrTransferTasks,
+
+		InsertExecutionInfo:       executionInfo,
+		InsertReplicationState:    request.InsertReplicationState,
+		InsertTimerTasks:          request.InsertTimerTasks,
+		InsertTransferTasks:       request.InsertTransferTasks,
+		InsertReplicationTasks:    request.InsertReplicationTasks,
+		InsertActivityInfos:       insertActivityInfos,
+		InsertTimerInfos:          request.InsertTimerInfos,
+		InsertChildExecutionInfos: insertChildExecutionInfos,
+		InsertRequestCancelInfos:  request.InsertRequestCancelInfos,
+		InsertSignalInfos:         request.InsertSignalInfos,
+		InsertSignalRequestedIDs:  request.InsertSignalRequestedIDs,
+	}
+	return m.persistence.ResetWorkflowExecution(newRequest)
+}
+
 func (m *executionManagerImpl) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	return m.persistence.CreateWorkflowExecution(request)
 }

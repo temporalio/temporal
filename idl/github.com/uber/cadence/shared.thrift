@@ -191,6 +191,7 @@ enum DecisionTaskFailedCause {
   FORCE_CLOSE_DECISION,
   FAILOVER_CLOSE_DECISION,
   BAD_SIGNAL_INPUT_SIZE,
+  RESET_WORKFLOW,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {
@@ -507,6 +508,10 @@ struct DecisionTaskFailedEventAttributes {
   30: optional DecisionTaskFailedCause cause
   35: optional binary details
   40: optional string identity
+  50: optional string reason
+  // for reset workflow
+  60: optional string forkRunId
+  70: optional string newRunId
 }
 
 struct ActivityTaskScheduledEventAttributes {
@@ -1124,6 +1129,18 @@ struct TerminateWorkflowExecutionRequest {
   30: optional string reason
   40: optional binary details
   50: optional string identity
+}
+
+struct ResetWorkflowExecutionRequest {
+  10: optional string domain
+  20: optional WorkflowExecution workflowExecution
+  30: optional string reason
+  40: optional i64 (js.type = "Long") decisionFinishEventId
+  50: optional string requestId
+}
+
+struct ResetWorkflowExecutionResponse {
+  10: optional string runId
 }
 
 struct ListOpenWorkflowExecutionsRequest {

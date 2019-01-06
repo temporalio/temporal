@@ -227,6 +227,24 @@ func (p *workflowExecutionRateLimitedPersistenceClient) ResetMutableState(reques
 	return err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.ResetWorkflowExecution(request)
+	return err
+}
+
+// CompleteForkBranch complete forking process
+func (p *historyV2RateLimitedPersistenceClient) CompleteForkBranch(request *CompleteForkBranchRequest) error {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	err := p.persistence.CompleteForkBranch(request)
+	return err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return ErrPersistenceLimitExceeded

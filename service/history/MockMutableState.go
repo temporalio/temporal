@@ -350,17 +350,44 @@ func (_m *mockMutableState) AddDecisionTaskCompletedEvent(_a0 int64, _a1 int64, 
 	return r0
 }
 
-// AddDecisionTaskFailedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
-func (_m *mockMutableState) AddDecisionTaskFailedEvent(_a0 int64, _a1 int64, _a2 shared.DecisionTaskFailedCause, _a3 []uint8, _a4 string) *shared.HistoryEvent {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+// AddDecisionTaskFailedEvent provides a mock function with given fields
+func (_m *mockMutableState) AddDecisionTaskFailedEvent(_a0 int64, _a1 int64, _a2 shared.DecisionTaskFailedCause, _a3 []uint8, _a4, _a5, _a6, _a7 string) *shared.HistoryEvent {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(int64, int64, shared.DecisionTaskFailedCause, []uint8, string) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	if rf, ok := ret.Get(0).(func(int64, int64, shared.DecisionTaskFailedCause, []uint8, string, string, string, string) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
 		}
+	}
+
+	return r0
+}
+
+// GetAllSignalsToSend provide mocks
+func (_m *mockMutableState) GetAllSignalsToSend() map[int64]*persistence.SignalInfo {
+	ret := _m.Called()
+
+	var r0 map[int64]*persistence.SignalInfo
+	if rf, ok := ret.Get(0).(func() map[int64]*persistence.SignalInfo); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(map[int64]*persistence.SignalInfo)
+	}
+
+	return r0
+}
+
+func (_m *mockMutableState) GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo {
+	ret := _m.Called()
+
+	var r0 map[int64]*persistence.RequestCancelInfo
+	if rf, ok := ret.Get(0).(func() map[int64]*persistence.RequestCancelInfo); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(map[int64]*persistence.RequestCancelInfo)
 	}
 
 	return r0

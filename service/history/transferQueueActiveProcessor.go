@@ -319,7 +319,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	if task.ScheduleID <= common.FirstEventID+2 {
+	if task.ScheduleID <= common.FirstEventID+2 || task.RecordVisibility {
 		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, nextEventID)
 		if err != nil {
 			return err

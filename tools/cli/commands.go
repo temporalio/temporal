@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 
+	"github.com/uber/cadence/.gen/go/shared"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 )
@@ -1154,6 +1155,39 @@ func ObserveHistory(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	printWorkflowProgress(c, wid, rid)
+}
+
+// ResetWorkflow reset workflow
+func ResetWorkflow(c *cli.Context) {
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := getRequiredOption(c, FlagRunID)
+	reason := getRequiredOption(c, FlagReason)
+	if len(reason) <= 0 {
+		ErrorAndExit("wrong reason", fmt.Errorf("reason cannot be empty"))
+	}
+	eventID := c.Int64(FlagEventID)
+	if eventID <= 0 {
+		ErrorAndExit("wrong eventID", fmt.Errorf("eventID must be greater than 0"))
+	}
+	ctx, cancel := newContext()
+	defer cancel()
+
+	frontendClient := cFactory.ServerFrontendClient(c)
+	resp, err := frontendClient.ResetWorkflowExecution(ctx, &shared.ResetWorkflowExecutionRequest{
+		Domain: common.StringPtr(domain),
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(rid),
+		},
+		Reason:                common.StringPtr(reason),
+		DecisionFinishEventId: common.Int64Ptr(eventID),
+		RequestId:             common.StringPtr(uuid.New()),
+	})
+	if err != nil {
+		ErrorAndExit("reset failed", err)
+	}
+	prettyPrintJSONObject(resp)
 }
 
 // ObserveHistoryWithID show the process of running workflow

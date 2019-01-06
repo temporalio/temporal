@@ -1212,7 +1212,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	now := time.Now()
 	tasks := []p.Task{
 		&p.ActivityTask{now, currentTransferID + 10001, domainID, tasklist, scheduleID, 111},
-		&p.DecisionTask{now, currentTransferID + 10002, domainID, tasklist, scheduleID, 222},
+		&p.DecisionTask{now, currentTransferID + 10002, domainID, tasklist, scheduleID, 222, false},
 		&p.CloseExecutionTask{now, currentTransferID + 10003, 333},
 		&p.CancelExecutionTask{now, currentTransferID + 10004, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 444},
 		&p.SignalExecutionTask{now, currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},
@@ -1309,7 +1309,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	now := time.Now()
 	tasks := []p.Task{
 		&p.ActivityTask{now, currentTransferID + 10001, domainID, tasklist, scheduleID, 111},
-		&p.DecisionTask{now, currentTransferID + 10002, domainID, tasklist, scheduleID, 222},
+		&p.DecisionTask{now, currentTransferID + 10002, domainID, tasklist, scheduleID, 222, false},
 		&p.CloseExecutionTask{now, currentTransferID + 10003, 333},
 		&p.CancelExecutionTask{now, currentTransferID + 10004, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 444},
 		&p.SignalExecutionTask{now, currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},

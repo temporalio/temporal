@@ -1076,6 +1076,11 @@ func updateBufferedEvents(tx *sqlx.Tx, batch *p.DataBlob, clear bool, shardID in
 	return nil
 }
 
+func (m *sqlExecutionManager) ResetWorkflowExecution(request *p.InternalResetWorkflowExecutionRequest) error {
+	// TODO need to implement with history eventsV2 API
+	return fmt.Errorf("Not implemented")
+}
+
 func (m *sqlExecutionManager) ResetMutableState(request *p.InternalResetMutableStateRequest) error {
 	return m.txExecuteShardLocked("ResetMutableState", request.RangeID, func(tx *sqlx.Tx) error {
 		return m.resetMutableStateTx(tx, request)

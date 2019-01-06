@@ -135,6 +135,18 @@ func (_m *HistoryV2Manager) DeleteHistoryBranch(request *persistence.DeleteHisto
 	return r0
 }
 
+// CompleteForkBranch provides a mock function with given fields: request
+func (_m *HistoryV2Manager) CompleteForkBranch(request *persistence.CompleteForkBranchRequest) error {
+	ret := _m.Called(request)
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.CompleteForkBranchRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
 // GetHistoryTree provides a mock function with given fields: request
 func (_m *HistoryV2Manager) GetHistoryTree(request *persistence.GetHistoryTreeRequest) (*persistence.GetHistoryTreeResponse, error) {
 	ret := _m.Called(request)

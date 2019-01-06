@@ -575,9 +575,69 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op = func() error {
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			return t.historyService.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			err := t.historyService.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 				BranchToken: msBuilder.GetCurrentBranch(),
 			})
+			if err == nil {
+				return nil
+			}
+
+			_, ok := err.(*persistence.ConditionFailedError)
+			if !ok {
+				return err
+			}
+
+			// we believe this is very rare case to see: DeleteHistoryBranch returns ConditionFailedError means there are some incomplete branches
+
+			resp, err := t.historyService.historyV2Mgr.GetHistoryTree(&persistence.GetHistoryTreeRequest{
+				BranchToken: msBuilder.GetCurrentBranch(),
+			})
+			if err != nil {
+				return err
+			}
+
+			if ok && len(resp.ForkingInProgressBranches) > 0 {
+				logInfo := ""
+				defer func() {
+					logger := t.logger.WithFields(bark.Fields{
+						logging.TagHistoryShardID:      t.shard.GetShardID(),
+						logging.TagTaskID:              task.GetTaskID(),
+						logging.TagTaskType:            task.GetTaskType(),
+						logging.TagDomainID:            task.DomainID,
+						logging.TagWorkflowExecutionID: task.WorkflowID,
+						logging.TagWorkflowRunID:       task.RunID,
+					})
+					logger.Warnf("seeing incomplete forking branches when deleting branch, details: %v", logInfo)
+				}()
+				for _, br := range resp.ForkingInProgressBranches {
+					if time.Now().After(br.ForkTime.Add(time.Minute)) {
+						logInfo += ";" + br.Info
+						// this can be case of goroutine crash the API call doesn't call CompleteForkBranch() to clean up the new branch
+						bt, err := persistence.NewHistoryBranchTokenFromAnother(br.BranchID, msBuilder.GetCurrentBranch())
+						if err != nil {
+							return err
+						}
+						err = t.historyService.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
+							// actually we don't know it is success or fail. but use true for safety
+							// the worst case is we may leak some data that will never deleted
+							Success:     true,
+							BranchToken: bt,
+						})
+						if err != nil {
+							return err
+						}
+					} else {
+						// in case of the forking is in progress within a short time period
+						return &workflow.ServiceBusyError{
+							Message: "waiting for forking to complete",
+						}
+					}
+				}
+			}
+			err = t.historyService.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+				BranchToken: msBuilder.GetCurrentBranch(),
+			})
+			return err
 		}
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{

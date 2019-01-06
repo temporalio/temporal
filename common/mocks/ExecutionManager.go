@@ -139,6 +139,20 @@ func (_m *ExecutionManager) ResetMutableState(request *persistence.ResetMutableS
 	return r0
 }
 
+// ResetWorkflowExecution provides a mock function with given fields: request
+func (_m *ExecutionManager) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.ResetWorkflowExecutionRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // DeleteWorkflowExecution provides a mock function with given fields: request
 func (_m *ExecutionManager) DeleteWorkflowExecution(request *persistence.DeleteWorkflowExecutionRequest) error {
 	ret := _m.Called(request)

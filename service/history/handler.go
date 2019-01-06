@@ -903,6 +903,41 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context,
 	return nil
 }
 
+// ResetWorkflowExecution reset an existing workflow execution
+// in the history and immediately terminating the execution instance.
+func (h *Handler) ResetWorkflowExecution(ctx context.Context,
+	wrappedRequest *hist.ResetWorkflowExecutionRequest) (*gen.ResetWorkflowExecutionResponse, error) {
+	h.startWG.Wait()
+
+	scope := metrics.HistoryResetWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := wrappedRequest.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	workflowExecution := wrappedRequest.ResetRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	resp, err2 := engine.ResetWorkflowExecution(ctx, wrappedRequest)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return resp, nil
+}
+
 // ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
 // used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
 // child execution without creating the decision task and then calls this API after updating the mutable state of

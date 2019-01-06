@@ -407,9 +407,23 @@ func (tb *timerBuilder) insertTimer(td *timerDetails) bool {
 	return i == 0 // This is the first timer in the list.
 }
 
+func (tb *timerBuilder) firstTimerTaskWithoutChecking() persistence.Task {
+	if len(tb.userTimers) > 0 {
+		return tb.createNewTask(tb.userTimers[0])
+	}
+	return nil
+}
+
 func (tb *timerBuilder) firstTimerTask() persistence.Task {
 	if len(tb.userTimers) > 0 && !tb.userTimers[0].TaskCreated {
 		return tb.createNewTask(tb.userTimers[0])
+	}
+	return nil
+}
+
+func (tb *timerBuilder) firstActivityTimerTaskWithoutChecking() persistence.Task {
+	if len(tb.activityTimers) > 0 {
+		return tb.createNewTask(tb.activityTimers[0])
 	}
 	return nil
 }

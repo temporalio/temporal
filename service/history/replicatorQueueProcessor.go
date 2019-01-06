@@ -237,15 +237,23 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 
 	// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 	var newRunHistory *shared.History
-	events := history.Events
-	if len(events) > 0 {
-		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
-			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
-			newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken)
-			if err != nil {
-				return nil, err
+	if task.ResetWorkflow {
+		newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
+			task.DomainID, task.WorkflowID, "", task.NewRunFirstEventID, task.NewRunNextEventID, task.NewRunEventStoreVersion, task.NewRunBranchToken)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		events := history.Events
+		if len(events) > 0 {
+			lastEvent := events[len(events)-1]
+			if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
+				newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+				newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
+					task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -265,6 +273,7 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 			NewRunHistory:           newRunHistory,
 			EventStoreVersion:       common.Int32Ptr(task.EventStoreVersion),
 			NewRunEventStoreVersion: common.Int32Ptr(task.NewRunEventStoreVersion),
+			ResetWorkflow:           common.BoolPtr(task.ResetWorkflow),
 		},
 	}
 	return ret, nil

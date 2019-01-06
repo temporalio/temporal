@@ -60,7 +60,7 @@ type (
 		AddCompletedWorkflowEvent(int64, *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
 		AddContinueAsNewEvent(int64, *cache.DomainCacheEntry, string, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) (*workflow.HistoryEvent, mutableState, error)
 		AddDecisionTaskCompletedEvent(int64, int64, *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent
-		AddDecisionTaskFailedEvent(int64, int64, workflow.DecisionTaskFailedCause, []uint8, string) *workflow.HistoryEvent
+		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause workflow.DecisionTaskFailedCause, details []byte, identity, reason, forkRunID, newRunID string) *workflow.HistoryEvent
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) *workflow.HistoryEvent
 		AddDecisionTaskScheduledEvent() *decisionInfo
 		AddDecisionTaskStartedEvent(int64, string, *workflow.PollForDecisionTaskRequest) (*workflow.HistoryEvent, *decisionInfo)
@@ -139,6 +139,8 @@ type (
 		GetCronBackoffDuration() time.Duration
 		GetScheduleIDByActivityID(string) (int64, bool)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
+		GetAllSignalsToSend() map[int64]*persistence.SignalInfo
+		GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo
 		GetStartVersion() int64
 		GetUserTimer(string) (bool, *persistence.TimerInfo)
 		GetWorkflowType() *workflow.WorkflowType

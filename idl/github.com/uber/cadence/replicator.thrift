@@ -58,6 +58,7 @@ struct HistoryTaskAttributes {
   90: optional shared.History newRunHistory
   100: optional i32 eventStoreVersion
   110: optional i32 newRunEventStoreVersion
+  120: optional bool resetWorkflow
 }
 
 struct SyncShardStatusTaskAttributes {

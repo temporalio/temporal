@@ -351,6 +351,23 @@ func (c *metricClient) TerminateWorkflowExecution(
 	return err
 }
 
+func (c *metricClient) ResetWorkflowExecution(
+	context context.Context,
+	request *h.ResetWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) (*shared.ResetWorkflowExecutionResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientResetWorkflowExecutionScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientResetWorkflowExecutionScope, metrics.CadenceClientLatency)
+	resp, err := c.client.ResetWorkflowExecution(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientResetWorkflowExecutionScope, metrics.CadenceClientFailures)
+	}
+
+	return resp, err
+}
+
 func (c *metricClient) ScheduleDecisionTask(
 	context context.Context,
 	request *h.ScheduleDecisionTaskRequest,

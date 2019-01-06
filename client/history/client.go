@@ -503,6 +503,29 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return err
 }
 
+func (c *clientImpl) ResetWorkflowExecution(
+	ctx context.Context,
+	request *h.ResetWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) (*workflow.ResetWorkflowExecutionResponse, error) {
+	client, err := c.getClientForWorkflowID(*request.ResetRequest.WorkflowExecution.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *workflow.ResetWorkflowExecutionResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ResetWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, err
+}
+
 func (c *clientImpl) ScheduleDecisionTask(
 	ctx context.Context,
 	request *h.ScheduleDecisionTaskRequest,

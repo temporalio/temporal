@@ -1927,7 +1927,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
-
 			token.FirstEventID = token.NextEventID
 			token.NextEventID = nextEventID
 			token.IsWorkflowRunning = isWorkflowRunning
@@ -2242,6 +2241,48 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 	}
 
 	return nil
+}
+
+// ResetWorkflowExecution reset an existing workflow execution to the nextFirstEventID
+// in the history and immediately terminating the current execution instance.
+func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
+	resetRequest *gen.ResetWorkflowExecutionRequest) (*gen.ResetWorkflowExecutionResponse, error) {
+
+	scope := metrics.FrontendResetWorkflowExecutionScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if resetRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if resetRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if err := wh.validateExecutionAndEmitMetrics(resetRequest.WorkflowExecution, scope); err != nil {
+		return nil, err
+	}
+
+	domainID, err := wh.domainCache.GetDomainID(resetRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	var resp *gen.ResetWorkflowExecutionResponse
+	resp, err = wh.history.ResetWorkflowExecution(ctx, &h.ResetWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		ResetRequest: resetRequest,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return resp, nil
 }
 
 // RequestCancelWorkflowExecution - requests to cancel a workflow execution
@@ -2712,6 +2753,24 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.De
 	return response, nil
 }
 
+func (wh *WorkflowHandler) readFullPageV2Events(req *persistence.ReadHistoryBranchRequest) ([]*gen.HistoryEvent, int, []byte, error) {
+	// NOTE: because V2 history stores events in different branch ranges due to forking operation, each ReadHistoryBranch cannot guarantee to return pageSize
+	historyEvents := []*gen.HistoryEvent{}
+	size := int(0)
+	for {
+		response, err := wh.historyV2Mgr.ReadHistoryBranch(req)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		historyEvents = append(historyEvents, response.HistoryEvents...)
+		size += response.Size
+		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
+			return historyEvents, size, response.NextPageToken, nil
+		}
+		req.NextPageToken = response.NextPageToken
+	}
+}
+
 func (wh *WorkflowHandler) getHistory(scope int, domainID string, execution gen.WorkflowExecution,
 	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte,
 	transientDecision *gen.TransientDecisionInfo, eventStoreVersion int32, branchToken []byte) (*gen.History, []byte, error) {
@@ -2719,20 +2778,17 @@ func (wh *WorkflowHandler) getHistory(scope int, domainID string, execution gen.
 	historyEvents := []*gen.HistoryEvent{}
 	var size int
 	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		response, err := wh.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		var err error
+		historyEvents, size, nextPageToken, err = wh.readFullPageV2Events(&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,
 			PageSize:      int(pageSize),
 			NextPageToken: nextPageToken,
 		})
-
 		if err != nil {
 			return nil, nil, err
 		}
-		historyEvents = append(historyEvents, response.HistoryEvents...)
-		nextPageToken = response.NextPageToken
-		size = response.Size
 	} else {
 		response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
 			DomainID:      domainID,

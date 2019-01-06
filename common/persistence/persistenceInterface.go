@@ -55,6 +55,7 @@ type (
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ResetMutableState(request *InternalResetMutableStateRequest) error
+		ResetWorkflowExecution(request *InternalResetWorkflowExecutionRequest) error
 
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
@@ -106,6 +107,8 @@ type (
 		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) (*InternalForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(request *InternalDeleteHistoryBranchRequest) error
+		// UpdateHistoryBranch update a branch
+		CompleteForkBranch(request *InternalCompleteForkBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
 		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 	}
@@ -294,6 +297,33 @@ type (
 		InsertSignalRequestedIDs  []string
 	}
 
+	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state  for Persistence Interface
+	InternalResetWorkflowExecutionRequest struct {
+		PrevRunID string
+		Condition int64
+		RangeID   int64
+
+		// for current mutable state
+		UpdateCurr           bool
+		CurrExecutionInfo    *InternalWorkflowExecutionInfo
+		CurrReplicationState *ReplicationState
+		CurrTransferTasks    []Task
+		CurrTimerTasks       []Task
+
+		// For new mutable state
+		InsertExecutionInfo       *InternalWorkflowExecutionInfo
+		InsertReplicationState    *ReplicationState
+		InsertTransferTasks       []Task
+		InsertTimerTasks          []Task
+		InsertReplicationTasks    []Task
+		InsertActivityInfos       []*InternalActivityInfo
+		InsertTimerInfos          []*TimerInfo
+		InsertChildExecutionInfos []*InternalChildExecutionInfo
+		InsertRequestCancelInfos  []*RequestCancelInfo
+		InsertSignalInfos         []*SignalInfo
+		InsertSignalRequestedIDs  []string
+	}
+
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
 	InternalAppendHistoryEventsRequest struct {
 		DomainID          string
@@ -310,6 +340,8 @@ type (
 	InternalAppendHistoryNodesRequest struct {
 		// true if it is the first append request to the branch
 		IsNewBranch bool
+		// the info for clean up data in background
+		Info string
 		// The branch to be appended
 		BranchInfo workflow.HistoryBranch
 		// The first eventID becomes the nodeID to be appended
@@ -360,6 +392,8 @@ type (
 		ForkNodeID int64
 		// branchID of the new branch
 		NewBranchID string
+		// the info for clean up data in background
+		Info string
 	}
 
 	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
@@ -388,6 +422,14 @@ type (
 		PageSize int
 		// Pagination token
 		NextPageToken []byte
+	}
+
+	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
+	InternalCompleteForkBranchRequest struct {
+		// branch to be updated
+		BranchInfo workflow.HistoryBranch
+		// whether fork is successful
+		Success bool
 	}
 
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest

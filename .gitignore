@@ -16,6 +16,10 @@ test
 test.log
 test_xdc
 test_xdc.log
+test_eventsV2
+test_eventsV2.log
+test_eventsV2_xdc
+test_eventsV2_xdc.log
 
 # Executables produced by cadence repo
 /cadence*

@@ -74,32 +74,11 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchReque
 		return nil, err
 	}
 
-	// We read the forking node to validate the forking point.
-	// This is mostly correctly. But in some very rarely corner case, it can be incorrect because of corrupted history:
-	//		It is possible that the node we read exists, but it is a stale batch of events. Forking incorrectly can cause corrupted history.
-	// Therefore the safest way is to read from very beginning to validate the forking point. But it will be very complex and inefficient.
-	// Talking to team we can start with this implementation.
-	// If a customer run into this bug, we can do another reset(fork) to correct it.
-	readReq := &ReadHistoryBranchRequest{
-		BranchToken: request.ForkBranchToken,
-		MinEventID:  request.ForkNodeID,
-		MaxEventID:  request.ForkNodeID + 1,
-		PageSize:    1,
-	}
-	readResp, err := m.ReadHistoryBranch(readReq)
-	if err != nil {
-		return nil, err
-	}
-	if len(readResp.HistoryEvents) != 1 {
-		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("ForkNodeID is invalid: %v for %+v", request.ForkNodeID, forkBranch),
-		}
-	}
-
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
 		ForkNodeID:     request.ForkNodeID,
 		NewBranchID:    uuid.New(),
+		Info:           request.Info,
 	}
 
 	resp, err := m.persistence.ForkHistoryBranch(req)
@@ -132,8 +111,32 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(request *DeleteHistoryBranchR
 	return m.persistence.DeleteHistoryBranch(req)
 }
 
+// CompleteForkBranch complete the forking process
+func (m *historyV2ManagerImpl) CompleteForkBranch(request *CompleteForkBranchRequest) error {
+	var branch workflow.HistoryBranch
+	err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+	if err != nil {
+		return err
+	}
+
+	req := &InternalCompleteForkBranchRequest{
+		BranchInfo: branch,
+		Success:    request.Success,
+	}
+
+	return m.persistence.CompleteForkBranch(req)
+}
+
 // GetHistoryTree returns all branch information of a tree
 func (m *historyV2ManagerImpl) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
+	if len(request.TreeID) == 0 {
+		var branch workflow.HistoryBranch
+		err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+		if err != nil {
+			return nil, err
+		}
+		request.TreeID = branch.GetTreeID()
+	}
 	return m.persistence.GetHistoryTree(request)
 }
 
@@ -178,6 +181,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesReq
 
 	req := &InternalAppendHistoryNodesRequest{
 		IsNewBranch:   request.IsNewBranch,
+		Info:          request.Info,
 		BranchInfo:    branch,
 		NodeID:        nodeID,
 		Events:        blob,
@@ -333,13 +337,13 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 			continue
 		}
 
-		if *fe.EventId <= token.LastEventID {
+		if *fe.EventId == token.LastEventID {
 			// we could see it because of batch with smaller txn_id
 			logger.Infof("Stale event batch with eventID: %v", *fe.EventId)
 			continue
 		}
 		if *fe.EventId != token.LastEventID+1 {
-			logger.Errorf("Corrupted incontinouous event batch, %v, %v, %v, %v, %v, %v", *fe.Version, *le.Version, *fe.EventId, *le.EventId, el, token.LastEventID)
+			logger.Errorf("Corrupted incontinouous event batch, %v, %v, %v, %v, %v", *fe.Version, *le.Version, *fe.EventId, *le.EventId, el)
 			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("corrupted history event batch, eventID is not continouous"),
 			}

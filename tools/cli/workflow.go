@@ -528,5 +528,31 @@ func newWorkflowCommands() []cli.Command {
 				ObserveHistoryWithID(c)
 			},
 		},
+		{
+			Name:    "reset",
+			Aliases: []string{"rs"},
+			Usage:   "reset the workflow",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagEventID,
+					Usage: "The eventID of a DecisionTaskCompleted/DecisionTaskFailed you want to reset to (exclusive)",
+				},
+				cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "reason to do the reset",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ResetWorkflow(c)
+			},
+		},
 	}
 }

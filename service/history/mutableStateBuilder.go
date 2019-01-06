@@ -850,6 +850,14 @@ func (e *mutableStateBuilder) GetSignalInfo(initiatedEventID int64) (*persistenc
 	return ri, ok
 }
 
+func (e *mutableStateBuilder) GetAllSignalsToSend() map[int64]*persistence.SignalInfo {
+	return e.pendingSignalInfoIDs
+}
+
+func (e *mutableStateBuilder) GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo {
+	return e.pendingRequestCancelInfoIDs
+}
+
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, bool) {
 	return e.executionInfo.CompletionEvent, true
@@ -1524,10 +1532,21 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduleToStartTimeoutEvent(schedul
 	return event
 }
 
-func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64,
-	startedEventID int64, cause workflow.DecisionTaskFailedCause, details []byte,
-	identity string) *workflow.HistoryEvent {
+func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause workflow.DecisionTaskFailedCause,
+	details []byte, identity, reason, forkRunID, newRunID string) *workflow.HistoryEvent {
+
+	attr := workflow.DecisionTaskFailedEventAttributes{
+		ScheduledEventId: common.Int64Ptr(scheduleEventID),
+		StartedEventId:   common.Int64Ptr(startedEventID),
+		Cause:            common.DecisionTaskFailedCausePtr(cause),
+		Details:          details,
+		Identity:         common.StringPtr(identity),
+		Reason:           common.StringPtr(reason),
+		ForkRunId:        common.StringPtr(forkRunID),
+		NewRunId:         common.StringPtr(newRunID),
+	}
 	hasPendingDecision := e.HasPendingDecisionTask()
+
 	dt, ok := e.GetPendingDecision(scheduleEventID)
 	if !hasPendingDecision || !ok || dt.StartedID != startedEventID {
 		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionDecisionTaskFailed, e.GetNextEventID(), fmt.Sprintf(
@@ -1539,7 +1558,7 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64,
 	var event *workflow.HistoryEvent
 	// Only emit DecisionTaskFailedEvent for the very first time
 	if dt.Attempt == 0 {
-		event = e.hBuilder.AddDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, details, identity)
+		event = e.hBuilder.AddDecisionTaskFailedEvent(attr)
 	}
 
 	e.ReplicateDecisionTaskFailedEvent()

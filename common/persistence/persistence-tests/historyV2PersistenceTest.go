@@ -53,6 +53,10 @@ type (
 	}
 )
 
+const testForkRunID = "11220000-0000-f000-f000-000000000000"
+
+var defaultVisibilityTimestamp = p.UnixNanoToDBTimestamp(time.Now().UnixNano()) - 1
+
 var historyTestRetryPolicy = createHistoryTestRetryPolicy()
 
 func createHistoryTestRetryPolicy() backoff.RetryPolicy {
@@ -131,22 +135,22 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			m.Store(idx, bi)
 
 			events := s.genRandomEvents([]int64{1, 2, 3}, 1)
-			err = s.append(bi, events, 1, true)
+			err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
 			s.Nil(err)
 			historyW.Events = events
 
 			events = s.genRandomEvents([]int64{4}, 1)
-			err = s.append(bi, events, 1, false)
+			err = s.appendNewNode(bi, events, 1)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{5, 6, 7, 8}, 1)
-			err = s.append(bi, events, 1, false)
+			err = s.appendNewNode(bi, events, 1)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)
-			err = s.append(bi, events, 1, false)
+			err = s.appendNewNode(bi, events, 1)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
@@ -171,11 +175,11 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		go func(idx int) {
 			defer wg.Done()
 
-			branch := s.getBranchByKey(&m, idx)
+			branch := s.getBranchByKey(m, idx)
 
 			// override with smaller txn_id
 			events := s.genRandomEvents([]int64{5}, 1)
-			err := s.append(branch, events, 0, false)
+			err := s.appendNewNode(branch, events, 0)
 			s.Nil(err)
 			// it shouldn't change anything
 			events = s.read(branch, 1, 25)
@@ -183,7 +187,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override with same txn_id but greater version
 			events = s.genRandomEvents([]int64{5}, 2)
-			err = s.append(branch, events, 1, false)
+			err = s.appendNewNode(branch, events, 1)
 			s.Nil(err)
 
 			// read to verify override success
@@ -192,7 +196,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override with larger txn_id and same version
 			events = s.genRandomEvents([]int64{5, 6}, 1)
-			err = s.append(branch, events, 2, false)
+			err = s.appendNewNode(branch, events, 2)
 			s.Nil(err)
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
@@ -205,7 +209,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override more with larger txn_id, this would fix the corrupted hole so that we cna get 20 events again
 			events = s.genRandomEvents([]int64{7, 8}, 1)
-			err = s.append(branch, events, 2, false)
+			err = s.appendNewNode(branch, events, 2)
 			s.Nil(err)
 
 			// read to verify override
@@ -213,7 +217,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			s.Equal(20, len(events))
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, 1)
-			err = s.append(branch, events, 2, false)
+			err = s.appendNewNode(branch, events, 2)
 			s.Nil(err)
 
 			events = s.read(branch, 1, 25)
@@ -242,7 +246,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	treeID := uuid.New()
 
 	wg := sync.WaitGroup{}
-	concurrency := 20
+	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 	branches := s.descTree(treeID)
@@ -254,20 +258,22 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 		eids = append(eids, i)
 	}
 	events := s.genRandomEvents(eids, 1)
-	err = s.appendOneByOne(masterBr, events, 1)
+	err = s.appendNewBranchAndFirstNode(masterBr, events[0:1], 1, "masterbr")
 	s.Nil(err)
-	events = s.read(masterBr, 1, int64(concurrency)+2)
+
+	readEvents := s.read(masterBr, 1, int64(concurrency)+2)
 	s.Nil(err)
-	s.Equal((concurrency)+1, len(events))
+	s.Equal(1, len(readEvents))
 
 	branches = s.descTree(treeID)
 	s.Equal(1, len(branches))
 	mbrID := *branches[0].BranchID
 
-	// cannot fork on un-existing node
-	_, err = s.fork(masterBr, int64(concurrency)+2)
-	_, ok := err.(*p.InvalidPersistenceRequestError)
-	s.Equal(true, ok)
+	err = s.appendOneByOne(masterBr, events[1:], 1)
+	s.Nil(err)
+	events = s.read(masterBr, 1, int64(concurrency)+2)
+	s.Nil(err)
+	s.Equal((concurrency)+1, len(events))
 
 	level1ID := sync.Map{}
 	level1Br := sync.Map{}
@@ -285,7 +291,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 			//cannot append to ancestors
 			events := s.genRandomEvents([]int64{forkNodeID - 1}, 1)
-			err = s.append(bi, events, 1, true)
+			err = s.appendNewNode(bi, events, 1)
 			_, ok := err.(*p.InvalidPersistenceRequestError)
 			s.Equal(true, ok)
 
@@ -296,32 +302,43 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			}
 			events = s.genRandomEvents(eids, 1)
 
-			err = s.appendOneByOne(bi, events, 1)
+			err = s.appendNewNode(bi, events[0:1], 1)
+			s.Nil(err)
+
+			err = s.appendOneByOne(bi, events[1:], 1)
 			s.Nil(err)
 
 			events = s.read(bi, 1, int64(concurrency)*2+2)
 			s.Nil(err)
 			s.Equal((concurrency)*2+1, len(events))
+
+			s.descInProgress(treeID)
+			if idx == 0 {
+				s.completeFork(bi, false)
+			} else {
+				s.completeFork(bi, true)
+			}
+
 		}(i)
 	}
 
 	wg.Wait()
-	branches = s.descTree(treeID)
-	s.Equal(concurrency+1, len(branches))
+	branches = s.descTreeByToken(masterBr)
+	s.Equal(concurrency, len(branches))
 	forkOnLevel1 := int32(0)
 	level2Br := sync.Map{}
 	wg = sync.WaitGroup{}
 
 	// test forking for second level of branch
-	for i := 0; i < concurrency; i++ {
+	for i := 1; i < concurrency; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
 
 			// Event we fork from level1 branch, it is possible that the new branch will fork from master branch
 			forkNodeID := rand.Int63n(int64(concurrency)*2) + 2
-			forkBr := s.getBranchByKey(&level1Br, idx)
-			lastForkNodeID := s.getIDByKey(&level1ID, idx)
+			forkBr := s.getBranchByKey(level1Br, idx)
+			lastForkNodeID := s.getIDByKey(level1ID, idx)
 
 			if forkNodeID > lastForkNodeID {
 				atomic.AddInt32(&forkOnLevel1, int32(1))
@@ -331,13 +348,16 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			s.Nil(err)
 			level2Br.Store(idx, bi)
 
+			s.completeFork(bi, true)
 			// append second batch to second level
 			eids := make([]int64, 0)
 			for i := forkNodeID; i <= int64(concurrency)*3+1; i++ {
 				eids = append(eids, i)
 			}
 			events := s.genRandomEvents(eids, 1)
-			err = s.appendOneByOne(bi, events, 1)
+			err = s.appendNewNode(bi, events[0:1], 1)
+			s.Nil(err)
+			err = s.appendOneByOne(bi, events[1:], 1)
 			s.Nil(err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
 			s.Nil(err)
@@ -345,7 +365,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 			// try override last event
 			events = s.genRandomEvents([]int64{int64(concurrency)*3 + 1}, 1)
-			err = s.append(bi, events, 2, false)
+			err = s.appendNewNode(bi, events, 2)
 			s.Nil(err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
 			s.Nil(err)
@@ -357,14 +377,15 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			level2Br.Store(concurrency+idx, bi)
 
 			events = s.genRandomEvents([]int64{1}, 1)
-			err = s.append(bi, events, 0, true)
+			err = s.appendNewBranchAndFirstNode(bi, events, 0, "newbr")
 			s.Nil(err)
+
 		}(i)
 	}
 
 	wg.Wait()
 	branches = s.descTree(treeID)
-	s.Equal(int(concurrency*3+1), len(branches))
+	s.Equal(int(concurrency*3-2), len(branches))
 	actualForkOnLevel1 := int32(0)
 	masterCnt := 0
 	for _, b := range branches {
@@ -378,7 +399,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 		}
 	}
 	s.Equal(forkOnLevel1, actualForkOnLevel1)
-	s.Equal(1+concurrency, masterCnt)
+	s.Equal(concurrency, masterCnt)
 
 	// Finally lets clean up all branches
 	level1Br.Range(func(k, v interface{}) bool {
@@ -405,14 +426,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 }
 
-func (s *HistoryV2PersistenceSuite) getBranchByKey(m *sync.Map, k int) []byte {
+func (s *HistoryV2PersistenceSuite) getBranchByKey(m sync.Map, k int) []byte {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
 	br := v.([]byte)
 	return br
 }
 
-func (s *HistoryV2PersistenceSuite) getIDByKey(m *sync.Map, k int) int64 {
+func (s *HistoryV2PersistenceSuite) getIDByKey(m sync.Map, k int) int64 {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
 	id := v.(int64)
@@ -451,12 +472,33 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 }
 
 // persistence helper
+func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*workflow.HistoryBranch {
+	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
+		BranchToken: br,
+	})
+	s.Nil(err)
+	return resp.Branches
+}
+
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*workflow.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID: treeID,
 	})
 	s.Nil(err)
+	s.True(len(resp.ForkingInProgressBranches) == 0)
 	return resp.Branches
+}
+
+// persistence helper
+func (s *HistoryV2PersistenceSuite) descInProgress(treeID string) {
+	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
+		TreeID: treeID,
+	})
+	s.Nil(err)
+	s.True(len(resp.ForkingInProgressBranches) > 0)
+	forkTime := p.UnixNanoToDBTimestamp(resp.ForkingInProgressBranches[0].ForkTime.UnixNano())
+	s.True(forkTime > defaultVisibilityTimestamp)
+	s.Equal(testForkRunID, resp.ForkingInProgressBranches[0].Info)
 }
 
 // persistence helper
@@ -501,12 +543,8 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 }
 
 func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*workflow.HistoryEvent, txnID int64) error {
-	err := s.append(branch, []*workflow.HistoryEvent{events[0]}, txnID, true)
-	if err != nil {
-		return err
-	}
 	for _, e := range events {
-		err := s.append(branch, []*workflow.HistoryEvent{e}, txnID, false)
+		err := s.append(branch, []*workflow.HistoryEvent{e}, txnID, false, "")
 		if err != nil {
 			return err
 		}
@@ -514,8 +552,16 @@ func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*work
 	return nil
 }
 
+func (s *HistoryV2PersistenceSuite) appendNewNode(branch []byte, events []*workflow.HistoryEvent, txnID int64) error {
+	return s.append(branch, events, txnID, false, "")
+}
+
+func (s *HistoryV2PersistenceSuite) appendNewBranchAndFirstNode(branch []byte, events []*workflow.HistoryEvent, txnID int64, branchInfo string) error {
+	return s.append(branch, events, txnID, true, branchInfo)
+}
+
 // persistence helper
-func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*workflow.HistoryEvent, txnID int64, isNewBranch bool) error {
+func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*workflow.HistoryEvent, txnID int64, isNewBranch bool, branchInfo string) error {
 
 	var resp *p.AppendHistoryNodesResponse
 
@@ -523,6 +569,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*workflow.His
 		var err error
 		resp, err = s.HistoryV2Mgr.AppendHistoryNodes(&p.AppendHistoryNodesRequest{
 			IsNewBranch:   isNewBranch,
+			Info:          branchInfo,
 			BranchToken:   branch,
 			Events:        events,
 			TransactionID: txnID,
@@ -550,6 +597,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 		resp, err := s.HistoryV2Mgr.ForkHistoryBranch(&p.ForkHistoryBranchRequest{
 			ForkBranchToken: forkBranch,
 			ForkNodeID:      forkNodeID,
+			Info:            testForkRunID,
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken
@@ -559,4 +607,13 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 
 	err := backoff.Retry(op, historyTestRetryPolicy, isConditionFail)
 	return bi, err
+}
+
+// persistence helper
+func (s *HistoryV2PersistenceSuite) completeFork(forkBranch []byte, succ bool) {
+	err := s.HistoryV2Mgr.CompleteForkBranch(&p.CompleteForkBranchRequest{
+		BranchToken: forkBranch,
+		Success:     succ,
+	})
+	s.Nil(err)
 }

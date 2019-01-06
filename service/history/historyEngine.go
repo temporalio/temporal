@@ -74,6 +74,7 @@ type (
 		logger               bark.Logger
 		config               *Config
 		archivalClient       sysworkflow.ArchivalClient
+		resetor              *workflowResetor
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -185,6 +186,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicator = newHistoryReplicator(shard, historyEngImpl, historyCache, shard.GetDomainCache(), historyManager, historyV2Manager,
 			logger)
 	}
+	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
 
 	return historyEngImpl
 }
@@ -333,6 +335,7 @@ func (e *historyEngineImpl) appendFirstBatchHistoryEvents(msBuilder mutableState
 		branchToken := msBuilder.GetCurrentBranch()
 		historySize, err = e.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
 			IsNewBranch: true,
+			Info:        historyGarbageCleanupInfo(domainID, execution.GetWorkflowId(), execution.GetRunId()),
 			BranchToken: branchToken,
 			Events:      events,
 			// It is ok to use 0 for TransactionID because RunID is unique so there are
@@ -1812,7 +1815,7 @@ func (e *historyEngineImpl) RespondDecisionTaskFailed(ctx context.Context, req *
 			}
 
 			msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, request.GetCause(), request.Details,
-				request.GetIdentity())
+				request.GetIdentity(), "", "", "")
 
 			return nil, nil
 		})
@@ -2561,6 +2564,10 @@ func (e *historyEngineImpl) SyncActivity(ctx context.Context, request *h.SyncAct
 	return e.replicator.SyncActivity(ctx, request)
 }
 
+func (e *historyEngineImpl) ResetWorkflowExecution(ctx context.Context, resetRequest *h.ResetWorkflowExecutionRequest) (response *workflow.ResetWorkflowExecutionResponse, retError error) {
+	return e.resetor.ResetWorkflowExecution(ctx, resetRequest)
+}
+
 type updateWorkflowAction struct {
 	deleteWorkflow bool
 	createDecision bool
@@ -2759,7 +2766,7 @@ func (e *historyEngineImpl) failDecision(context workflowExecutionContext, sched
 		return nil, err
 	}
 
-	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, details, request.GetIdentity())
+	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, nil, request.GetIdentity(), "", "", "")
 
 	// Return new builder back to the caller for further updates
 	return msBuilder, nil

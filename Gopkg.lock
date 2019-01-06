@@ -734,6 +734,7 @@
     "github.com/go-sql-driver/mysql",
     "github.com/gocql/gocql",
     "github.com/golang/mock/gomock",
+    "github.com/google/uuid",
     "github.com/iancoleman/strcase",
     "github.com/jmoiron/sqlx",
     "github.com/olekukonko/tablewriter",

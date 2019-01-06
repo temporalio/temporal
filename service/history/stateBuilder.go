@@ -41,6 +41,7 @@ type (
 		getTimerTasks() []persistence.Task
 		getNewRunTransferTasks() []persistence.Task
 		getNewRunTimerTasks() []persistence.Task
+		getMutableState() mutableState
 	}
 
 	stateBuilderImpl struct {
@@ -70,6 +71,10 @@ func newStateBuilder(shard ShardContext, msBuilder mutableState, logger bark.Log
 	}
 }
 
+func (b *stateBuilderImpl) getMutableState() mutableState {
+	return b.msBuilder
+}
+
 func (b *stateBuilderImpl) getTransferTasks() []persistence.Task {
 	return b.transferTasks
 }
@@ -94,8 +99,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 	var newRunStateBuilder mutableState
 	for _, event := range history {
 		lastEvent = event
-		// must set the current version, since this is standby here, not active
-		b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
+		// NOTE: stateBuilder is also being used in the active side
+		if b.msBuilder.GetReplicationState() != nil {
+			b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
+		}
 		switch event.GetEventType() {
 		case shared.EventTypeWorkflowExecutionStarted:
 			attributes := event.WorkflowExecutionStartedEventAttributes

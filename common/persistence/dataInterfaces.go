@@ -293,6 +293,7 @@ type (
 		TaskType                int
 		ScheduleID              int64
 		Version                 int64
+		RecordVisibility        bool
 	}
 
 	// ReplicationTaskInfo describes the replication task created for replication of history events
@@ -311,6 +312,9 @@ type (
 		BranchToken             []byte
 		NewRunEventStoreVersion int32
 		NewRunBranchToken       []byte
+		ResetWorkflow           bool
+		NewRunFirstEventID      int64
+		NewRunNextEventID       int64
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -376,6 +380,7 @@ type (
 		TaskList            string
 		ScheduleID          int64
 		Version             int64
+		RecordVisibility    bool
 	}
 
 	// CloseExecutionTask identifies a transfer task for deletion of execution
@@ -489,8 +494,11 @@ type (
 		LastReplicationInfo     map[string]*ReplicationInfo
 		EventStoreVersion       int32
 		BranchToken             []byte
+		ResetWorkflow           bool
 		NewRunEventStoreVersion int32
 		NewRunBranchToken       []byte
+		NewRunFirstEventID      int64
+		NewRunNextEventID       int64
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -735,7 +743,7 @@ type (
 		Encoding common.EncodingType
 	}
 
-	// ResetMutableStateRequest is used to reset workflow execution state
+	// ResetMutableStateRequest is used to reset workflow execution state for a single run
 	ResetMutableStateRequest struct {
 		PrevRunID        string
 		ExecutionInfo    *WorkflowExecutionInfo
@@ -744,6 +752,35 @@ type (
 		RangeID          int64
 
 		// Mutable state
+		InsertActivityInfos       []*ActivityInfo
+		InsertTimerInfos          []*TimerInfo
+		InsertChildExecutionInfos []*ChildExecutionInfo
+		InsertRequestCancelInfos  []*RequestCancelInfo
+		InsertSignalInfos         []*SignalInfo
+		InsertSignalRequestedIDs  []string
+		//Optional. It is to suggest a binary encoding type to serialize history events
+		Encoding common.EncodingType
+	}
+
+	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
+	ResetWorkflowExecutionRequest struct {
+		PrevRunID string
+		Condition int64
+		RangeID   int64
+
+		// for current mutable state
+		UpdateCurr           bool
+		CurrExecutionInfo    *WorkflowExecutionInfo
+		CurrReplicationState *ReplicationState
+		CurrTransferTasks    []Task
+		CurrTimerTasks       []Task
+
+		// For new mutable state
+		InsertExecutionInfo       *WorkflowExecutionInfo
+		InsertReplicationState    *ReplicationState
+		InsertTransferTasks       []Task
+		InsertTimerTasks          []Task
+		InsertReplicationTasks    []Task
 		InsertActivityInfos       []*ActivityInfo
 		InsertTimerInfos          []*TimerInfo
 		InsertChildExecutionInfos []*ChildExecutionInfo
@@ -1120,6 +1157,8 @@ type (
 	AppendHistoryNodesRequest struct {
 		// true if this is the first append request to the branch
 		IsNewBranch bool
+		// the info for clean up data in background
+		Info string
 		// The branch to be appended
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
@@ -1187,12 +1226,22 @@ type (
 		// Application must provide a void forking nodeID, it must be a valid nodeID in that branch. A valid nodeID is the firstEventID of a valid batch of events.
 		// And ForkNodeID > 1 because forking from 1 doesn't make any sense.
 		ForkNodeID int64
+		// the info for clean up data in background
+		Info string
 	}
 
 	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
 	ForkHistoryBranchResponse struct {
 		// branchToken to represent the new branch
 		NewBranchToken []byte
+	}
+
+	// CompleteForkBranchRequest is used to complete forking
+	CompleteForkBranchRequest struct {
+		// the new branch returned from ForkHistoryBranchRequest
+		BranchToken []byte
+		// true means the fork is success, will update the flag, otherwise will delete the new branch
+		Success bool
 	}
 
 	// DeleteHistoryBranchRequest is used to remove a history branch
@@ -1205,12 +1254,22 @@ type (
 	GetHistoryTreeRequest struct {
 		// A UUID of a tree
 		TreeID string
+		// optional: can provide treeID via branchToken if treeID is empty
+		BranchToken []byte
+	}
+
+	// ForkingInProgressBranch is part of GetHistoryTreeResponse
+	ForkingInProgressBranch struct {
+		BranchID string
+		ForkTime time.Time
+		Info     string
 	}
 
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
 		// all branches of a tree
-		Branches []*workflow.HistoryBranch
+		Branches                  []*workflow.HistoryBranch
+		ForkingInProgressBranches []ForkingInProgressBranch
 	}
 
 	// AppendHistoryEventsResponse is response for AppendHistoryEventsRequest
@@ -1243,6 +1302,7 @@ type (
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
 		ResetMutableState(request *ResetMutableStateRequest) error
+		ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
@@ -1312,6 +1372,8 @@ type (
 		ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
 		ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
+		// CompleteForkBranch will complete the forking process after update mutableState, this is to help preventing data leakage
+		CompleteForkBranch(request *CompleteForkBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
 		DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error
@@ -2041,6 +2103,26 @@ func NewHistoryBranchToken(treeID string) ([]byte, error) {
 	branchID := uuid.New()
 	bi := &workflow.HistoryBranch{
 		TreeID:    &treeID,
+		BranchID:  &branchID,
+		Ancestors: []*workflow.HistoryBranchRange{},
+	}
+	token, err := internalThriftEncoder.Encode(bi)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
+// NewHistoryBranchTokenFromAnother make up a branchToken
+func NewHistoryBranchTokenFromAnother(branchID string, anotherToken []byte) ([]byte, error) {
+	var branch workflow.HistoryBranch
+	err := internalThriftEncoder.Decode(anotherToken, &branch)
+	if err != nil {
+		return nil, err
+	}
+
+	bi := &workflow.HistoryBranch{
+		TreeID:    branch.TreeID,
 		BranchID:  &branchID,
 		Ancestors: []*workflow.HistoryBranchRange{},
 	}

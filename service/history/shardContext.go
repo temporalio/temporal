@@ -70,6 +70,7 @@ type (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ResetMutableState(request *persistence.ResetMutableStateRequest) error
+		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
 		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error)
 		NotifyNewHistoryEvent(event *historyEventNotification) error
@@ -544,6 +545,101 @@ Update_Loop:
 	}
 
 	return nil, ErrMaxAttemptsExceeded
+}
+
+func (s *shardContextImpl) allocateTransferIDsLocked(tasks []persistence.Task, transferMaxReadLevel *int64) error {
+	for _, task := range tasks {
+		id, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return err
+		}
+		s.logger.Debugf("Assigning task ID: %v", id)
+		task.SetTaskID(id)
+		*transferMaxReadLevel = id
+	}
+	return nil
+}
+
+func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
+	encoding, err := s.getDefaultEncoding(request.CurrExecutionInfo.DomainID)
+	if err != nil {
+		return err
+	}
+	request.Encoding = encoding
+
+	s.Lock()
+	defer s.Unlock()
+
+	transferMaxReadLevel := int64(0)
+	// assign IDs for the transfer/replication tasks
+	// Must be done under the shard lock to ensure transfer tasks are written to persistence in increasing
+	// ID order
+	err = s.allocateTransferIDsLocked(request.InsertTransferTasks, &transferMaxReadLevel)
+	if err != nil {
+		return err
+	}
+	err = s.allocateTransferIDsLocked(request.InsertReplicationTasks, &transferMaxReadLevel)
+	if err != nil {
+		return err
+	}
+	err = s.allocateTransferIDsLocked(request.CurrTransferTasks, &transferMaxReadLevel)
+	if err != nil {
+		return err
+	}
+	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
+
+	// assign IDs for timer tasks
+	err = s.allocateTimerIDsLocked(request.InsertTimerTasks, request.CurrExecutionInfo.DomainID, request.CurrExecutionInfo.WorkflowID)
+	if err != nil {
+		return err
+	}
+	err = s.allocateTimerIDsLocked(request.CurrTimerTasks, request.CurrExecutionInfo.DomainID, request.CurrExecutionInfo.WorkflowID)
+	if err != nil {
+		return err
+	}
+Reset_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		currentRangeID := s.getRangeID()
+		request.RangeID = currentRangeID
+		err := s.executionManager.ResetWorkflowExecution(request)
+		if err != nil {
+			switch err.(type) {
+			case *persistence.ConditionFailedError,
+				*shared.ServiceBusyError,
+				*shared.LimitExceededError:
+				// No special handling required for these errors
+			case *persistence.ShardOwnershipLostError:
+				{
+					// RangeID might have been renewed by the same host while this update was in flight
+					// Retry the operation if we still have the shard ownership
+					if currentRangeID != s.getRangeID() {
+						continue Reset_Loop
+					} else {
+						// Shard is stolen, trigger shutdown of history engine
+						s.closeShard()
+					}
+				}
+			default:
+				{
+					// We have no idea if the write failed or will eventually make it to
+					// persistence. Increment RangeID to guarantee that subsequent reads
+					// will either see that write, or know for certain that it failed.
+					// This allows the callers to reliably check the outcome by performing
+					// a read.
+					err1 := s.renewRangeLocked(false)
+					if err1 != nil {
+						// At this point we have no choice but to unload the shard, so that it
+						// gets a new RangeID when it's reloaded.
+						s.closeShard()
+					}
+				}
+			}
+		}
+
+		return err
+	}
+
+	return ErrMaxAttemptsExceeded
 }
 
 func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableStateRequest) error {

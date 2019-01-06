@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
-
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -117,7 +116,6 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryWithInfo(&p.DomainInfo{ID: validDomainID}), nil)
 	s.mockArchivalClient = &mocks.ArchivalClient{}
 
 	mockShard := &shardContextImpl{
@@ -168,6 +166,10 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
+	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
@@ -246,6 +248,10 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 }
 
 func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
+	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+
 	domainID := validDomainID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
@@ -286,6 +292,10 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 }
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
+	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
@@ -338,6 +348,10 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 }
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
+	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")

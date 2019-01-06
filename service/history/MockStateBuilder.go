@@ -135,3 +135,18 @@ func (_m *mockStateBuilder) applyEvents(domainID string, requestID string, execu
 
 	return r0, r1, r2, r3
 }
+
+// getMutableState provides a mock function with given fields:
+func (_m *mockStateBuilder) getMutableState() mutableState {
+	ret := _m.Called()
+
+	var r0 mutableState
+	if rf, ok := ret.Get(0).(func() mutableState); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(mutableState)
+		}
+	}
+	return r0
+}

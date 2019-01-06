@@ -7872,6 +7872,7 @@ const (
 	DecisionTaskFailedCauseForceCloseDecision                                  DecisionTaskFailedCause = 16
 	DecisionTaskFailedCauseFailoverCloseDecision                               DecisionTaskFailedCause = 17
 	DecisionTaskFailedCauseBadSignalInputSize                                  DecisionTaskFailedCause = 18
+	DecisionTaskFailedCauseResetWorkflow                                       DecisionTaskFailedCause = 19
 )
 
 // DecisionTaskFailedCause_Values returns all recognized values of DecisionTaskFailedCause.
@@ -7896,6 +7897,7 @@ func DecisionTaskFailedCause_Values() []DecisionTaskFailedCause {
 		DecisionTaskFailedCauseForceCloseDecision,
 		DecisionTaskFailedCauseFailoverCloseDecision,
 		DecisionTaskFailedCauseBadSignalInputSize,
+		DecisionTaskFailedCauseResetWorkflow,
 	}
 }
 
@@ -7963,6 +7965,9 @@ func (v *DecisionTaskFailedCause) UnmarshalText(value []byte) error {
 	case "BAD_SIGNAL_INPUT_SIZE":
 		*v = DecisionTaskFailedCauseBadSignalInputSize
 		return nil
+	case "RESET_WORKFLOW":
+		*v = DecisionTaskFailedCauseResetWorkflow
+		return nil
 	default:
 		val, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
@@ -8019,6 +8024,8 @@ func (v DecisionTaskFailedCause) MarshalText() ([]byte, error) {
 		return []byte("FAILOVER_CLOSE_DECISION"), nil
 	case 18:
 		return []byte("BAD_SIGNAL_INPUT_SIZE"), nil
+	case 19:
+		return []byte("RESET_WORKFLOW"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -8068,6 +8075,8 @@ func (v DecisionTaskFailedCause) MarshalLogObject(enc zapcore.ObjectEncoder) err
 		enc.AddString("name", "FAILOVER_CLOSE_DECISION")
 	case 18:
 		enc.AddString("name", "BAD_SIGNAL_INPUT_SIZE")
+	case 19:
+		enc.AddString("name", "RESET_WORKFLOW")
 	}
 	return nil
 }
@@ -8146,6 +8155,8 @@ func (v DecisionTaskFailedCause) String() string {
 		return "FAILOVER_CLOSE_DECISION"
 	case 18:
 		return "BAD_SIGNAL_INPUT_SIZE"
+	case 19:
+		return "RESET_WORKFLOW"
 	}
 	return fmt.Sprintf("DecisionTaskFailedCause(%d)", w)
 }
@@ -8202,6 +8213,8 @@ func (v DecisionTaskFailedCause) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"FAILOVER_CLOSE_DECISION\""), nil
 	case 18:
 		return ([]byte)("\"BAD_SIGNAL_INPUT_SIZE\""), nil
+	case 19:
+		return ([]byte)("\"RESET_WORKFLOW\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -8248,6 +8261,9 @@ type DecisionTaskFailedEventAttributes struct {
 	Cause            *DecisionTaskFailedCause `json:"cause,omitempty"`
 	Details          []byte                   `json:"details,omitempty"`
 	Identity         *string                  `json:"identity,omitempty"`
+	Reason           *string                  `json:"reason,omitempty"`
+	ForkRunId        *string                  `json:"forkRunId,omitempty"`
+	NewRunId         *string                  `json:"newRunId,omitempty"`
 }
 
 // ToWire translates a DecisionTaskFailedEventAttributes struct into a Thrift-level intermediate
@@ -8267,7 +8283,7 @@ type DecisionTaskFailedEventAttributes struct {
 //   }
 func (v *DecisionTaskFailedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -8311,6 +8327,30 @@ func (v *DecisionTaskFailedEventAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Reason != nil {
+		w, err = wire.NewValueString(*(v.Reason)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.ForkRunId != nil {
+		w, err = wire.NewValueString(*(v.ForkRunId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.NewRunId != nil {
+		w, err = wire.NewValueString(*(v.NewRunId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
 
@@ -8393,6 +8433,36 @@ func (v *DecisionTaskFailedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Reason = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ForkRunId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.NewRunId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -8406,7 +8476,7 @@ func (v *DecisionTaskFailedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [8]string
 	i := 0
 	if v.ScheduledEventId != nil {
 		fields[i] = fmt.Sprintf("ScheduledEventId: %v", *(v.ScheduledEventId))
@@ -8426,6 +8496,18 @@ func (v *DecisionTaskFailedEventAttributes) String() string {
 	}
 	if v.Identity != nil {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+	if v.Reason != nil {
+		fields[i] = fmt.Sprintf("Reason: %v", *(v.Reason))
+		i++
+	}
+	if v.ForkRunId != nil {
+		fields[i] = fmt.Sprintf("ForkRunId: %v", *(v.ForkRunId))
+		i++
+	}
+	if v.NewRunId != nil {
+		fields[i] = fmt.Sprintf("NewRunId: %v", *(v.NewRunId))
 		i++
 	}
 
@@ -8467,6 +8549,15 @@ func (v *DecisionTaskFailedEventAttributes) Equals(rhs *DecisionTaskFailedEventA
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
 		return false
 	}
+	if !_String_EqualsPtr(v.Reason, rhs.Reason) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ForkRunId, rhs.ForkRunId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.NewRunId, rhs.NewRunId) {
+		return false
+	}
 
 	return true
 }
@@ -8491,6 +8582,15 @@ func (v *DecisionTaskFailedEventAttributes) MarshalLogObject(enc zapcore.ObjectE
 	}
 	if v.Identity != nil {
 		enc.AddString("identity", *v.Identity)
+	}
+	if v.Reason != nil {
+		enc.AddString("reason", *v.Reason)
+	}
+	if v.ForkRunId != nil {
+		enc.AddString("forkRunId", *v.ForkRunId)
+	}
+	if v.NewRunId != nil {
+		enc.AddString("newRunId", *v.NewRunId)
 	}
 	return err
 }
@@ -8540,6 +8640,36 @@ func (v *DecisionTaskFailedEventAttributes) GetDetails() (o []byte) {
 func (v *DecisionTaskFailedEventAttributes) GetIdentity() (o string) {
 	if v.Identity != nil {
 		return *v.Identity
+	}
+
+	return
+}
+
+// GetReason returns the value of Reason if it is set or its
+// zero value if it is unset.
+func (v *DecisionTaskFailedEventAttributes) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+
+	return
+}
+
+// GetForkRunId returns the value of ForkRunId if it is set or its
+// zero value if it is unset.
+func (v *DecisionTaskFailedEventAttributes) GetForkRunId() (o string) {
+	if v.ForkRunId != nil {
+		return *v.ForkRunId
+	}
+
+	return
+}
+
+// GetNewRunId returns the value of NewRunId if it is set or its
+// zero value if it is unset.
+func (v *DecisionTaskFailedEventAttributes) GetNewRunId() (o string) {
+	if v.NewRunId != nil {
+		return *v.NewRunId
 	}
 
 	return
@@ -26887,6 +27017,426 @@ func (v *ResetStickyTaskListResponse) MarshalLogObject(enc zapcore.ObjectEncoder
 		return nil
 	}
 	return err
+}
+
+type ResetWorkflowExecutionRequest struct {
+	Domain                *string            `json:"domain,omitempty"`
+	WorkflowExecution     *WorkflowExecution `json:"workflowExecution,omitempty"`
+	Reason                *string            `json:"reason,omitempty"`
+	DecisionFinishEventId *int64             `json:"decisionFinishEventId,omitempty"`
+	RequestId             *string            `json:"requestId,omitempty"`
+}
+
+// ToWire translates a ResetWorkflowExecutionRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ResetWorkflowExecutionRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [5]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowExecution != nil {
+		w, err = v.WorkflowExecution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Reason != nil {
+		w, err = wire.NewValueString(*(v.Reason)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.DecisionFinishEventId != nil {
+		w, err = wire.NewValueI64(*(v.DecisionFinishEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.RequestId != nil {
+		w, err = wire.NewValueString(*(v.RequestId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ResetWorkflowExecutionRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ResetWorkflowExecutionRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ResetWorkflowExecutionRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ResetWorkflowExecutionRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowExecution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Reason = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.DecisionFinishEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RequestId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ResetWorkflowExecutionRequest
+// struct.
+func (v *ResetWorkflowExecutionRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [5]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.WorkflowExecution != nil {
+		fields[i] = fmt.Sprintf("WorkflowExecution: %v", v.WorkflowExecution)
+		i++
+	}
+	if v.Reason != nil {
+		fields[i] = fmt.Sprintf("Reason: %v", *(v.Reason))
+		i++
+	}
+	if v.DecisionFinishEventId != nil {
+		fields[i] = fmt.Sprintf("DecisionFinishEventId: %v", *(v.DecisionFinishEventId))
+		i++
+	}
+	if v.RequestId != nil {
+		fields[i] = fmt.Sprintf("RequestId: %v", *(v.RequestId))
+		i++
+	}
+
+	return fmt.Sprintf("ResetWorkflowExecutionRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ResetWorkflowExecutionRequest match the
+// provided ResetWorkflowExecutionRequest.
+//
+// This function performs a deep comparison.
+func (v *ResetWorkflowExecutionRequest) Equals(rhs *ResetWorkflowExecutionRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !((v.WorkflowExecution == nil && rhs.WorkflowExecution == nil) || (v.WorkflowExecution != nil && rhs.WorkflowExecution != nil && v.WorkflowExecution.Equals(rhs.WorkflowExecution))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Reason, rhs.Reason) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.DecisionFinishEventId, rhs.DecisionFinishEventId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RequestId, rhs.RequestId) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ResetWorkflowExecutionRequest.
+func (v *ResetWorkflowExecutionRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Domain != nil {
+		enc.AddString("domain", *v.Domain)
+	}
+	if v.WorkflowExecution != nil {
+		err = multierr.Append(err, enc.AddObject("workflowExecution", v.WorkflowExecution))
+	}
+	if v.Reason != nil {
+		enc.AddString("reason", *v.Reason)
+	}
+	if v.DecisionFinishEventId != nil {
+		enc.AddInt64("decisionFinishEventId", *v.DecisionFinishEventId)
+	}
+	if v.RequestId != nil {
+		enc.AddString("requestId", *v.RequestId)
+	}
+	return err
+}
+
+// GetDomain returns the value of Domain if it is set or its
+// zero value if it is unset.
+func (v *ResetWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+
+	return
+}
+
+// GetWorkflowExecution returns the value of WorkflowExecution if it is set or its
+// zero value if it is unset.
+func (v *ResetWorkflowExecutionRequest) GetWorkflowExecution() (o *WorkflowExecution) {
+	if v.WorkflowExecution != nil {
+		return v.WorkflowExecution
+	}
+
+	return
+}
+
+// GetReason returns the value of Reason if it is set or its
+// zero value if it is unset.
+func (v *ResetWorkflowExecutionRequest) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+
+	return
+}
+
+// GetDecisionFinishEventId returns the value of DecisionFinishEventId if it is set or its
+// zero value if it is unset.
+func (v *ResetWorkflowExecutionRequest) GetDecisionFinishEventId() (o int64) {
+	if v.DecisionFinishEventId != nil {
+		return *v.DecisionFinishEventId
+	}
+
+	return
+}
+
+// GetRequestId returns the value of RequestId if it is set or its
+// zero value if it is unset.
+func (v *ResetWorkflowExecutionRequest) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+
+	return
+}
+
+type ResetWorkflowExecutionResponse struct {
+	RunId *string `json:"runId,omitempty"`
+}
+
+// ToWire translates a ResetWorkflowExecutionResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ResetWorkflowExecutionResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.RunId != nil {
+		w, err = wire.NewValueString(*(v.RunId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ResetWorkflowExecutionResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ResetWorkflowExecutionResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ResetWorkflowExecutionResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ResetWorkflowExecutionResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ResetWorkflowExecutionResponse
+// struct.
+func (v *ResetWorkflowExecutionResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.RunId != nil {
+		fields[i] = fmt.Sprintf("RunId: %v", *(v.RunId))
+		i++
+	}
+
+	return fmt.Sprintf("ResetWorkflowExecutionResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ResetWorkflowExecutionResponse match the
+// provided ResetWorkflowExecutionResponse.
+//
+// This function performs a deep comparison.
+func (v *ResetWorkflowExecutionResponse) Equals(rhs *ResetWorkflowExecutionResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunId, rhs.RunId) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ResetWorkflowExecutionResponse.
+func (v *ResetWorkflowExecutionResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.RunId != nil {
+		enc.AddString("runId", *v.RunId)
+	}
+	return err
+}
+
+// GetRunId returns the value of RunId if it is set or its
+// zero value if it is unset.
+func (v *ResetWorkflowExecutionResponse) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+
+	return
 }
 
 type RespondActivityTaskCanceledByIDRequest struct {

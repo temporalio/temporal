@@ -636,6 +636,7 @@ type HistoryTaskAttributes struct {
 	NewRunHistory           *shared.History                    `json:"newRunHistory,omitempty"`
 	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
 	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
+	ResetWorkflow           *bool                              `json:"resetWorkflow,omitempty"`
 }
 
 type _List_String_ValueList []string
@@ -719,7 +720,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -819,6 +820,14 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.ResetWorkflow != nil {
+		w, err = wire.NewValueBool(*(v.ResetWorkflow)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
 
@@ -1017,6 +1026,16 @@ func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ResetWorkflow = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1030,7 +1049,7 @@ func (v *HistoryTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [13]string
 	i := 0
 	if v.TargetClusters != nil {
 		fields[i] = fmt.Sprintf("TargetClusters: %v", v.TargetClusters)
@@ -1080,6 +1099,10 @@ func (v *HistoryTaskAttributes) String() string {
 		fields[i] = fmt.Sprintf("NewRunEventStoreVersion: %v", *(v.NewRunEventStoreVersion))
 		i++
 	}
+	if v.ResetWorkflow != nil {
+		fields[i] = fmt.Sprintf("ResetWorkflow: %v", *(v.ResetWorkflow))
+		i++
+	}
 
 	return fmt.Sprintf("HistoryTaskAttributes{%v}", strings.Join(fields[:i], ", "))
 }
@@ -1117,6 +1140,16 @@ func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*shared.ReplicationI
 }
 
 func _I32_EqualsPtr(lhs, rhs *int32) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+func _Bool_EqualsPtr(lhs, rhs *bool) bool {
 	if lhs != nil && rhs != nil {
 
 		x := *lhs
@@ -1170,6 +1203,9 @@ func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
 		return false
 	}
 	if !_I32_EqualsPtr(v.NewRunEventStoreVersion, rhs.NewRunEventStoreVersion) {
+		return false
+	}
+	if !_Bool_EqualsPtr(v.ResetWorkflow, rhs.ResetWorkflow) {
 		return false
 	}
 
@@ -1239,6 +1275,9 @@ func (v *HistoryTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.NewRunEventStoreVersion != nil {
 		enc.AddInt32("newRunEventStoreVersion", *v.NewRunEventStoreVersion)
+	}
+	if v.ResetWorkflow != nil {
+		enc.AddBool("resetWorkflow", *v.ResetWorkflow)
 	}
 	return err
 }
@@ -1358,6 +1397,16 @@ func (v *HistoryTaskAttributes) GetEventStoreVersion() (o int32) {
 func (v *HistoryTaskAttributes) GetNewRunEventStoreVersion() (o int32) {
 	if v.NewRunEventStoreVersion != nil {
 		return *v.NewRunEventStoreVersion
+	}
+
+	return
+}
+
+// GetResetWorkflow returns the value of ResetWorkflow if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetResetWorkflow() (o bool) {
+	if v.ResetWorkflow != nil {
+		return *v.ResetWorkflow
 	}
 
 	return

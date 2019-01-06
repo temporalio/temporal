@@ -834,6 +834,38 @@ func (s *TestBase) ResetMutableState(prevRunID string, info *p.WorkflowExecution
 	})
 }
 
+// ResetWorkflowExecution is  utility method to reset WF
+func (s *TestBase) ResetWorkflowExecution(prevRunID string, condition int64, info *p.WorkflowExecutionInfo, replicationState *p.ReplicationState,
+	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
+	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
+	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currReplicationState *p.ReplicationState,
+	currTrasTasks, currTimerTasks []p.Task) error {
+	return s.ExecutionManager.ResetWorkflowExecution(&p.ResetWorkflowExecutionRequest{
+		PrevRunID: prevRunID,
+		Condition: condition,
+		RangeID:   s.ShardInfo.RangeID,
+
+		UpdateCurr:           updateCurr,
+		CurrExecutionInfo:    currInfo,
+		CurrReplicationState: currReplicationState,
+		CurrTransferTasks:    currTrasTasks,
+		CurrTimerTasks:       currTimerTasks,
+
+		InsertExecutionInfo:       info,
+		InsertReplicationState:    replicationState,
+		InsertTransferTasks:       trasTasks,
+		InsertTimerTasks:          timerTasks,
+		InsertReplicationTasks:    replTasks,
+		InsertActivityInfos:       activityInfos,
+		InsertTimerInfos:          timerInfos,
+		InsertChildExecutionInfos: childExecutionInfos,
+		InsertRequestCancelInfos:  requestCancelInfos,
+		InsertSignalInfos:         signalInfos,
+		InsertSignalRequestedIDs:  ids,
+		Encoding:                  pickRandomEncoding(),
+	})
+}
+
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *p.WorkflowExecutionInfo) error {
 	return s.ExecutionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{

@@ -1301,7 +1301,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.On("GetInFlightDecisionTask").Return(pendingDecisionInfo, true)
 	msBuilderIn.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderIn.On("AddDecisionTaskFailedEvent", pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService).Return(&shared.HistoryEvent{}).Once()
+		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "").Return(&shared.HistoryEvent{}).Once()
 	context.On("updateWorkflowExecution", ([]persistence.Task)(nil), ([]persistence.Task)(nil), mock.Anything).Return(nil).Once()
 
 	// after the flush, the pending buffered events are gone, however, the last event ID should increase
@@ -2863,6 +2863,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	currentNextEventID := int64(999)
+	msBuilderCurrent.On("GetReplicationState").Return(&persistence.ReplicationState{})
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true) // this is used to update the version on mutable state
 	msBuilderCurrent.On("UpdateReplicationStateVersion", incomingVersion, true).Once()
