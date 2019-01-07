@@ -71,8 +71,8 @@ var (
 	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
 	// try this task again after a small delay.
 	ErrRetryEntityNotExists = &shared.RetryTaskError{Message: "entity not exists"}
-	// ErrRetrySyncActivity is returned when sync activity replication tasks are arriving out of order, should retry
-	ErrRetrySyncActivity = &shared.RetryTaskError{Message: "retry on applying sync activity"}
+	// ErrRetrySyncActivityMsg is returned when sync activity replication tasks are arriving out of order, should retry
+	ErrRetrySyncActivityMsg = "retry on applying sync activity"
 	// ErrRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
 	ErrRetryBufferEventsMsg = "retry on applying buffer events"
 	// ErrRetryEmptyEventsMsg is returned when events size is 0
@@ -187,7 +187,7 @@ func (r *historyReplicator) SyncActivity(ctx context.Context, request *h.SyncAct
 
 		// version >= last write version
 		// this can happen if out of order delivery heppens
-		return ErrRetrySyncActivity
+		return newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, domainID, execution.GetWorkflowId(), execution.GetRunId(), msBuilder.GetNextEventID())
 	}
 
 	ai, isRunning := msBuilder.GetActivityInfo(scheduleID)

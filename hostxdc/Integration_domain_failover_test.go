@@ -528,6 +528,180 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.Nil(err)
 }
 
+func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
+	domainName := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.host.GetFrontendClient() // active
+	regReq := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	}
+	err := client1.RegisterDomain(createContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	}
+	resp, err := client1.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+	// Wait for domain cache to pick the chenge
+	time.Sleep(cacheRefreshInterval)
+
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+
+	// Start a workflow
+	id := "integration-sticky-decision-workflow-failover-test"
+	wt := "integration-sticky-decision-workflow-failover-test-type"
+	tl := "integration-sticky-decision-workflow-failover-test-tasklist"
+	stl1 := "integration-sticky-decision-workflow-failover-test-tasklist-sticky1"
+	stl2 := "integration-sticky-decision-workflow-failover-test-tasklist-sticky2"
+	identity1 := "worker1"
+	identity2 := "worker2"
+
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	stickyTaskList1 := &workflow.TaskList{Name: common.StringPtr(stl1)}
+	stickyTaskList2 := &workflow.TaskList{Name: common.StringPtr(stl2)}
+	stickyTaskTimeout := common.Int32Ptr(100)
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2592000),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(60),
+		Identity:                            common.StringPtr(identity1),
+	}
+	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	firstDecisionMade := false
+	secondDecisionMade := false
+	workflowCompleted := false
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if !firstDecisionMade {
+			firstDecisionMade = true
+			return nil, []*workflow.Decision{}, nil
+		}
+
+		if !secondDecisionMade {
+			secondDecisionMade = true
+			return nil, []*workflow.Decision{}, nil
+		}
+
+		workflowCompleted = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller1 := &host.TaskPoller{
+		Engine:                              client1,
+		Domain:                              domainName,
+		TaskList:                            taskList,
+		StickyTaskList:                      stickyTaskList1,
+		StickyScheduleToStartTimeoutSeconds: stickyTaskTimeout,
+		Identity:                            identity1,
+		DecisionHandler:                     dtHandler,
+		Logger:                              s.logger,
+		T:                                   s.T(),
+	}
+
+	poller2 := &host.TaskPoller{
+		Engine:                              client2,
+		Domain:                              domainName,
+		TaskList:                            taskList,
+		StickyTaskList:                      stickyTaskList2,
+		StickyScheduleToStartTimeoutSeconds: stickyTaskTimeout,
+		Identity:                            identity2,
+		DecisionHandler:                     dtHandler,
+		Logger:                              s.logger,
+		T:                                   s.T(),
+	}
+
+	_, err = poller1.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(firstDecisionMade)
+
+	// Send a signal in cluster
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	err = client1.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain: common.StringPtr(domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(we.GetRunId()),
+		},
+		SignalName: common.StringPtr(signalName),
+		Input:      signalInput,
+		Identity:   common.StringPtr(identity1),
+	})
+	s.Nil(err)
+
+	// Update domain to fail over
+	updateReq := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[1]),
+		},
+	}
+	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// Wait for domain cache to pick the chenge
+	time.Sleep(cacheRefreshInterval)
+
+	_, err = poller2.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(secondDecisionMade)
+
+	err = client2.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain: common.StringPtr(domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(we.GetRunId()),
+		},
+		SignalName: common.StringPtr(signalName),
+		Input:      signalInput,
+		Identity:   common.StringPtr(identity2),
+	})
+	s.Nil(err)
+
+	// Update domain to fail over back
+	updateReq = &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[0]),
+		},
+	}
+	updateResp, err = client2.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[0], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(10), updateResp.GetFailoverVersion())
+
+	_, err = poller1.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(workflowCompleted)
+}
+
 func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
 	domainName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.host.GetFrontendClient() // active
