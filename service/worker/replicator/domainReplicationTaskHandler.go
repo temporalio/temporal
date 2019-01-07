@@ -101,8 +101,10 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 			Data:        task.Info.Data,
 		},
 		Config: &persistence.DomainConfig{
-			Retention:  task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric: task.Config.GetEmitMetric(),
+			Retention:      task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+			EmitMetric:     task.Config.GetEmitMetric(),
+			ArchivalBucket: task.Config.GetArchivalBucketName(),
+			ArchivalStatus: task.Config.GetArchivalStatus(),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
@@ -168,8 +170,10 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 			Data:        task.Info.Data,
 		}
 		request.Config = &persistence.DomainConfig{
-			Retention:  task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric: task.Config.GetEmitMetric(),
+			Retention:      task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+			EmitMetric:     task.Config.GetEmitMetric(),
+			ArchivalBucket: task.Config.GetArchivalBucketName(),
+			ArchivalStatus: task.Config.GetArchivalStatus(),
 		}
 		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters)
 		request.ConfigVersion = task.GetConfigVersion()

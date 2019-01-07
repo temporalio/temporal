@@ -83,6 +83,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
+	archivalBucket := "some random archival bucket name"
+	archivalStatus := shared.ArchivalStatusEnabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -109,6 +111,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(clusterActive),
@@ -135,6 +139,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
+	s.Equal(archivalBucket, resp.Config.ArchivalBucket)
+	s.Equal(archivalStatus, resp.Config.ArchivalStatus)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
@@ -152,6 +158,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 	ownerEmail := "some random test owner"
 	retention := int32(10)
 	emitMetric := true
+	archivalBucket := "some random archival bucket name"
+	archivalStatus := shared.ArchivalStatusEnabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(12)
@@ -179,6 +187,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(clusterActive),
@@ -205,6 +215,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 	s.Equal(domainData, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
+	s.Equal(archivalBucket, resp.Config.ArchivalBucket)
+	s.Equal(archivalStatus, resp.Config.ArchivalStatus)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
@@ -223,6 +235,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
+	archivalBucket := "some random archival bucket name"
+	archivalStatus := shared.ArchivalStatusEnabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -249,6 +263,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(clusterActive),
@@ -269,6 +285,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	updatedData := map[string]string{"k": "v1"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
+	updateArchivalStatus := shared.ArchivalStatusDisabled
 	updateClusterActive := "other random active cluster name"
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion + 1
@@ -294,6 +311,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
 			EmitMetric:                             common.BoolPtr(updateEmitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(updateArchivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(updateClusterActive),
@@ -318,6 +337,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	s.Equal(updatedData, resp.Info.Data)
 	s.Equal(updateRetention, resp.Config.Retention)
 	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
+	s.Equal(archivalBucket, resp.Config.ArchivalBucket)
+	s.Equal(updateArchivalStatus, resp.Config.ArchivalStatus)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
@@ -336,6 +357,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
+	archivalBucket := ""
+	archivalStatus := shared.ArchivalStatusNeverEnabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -362,6 +385,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(clusterActive),
@@ -382,6 +407,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	updateData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
+	updateArchivalBucket := "some random archival bucket name"
+	updateArchivalStatus := shared.ArchivalStatusEnabled
 	updateClusterActive := "other random active cluster name"
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion + 1
@@ -407,6 +434,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
 			EmitMetric:                             common.BoolPtr(updateEmitMetric),
+			ArchivalBucketName:                     common.StringPtr(updateArchivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(updateArchivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(updateClusterActive),
@@ -431,6 +460,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	s.Equal(updateData, resp.Info.Data)
 	s.Equal(updateRetention, resp.Config.Retention)
 	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
+	s.Equal(updateArchivalBucket, resp.Config.ArchivalBucket)
+	s.Equal(updateArchivalStatus, resp.Config.ArchivalStatus)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
@@ -449,6 +480,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
+	archivalBucket := "some random archival bucket name"
+	archivalStatus := shared.ArchivalStatusEnabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -475,6 +508,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(clusterActive),
@@ -520,6 +555,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
 			EmitMetric:                             common.BoolPtr(updateEmitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(updateClusterActive),
@@ -544,6 +581,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
+	s.Equal(archivalBucket, resp.Config.ArchivalBucket)
+	s.Equal(archivalStatus, resp.Config.ArchivalStatus)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
@@ -562,6 +601,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
+	archivalBucket := "some random archival bucket name"
+	archivalStatus := shared.ArchivalStatusEnabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -588,6 +629,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(clusterActive),
@@ -635,6 +678,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
 			EmitMetric:                             common.BoolPtr(updateEmitMetric),
+			ArchivalBucketName:                     common.StringPtr(archivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(updateClusterActive),
@@ -656,6 +701,8 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
+	s.Equal(archivalBucket, resp.Config.ArchivalBucket)
+	s.Equal(archivalStatus, resp.Config.ArchivalStatus)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)

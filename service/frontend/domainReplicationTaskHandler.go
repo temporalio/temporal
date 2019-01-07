@@ -91,6 +91,8 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
 			EmitMetric:                             common.BoolPtr(config.EmitMetric),
+			ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
+			ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),
