@@ -447,6 +447,64 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotSticky_MutableStateSticky() {
+	domainID := "some random domain ID"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+	stickyTaskListName := "some random sticky task list"
+	stickyTaskListTimeout := int32(233)
+
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, s.version)
+	msBuilder.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
+	di.StartedID = event.GetEventId()
+	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
+	// set the sticky tasklist attr
+	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo.StickyTaskList = stickyTaskListName
+	executionInfo.StickyScheduleToStartTimeout = stickyTaskListTimeout
+
+	// make another round of decision
+	taskID := int64(59)
+	di = addDecisionTaskScheduledEvent(msBuilder)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, di.ScheduleID)
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:    s.version,
+		DomainID:   domainID,
+		WorkflowID: execution.GetWorkflowId(),
+		RunID:      execution.GetRunId(),
+		TaskID:     taskID,
+		TaskList:   taskListName,
+		TaskType:   persistence.TransferTaskTypeDecisionTask,
+		ScheduleID: di.ScheduleID,
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockMatchingClient.On("AddDecisionTask", nil, s.createAddDecisionTaskRequest(transferTask, msBuilder)).Once().Return(nil)
+
+	_, err := s.transferQueueActiveProcessor.process(transferTask)
+	s.Nil(err)
+}
+
 func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Duplication() {
 	domainID := "some random domain ID"
 	execution := workflow.WorkflowExecution{
@@ -1393,7 +1451,7 @@ func (s *transferQueueActiveProcessorSuite) createAddDecisionTaskRequest(task *p
 	taskList := &workflow.TaskList{Name: &task.TaskList}
 	executionInfo := msBuilder.GetExecutionInfo()
 	timeout := executionInfo.WorkflowTimeout
-	if msBuilder.IsStickyTaskListEnabled() {
+	if msBuilder.GetExecutionInfo().TaskList != task.TaskList {
 		taskList.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}

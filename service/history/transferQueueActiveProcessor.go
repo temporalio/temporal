@@ -262,12 +262,10 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	err = t.pushActivity(task, timeout)
-	return err
+	return t.pushActivity(task, timeout)
 }
 
 func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) (retError error) {
-
 	var err error
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
@@ -294,7 +292,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 
 	di, found := msBuilder.GetPendingDecision(task.ScheduleID)
 	if !found {
-		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TaskTypeDecisionTimeout, task.TaskID, task.ScheduleID)
+		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeDecisionTask, task.TaskID, task.ScheduleID)
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, di.Version, task.Version, task)
@@ -309,8 +307,15 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp
-	if msBuilder.IsStickyTaskListEnabled() {
-		tasklist.Name = common.StringPtr(executionInfo.StickyTaskList)
+
+	// NOTE: previously this section check whether mutable state has enabled
+	// sticky decision, if so convert the decision to a sticky decision.
+	// that logic has a bug which timer task for that sticky decision is not generated
+	// the correct logic should check whether the decision task is a sticky decision
+	// task or not.
+	if msBuilder.GetExecutionInfo().TaskList != task.TaskList {
+		// this decision is an sticky decision
+		// there shall already be an timer set
 		tasklist.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
 		decisionTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
@@ -324,11 +329,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 		}
 	}
 
-	err = t.pushDecision(task, tasklist, decisionTimeout)
-	if err != nil {
-		return err
-	}
-	return nil
+	return t.pushDecision(task, tasklist, decisionTimeout)
 }
 
 func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) (retError error) {
@@ -564,7 +565,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 		// TODO: here we should also RemoveSignalMutableState from target workflow
 		// Otherwise, target SignalRequestID still can leak if shard restart after requestSignalCompleted
 		// To do that, probably need to add the SignalRequestID in transfer task.
-		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeCancelExecution, task.TaskID, task.ScheduleID)
+		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeSignalExecution, task.TaskID, task.ScheduleID)
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, si.Version, task.Version, task)

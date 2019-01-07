@@ -92,6 +92,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 	var lastEvent *shared.HistoryEvent
 	var lastDecision *decisionInfo
 	var newRunStateBuilder mutableState
+
+	// need to clear the stickness since workflow turned to passive
+	b.msBuilder.ClearStickyness()
 	for _, event := range history {
 		lastEvent = event
 		// must set the current version, since this is standby here, not active

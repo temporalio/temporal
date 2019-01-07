@@ -418,10 +418,13 @@ func (p *replicationTaskProcessor) handleActivityTask(task *replicator.Replicati
 	}
 
 	retryErr, ok := err.(*shared.RetryTaskError)
-	if !ok {
+	if !ok || retryErr.GetRunId() == "" {
 		return err
 	}
 
+	p.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientRequests)
+	stopwatch := p.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientLatency)
+	defer stopwatch.Stop()
 	// this is the retry error
 	beginRunID := retryErr.GetRunId()
 	beginEventID := retryErr.GetNextEventId()
@@ -508,10 +511,13 @@ RetryLoop:
 	}
 
 	retryErr, ok := err.(*shared.RetryTaskError)
-	if !ok {
+	if !ok || retryErr.GetRunId() == "" {
 		return err
 	}
 
+	p.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientRequests)
+	stopwatch := p.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientLatency)
+	defer stopwatch.Stop()
 	// this is the retry error
 	beginRunID := retryErr.GetRunId()
 	beginEventID := retryErr.GetNextEventId()

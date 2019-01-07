@@ -342,6 +342,15 @@ const (
 
 	// DomainCacheScope tracks domain cache callbacks
 	DomainCacheScope
+	// HistoryRereplicationByTransferTaskScope tracks history replication calls made by transfer task
+	HistoryRereplicationByTransferTaskScope
+	// HistoryRereplicationByTimerTaskScope tracks history replication calls made by timer task
+	HistoryRereplicationByTimerTaskScope
+	// HistoryRereplicationByHistoryReplicationScope tracks history replication calls made by history replication
+	HistoryRereplicationByHistoryReplicationScope
+	// HistoryRereplicationByActivityReplicationScope tracks history replication calls made by activity replication
+	HistoryRereplicationByActivityReplicationScope
+
 	// PersistenceAppendHistoryNodesScope tracks AppendHistoryNodes calls made by service to persistence layer
 	PersistenceAppendHistoryNodesScope
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
@@ -742,7 +751,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
 
-		DomainCacheScope: {operation: "DomainCache"},
+		DomainCacheScope:                               {operation: "DomainCache"},
+		HistoryRereplicationByTransferTaskScope:        {operation: "HistoryRereplicationByTransferTask"},
+		HistoryRereplicationByTimerTaskScope:           {operation: "HistoryRereplicationByTimerTask"},
+		HistoryRereplicationByHistoryReplicationScope:  {operation: "HistoryRereplicationByHistoryReplication"},
+		HistoryRereplicationByActivityReplicationScope: {operation: "HistoryRereplicationByActivityReplication"},
 	},
 	// Frontend Scope Names
 	Frontend: {

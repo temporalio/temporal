@@ -510,6 +510,9 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(timerTask *persi
 		return nil
 	}
 
+	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientRequests)
+	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientLatency)
+	defer stopwatch.Stop()
 	err := t.historyRereplicator.SendMultiWorkflowHistory(
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,
