@@ -412,10 +412,6 @@ func (c *historyRereplicationContext) getHistory(domainID string, workflowID str
 		logger.WithField(logging.TagErr, err).Error("error getting history")
 		return nil, err
 	}
-	if len(response.HistoryBatches) == 0 {
-		logger.WithField(logging.TagErr, ErrNoHistoryRawEventBatches).Error(ErrNoHistoryRawEventBatches.Error())
-		return nil, ErrNoHistoryRawEventBatches
-	}
 
 	return response, nil
 }
@@ -482,8 +478,5 @@ func (c *historyRereplicationContext) deserializeBlob(blob *shared.DataBlob) ([]
 		return nil, ErrUnknownEncodingType
 	}
 
-	if len(historyEvents) == 0 {
-		return nil, ErrEmptyHistoryRawEventBatch
-	}
 	return historyEvents, nil
 }

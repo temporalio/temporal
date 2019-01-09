@@ -63,10 +63,11 @@ type (
 	Config struct {
 		EnableHistoryRereplication dynamicconfig.BoolPropertyFn
 
-		PersistenceMaxQPS          dynamicconfig.IntPropertyFn
-		ReplicatorConcurrency      dynamicconfig.IntPropertyFn
-		ReplicatorBufferRetryCount dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetry    dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                  dynamicconfig.IntPropertyFn
+		ReplicatorConcurrency              dynamicconfig.IntPropertyFn
+		ReplicatorActivityBufferRetryCount dynamicconfig.IntPropertyFn
+		ReplicatorHistoryBufferRetryCount  dynamicconfig.IntPropertyFn
+		ReplicationTaskMaxRetry            dynamicconfig.IntPropertyFn
 	}
 )
 

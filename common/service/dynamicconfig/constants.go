@@ -151,10 +151,11 @@ var keys = map[Key]string{
 	EnableEventsV2:                                        "history.enableEventsV2",
 	NumSystemWorkflows:                                    "history.numSystemWorkflows",
 
-	WorkerPersistenceMaxQPS:          "worker.persistenceMaxQPS",
-	WorkerReplicatorConcurrency:      "worker.replicatorConcurrency",
-	WorkerReplicatorBufferRetryCount: "worker.replicatorBufferRetryCount",
-	WorkerReplicationTaskMaxRetry:    "worker.replicationTaskMaxRetry",
+	WorkerPersistenceMaxQPS:                  "worker.persistenceMaxQPS",
+	WorkerReplicatorConcurrency:              "worker.replicatorConcurrency",
+	WorkerReplicatorActivityBufferRetryCount: "worker.replicatorActivityBufferRetryCount",
+	WorkerReplicatorHistoryBufferRetryCount:  "worker.replicatorHistoryBufferRetryCount",
+	WorkerReplicationTaskMaxRetry:            "worker.replicationTaskMaxRetry",
 }
 
 const (
@@ -381,8 +382,10 @@ const (
 	WorkerPersistenceMaxQPS
 	// WorkerReplicatorConcurrency is the max concurrenct tasks to be processed at any given time
 	WorkerReplicatorConcurrency
-	// WorkerReplicatorBufferRetryCount is the retry attempt when encounter retry error
-	WorkerReplicatorBufferRetryCount
+	// WorkerReplicatorActivityBufferRetryCount is the retry attempt when encounter retry error on activity
+	WorkerReplicatorActivityBufferRetryCount
+	// WorkerReplicatorHistoryBufferRetryCount is the retry attempt when encounter retry error on history
+	WorkerReplicatorHistoryBufferRetryCount
 	// WorkerReplicationTaskMaxRetry is the max retry for any task
 	WorkerReplicationTaskMaxRetry
 
