@@ -123,10 +123,10 @@ func Test_NextCronSchedule(t *testing.T) {
 	a := assert.New(t)
 
 	// every day cron
-	now, _ := time.Parse(time.RFC3339, "2018-12-17T08:08:00+00:00")
+	now, _ := time.Parse(time.RFC3339, "2018-12-17T08:00:00-08:00") // UTC: 2018-12-17 16:00:00 +0000 UTC
 	cronSpec := "0 10 * * *"
 	backoff := getBackoffForNextCronSchedule(cronSpec, now)
-	a.Equal(time.Minute*112, backoff)
+	a.Equal(time.Hour*18, backoff)
 	backoff = getBackoffForNextCronSchedule(cronSpec, now.Add(backoff))
 	a.Equal(time.Hour*24, backoff)
 

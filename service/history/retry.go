@@ -73,6 +73,7 @@ func getBackoffForNextCronSchedule(cronSchedule string, nowTime time.Time) time.
 		return common.NoRetryBackoff
 	}
 
+	nowTime = nowTime.In(time.UTC)
 	backoffInterval := schedule.Next(nowTime).Sub(nowTime)
 	roundedInterval := time.Second * time.Duration(math.Ceil(backoffInterval.Seconds()))
 	return roundedInterval
