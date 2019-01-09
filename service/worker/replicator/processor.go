@@ -378,6 +378,7 @@ func (p *replicationTaskProcessor) handleActivityTask(task *replicator.Replicati
 	sw := p.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
+	var err error
 	attr := task.SyncActicvityTaskAttributes
 	logger.Debugf("Received sync activity task %v.", attr)
 
@@ -394,9 +395,22 @@ func (p *replicationTaskProcessor) handleActivityTask(task *replicator.Replicati
 		Details:           attr.Details,
 		Attempt:           attr.Attempt,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-	err := p.historyClient.SyncActivity(ctx, req)
-	cancel()
+
+RetryLoop:
+	for i := 0; i < p.config.ReplicatorActivityBufferRetryCount(); i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+		err = p.historyClient.SyncActivity(ctx, req)
+		cancel()
+
+		// Replication tasks could be slightly out of order for a particular workflow execution
+		// We first try to apply the events without buffering enabled with a small delay to account for such delays
+		// Caller should try to apply the event with buffering enabled once we return RetryTaskError after all retries
+		if p.isRetryTaskError(err) {
+			time.Sleep(retryErrorWaitMillis * time.Millisecond)
+			continue RetryLoop
+		}
+		break RetryLoop
+	}
 
 	if !p.isRetryTaskError(err) {
 		return err
@@ -409,7 +423,7 @@ func (p *replicationTaskProcessor) handleActivityTask(task *replicator.Replicati
 	defer p.rereplicationLock.UnlockID(workflowIdendifier)
 
 	// before actually trying to re-replicate the missing event, try again
-	ctx, cancel = context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	err = p.historyClient.SyncActivity(ctx, req)
 	cancel()
 
@@ -485,7 +499,7 @@ Loop:
 	}
 
 RetryLoop:
-	for i := 0; i < p.config.ReplicatorBufferRetryCount(); i++ {
+	for i := 0; i < p.config.ReplicatorHistoryBufferRetryCount(); i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 		err = p.historyClient.ReplicateEvents(ctx, req)
 		cancel()
