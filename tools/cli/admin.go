@@ -51,6 +51,10 @@ func newAdminWorkflowCommands() []cli.Command {
 					Name:  FlagBranchID,
 					Usage: "BranchID",
 				},
+				cli.StringFlag{
+					Name:  FlagOutputFilenameWithAlias,
+					Usage: "output file",
+				},
 
 				// for cassandra connection
 				cli.StringFlag{

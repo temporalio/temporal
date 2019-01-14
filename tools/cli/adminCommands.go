@@ -24,6 +24,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"io/ioutil"
+
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/admin"
@@ -45,6 +47,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 	tid := c.String(FlagTreeID)
 	bid := c.String(FlagBranchID)
+	outputFileName := c.String(FlagOutputFilename)
 
 	session := connectToCassandra(c)
 	serializer := persistence.NewHistorySerializer()
@@ -90,6 +93,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
+	allEvents := &shared.History{}
 	totalSize := 0
 	for idx, b := range history {
 		totalSize += len(b.Data)
@@ -98,6 +102,7 @@ func AdminShowWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("DeserializeBatchEvents err", err)
 		}
+		allEvents.Events = append(allEvents.Events, historyBatch...)
 		for _, e := range historyBatch {
 			jsonstr, err := json.Marshal(e)
 			if err != nil {
@@ -107,6 +112,16 @@ func AdminShowWorkflow(c *cli.Context) {
 		}
 	}
 	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(history), totalSize)
+
+	if outputFileName != "" {
+		data, err := json.Marshal(allEvents.Events)
+		if err != nil {
+			ErrorAndExit("Failed to serialize history data.", err)
+		}
+		if err := ioutil.WriteFile(outputFileName, data, 0777); err != nil {
+			ErrorAndExit("Failed to export history data file.", err)
+		}
+	}
 }
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
