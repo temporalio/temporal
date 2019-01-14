@@ -199,4 +199,3 @@ func (_m *ClusterMetadata) GetDefaultArchivalBucket() string {
 
 	return r0
 }
-

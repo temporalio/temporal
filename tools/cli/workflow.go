@@ -134,6 +134,17 @@ func newWorkflowCommands() []cli.Command {
 					Value: defaultDecisionTimeoutInSeconds,
 					Usage: "Decision task start to close timeout in seconds",
 				},
+				cli.StringFlag{
+					Name: FlagCronSchedule,
+					Usage: "Optional cron schedule for the workflow. Cron spec is as following: \n" +
+						"\t┌───────────── minute (0 - 59) \n" +
+						"\t│ ┌───────────── hour (0 - 23) \n" +
+						"\t│ │ ┌───────────── day of the month (1 - 31) \n" +
+						"\t│ │ │ ┌───────────── month (1 - 12) \n" +
+						"\t│ │ │ │ ┌───────────── day of the week (0 - 6) (Sunday to Saturday) \n" +
+						"\t│ │ │ │ │ \n" +
+						"\t* * * * *",
+				},
 				cli.IntFlag{
 					Name: FlagWorkflowIDReusePolicyAlias,
 					Usage: "Optional input to configure if the same workflow ID is allow to use for new workflow execution. " +
@@ -181,6 +192,17 @@ func newWorkflowCommands() []cli.Command {
 				cli.IntFlag{
 					Name:  FlagContextTimeoutWithAlias,
 					Usage: "Optional timeout for start command context in seconds, default value is 120",
+				},
+				cli.StringFlag{
+					Name: FlagCronSchedule,
+					Usage: "Optional cron schedule for the workflow. Cron spec is as following: \n" +
+						"\t┌───────────── minute (0 - 59) \n" +
+						"\t│ ┌───────────── hour (0 - 23) \n" +
+						"\t│ │ ┌───────────── day of the month (1 - 31) \n" +
+						"\t│ │ │ ┌───────────── month (1 - 12) \n" +
+						"\t│ │ │ │ ┌───────────── day of the week (0 - 6) (Sunday to Saturday) \n" +
+						"\t│ │ │ │ │ \n" +
+						"\t* * * * *",
 				},
 				cli.IntFlag{
 					Name: FlagWorkflowIDReusePolicyAlias,

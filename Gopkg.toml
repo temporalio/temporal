@@ -108,7 +108,7 @@ ignored = ["github.com/uber/cadence/.gen"]
 
 [[constraint]]
   name = "go.uber.org/cadence"
-  version = "0.7.6"
+  branch = "master"
 
 [[constraint]]
   name = "go.uber.org/yarpc"

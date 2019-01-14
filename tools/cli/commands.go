@@ -78,6 +78,7 @@ const (
 	FlagTaskListTypeWithAlias             = FlagTaskListType + ", tlt"
 	FlagWorkflowIDReusePolicy             = "workflowidreusepolicy"
 	FlagWorkflowIDReusePolicyAlias        = FlagWorkflowIDReusePolicy + ", wrp"
+	FlagCronSchedule                      = "cron"
 	FlagWorkflowType                      = "workflow_type"
 	FlagWorkflowTypeWithAlias             = FlagWorkflowType + ", wt"
 	FlagWorkflowStatus                    = "status"
@@ -559,7 +560,7 @@ func StartWorkflow(c *cli.Context) {
 	tcCtx, cancel := newContext()
 	defer cancel()
 
-	resp, err := serviceClient.StartWorkflowExecution(tcCtx, &s.StartWorkflowExecutionRequest{
+	startRequest := &s.StartWorkflowExecutionRequest{
 		RequestId:  common.StringPtr(uuid.New()),
 		Domain:     common.StringPtr(domain),
 		WorkflowId: common.StringPtr(wid),
@@ -574,7 +575,13 @@ func StartWorkflow(c *cli.Context) {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(int32(dt)),
 		Identity:                            common.StringPtr(getCliIdentity()),
 		WorkflowIdReusePolicy:               reusePolicy,
-	})
+	}
+
+	if c.IsSet(FlagCronSchedule) {
+		startRequest.CronSchedule = common.StringPtr(c.String(FlagCronSchedule))
+	}
+
+	resp, err := serviceClient.StartWorkflowExecution(tcCtx, startRequest)
 
 	if err != nil {
 		ErrorAndExit("Failed to create workflow.", err)
@@ -613,7 +620,7 @@ func RunWorkflow(c *cli.Context) {
 	tcCtx, cancel := newContextForLongPoll(contextTimeout)
 	defer cancel()
 
-	resp, err := serviceClient.StartWorkflowExecution(tcCtx, &s.StartWorkflowExecutionRequest{
+	startRequest := &s.StartWorkflowExecutionRequest{
 		RequestId:  common.StringPtr(uuid.New()),
 		Domain:     common.StringPtr(domain),
 		WorkflowId: common.StringPtr(wid),
@@ -628,7 +635,12 @@ func RunWorkflow(c *cli.Context) {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(int32(dt)),
 		Identity:                            common.StringPtr(getCliIdentity()),
 		WorkflowIdReusePolicy:               reusePolicy,
-	})
+	}
+	if c.IsSet(FlagCronSchedule) {
+		startRequest.CronSchedule = common.StringPtr(c.String(FlagCronSchedule))
+	}
+
+	resp, err := serviceClient.StartWorkflowExecution(tcCtx, startRequest)
 
 	if err != nil {
 		ErrorAndExit("Failed to run workflow.", err)
