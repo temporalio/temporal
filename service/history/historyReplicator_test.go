@@ -68,6 +68,7 @@ type (
 		mockTxProcessor     *MockTransferQueueProcessor
 		mockTimerProcessor  *MockTimerQueueProcessor
 		mockClientBean      *client.MockClientBean
+		mockWorkflowResetor *mockWorkflowResetor
 
 		historyReplicator *historyReplicator
 	}
@@ -141,6 +142,8 @@ func (s *historyReplicatorSuite) SetupTest() {
 		timerProcessor:     s.mockTimerProcessor,
 	}
 	s.historyReplicator = newHistoryReplicator(s.mockShard, h, historyCache, s.mockShard.domainCache, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger)
+	s.mockWorkflowResetor = &mockWorkflowResetor{}
+	s.historyReplicator.resetor = s.mockWorkflowResetor
 }
 
 func (s *historyReplicatorSuite) TearDownTest() {
@@ -153,6 +156,7 @@ func (s *historyReplicatorSuite) TearDownTest() {
 	s.mockTxProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
+	s.mockWorkflowResetor.AssertExpectations(s.T())
 }
 
 func (s *historyReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
@@ -730,7 +734,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, version,
-		s.logger)
+		s.logger, &h.ReplicateEventsRequest{})
 	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
 }
 
@@ -764,8 +768,49 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, version,
-		s.logger)
+		s.logger, &h.ReplicateEventsRequest{})
 	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+}
+
+func (s *historyReplicatorSuite) TestWorkflowReset() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	version := int64(123)
+	currentRunID := uuid.New()
+	currentVersion := version - 100
+	currentNextEventID := int64(2333)
+
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: currentRunID,
+		// other attributes are not used
+	}, nil)
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(currentRunID),
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistence.WorkflowMutableState{
+			ExecutionInfo:    &persistence.WorkflowExecutionInfo{RunID: currentRunID, NextEventID: currentNextEventID, State: persistence.WorkflowStateCompleted},
+			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
+		},
+	}, nil)
+
+	reqCtx := ctx.Background()
+	req := &h.ReplicateEventsRequest{
+		ResetWorkflow: common.BoolPtr(true),
+	}
+
+	s.mockWorkflowResetor.On("ApplyResetEvent", reqCtx, req, domainID, workflowID, currentRunID).Return(nil).Once()
+
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(reqCtx, domainID, workflowID, runID, version,
+		s.logger, req)
+	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent() {
@@ -813,7 +858,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID,
-		version, s.logger)
+		version, s.logger, &h.ReplicateEventsRequest{})
 	s.Nil(err)
 }
 
@@ -1301,7 +1346,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.On("GetInFlightDecisionTask").Return(pendingDecisionInfo, true)
 	msBuilderIn.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderIn.On("AddDecisionTaskFailedEvent", pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "").Return(&shared.HistoryEvent{}).Once()
+		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "", int64(0)).Return(&shared.HistoryEvent{}).Once()
 	context.On("updateWorkflowExecution", ([]persistence.Task)(nil), ([]persistence.Task)(nil), mock.Anything).Return(nil).Once()
 
 	// after the flush, the pending buffered events are gone, however, the last event ID should increase

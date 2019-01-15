@@ -155,7 +155,7 @@ func (_m *mockWorkflowExecutionContext) lock(_a0 context.Context) error {
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) replicateContinueAsNewWorkflowExecution(_a0 mutableState, _a1 int64) error {
+func (_m *mockWorkflowExecutionContext) appendFirstBatchHistoryForContinueAsNew(_a0 mutableState, _a1 int64) error {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 error
@@ -203,11 +203,11 @@ func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 mutabl
 	return r0, r1
 }
 
-func (_m *mockWorkflowExecutionContext) resetWorkflowExecution(_a0 mutableState, _a1 bool, _a2, _a3 persistence.Task, _a4 mutableState, _a5, _a6, _a7 []persistence.Task) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+func (_m *mockWorkflowExecutionContext) resetWorkflowExecution(_a0 mutableState, _a1 bool, _a2, _a3 persistence.Task, _a4 mutableState, _a5, _a6, _a7 []persistence.Task, _a8 string, _a9, _a10 int64) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9, _a10)
 	var r0 error
-	if rf, ok := ret.Get(1).(func(mutableState, bool, persistence.Task, persistence.Task, mutableState, []persistence.Task, []persistence.Task, []persistence.Task) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+	if rf, ok := ret.Get(1).(func(mutableState, bool, persistence.Task, persistence.Task, mutableState, []persistence.Task, []persistence.Task, []persistence.Task, string, int64, int64) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9, _a10)
 	} else {
 		r0 = ret.Error(1)
 	}

@@ -235,25 +235,17 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 		}
 	}
 
-	// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 	var newRunHistory *shared.History
-	if task.ResetWorkflow {
-		newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-			task.DomainID, task.WorkflowID, "", task.NewRunFirstEventID, task.NewRunNextEventID, task.NewRunEventStoreVersion, task.NewRunBranchToken)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		events := history.Events
-		if len(events) > 0 {
-			lastEvent := events[len(events)-1]
-			if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
-				newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
-				newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-					task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken)
-				if err != nil {
-					return nil, err
-				}
+	events := history.Events
+	if len(events) > 0 {
+		lastEvent := events[len(events)-1]
+		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
+			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
+			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+			newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
+				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}

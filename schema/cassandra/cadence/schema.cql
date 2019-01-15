@@ -120,8 +120,6 @@ CREATE TYPE replication_task (
   new_run_event_store_version        int, -- indiciates which version of event store to query for new run(continueAsNew)
   new_run_branch_token               blob, -- if eventV2, then query with this token for new run(continueAsNew)
   reset_workflow             boolean, -- whether the task is for resetWorkflowExecution
-  new_run_first_event_id     bigint,  -- Used by ReplicationTask to set the first event ID of the new run (current only for reset)
-  new_run_next_event_id      bigint,  -- Used by ReplicationTask to set the next event ID of the new run (current only for reset)
 );
 
 CREATE TYPE timer_task (

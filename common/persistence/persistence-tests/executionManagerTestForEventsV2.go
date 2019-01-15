@@ -930,11 +930,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 				LastEventID: int64(20),
 			},
 		},
-		EventStoreVersion:  p.EventStoreVersionV2,
-		BranchToken:        []byte("branchToken5"),
-		ResetWorkflow:      true,
-		NewRunFirstEventID: int64(20),
-		NewRunNextEventID:  int64(60),
+		EventStoreVersion: p.EventStoreVersionV2,
+		BranchToken:       []byte("branchToken5"),
+		ResetWorkflow:     true,
 	}}
 
 	insertTimerInfos := []*p.TimerInfo{{
@@ -976,9 +974,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 
 	insertSignalRequests := []string{uuid.New()}
 
-	err = s.ResetWorkflowExecution(updatedInfo.RunID, 3,
+	err = s.ResetWorkflowExecution(3,
 		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
-		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks)
+		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000, replicationState0.LastWriteVersion)
 	s.Nil(err)
 
 	//////////////////////////////
@@ -1025,8 +1023,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(10), tsk.FirstEventID)
 	s.Equal(int64(30), tsk.NextEventID)
 	s.Equal(true, tsk.ResetWorkflow)
-	s.Equal(int64(20), tsk.NewRunFirstEventID)
-	s.Equal(int64(60), tsk.NewRunNextEventID)
 	s.Equal(int64(90), tsk.Version)
 	s.Equal(int32(p.EventStoreVersionV2), tsk.EventStoreVersion)
 	s.Equal(int32(0), tsk.NewRunEventStoreVersion)
@@ -1274,6 +1270,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(int32(p.EventStoreVersionV2), info0.EventStoreVersion)
+	s.Equal(p.WorkflowStateCreated, info0.State)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
@@ -1292,6 +1289,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 			s.Fail("Unexpected key")
 		}
 	}
+
+	info0.State = p.WorkflowStateCompleted
+	err = s.UpdateWorklowStateAndReplication(info0, replicationState0, nil, nil, info0.NextEventID, nil)
+	s.Nil(err)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedReplicationState := copyReplicationState(replicationState0)
@@ -1391,9 +1392,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 
 	insertSignalRequests := []string{uuid.New()}
 
-	err = s.ResetWorkflowExecution(updatedInfo.RunID, 3,
+	err = s.ResetWorkflowExecution(3,
 		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
-		false, updatedInfo, updatedReplicationState, nil, nil)
+		false, updatedInfo, updatedReplicationState, nil, nil, info0.RunID, -1000, replicationState0.LastWriteVersion)
 	s.Nil(err)
 
 	//////////////////////////////
@@ -1662,9 +1663,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		CancelRequestID: uuid.New(),
 	}}
 
-	err = s.ResetWorkflowExecution(updatedInfo.RunID, 3,
+	err = s.ResetWorkflowExecution(3,
 		insertInfo, nil, insertActivityInfos, insertTimerInfos, nil, insertRequestCancelInfos, nil, nil, insertTransTasks, insertTimerTasks, nil,
-		false, updatedInfo, nil, nil, nil)
+		false, updatedInfo, nil, nil, nil, info0.RunID, -1000, -1000)
 	s.Nil(err)
 
 	//////////////////////////////

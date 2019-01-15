@@ -74,7 +74,7 @@ type (
 		logger               bark.Logger
 		config               *Config
 		archivalClient       sysworkflow.ArchivalClient
-		resetor              *workflowResetor
+		resetor              workflowResetor
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -186,7 +186,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicator = newHistoryReplicator(shard, historyEngImpl, historyCache, shard.GetDomainCache(), historyManager, historyV2Manager,
 			logger)
 	}
-	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
+	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl, historyEngImpl.replicator)
 
 	return historyEngImpl
 }
@@ -1815,7 +1815,7 @@ func (e *historyEngineImpl) RespondDecisionTaskFailed(ctx context.Context, req *
 			}
 
 			msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, request.GetCause(), request.Details,
-				request.GetIdentity(), "", "", "")
+				request.GetIdentity(), "", "", "", 0)
 
 			return nil, nil
 		})
@@ -2766,7 +2766,7 @@ func (e *historyEngineImpl) failDecision(context workflowExecutionContext, sched
 		return nil, err
 	}
 
-	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, nil, request.GetIdentity(), "", "", "")
+	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, nil, request.GetIdentity(), "", "", "", 0)
 
 	// Return new builder back to the caller for further updates
 	return msBuilder, nil

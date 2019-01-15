@@ -835,13 +835,24 @@ func (s *TestBase) ResetMutableState(prevRunID string, info *p.WorkflowExecution
 }
 
 // ResetWorkflowExecution is  utility method to reset WF
-func (s *TestBase) ResetWorkflowExecution(prevRunID string, condition int64, info *p.WorkflowExecutionInfo, replicationState *p.ReplicationState,
+func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecutionInfo, replicationState *p.ReplicationState,
 	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
 	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currReplicationState *p.ReplicationState,
-	currTrasTasks, currTimerTasks []p.Task) error {
+	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64, prevRunVersion int64) error {
+
+	prevRunState := p.WorkflowStateCompleted
+	if updateCurr {
+		prevRunState = p.WorkflowStateRunning
+	}
+
 	return s.ExecutionManager.ResetWorkflowExecution(&p.ResetWorkflowExecutionRequest{
-		PrevRunID: prevRunID,
+		BaseRunID:          forkRunID,
+		BaseRunNextEventID: forkRunNextEventID,
+
+		PrevRunVersion: prevRunVersion,
+		PrevRunState:   prevRunState,
+
 		Condition: condition,
 		RangeID:   s.ShardInfo.RangeID,
 

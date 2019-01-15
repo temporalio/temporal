@@ -60,6 +60,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		metricsClient     metrics.Client
 		logger            bark.Logger
+		resetor           workflowResetor
 
 		getNewConflictResolver conflictResolverProvider
 		getNewStateBuilder     stateBuilderProvider
@@ -132,6 +133,7 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 			)
 		},
 	}
+	replicator.resetor = newWorkflowResetor(historyEngine, replicator)
 
 	return replicator
 }
@@ -379,7 +381,7 @@ func (r *historyReplicator) ApplyEvents(ctx context.Context, request *h.Replicat
 			// we need to check the existing workflow ID
 			release(err)
 			return r.ApplyOtherEventsMissingMutableState(ctx, domainID, request.WorkflowExecution.GetWorkflowId(),
-				request.WorkflowExecution.GetRunId(), firstEvent.GetVersion(), logger)
+				request.WorkflowExecution.GetRunId(), firstEvent.GetVersion(), logger, request)
 		}
 
 		logger.WithField(logging.TagCurrentVersion, msBuilder.GetReplicationState().LastWriteVersion)
@@ -405,7 +407,7 @@ func (r *historyReplicator) ApplyStartEvent(ctx context.Context, context workflo
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Context, domainID string, workflowID string,
-	runID string, incomingVersion int64, logger bark.Logger) error {
+	runID string, incomingVersion int64, logger bark.Logger, request *h.ReplicateEventsRequest) error {
 	// we need to check the current workflow execution
 	_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
 	if err != nil {
@@ -432,6 +434,11 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Cont
 
 	if currentStillRunning {
 		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID)
+	}
+
+	if request.GetResetWorkflow() {
+		//Note that at this point, current run is already closed and currentLastWriteVersion <= incomingVersion
+		return r.resetor.ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID)
 	}
 	return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
 }
@@ -637,19 +644,22 @@ func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context wo
 	if request.NewRunHistory != nil {
 		newRunHistory = request.NewRunHistory.Events
 	}
+
+	// directly use stateBuilder to apply events for other events(including continueAsNew)
 	lastEvent, di, newRunStateBuilder, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
 	if err != nil {
 		return err
 	}
 
-	// If replicated events has ContinueAsNew event, then create the new run history
+	// If replicated events has ContinueAsNew event, then append the new run history
 	if newRunStateBuilder != nil {
 		// Generate a transaction ID for appending events to history
 		transactionID, err := r.shard.GetNextTransferTaskID()
 		if err != nil {
 			return err
 		}
-		err = context.replicateContinueAsNewWorkflowExecution(newRunStateBuilder, transactionID)
+		// contineueAsNew
+		err = context.appendFirstBatchHistoryForContinueAsNew(newRunStateBuilder, transactionID)
 		if err != nil {
 			return err
 		}
@@ -1192,7 +1202,7 @@ func (r *historyReplicator) flushEventsBuffer(context workflowExecutionContext, 
 	}
 	msBuilder.UpdateReplicationStateVersion(msBuilder.GetLastWriteVersion(), true)
 	msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
-		workflow.DecisionTaskFailedCauseFailoverCloseDecision, nil, identityHistoryService, "", "", "")
+		workflow.DecisionTaskFailedCauseFailoverCloseDecision, nil, identityHistoryService, "", "", "", 0)
 
 	// there is no need to generate a new decision and corresponding decision timer task
 	// here, the intent is to flush the buffered events
