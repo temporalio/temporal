@@ -174,7 +174,7 @@ func NewEngineWithShardContext(
 		visibilityProducer = getVisibilityProducer(messagingClient, shard.GetMetricsClient())
 	}
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, visibilityProducer, matching, historyClient, logger)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, visibilityProducer, logger)
 	historyEngImpl.txProcessor = txProcessor
 	shardWrapper.txProcessor = txProcessor
 

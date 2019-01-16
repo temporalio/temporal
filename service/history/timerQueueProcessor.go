@@ -31,6 +31,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
@@ -52,6 +53,7 @@ type (
 		taskAllocator          taskAllocator
 		config                 *Config
 		metricsClient          metrics.Client
+		visibilityProducer     messaging.Producer
 		historyService         *historyEngineImpl
 		ackLevel               TimerSequenceID
 		logger                 bark.Logger
@@ -64,7 +66,7 @@ type (
 	}
 )
 
-func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, logger bark.Logger) timerQueueProcessor {
+func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, visibilityProducer messaging.Producer, logger bark.Logger) timerQueueProcessor {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
@@ -85,8 +87,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 				logger,
 			)
 			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
-				shard, historyService, clusterName,
-				taskAllocator, historyRereplicator, logger,
+				shard, historyService, clusterName, taskAllocator, historyRereplicator, visibilityProducer, logger,
 			)
 		}
 	}
@@ -98,12 +99,13 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		taskAllocator:          taskAllocator,
 		config:                 shard.GetConfig(),
 		metricsClient:          historyService.metricsClient,
+		visibilityProducer:     visibilityProducer,
 		historyService:         historyService,
 		ackLevel:               TimerSequenceID{VisibilityTimestamp: shard.GetTimerAckLevel()},
 		logger:                 logger,
 		matchingClient:         matchingClient,
 		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
+		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, visibilityProducer, logger),
 		standbyTimerProcessors: standbyTimerProcessors,
 	}
 }
@@ -166,7 +168,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) 
 	t.logger.Infof("Timer Failover Triggered: %v, min level: %v, max level: %v.\n", domainIDs, minLevel, maxLevel)
 	// we should consider make the failover idempotent
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainIDs,
-		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.taskAllocator, t.logger)
+		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.taskAllocator, t.visibilityProducer, t.logger)
 
 	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 		standbyTimerProcessor.retryTasks()

@@ -21,6 +21,7 @@
 package indexer
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/suite"
@@ -276,6 +277,27 @@ func (s *esProcessorSuite) TestGetKeyForKafkaMsg() {
 	m[es.KafkaKey] = testKey
 	request.Doc(m)
 	s.Equal(testKey, s.esProcessor.getKeyForKafkaMsg(request))
+}
+
+func (s *esProcessorSuite) TestGetKeyForKafkaMsg_Delete() {
+	request := elastic.NewBulkDeleteRequest()
+
+	// ensure compatible with dependency
+	source, err := request.Source()
+	s.NoError(err)
+	s.Equal(1, len(source))
+	var body map[string]map[string]interface{}
+	err = json.Unmarshal([]byte(source[0]), &body)
+	s.NoError(err)
+	_, ok := body["delete"]
+	s.True(ok)
+
+	s.PanicsWithValue("_id not found in request opMap", func() { s.esProcessor.getKeyForKafkaMsg(request) })
+
+	id := "id"
+	request.Id(id)
+	key := s.esProcessor.getKeyForKafkaMsg(request)
+	s.Equal(id, key)
 }
 
 func (s *esProcessorSuite) TestIsResponseSuccess() {

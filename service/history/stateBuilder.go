@@ -345,48 +345,38 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeWorkflowExecutionCompleted:
 			b.msBuilder.ReplicateWorkflowExecutionCompletedEvent(event)
-			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
+			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			b.timerTasks = append(b.timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionFailed:
 			b.msBuilder.ReplicateWorkflowExecutionFailedEvent(event)
-			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
+			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			b.timerTasks = append(b.timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionTimedOut:
 			b.msBuilder.ReplicateWorkflowExecutionTimedoutEvent(event)
-			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
+			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			b.timerTasks = append(b.timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionCanceled:
 			b.msBuilder.ReplicateWorkflowExecutionCanceledEvent(event)
-			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
+			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			b.timerTasks = append(b.timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionTerminated:
 			b.msBuilder.ReplicateWorkflowExecutionTerminatedEvent(event)
-			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
+			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			b.timerTasks = append(b.timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionContinuedAsNew:
 			// ContinuedAsNew event also has history for first 2 events for next run as they are created transactionally
@@ -456,12 +446,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			// we should merge all task generation & persistence into one place
 			// BTW, the newRunTransferTasks and newRunTimerTasks are not used
 
-			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
+			err = b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			b.timerTasks = append(b.timerTasks, timerTask)
 		}
 	}
 
@@ -578,4 +566,14 @@ func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBui
 		return newTimerBuilderForStandby(b.shard.GetConfig(), b.logger, timeSource)
 	}
 	return newTimerBuilder(b.shard.GetConfig(), b.logger, timeSource)
+}
+
+func (b *stateBuilderImpl) appendTasksForFinishedExecutions(event *shared.HistoryEvent, domainID, workflowID string) error {
+	b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
+	timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, workflowID)
+	if err != nil {
+		return err
+	}
+	b.timerTasks = append(b.timerTasks, timerTask)
+	return nil
 }

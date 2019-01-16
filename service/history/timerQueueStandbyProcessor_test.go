@@ -152,7 +152,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	}
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
-	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(s.mockShard, h, s.clusterName, newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.logger)
+	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(s.mockShard, h, s.clusterName, newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.mockProducer, s.logger)
 	s.mocktimerQueueAckMgr = &MockTimerQueueAckMgr{}
 	s.timerQueueStandbyProcessor.timerQueueAckMgr = s.mocktimerQueueAckMgr
 }

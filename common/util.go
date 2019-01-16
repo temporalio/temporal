@@ -63,6 +63,10 @@ const (
 	adminServiceOperationMaxInterval        = 5 * time.Second
 	adminServiceOperationExpirationInterval = 15 * time.Second
 
+	retryKafkaOperationInitialInterval    = 50 * time.Millisecond
+	retryKafkaOperationMaxInterval        = 10 * time.Second
+	retryKafkaOperationExpirationInterval = 30 * time.Second
+
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "COMPLETE_RESULT_EXCEEDS_LIMIT"
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -153,6 +157,15 @@ func CreateAdminServiceRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
+// CreateKafkaOperationRetryPolicy creates a retry policy for kafka operation
+func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(retryKafkaOperationInitialInterval)
+	policy.SetMaximumInterval(retryKafkaOperationMaxInterval)
+	policy.SetExpirationInterval(retryKafkaOperationExpirationInterval)
+
+	return policy
+}
+
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
@@ -161,6 +174,11 @@ func IsPersistenceTransientError(err error) bool {
 	}
 
 	return false
+}
+
+// IsKafkaTransientError check if the error is a transient kafka error
+func IsKafkaTransientError(err error) bool {
+	return true
 }
 
 // IsServiceTransientError checks if the error is a retryable error.

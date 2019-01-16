@@ -66,6 +66,7 @@ type (
 )
 
 var _ ESProcessor = (*esProcessorImpl)(nil)
+var _ ElasticBulkProcessor = (*elastic.BulkProcessor)(nil)
 
 const (
 	// retry configs for es bulk processor
@@ -206,7 +207,7 @@ func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) str
 		if err := json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.WithFields(bark.Fields{
 				logging.TagErr: err,
-			}).Error("Unmarshal request body err.")
+			}).Error("Unmarshal index request body err.")
 			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
 			return ""
 		}
@@ -221,6 +222,27 @@ func (p *esProcessorImpl) getKeyForKafkaMsg(request elastic.BulkableRequest) str
 			// must be bug in code and bad deployment, check processor that add es requests
 			panic("KafkaKey is not string")
 		}
+	} else { // delete requests
+		var body map[string]map[string]interface{}
+		if err := json.Unmarshal([]byte(req[0]), &body); err != nil {
+			p.logger.WithFields(bark.Fields{
+				logging.TagErr: err,
+			}).Error("Unmarshal delete request body err.")
+			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorCorruptedData)
+			return ""
+		}
+
+		opMap, ok := body["delete"]
+		if !ok {
+			// must be bug, check if dependency changed
+			panic("delete key not found in request")
+		}
+		k, ok := opMap["_id"]
+		if !ok {
+			// must be bug in code and bad deployment, check processor that add es requests
+			panic("_id not found in request opMap")
+		}
+		key, _ = k.(string)
 	}
 	return key
 }

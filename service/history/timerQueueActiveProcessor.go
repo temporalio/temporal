@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -53,7 +54,7 @@ type (
 )
 
 func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client,
-	taskAllocator taskAllocator, logger bark.Logger) *timerQueueActiveProcessorImpl {
+	taskAllocator taskAllocator, visibilityProducer messaging.Producer, logger bark.Logger) *timerQueueActiveProcessorImpl {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
@@ -98,6 +99,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			shard.GetConfig().TimerProcessorStartDelay,
+			visibilityProducer,
 			logger,
 		),
 		timerQueueAckMgr: timerQueueAckMgr,
@@ -107,8 +109,10 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	return processor
 }
 
-func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainIDs map[string]struct{}, standbyClusterName string,
-	minLevel time.Time, maxLevel time.Time, matchingClient matching.Client, taskAllocator taskAllocator, logger bark.Logger) (func(ackLevel TimerSequenceID) error, *timerQueueActiveProcessorImpl) {
+func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainIDs map[string]struct{},
+	standbyClusterName string, minLevel time.Time, maxLevel time.Time, matchingClient matching.Client,
+	taskAllocator taskAllocator, visibilityProducer messaging.Producer,
+	logger bark.Logger) (func(ackLevel TimerSequenceID) error, *timerQueueActiveProcessorImpl) {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing domain failover
@@ -172,6 +176,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 			timerGate,
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 			shard.GetConfig().TimerProcessorFailoverStartDelay,
+			visibilityProducer,
 			logger,
 		),
 		timerQueueAckMgr: timerQueueAckMgr,

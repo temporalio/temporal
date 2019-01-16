@@ -191,18 +191,7 @@ func (p *indexProcessor) process(kafkaMsg messaging.Message) error {
 		return err
 	}
 
-	switch indexMsg.GetMessageType() {
-	case indexer.MessageTypeIndex:
-		p.addMessageToESProcessor(kafkaMsg, indexMsg)
-	case indexer.MessageTypeDelete:
-		// TODO
-	default:
-		logger.Error("Unknown message type")
-		p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
-		err = errUnknownMessageType
-	}
-
-	return err
+	return p.addMessageToES(indexMsg, kafkaMsg, logger)
 }
 
 func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
@@ -213,18 +202,38 @@ func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
 	return &msg, nil
 }
 
-func (p *indexProcessor) addMessageToESProcessor(kafkaMsg messaging.Message, indexMsg *indexer.Message) {
-	keyToKafkaMsg := fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
+func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg messaging.Message, logger bark.Logger) error {
 	docID := indexMsg.GetWorkflowID() + esDocIDDelimiter + indexMsg.GetRunID()
-	doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
-	req := elastic.NewBulkIndexRequest().
-		Index(p.esIndexName).
-		Type(esDocType).
-		Id(docID).
-		VersionType(versionTypeExternal).
-		Version(indexMsg.GetVersion()).
-		Doc(doc)
+
+	var keyToKafkaMsg string
+	var req elastic.BulkableRequest
+	switch indexMsg.GetMessageType() {
+	case indexer.MessageTypeIndex:
+		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
+		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
+		req = elastic.NewBulkIndexRequest().
+			Index(p.esIndexName).
+			Type(esDocType).
+			Id(docID).
+			VersionType(versionTypeExternal).
+			Version(indexMsg.GetVersion()).
+			Doc(doc)
+	case indexer.MessageTypeDelete:
+		keyToKafkaMsg = docID
+		req = elastic.NewBulkDeleteRequest().
+			Index(p.esIndexName).
+			Type(esDocType).
+			Id(docID).
+			VersionType(versionTypeExternal).
+			Version(indexMsg.GetVersion())
+	default:
+		logger.Error("Unknown message type")
+		p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
+		return errUnknownMessageType
+	}
+
 	p.esProcessor.Add(req, keyToKafkaMsg, kafkaMsg)
+	return nil
 }
 
 func (p *indexProcessor) generateESDoc(msg *indexer.Message, keyToKafkaMsg string) map[string]interface{} {

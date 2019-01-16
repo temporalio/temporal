@@ -103,7 +103,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	s.engineImpl.txProcessor = newTransferQueueProcessor(
 		s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.KafkaProducer{}, &mocks.MatchingClient{}, &mocks.HistoryClient{}, s.logger,
 	)
-	s.engineImpl.timerProcessor = newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.mockMatchingClient, s.logger)
+	s.engineImpl.timerProcessor = newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.mockMatchingClient, &mocks.KafkaProducer{}, s.logger)
 }
 
 func (s *timerQueueProcessorSuite) TearDownTest() {

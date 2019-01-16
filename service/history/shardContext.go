@@ -937,6 +937,9 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverInProgressTimer, time.Duration(timerFailoverInProgress))
 }
 
+// NOTE: allocateTimerIDsLocked should always been called after assigning taskID for transferTasks when assigning taskID together,
+// because Cadence Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
+// for a given workflow.
 func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task, domainID, workflowID string) error {
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	clusterMetadata := s.GetService().GetClusterMetadata()

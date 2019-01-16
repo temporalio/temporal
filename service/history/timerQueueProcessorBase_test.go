@@ -55,6 +55,7 @@ type (
 		mockProcessor       *MockTimerProcessor
 		mockQueueAckMgr     *MockTimerQueueAckMgr
 		mockClientBean      *client.MockClientBean
+		mockProducer        messaging.Producer
 
 		scope            int
 		notificationChan chan struct{}
@@ -105,6 +106,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
 	}
+	s.mockProducer = &mocks.KafkaProducer{}
 
 	s.scope = 0
 	s.notificationChan = make(chan struct{})
@@ -121,6 +123,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		NewLocalTimerGate(),
 		dynamicconfig.GetIntPropertyFn(10),
 		dynamicconfig.GetDurationPropertyFn(0*time.Second),
+		s.mockProducer,
 		s.logger,
 	)
 	s.timerQueueProcessor.timerProcessor = s.mockProcessor

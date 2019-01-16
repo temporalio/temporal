@@ -141,7 +141,7 @@ func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTask
 
 func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano int64, workflowTimeout int32, nextEventID int64) error {
+	startTimeUnixNano int64, workflowTimeout int32, taskID int64) error {
 	domain := defaultDomainName
 	isSampledEnabled := false
 	wid := execution.GetWorkflowId()
@@ -163,7 +163,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 
 	// publish to kafka
 	if t.visibilityProducer != nil {
-		msg := getVisibilityMessageForOpenExecution(domainID, execution, workflowTypeName, startTimeUnixNano, nextEventID)
+		msg := getVisibilityMessageForOpenExecution(domainID, execution, workflowTypeName, startTimeUnixNano, taskID)
 		err := t.visibilityProducer.Publish(msg)
 		if err != nil {
 			return err
@@ -183,7 +183,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
-	historyLength int64, nextEventID int64) error {
+	historyLength int64, taskID int64) error {
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
 	domain := defaultDomainName
@@ -211,7 +211,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	// publish to kafka
 	if t.visibilityProducer != nil {
 		msg := getVisibilityMessageForCloseExecution(domainID, execution, workflowTypeName,
-			startTimeUnixNano, endTimeUnixNano, closeStatus, historyLength, nextEventID)
+			startTimeUnixNano, endTimeUnixNano, closeStatus, historyLength, taskID)
 		err := t.visibilityProducer.Publish(msg)
 		if err != nil {
 			return err
@@ -232,7 +232,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 }
 
 func getVisibilityMessageForOpenExecution(domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano int64, nextEventID int64) *indexer.Message {
+	startTimeUnixNano int64, taskID int64) *indexer.Message {
 
 	msgType := indexer.MessageTypeIndex
 	fields := map[string]*indexer.Field{
@@ -245,7 +245,7 @@ func getVisibilityMessageForOpenExecution(domainID string, execution workflow.Wo
 		DomainID:    common.StringPtr(domainID),
 		WorkflowID:  common.StringPtr(execution.GetWorkflowId()),
 		RunID:       common.StringPtr(execution.GetRunId()),
-		Version:     common.Int64Ptr(nextEventID),
+		Version:     common.Int64Ptr(taskID),
 		IndexAttributes: &indexer.IndexAttributes{
 			Fields: fields,
 		},
@@ -255,7 +255,7 @@ func getVisibilityMessageForOpenExecution(domainID string, execution workflow.Wo
 
 func getVisibilityMessageForCloseExecution(domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
-	historyLength int64, nextEventID int64) *indexer.Message {
+	historyLength int64, taskID int64) *indexer.Message {
 
 	msgType := indexer.MessageTypeIndex
 	fields := map[string]*indexer.Field{
@@ -271,7 +271,7 @@ func getVisibilityMessageForCloseExecution(domainID string, execution workflow.W
 		DomainID:    common.StringPtr(domainID),
 		WorkflowID:  common.StringPtr(execution.GetWorkflowId()),
 		RunID:       common.StringPtr(execution.GetRunId()),
-		Version:     common.Int64Ptr(nextEventID),
+		Version:     common.Int64Ptr(taskID),
 		IndexAttributes: &indexer.IndexAttributes{
 			Fields: fields,
 		},
