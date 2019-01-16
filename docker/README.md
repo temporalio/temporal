@@ -73,7 +73,7 @@ Update docker-compose.yml when releasing new version
 1. Build the new docker image and push into docker hub
 ```bash
 docker build . -t ubercadence/server:THE.LATEST.VERSION  --build-arg git_branch=vTHE.LATEST.VERSION 
-docker push ubercadence/server:master
+docker push ubercadence/server:THE.LATEST.VERSION
 ```
 2. Remember to update the docker-compose.yml to use latest version and check in to master
 ```yaml
