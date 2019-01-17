@@ -134,7 +134,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	failoverUUID := uuid.New()
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: currentClusterName,
-		logging.TagDomainID:        domainIDs,
+		logging.TagDomainIDs:       domainIDs,
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
