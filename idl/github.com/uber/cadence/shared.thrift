@@ -870,8 +870,8 @@ struct RegisterDomainRequest {
   // A key-value map for any customized purpose
   80: optional map<string,string> data
   90: optional string securityToken
-  100: optional bool enableArchival
-  110: optional string customArchivalBucketName
+  100: optional ArchivalStatus archivalStatus
+  110: optional string archivalBucketName
 }
 
 struct ListDomainsRequest {

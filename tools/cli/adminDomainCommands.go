@@ -92,23 +92,6 @@ func AdminRegisterDomain(c *cli.Context) {
 		}
 	}
 
-	if !c.IsSet(FlagEnableArchival) && c.IsSet(FlagCustomArchivalBucketName) {
-		ErrorAndExit("Option format is invalid.", errors.New("must enable archival if setting custom bucket name"))
-	}
-
-	enableArchival := false
-	if c.IsSet(FlagEnableArchival) {
-		enableArchival, err = strconv.ParseBool(c.String(FlagEnableArchival))
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEnableArchival), err)
-		}
-	}
-
-	customBucketName := ""
-	if c.IsSet(FlagCustomArchivalBucketName) {
-		customBucketName = c.String(FlagCustomArchivalBucketName)
-	}
-
 	request := &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domain),
 		Description:                            common.StringPtr(description),
@@ -119,8 +102,8 @@ func AdminRegisterDomain(c *cli.Context) {
 		Clusters:                               clusters,
 		ActiveClusterName:                      common.StringPtr(activeClusterName),
 		SecurityToken:                          common.StringPtr(securityToken),
-		EnableArchival:                         common.BoolPtr(enableArchival),
-		CustomArchivalBucketName:               common.StringPtr(customBucketName),
+		ArchivalStatus:                         archivalStatus(c),
+		ArchivalBucketName:                     archivalBucketName(c),
 	}
 
 	ctx, cancel := newContext()
@@ -211,25 +194,6 @@ func AdminUpdateDomain(c *cli.Context) {
 			}
 		}
 
-		var archivalStatus *shared.ArchivalStatus
-		if c.IsSet(FlagArchivalStatus) {
-			switch c.String(FlagArchivalStatus) {
-			case "enabled":
-				archivalStatus = common.ArchivalStatusPtr(shared.ArchivalStatusEnabled)
-			case "disabled":
-				archivalStatus = common.ArchivalStatusPtr(shared.ArchivalStatusDisabled)
-			default:
-				ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagArchivalStatus), errors.New("invalid status, options are {enabled, disabled}"))
-			}
-		}
-		bucketName := ""
-		if c.IsSet(FlagCustomArchivalBucketName) {
-			if archivalStatus == nil || *archivalStatus != shared.ArchivalStatusEnabled {
-				ErrorAndExit("Option format is invalid.", errors.New("must enable archival if setting custom bucket name"))
-			}
-			bucketName = c.String(FlagCustomArchivalBucketName)
-		}
-
 		updateInfo := &shared.UpdateDomainInfo{
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
@@ -238,8 +202,8 @@ func AdminUpdateDomain(c *cli.Context) {
 		updateConfig := &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 			EmitMetric:                             common.BoolPtr(emitMetric),
-			ArchivalStatus:                         archivalStatus,
-			ArchivalBucketName:                     common.StringPtr(bucketName),
+			ArchivalStatus:                         archivalStatus(c),
+			ArchivalBucketName:                     archivalBucketName(c),
 		}
 		replicationConfig := &shared.DomainReplicationConfiguration{
 			Clusters: clusters,
@@ -319,4 +283,28 @@ func serverClustersToString(clusters []*shared.ClusterReplicationConfiguration) 
 		}
 	}
 	return res
+}
+
+func archivalBucketName(c *cli.Context) *string {
+	archivalBucketName := c.String(FlagArchivalBucketName)
+	if len(archivalBucketName) == 0 {
+		return nil
+	}
+	return common.StringPtr(archivalBucketName)
+}
+
+func archivalStatus(c *cli.Context) *shared.ArchivalStatus {
+	if c.IsSet(FlagArchivalStatus) {
+		switch c.String(FlagArchivalStatus) {
+		case "never_enabled":
+			return common.ArchivalStatusPtr(shared.ArchivalStatusNeverEnabled)
+		case "disabled":
+			return common.ArchivalStatusPtr(shared.ArchivalStatusDisabled)
+		case "enabled":
+			return common.ArchivalStatusPtr(shared.ArchivalStatusEnabled)
+		default:
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagArchivalStatus), errors.New("invalid status, options are {never_enabled, disabled, enabled}"))
+		}
+	}
+	return nil
 }
