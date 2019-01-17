@@ -264,7 +264,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 
 			if len(failoverDomainIDs) > 0 {
 				e.logger.WithFields(bark.Fields{
-					logging.TagDomainID: failoverDomainIDs,
+					logging.TagDomainIDs: failoverDomainIDs,
 				}).Infof("Domain Failover Start.")
 
 				e.txProcessor.FailoverDomain(failoverDomainIDs)

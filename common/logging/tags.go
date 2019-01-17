@@ -36,6 +36,7 @@ const (
 	TagHistoryBuilderAction       = "history-builder-action"
 	TagStoreOperation             = "store-operation"
 	TagDomainID                   = "domain-id"
+	TagDomainIDs                  = "domain-ids"
 	TagWorkflowExecutionID        = "execution-id"
 	TagWorkflowRunID              = "run-id"
 	TagHistoryShardID             = "shard-id"

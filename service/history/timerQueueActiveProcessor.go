@@ -139,7 +139,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: currentClusterName,
-		logging.TagDomainID:        domainIDs,
+		logging.TagDomainIDs:       domainIDs,
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
