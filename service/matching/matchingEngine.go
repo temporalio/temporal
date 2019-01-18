@@ -479,6 +479,8 @@ query_loop:
 						expectedNextEventID = ms.GetNextEventId()
 						continue wait_loop
 					}
+
+					return nil, &workflow.QueryFailedError{Message: err.Error()}
 				}
 			}
 
