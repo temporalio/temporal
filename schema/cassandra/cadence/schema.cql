@@ -26,6 +26,7 @@ CREATE TYPE workflow_execution (
   parent_workflow_id               text,   -- ID of parent workflow which started the workflow execution
   parent_run_id                    uuid,   -- RunID of parent workflow which started the workflow execution
   initiated_id                     bigint, -- Initiated event ID of parent workflow which started this execution
+  completion_event_batch_id        bigint,
   completion_event                 blob,   -- Completion event used to communicate result to parent workflow execution
   completion_event_data_encoding   text, -- Protocol used for history serialization
   task_list                        text,
@@ -139,7 +140,8 @@ CREATE TYPE timer_task (
 CREATE TYPE activity_info (
   version                   bigint,
   schedule_id               bigint,
-  scheduled_event           blob,
+  scheduled_event_batch_id  bigint,
+  scheduled_event           blob,  -- deprecated
   scheduled_time            timestamp,
   started_id                bigint,
   started_event             blob,
@@ -179,13 +181,18 @@ CREATE TYPE timer_info (
 
 -- Child execution in progress mutable state
 CREATE TYPE child_execution_info (
-  version           bigint,
-  initiated_id      bigint,
-  initiated_event   blob,
-  started_id        bigint,
-  started_event     blob,
-  create_request_id uuid,
-  event_data_encoding   text, -- Protocol used for history serialization
+  version                   bigint,
+  initiated_id              bigint,
+  initiated_event_batch_id  bigint,
+  initiated_event           blob,
+  started_id                bigint,
+  started_workflow_id       text,
+  started_run_id            uuid,
+  started_event             blob, -- deprecated
+  create_request_id         uuid,
+  event_data_encoding       text, -- Protocol used for history serialization
+  domain_name               text,
+  workflow_type_name        text,
 );
 
 -- External workflow cancellation in progress mutable state

@@ -1490,6 +1490,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	activityInfos := []*p.ActivityInfo{{
 		Version:                  7789,
 		ScheduleID:               1,
+		ScheduledEventBatchID:    1,
 		ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(1)},
 		ScheduledTime:            currentTime,
 		StartedID:                2,
@@ -1515,6 +1516,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(1), ai.ScheduleID)
+	s.Equal(int64(1), ai.ScheduledEventBatchID)
 	s.Equal(int64(1), *ai.ScheduledEvent.EventId)
 	s.EqualTimes(currentTime, ai.ScheduledTime)
 	s.Equal(int64(2), ai.StartedID)
@@ -2549,6 +2551,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 			4: {
 				Version:                  7789,
 				ScheduleID:               4,
+				ScheduledEventBatchID:    3,
 				ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(40)},
 				ScheduledTime:            currentTime,
 				StartedID:                6,
@@ -2564,6 +2567,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 			5: {
 				Version:                  7789,
 				ScheduleID:               5,
+				ScheduledEventBatchID:    3,
 				ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(50)},
 				ScheduledTime:            currentTime,
 				StartedID:                7,
@@ -2683,6 +2687,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(4), ai.ScheduleID)
+	s.Equal(int64(3), ai.ScheduledEventBatchID)
 	s.Equal(int64(40), *ai.ScheduledEvent.EventId)
 	s.EqualTimes(currentTime, ai.ScheduledTime)
 	s.Equal(int64(6), ai.StartedID)
@@ -2700,6 +2705,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(5), ai.ScheduleID)
+	s.Equal(int64(3), ai.ScheduledEventBatchID)
 	s.Equal(int64(50), *ai.ScheduledEvent.EventId)
 	s.EqualTimes(currentTime, ai.ScheduledTime)
 	s.Equal(int64(7), ai.StartedID)
@@ -2775,6 +2781,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		{
 			Version:                  8789,
 			ScheduleID:               40,
+			ScheduledEventBatchID:    30,
 			ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(400)},
 			ScheduledTime:            currentTime,
 			StartedID:                60,
@@ -2865,6 +2872,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(ai)
 	s.Equal(int64(8789), ai.Version)
 	s.Equal(int64(40), ai.ScheduleID)
+	s.Equal(int64(30), ai.ScheduledEventBatchID)
 	s.Equal(int64(400), *ai.ScheduledEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
 	s.Equal(int64(60), ai.StartedID)

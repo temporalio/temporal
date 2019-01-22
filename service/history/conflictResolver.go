@@ -101,6 +101,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(
 				r.clusterMetadata.GetCurrentClusterName(),
 				r.shard.GetConfig(),
+				r.shard.GetEventsCache(),
 				r.logger,
 				firstEvent.GetVersion(),
 			)

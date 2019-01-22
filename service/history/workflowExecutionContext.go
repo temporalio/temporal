@@ -158,7 +158,8 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 		return err
 	}
 
-	msBuilder := newMutableStateBuilder(c.clusterMetadata.GetCurrentClusterName(), c.shard.GetConfig(), c.logger)
+	msBuilder := newMutableStateBuilder(c.clusterMetadata.GetCurrentClusterName(), c.shard.GetConfig(),
+		c.shard.GetEventsCache(), c.logger)
 	if response != nil && response.State != nil {
 		state := response.State
 		msBuilder.Load(state)

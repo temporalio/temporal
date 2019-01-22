@@ -75,6 +75,7 @@ type (
 		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error)
 		NotifyNewHistoryEvent(event *historyEventNotification) error
 		GetConfig() *Config
+		GetEventsCache() eventsCache
 		GetLogger() bark.Logger
 		GetMetricsClient() metrics.Client
 		GetTimeSource() common.TimeSource
@@ -95,6 +96,7 @@ type (
 		historyV2Mgr     persistence.HistoryV2Manager
 		executionManager persistence.ExecutionManager
 		domainCache      cache.DomainCache
+		eventsCache      eventsCache
 		closeCh          chan<- int
 		isClosed         bool
 		config           *Config
@@ -760,6 +762,10 @@ func (s *shardContextImpl) GetConfig() *Config {
 	return s.config
 }
 
+func (s *shardContextImpl) GetEventsCache() eventsCache {
+	return s.eventsCache
+}
+
 func (s *shardContextImpl) GetLogger() bark.Logger {
 	return s.logger
 }
@@ -1090,6 +1096,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	context.logger = shardItem.logger.WithFields(bark.Fields{
 		logging.TagHistoryShardID: shardItem.shardID,
 	})
+	context.eventsCache = newEventsCache(context)
 
 	err1 := context.renewRangeLocked(true)
 	if err1 != nil {

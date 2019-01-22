@@ -89,6 +89,7 @@ const (
 	TagValueHistoryBuilderComponent           = "history-builder"
 	TagValueHistoryEngineComponent            = "history-engine"
 	TagValueHistoryCacheComponent             = "history-cache"
+	TagValueEventsCacheComponent              = "events-cache"
 	TagValueTransferQueueComponent            = "transfer-queue-processor"
 	TagValueTimerQueueComponent               = "timer-queue-processor"
 	TagValueReplicatorQueueComponent          = "replicator-queue-processor"

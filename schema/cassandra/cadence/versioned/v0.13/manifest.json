@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.13",
   "MinCompatibleVersion": "0.13",
-  "Description": "Support workflow reset",
+  "Description": "Support workflow reset.  Move history events out of mutable state.",
   "SchemaUpdateCqlFiles": [
-    "reset.cql"
+    "reset.cql",
+    "events_cache.cql"
   ]
 }

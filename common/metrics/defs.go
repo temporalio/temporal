@@ -69,6 +69,7 @@ const (
 	ShardTagName       = "shard"
 	CadenceRoleTagName = "cadence-role"
 	StatsTypeTagName   = "stats-type"
+	CacheTypeTagName   = "cache-type"
 )
 
 // This package should hold all the metrics and tags for cadence
@@ -84,6 +85,9 @@ const (
 
 	SizeStatsTypeTagValue  = "size"
 	CountStatsTypeTagValue = "count"
+
+	MutableStateCacheTypeTagValue = "mutablestate"
+	EventsCacheTypeTagValue       = "events"
 )
 
 // Common service base metrics
@@ -587,6 +591,14 @@ const (
 	HistoryCacheGetOrCreateScope
 	// HistoryCacheGetCurrentExecutionScope is the scope used by history cache for getting current execution
 	HistoryCacheGetCurrentExecutionScope
+	// EventsCacheGetEventScope is the scope used by events cache
+	EventsCacheGetEventScope
+	// EventsCachePutEventScope is the scope used by events cache
+	EventsCachePutEventScope
+	// EventsCacheDeleteEventScope is the scope used by events cache
+	EventsCacheDeleteEventScope
+	// EventsCacheGetFromStoreScope is the scope used by events cache
+	EventsCacheGetFromStoreScope
 	// ExecutionSizeStatsScope is the scope used for emiting workflow execution size related stats
 	ExecutionSizeStatsScope
 	// ExecutionCountStatsScope is the scope used for emiting workflow execution count related stats
@@ -880,9 +892,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicateHistoryEventsScope:                  {operation: "ReplicateHistoryEvents"},
 		ShardInfoScope:                               {operation: "ShardInfo"},
 		WorkflowContextScope:                         {operation: "WorkflowContext"},
-		HistoryCacheGetAndCreateScope:                {operation: "HistoryCacheGetAndCreate"},
-		HistoryCacheGetOrCreateScope:                 {operation: "HistoryCacheGetOrCreate"},
-		HistoryCacheGetCurrentExecutionScope:         {operation: "HistoryCacheGetCurrentExecution"},
+		HistoryCacheGetAndCreateScope:                {operation: "HistoryCacheGetAndCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		HistoryCacheGetOrCreateScope:                 {operation: "HistoryCacheGetOrCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		HistoryCacheGetCurrentExecutionScope:         {operation: "HistoryCacheGetCurrentExecution", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
+		EventsCacheGetEventScope:                     {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		EventsCachePutEventScope:                     {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		EventsCacheDeleteEventScope:                  {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
+		EventsCacheGetFromStoreScope:                 {operation: "EventsCacheGetFromStore", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		ExecutionSizeStatsScope:                      {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
 		ExecutionCountStatsScope:                     {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
 		SessionSizeStatsScope:                        {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
@@ -1036,9 +1052,9 @@ const (
 	UnbufferReplicationTaskTimer
 	HistoryConflictsCounter
 	CompleteTaskFailedCounter
-	HistoryCacheRequests
-	HistoryCacheFailures
-	HistoryCacheLatency
+	CacheRequests
+	CacheFailures
+	CacheLatency
 	CacheMissCounter
 	AcquireLockFailedCounter
 	WorkflowContextCleared
@@ -1214,9 +1230,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		UnbufferReplicationTaskTimer:                 {metricName: "unbuffer-replication-tasks", metricType: Timer},
 		HistoryConflictsCounter:                      {metricName: "history-conflicts", metricType: Counter},
 		CompleteTaskFailedCounter:                    {metricName: "complete-task-fail-count", metricType: Counter},
-		HistoryCacheRequests:                         {metricName: "history-cache.requests", metricType: Counter},
-		HistoryCacheFailures:                         {metricName: "history-cache.errors", metricType: Counter},
-		HistoryCacheLatency:                          {metricName: "history-cache.latency", metricType: Timer},
+		CacheRequests:                                {metricName: "cache.requests", metricType: Counter},
+		CacheFailures:                                {metricName: "cache.errors", metricType: Counter},
+		CacheLatency:                                 {metricName: "cache.latency", metricType: Timer},
 		CacheMissCounter:                             {metricName: "cache-miss", metricType: Counter},
 		AcquireLockFailedCounter:                     {metricName: "acquire-lock-failed", metricType: Counter},
 		WorkflowContextCleared:                       {metricName: "workflow-context-cleared", metricType: Counter},

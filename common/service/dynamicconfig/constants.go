@@ -97,6 +97,9 @@ var keys = map[Key]string{
 	HistoryCacheInitialSize:                               "history.cacheInitialSize",
 	HistoryCacheMaxSize:                                   "history.cacheMaxSize",
 	HistoryCacheTTL:                                       "history.cacheTTL",
+	EventsCacheInitialSize:                                "history.eventsCacheInitialSize",
+	EventsCacheMaxSize:                                    "history.eventsCacheMaxSize",
+	EventsCacheTTL:                                        "history.eventsCacheTTL",
 	AcquireShardInterval:                                  "history.acquireShardInterval",
 	StandbyClusterDelay:                                   "history.standbyClusterDelay",
 	TimerTaskBatchSize:                                    "history.timerTaskBatchSize",
@@ -272,6 +275,12 @@ const (
 	HistoryCacheMaxSize
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL
+	// EventsCacheInitialSize is initial size of events cache
+	EventsCacheInitialSize
+	// EventsCacheMaxSize is max size of events cache
+	EventsCacheMaxSize
+	// EventsCacheTTL is TTL of events cache
+	EventsCacheTTL
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval
 	// StandbyClusterDelay is the atrificial delay added to standby cluster's view of active cluster's time

@@ -128,6 +128,7 @@ var (
 	// Omit shard_id, run_id, domain_id, workflow_id, schedule_id since they're in the primary key
 	activityInfoColumns = []string{
 		"version",
+		"scheduled_event_batch_id",
 		"scheduled_event",
 		"scheduled_event_encoding",
 		"scheduled_time",
@@ -178,6 +179,7 @@ type (
 	activityInfoMapsRow struct {
 		activityInfoMapsPrimaryKey
 		Version                  int64
+		ScheduledEventBatchID    int64
 		ScheduledEvent           []byte
 		ScheduledEventEncoding   string
 		ScheduledTime            time.Time
@@ -229,6 +231,7 @@ func updateActivityInfos(tx *sqlx.Tx,
 					ScheduleID: v.ScheduleID,
 				},
 				Version:                  v.Version,
+				ScheduledEventBatchID:    v.ScheduledEventBatchID,
 				ScheduledEvent:           v.ScheduledEvent.Data,
 				ScheduledEventEncoding:   string(v.ScheduledEvent.Encoding),
 				ScheduledTime:            v.ScheduledTime,
@@ -371,6 +374,7 @@ func getActivityInfoMap(tx *sqlx.Tx,
 		info := &persistence.InternalActivityInfo{
 			Version:                  v.Version,
 			ScheduleID:               v.ScheduleID,
+			ScheduledEventBatchID:    v.ScheduledEventBatchID,
 			ScheduledEvent:           persistence.NewDataBlob(v.ScheduledEvent, common.EncodingType(v.ScheduledEventEncoding)),
 			ScheduledTime:            v.ScheduledTime,
 			StartedID:                v.StartedID,
@@ -592,12 +596,17 @@ func deleteTimerInfoMap(tx *sqlx.Tx, shardID int, domainID, workflowID, runID st
 var (
 	childExecutionInfoColumns = []string{
 		"version",
+		"initiated_event_batch_id",
 		"initiated_event",
 		"initiated_event_encoding",
 		"started_id",
+		"started_workflow_id",
+		"started_run_id",
 		"started_event",
 		"started_event_encoding",
 		"create_request_id",
+		"domain_name",
+		"workflow_type_name",
 	}
 	childExecutionInfoTableName = "child_execution_info_maps"
 	childExecutionInfoKey       = "initiated_id"
@@ -620,12 +629,17 @@ type (
 	childExecutionInfoMapsRow struct {
 		childExecutionInfoMapsPrimaryKey
 		Version                int64
+		InitiatedEventBatchID  int64
 		InitiatedEvent         *[]byte
 		InitiatedEventEncoding string
 		StartedID              int64
+		StartedWorkflowID      string
+		StartedRunID           string
 		StartedEvent           *[]byte
 		StartedEventEncoding   string
 		CreateRequestID        string
+		DomainName             string
+		WorkflowTypeName       string
 	}
 )
 
@@ -648,10 +662,15 @@ func updateChildExecutionInfos(tx *sqlx.Tx,
 					InitiatedID: v.InitiatedID,
 				},
 				Version:                v.Version,
+				InitiatedEventBatchID:  v.InitiatedEventBatchID,
 				StartedID:              v.StartedID,
+				StartedWorkflowID:      v.StartedWorkflowID,
+				StartedRunID:           v.StartedRunID,
 				InitiatedEvent:         &v.InitiatedEvent.Data,
 				InitiatedEventEncoding: string(v.InitiatedEvent.Encoding),
 				CreateRequestID:        v.CreateRequestID,
+				DomainName:             v.DomainName,
+				WorkflowTypeName:       v.WorkflowTypeName,
 			}
 			if v.StartedEvent != nil {
 				row.StartedEvent = &v.StartedEvent.Data
@@ -712,14 +731,18 @@ func getChildExecutionInfoMap(tx *sqlx.Tx,
 	ret := make(map[int64]*persistence.InternalChildExecutionInfo)
 	for _, v := range childExecutionInfoMapsRows {
 		info := &persistence.InternalChildExecutionInfo{
-			InitiatedID:     v.InitiatedID,
-			Version:         v.Version,
-			StartedID:       v.StartedID,
-			CreateRequestID: v.CreateRequestID,
-			InitiatedEvent: persistence.DataBlob{
-				Data:     *v.InitiatedEvent,
-				Encoding: common.EncodingType(v.InitiatedEventEncoding),
-			},
+			InitiatedID:           v.InitiatedID,
+			InitiatedEventBatchID: v.InitiatedEventBatchID,
+			Version:               v.Version,
+			StartedID:             v.StartedID,
+			StartedWorkflowID:     v.StartedWorkflowID,
+			StartedRunID:          v.StartedRunID,
+			CreateRequestID:       v.CreateRequestID,
+			DomainName:            v.DomainName,
+			WorkflowTypeName:      v.WorkflowTypeName,
+		}
+		if v.InitiatedEvent != nil {
+			info.InitiatedEvent = persistence.NewDataBlob(*v.InitiatedEvent, common.EncodingType(v.InitiatedEventEncoding))
 		}
 		if v.StartedEvent != nil {
 			info.StartedEvent = persistence.NewDataBlob(*v.StartedEvent, common.EncodingType(v.InitiatedEventEncoding))

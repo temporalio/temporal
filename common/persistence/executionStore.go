@@ -27,7 +27,6 @@ import (
 )
 
 type (
-
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and HistorySerializer
 	executionManagerImpl struct {
 		serializer    HistorySerializer
@@ -114,6 +113,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(info *InternalWorkflowEx
 		ParentWorkflowID:             info.ParentWorkflowID,
 		ParentRunID:                  info.ParentRunID,
 		InitiatedID:                  info.InitiatedID,
+		CompletionEventBatchID:       info.CompletionEventBatchID,
 		TaskList:                     info.TaskList,
 		WorkflowTypeName:             info.WorkflowTypeName,
 		WorkflowTimeout:              info.WorkflowTimeout,
@@ -200,7 +200,7 @@ func (m *executionManagerImpl) DeserializeBufferedEvents(blobs []*DataBlob) ([]*
 func (m *executionManagerImpl) DeserializeChildExecutionInfos(infos map[int64]*InternalChildExecutionInfo) (map[int64]*ChildExecutionInfo, error) {
 	newInfos := make(map[int64]*ChildExecutionInfo, 0)
 	for k, v := range infos {
-		initiatedEvent, err := m.serializer.DeserializeEvent(&v.InitiatedEvent)
+		initiatedEvent, err := m.serializer.DeserializeEvent(v.InitiatedEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -212,10 +212,27 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(infos map[int64]*I
 			InitiatedEvent: initiatedEvent,
 			StartedEvent:   startedEvent,
 
-			Version:         v.Version,
-			InitiatedID:     v.InitiatedID,
-			StartedID:       v.StartedID,
-			CreateRequestID: v.CreateRequestID,
+			Version:               v.Version,
+			InitiatedID:           v.InitiatedID,
+			InitiatedEventBatchID: v.InitiatedEventBatchID,
+			StartedID:             v.StartedID,
+			StartedWorkflowID:     v.StartedWorkflowID,
+			StartedRunID:          v.StartedRunID,
+			CreateRequestID:       v.CreateRequestID,
+			DomainName:            v.DomainName,
+			WorkflowTypeName:      v.WorkflowTypeName,
+		}
+
+		// Needed for backward compatibility reason.
+		// ChildWorkflowExecutionStartedEvent was only used by transfer queue processing of StartChildWorkflow.
+		// Updated the code to instead directly read WorkflowId and RunId from mutable state
+		// Existing mutable state won't have those values set so instead use started event to set StartedWorkflowID and
+		// StartedRunID on the mutable state before passing it to application
+		if startedEvent != nil && startedEvent.ChildWorkflowExecutionStartedEventAttributes != nil &&
+			startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution != nil {
+			startedExecution := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution
+			c.StartedWorkflowID = startedExecution.GetWorkflowId()
+			c.StartedRunID = startedExecution.GetRunId()
 		}
 		newInfos[k] = c
 	}
@@ -239,6 +256,7 @@ func (m *executionManagerImpl) DeserializeActivityInfos(infos map[int64]*Interna
 
 			Version:                        v.Version,
 			ScheduleID:                     v.ScheduleID,
+			ScheduledEventBatchID:          v.ScheduledEventBatchID,
 			ScheduledTime:                  v.ScheduledTime,
 			StartedID:                      v.StartedID,
 			StartedTime:                    v.StartedTime,
@@ -366,9 +384,6 @@ func (m *executionManagerImpl) SerializeNewBufferedReplicationTask(task *Buffere
 func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*ChildExecutionInfo, encoding common.EncodingType) ([]*InternalChildExecutionInfo, error) {
 	newInfos := make([]*InternalChildExecutionInfo, 0)
 	for _, v := range infos {
-		if v.InitiatedEvent == nil {
-			m.logger.Fatalf("nil InitiatedEvent for %v", v.InitiatedID)
-		}
 		initiatedEvent, err := m.serializer.SerializeEvent(v.InitiatedEvent, encoding)
 		if err != nil {
 			return nil, err
@@ -378,13 +393,18 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*Child
 			return nil, err
 		}
 		i := &InternalChildExecutionInfo{
-			InitiatedEvent: *initiatedEvent,
+			InitiatedEvent: initiatedEvent,
 			StartedEvent:   startedEvent,
 
-			Version:         v.Version,
-			InitiatedID:     v.InitiatedID,
-			CreateRequestID: v.CreateRequestID,
-			StartedID:       v.StartedID,
+			Version:               v.Version,
+			InitiatedID:           v.InitiatedID,
+			InitiatedEventBatchID: v.InitiatedEventBatchID,
+			CreateRequestID:       v.CreateRequestID,
+			StartedID:             v.StartedID,
+			StartedWorkflowID:     v.StartedWorkflowID,
+			StartedRunID:          v.StartedRunID,
+			DomainName:            v.DomainName,
+			WorkflowTypeName:      v.WorkflowTypeName,
 		}
 		newInfos = append(newInfos, i)
 	}
@@ -394,9 +414,6 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*Child
 func (m *executionManagerImpl) SerializeUpsertActivityInfos(infos []*ActivityInfo, encoding common.EncodingType) ([]*InternalActivityInfo, error) {
 	newInfos := make([]*InternalActivityInfo, 0)
 	for _, v := range infos {
-		if v.ScheduledEvent == nil {
-			m.logger.Fatal("SerializeUpsertActivityInfos ScheduledEvent is required")
-		}
 		scheduledEvent, err := m.serializer.SerializeEvent(v.ScheduledEvent, encoding)
 		if err != nil {
 			return nil, err
@@ -408,6 +425,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(infos []*ActivityInf
 		i := &InternalActivityInfo{
 			Version:                        v.Version,
 			ScheduleID:                     v.ScheduleID,
+			ScheduledEventBatchID:          v.ScheduledEventBatchID,
 			ScheduledEvent:                 scheduledEvent,
 			ScheduledTime:                  v.ScheduledTime,
 			StartedID:                      v.StartedID,
@@ -459,6 +477,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 		ParentWorkflowID:             info.ParentWorkflowID,
 		ParentRunID:                  info.ParentRunID,
 		InitiatedID:                  info.InitiatedID,
+		CompletionEventBatchID:       info.CompletionEventBatchID,
 		CompletionEvent:              completionEvent,
 		TaskList:                     info.TaskList,
 		WorkflowTypeName:             info.WorkflowTypeName,

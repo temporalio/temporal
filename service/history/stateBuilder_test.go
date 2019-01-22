@@ -229,7 +229,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 			TableVersion:   persistence.DomainTableVersionV1,
 		}, nil,
 	).Once()
-	s.mockMutableState.On("ReplicateWorkflowExecutionTimedoutEvent", event).Once()
+	s.mockMutableState.On("ReplicateWorkflowExecutionTimedoutEvent", event.GetEventId(), event).Once()
 	s.mockUpdateVersion(event)
 
 	s.mockMutableState.On("ClearStickyness").Once()
@@ -279,7 +279,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 			TableVersion:   persistence.DomainTableVersionV1,
 		}, nil,
 	).Once()
-	s.mockMutableState.On("ReplicateWorkflowExecutionTerminatedEvent", event).Once()
+	s.mockMutableState.On("ReplicateWorkflowExecutionTerminatedEvent", event.GetEventId(), event).Once()
 	s.mockUpdateVersion(event)
 
 	s.mockMutableState.On("ClearStickyness").Once()
@@ -359,7 +359,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 			TableVersion:   persistence.DomainTableVersionV1,
 		}, nil,
 	).Once()
-	s.mockMutableState.On("ReplicateWorkflowExecutionFailedEvent", event).Once()
+	s.mockMutableState.On("ReplicateWorkflowExecutionFailedEvent", event.GetEventId(), event).Once()
 	s.mockUpdateVersion(event)
 
 	s.mockMutableState.On("ClearStickyness").Once()
@@ -498,6 +498,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(
 		s.mockClusterMetadata.GetCurrentClusterName(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetEventsCache(),
 		s.logger,
 		newRunStartedEvent.GetVersion(),
 	)
@@ -576,7 +577,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 			TableVersion:   persistence.DomainTableVersionV1,
 		}, nil,
 	).Once()
-	s.mockMutableState.On("ReplicateWorkflowExecutionCompletedEvent", event).Once()
+	s.mockMutableState.On("ReplicateWorkflowExecutionCompletedEvent", event.GetEventId(), event).Once()
 	s.mockUpdateVersion(event)
 
 	s.mockMutableState.On("ClearStickyness").Once()
@@ -626,7 +627,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 			TableVersion:   persistence.DomainTableVersionV1,
 		}, nil,
 	).Once()
-	s.mockMutableState.On("ReplicateWorkflowExecutionCanceledEvent", event).Once()
+	s.mockMutableState.On("ReplicateWorkflowExecutionCanceledEvent", event.GetEventId(), event).Once()
 	s.mockUpdateVersion(event)
 
 	s.mockMutableState.On("ClearStickyness").Once()
@@ -692,6 +693,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	msBuilder := newMutableStateBuilderWithReplicationState(
 		"currentCluster",
 		s.mockShard.GetConfig(),
+		s.mockShard.GetEventsCache(),
 		s.logger,
 		version,
 	)
@@ -805,6 +807,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(
 		s.mockClusterMetadata.GetCurrentClusterName(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetEventsCache(),
 		s.logger,
 		newRunStartedEvent.GetVersion(),
 	)
@@ -1019,15 +1022,17 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	}
 
 	ci := &persistence.ChildExecutionInfo{
-		Version:         event.GetVersion(),
-		InitiatedID:     event.GetEventId(),
-		InitiatedEvent:  event,
-		StartedID:       common.EmptyEventID,
-		CreateRequestID: createRequestID,
+		Version:               event.GetVersion(),
+		InitiatedID:           event.GetEventId(),
+		InitiatedEventBatchID: event.GetEventId(),
+		StartedID:             common.EmptyEventID,
+		CreateRequestID:       createRequestID,
+		DomainName:            targetDomain,
 	}
 
 	// the create request ID is generated inside, cannot assert equal
-	s.mockMutableState.On("ReplicateStartChildWorkflowExecutionInitiatedEvent", event, mock.Anything).Return(ci).Once()
+	s.mockMutableState.On("ReplicateStartChildWorkflowExecutionInitiatedEvent", event.GetEventId(), event,
+		mock.Anything).Return(ci).Once()
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: targetDomain}).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: targetDomainID, Name: targetDomain},
@@ -2030,6 +2035,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	ai := &persistence.ActivityInfo{
 		Version:                  event.GetVersion(),
 		ScheduleID:               event.GetEventId(),
+		ScheduledEventBatchID:    event.GetEventId(),
 		ScheduledEvent:           event,
 		ScheduledTime:            time.Unix(0, event.GetTimestamp()),
 		StartedID:                common.EmptyEventID,
@@ -2051,7 +2057,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
 	s.mockMutableState.On("GetPendingActivityInfos").Return(map[int64]*persistence.ActivityInfo{event.GetEventId(): ai})
 	s.mockMutableState.On("UpdateActivity", ai).Return(nil).Once()
-	s.mockMutableState.On("ReplicateActivityTaskScheduledEvent", event).Return(ai).Once()
+	s.mockMutableState.On("ReplicateActivityTaskScheduledEvent", event.GetEventId(), event).Return(ai).Once()
 	s.mockUpdateVersion(event)
 
 	s.mockMutableState.On("ClearStickyness").Once()

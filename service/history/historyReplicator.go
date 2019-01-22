@@ -128,6 +128,7 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 			return newMutableStateBuilderWithReplicationState(
 				shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 				shard.GetConfig(),
+				shard.GetEventsCache(),
 				logger,
 				version,
 			)

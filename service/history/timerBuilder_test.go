@@ -21,6 +21,7 @@
 package history
 
 import (
+	"github.com/stretchr/testify/mock"
 	"os"
 	"testing"
 	"time"
@@ -43,9 +44,10 @@ import (
 type (
 	timerBuilderProcessorSuite struct {
 		suite.Suite
-		tb     *timerBuilder
-		config *Config
-		logger bark.Logger
+		tb              *timerBuilder
+		mockEventsCache *MockEventsCache
+		config          *Config
+		logger          bark.Logger
 	}
 )
 
@@ -70,14 +72,18 @@ func (s *timerBuilderProcessorSuite) SetupSuite() {
 	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
 	s.config = NewDynamicConfigForTest()
-	s.tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
+}
+
+func (s *timerBuilderProcessorSuite) SetupTest() {
+	s.mockEventsCache = &MockEventsCache{}
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 
 	// Add one timer.
-	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(201)},
 		TimerInfos:    make(map[string]*persistence.TimerInfo),
@@ -109,7 +115,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 	// Add two timers. (before and after)
 	tp := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid1": tp}
-	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(202)},
 		TimerInfos:    timerInfos,
@@ -136,7 +142,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 	tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tp2 := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: TimerTaskStatusNone, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos = map[string]*persistence.TimerInfo{"tid1": tp2}
-	msb = newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	msb = newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
@@ -163,7 +169,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 	tp := &persistence.TimerInfo{TimerID: "tid-exist", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid-exist": tp}
-	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
@@ -179,7 +185,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	// ScheduleToStart being more than HB.
-	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("test-id"),

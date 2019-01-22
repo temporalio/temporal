@@ -291,6 +291,7 @@ func (e *historyEngineImpl) createMutableState(clusterMetadata cluster.Metadata,
 		msBuilder = newMutableStateBuilderWithReplicationState(
 			clusterMetadata.GetCurrentClusterName(),
 			e.shard.GetConfig(),
+			e.shard.GetEventsCache(),
 			e.logger,
 			domainEntry.GetFailoverVersion(),
 		)
@@ -298,6 +299,7 @@ func (e *historyEngineImpl) createMutableState(clusterMetadata cluster.Metadata,
 		msBuilder = newMutableStateBuilder(
 			clusterMetadata.GetCurrentClusterName(),
 			e.shard.GetConfig(),
+			e.shard.GetEventsCache(),
 			e.logger,
 		)
 	}
@@ -831,7 +833,9 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 				p.LastHeartbeatTimestamp = common.Int64Ptr(lastHeartbeatUnixNano)
 				p.HeartbeatDetails = ai.Details
 			}
-			p.ActivityType = ai.ScheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
+			// TODO: move to mutable state instead of loading it from event
+			scheduledEvent, _ := msBuilder.GetActivityScheduledEvent(ai.ScheduleID)
+			p.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
 			p.LastStartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
 			p.Attempt = common.Int32Ptr(ai.Attempt)
 			result.PendingActivities = append(result.PendingActivities, p)

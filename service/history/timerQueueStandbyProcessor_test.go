@@ -122,7 +122,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 
 	config := NewDynamicConfigForTest()
 	config.EnableHistoryRereplication = dynamicconfig.GetBoolPropertyFn(true)
-	s.mockShard = &shardContextImpl{
+	shardContext := &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
@@ -138,6 +138,8 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		standbyClusterCurrentTime: make(map[string]time.Time),
 	}
+	shardContext.eventsCache = newEventsCache(shardContext)
+	s.mockShard = shardContext
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
@@ -181,6 +183,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Pending() 
 	msBuilder := newMutableStateBuilderWithReplicationState(
 		s.mockClusterMetadata.GetCurrentClusterName(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetEventsCache(),
 		s.logger,
 		version,
 	)
@@ -247,7 +250,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Success() 
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -303,7 +307,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Multiple()
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -365,7 +370,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -432,7 +438,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -496,7 +503,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_Ca
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -608,7 +616,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -664,7 +673,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Success() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -712,7 +722,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Pendin
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	event := msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -763,7 +774,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Succes
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -806,7 +818,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -863,7 +876,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Success() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -911,7 +925,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessRetryTimeout() {
 	taskListName := "some random task list"
 
 	version := int64(4096)
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(), s.mockShard.GetConfig(), s.logger, version)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(), s.mockShard.GetEventsCache(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{

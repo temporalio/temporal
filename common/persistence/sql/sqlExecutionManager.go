@@ -69,6 +69,7 @@ type (
 		ParentWorkflowID             *string
 		ParentRunID                  *string
 		InitiatedID                  *int64
+		CompletionEventBatchID       *int64
 		CompletionEvent              *[]byte
 		CompletionEventEncoding      *string
 		TaskList                     string
@@ -233,12 +234,14 @@ execution_context`
 	executionsNonblobParentColumns = `parent_domain_id,
 parent_workflow_id,
 parent_run_id,
-initiated_id`
+initiated_id,
+completion_event_batch_id`
 
 	executionsNonblobParentColumnsTags = `:parent_domain_id,
 :parent_workflow_id,
 :parent_run_id,
-:initiated_id`
+:initiated_id,
+:completion_event_batch_id`
 
 	executionsCancelColumns = `cancel_requested,
 cancel_request_id`
@@ -697,6 +700,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		ClientImpl:                   execution.ClientImpl,
 		SignalCount:                  int32(execution.SignalCount),
 		CronSchedule:                 execution.CronSchedule,
+		CompletionEventBatchID:       common.EmptyEventID,
 	}
 
 	if execution.ExecutionContext != nil && len(*execution.ExecutionContext) > 0 {
@@ -732,6 +736,10 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 	if execution.CancelRequested != nil && (*execution.CancelRequested != 0) {
 		state.ExecutionInfo.CancelRequested = true
 		state.ExecutionInfo.CancelRequestID = *execution.CancelRequestID
+	}
+
+	if execution.CompletionEventBatchID != nil {
+		state.ExecutionInfo.CompletionEventBatchID = *execution.CompletionEventBatchID
 	}
 
 	if execution.CompletionEvent != nil {
@@ -2006,6 +2014,7 @@ func updateExecution(tx *sqlx.Tx,
 			ParentWorkflowID:             &executionInfo.ParentWorkflowID,
 			ParentRunID:                  &executionInfo.ParentRunID,
 			InitiatedID:                  &executionInfo.InitiatedID,
+			CompletionEventBatchID:       &executionInfo.CompletionEventBatchID,
 			TaskList:                     executionInfo.TaskList,
 			WorkflowTypeName:             executionInfo.WorkflowTypeName,
 			WorkflowTimeoutSeconds:       int64(executionInfo.WorkflowTimeout),

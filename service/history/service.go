@@ -51,6 +51,12 @@ type Config struct {
 	HistoryCacheMaxSize     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL         dynamicconfig.DurationPropertyFn
 
+	// EventsCache settings
+	// Change of these configs require shard restart
+	EventsCacheInitialSize dynamicconfig.IntPropertyFn
+	EventsCacheMaxSize     dynamicconfig.IntPropertyFn
+	EventsCacheTTL         dynamicconfig.DurationPropertyFn
+
 	// ShardController settings
 	RangeSizeBits        uint
 	AcquireShardInterval dynamicconfig.DurationPropertyFn
@@ -149,6 +155,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		HistoryCacheInitialSize:                               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
+		EventsCacheInitialSize:                                dc.GetIntProperty(dynamicconfig.EventsCacheInitialSize, 128),
+		EventsCacheMaxSize:                                    dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 512),
+		EventsCacheTTL:                                        dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 		RangeSizeBits:                                         20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                                  dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
 		StandbyClusterDelay:                                   dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, 5*time.Minute),

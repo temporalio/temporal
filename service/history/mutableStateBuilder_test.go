@@ -38,8 +38,9 @@ import (
 type (
 	mutableStateSuite struct {
 		suite.Suite
-		msBuilder *mutableStateBuilder
-		logger    bark.Logger
+		msBuilder       *mutableStateBuilder
+		mockEventsCache *MockEventsCache
+		logger          bark.Logger
 	}
 )
 
@@ -61,7 +62,9 @@ func (s *mutableStateSuite) TearDownSuite() {
 
 func (s *mutableStateSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewDynamicConfigForTest(), s.logger)
+	s.mockEventsCache = &MockEventsCache{}
+	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewDynamicConfigForTest(), s.mockEventsCache,
+		s.logger)
 }
 
 func (s *mutableStateSuite) TearDownTest() {

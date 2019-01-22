@@ -221,7 +221,10 @@ func computeTimerInfoSize(ti *TimerInfo) int {
 }
 
 func computeChildInfoSize(ci *InternalChildExecutionInfo) int {
-	size := len(ci.InitiatedEvent.Data)
+	size := 0
+	if ci.InitiatedEvent != nil {
+		size += len(ci.InitiatedEvent.Data)
+	}
 	if ci.StartedEvent != nil {
 		size += len(ci.StartedEvent.Data)
 	}

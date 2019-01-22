@@ -66,6 +66,7 @@ type (
 		mockDomainCache     *cache.DomainCacheMock
 		mockClientBean      *client.MockClientBean
 		mockArchivalClient  *mocks.ArchivalClient
+		mockEventsCache     *MockEventsCache
 
 		shardClosedCh chan int
 		config        *Config
@@ -117,6 +118,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockArchivalClient = &mocks.ArchivalClient{}
+	s.mockEventsCache = &MockEventsCache{}
 
 	mockShard := &shardContextImpl{
 		service:                   s.mockService,
@@ -126,6 +128,7 @@ func (s *engine3Suite) SetupTest() {
 		historyMgr:                s.mockHistoryMgr,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
 		domainCache:               s.mockDomainCache,
+		eventsCache:               s.mockEventsCache,
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
@@ -179,7 +182,8 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder("test", s.config, bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder("test", s.config, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()))
 	msBuilder.SetHistoryTree(msBuilder.GetExecutionInfo().RunID)
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
@@ -317,7 +321,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()))
 	msBuilder.SetHistoryTree(msBuilder.GetExecutionInfo().RunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}

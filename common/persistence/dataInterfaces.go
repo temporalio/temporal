@@ -222,6 +222,7 @@ type (
 		ParentWorkflowID             string
 		ParentRunID                  string
 		InitiatedID                  int64
+		CompletionEventBatchID       int64
 		CompletionEvent              *workflow.HistoryEvent
 		TaskList                     string
 		WorkflowTypeName             string
@@ -529,6 +530,7 @@ type (
 	ActivityInfo struct {
 		Version                  int64
 		ScheduleID               int64
+		ScheduledEventBatchID    int64
 		ScheduledEvent           *workflow.HistoryEvent
 		ScheduledTime            time.Time
 		StartedID                int64
@@ -572,12 +574,17 @@ type (
 
 	// ChildExecutionInfo has details for pending child executions.
 	ChildExecutionInfo struct {
-		Version         int64
-		InitiatedID     int64
-		InitiatedEvent  *workflow.HistoryEvent
-		StartedID       int64
-		StartedEvent    *workflow.HistoryEvent
-		CreateRequestID string
+		Version               int64
+		InitiatedID           int64
+		InitiatedEventBatchID int64
+		InitiatedEvent        *workflow.HistoryEvent
+		StartedID             int64
+		StartedWorkflowID     string
+		StartedRunID          string
+		StartedEvent          *workflow.HistoryEvent
+		CreateRequestID       string
+		DomainName            string
+		WorkflowTypeName      string
 	}
 
 	// RequestCancelInfo has details for pending external workflow cancellations

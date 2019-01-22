@@ -21,6 +21,7 @@
 package history
 
 import (
+	"github.com/stretchr/testify/mock"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -43,10 +44,11 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		domainID  string
-		msBuilder mutableState
-		builder   *historyBuilder
-		logger    bark.Logger
+		domainID        string
+		msBuilder       mutableState
+		builder         *historyBuilder
+		mockEventsCache *MockEventsCache
+		logger          bark.Logger
 	}
 )
 
@@ -60,7 +62,9 @@ func (s *historyBuilderSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.domainID = "history-builder-test-domain"
-	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewDynamicConfigForTest(), s.logger)
+	s.mockEventsCache = &MockEventsCache{}
+	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewDynamicConfigForTest(), s.mockEventsCache,
+		s.logger)
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
 }
 
@@ -700,6 +704,8 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID int64, activityID, activityType,
 	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything).Return()
 	return s.msBuilder.AddActivityTaskScheduledEvent(decisionCompletedID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr(activityID),

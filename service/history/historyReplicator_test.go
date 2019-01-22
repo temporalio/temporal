@@ -2943,7 +2943,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		NewRunHistory:     nil,
 	}
 
-	msBuilderCurrent.On("ReplicateWorkflowExecutionTerminatedEvent", mock.MatchedBy(func(input *shared.HistoryEvent) bool {
+	msBuilderCurrent.On("ReplicateWorkflowExecutionTerminatedEvent", int64(999), mock.MatchedBy(func(input *shared.HistoryEvent) bool {
 		return reflect.DeepEqual(terminationEvent, input)
 	})).Return(nil)
 	contextCurrent.On("replicateWorkflowExecution", terminateRequest, mock.Anything, mock.Anything, currentNextEventID, mock.Anything, mock.Anything).Return(nil).Once()

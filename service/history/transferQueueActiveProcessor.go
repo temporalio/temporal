@@ -789,9 +789,11 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 		})
 	} else {
 		// ChildExecution already started, just create DecisionTask and complete transfer task
-		startedEvent, _ := msBuilder.GetChildExecutionStartedEvent(initiatedEventID)
-		startedAttributes := startedEvent.ChildWorkflowExecutionStartedEventAttributes
-		err = t.createFirstDecisionTask(targetDomainID, startedAttributes.WorkflowExecution)
+		childExecution := &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(ci.StartedWorkflowID),
+			RunId:      common.StringPtr(ci.StartedRunID),
+		}
+		err = t.createFirstDecisionTask(targetDomainID, childExecution)
 	}
 
 	return err

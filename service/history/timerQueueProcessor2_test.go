@@ -66,6 +66,7 @@ type (
 		mockClientBean      *client.MockClientBean
 		mockMessagingClient messaging.Client
 		mockService         service.Service
+		mockEventsCache     *MockEventsCache
 	}
 )
 
@@ -116,6 +117,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
+	s.mockEventsCache = &MockEventsCache{}
 
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger)
 	s.mockShard = &shardContextImpl{
@@ -130,6 +132,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		config:                    s.config,
 		logger:                    s.logger,
 		domainCache:               domainCache,
+		eventsCache:               s.mockEventsCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 	}
@@ -171,7 +174,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	taskList := "user-timer-update-times-out"
 
-	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	startRequest := &workflow.StartWorkflowExecutionRequest{
 		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:                            common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
@@ -243,7 +246,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		RunId: common.StringPtr(validRunID)}
 	taskList := "task-workflow-times-out"
 
-	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.logger)
+	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.config, s.mockEventsCache, s.logger)
 	startRequest := &workflow.StartWorkflowExecutionRequest{
 		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:                            common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),

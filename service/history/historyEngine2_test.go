@@ -68,6 +68,7 @@ type (
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockDomainCache     *cache.DomainCacheMock
+		mockEventsCache     *MockEventsCache
 
 		shardClosedCh chan int
 		config        *Config
@@ -119,6 +120,9 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, nil), nil)
+	s.mockEventsCache = &MockEventsCache{}
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything).Return()
 
 	mockShard := &shardContextImpl{
 		service:                   s.mockService,
@@ -133,6 +137,7 @@ func (s *engine2Suite) SetupTest() {
 		config:                    s.config,
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		eventsCache:               s.mockEventsCache,
 	}
 
 	historyCache := newHistoryCache(mockShard)
@@ -174,7 +179,8 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder("test", s.config, bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder("test", s.config, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()))
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
 
@@ -799,6 +805,8 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		nil,
 	)
 
+	s.mockEventsCache.On("getEvent", domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId(),
+		decisionCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), mock.Anything, mock.Anything).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &h.RecordActivityTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
@@ -912,7 +920,8 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 
 func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution, tl, identity string,
 	startDecision bool) mutableState {
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, s.logger)
+	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, s.mockEventsCache,
+		s.logger)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
@@ -942,7 +951,8 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	markerDetails := []byte("marker details")
 	markerName := "marker name"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1345,7 +1355,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()))
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
@@ -1454,7 +1465,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.config, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()))
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}

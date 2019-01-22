@@ -72,7 +72,8 @@ CREATE TABLE executions(
 	parent_workflow_id VARCHAR(255), -- 2.
 	parent_run_id CHAR(64), -- 3.
 	initiated_id BIGINT, -- 4. these (parent-related fields) are nullable as their default values are not checked by tests
-	completion_event BLOB, -- 5.
+	completion_event_batch_id BIGINT, -- 5.
+	completion_event BLOB, -- 6.
 	completion_event_encoding VARCHAR(64),
 	task_list VARCHAR(255) NOT NULL,
 	workflow_type_name VARCHAR(255) NOT NULL,
@@ -219,6 +220,7 @@ CREATE TABLE activity_info_maps (
 	schedule_id BIGINT NOT NULL, -- the key.
 -- fields of activity_info type follow
 version                     BIGINT NOT NULL,
+scheduled_event_batch_id    BIGINT NOT NULL,
 scheduled_event             BLOB,
 scheduled_event_encoding    VARCHAR(64),
 scheduled_time              TIMESTAMP(3) NOT NULL DEFAULT '1970-01-01 00:00:01.000',
@@ -272,12 +274,17 @@ run_id CHAR(64) NOT NULL,
 initiated_id BIGINT NOT NULL,
 --
 version BIGINT NOT NULL,
+initiated_event_batch_id  BIGINT NOT NULL,
 initiated_event BLOB,
 initiated_event_encoding  VARCHAR(64),
 started_id BIGINT NOT NULL,
+started_workflow_id VARCHAR(255) NOT NULL,
+started_run_id CHAR(64),
 started_event BLOB,
 started_event_encoding  VARCHAR(64),
 create_request_id CHAR(64),
+domain_name VARCHAR(255) NOT NULL,
+workflow_type_name VARCHAR(255) NOT NULL,
 PRIMARY KEY (shard_id, domain_id, workflow_id, run_id, initiated_id)
 );
 

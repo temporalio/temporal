@@ -29,7 +29,6 @@ import (
 )
 
 type (
-
 	//////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
 	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
@@ -130,6 +129,7 @@ type (
 		ParentWorkflowID             string
 		ParentRunID                  string
 		InitiatedID                  int64
+		CompletionEventBatchID       int64
 		CompletionEvent              *DataBlob
 		TaskList                     string
 		WorkflowTypeName             string
@@ -194,6 +194,7 @@ type (
 	InternalActivityInfo struct {
 		Version                  int64
 		ScheduleID               int64
+		ScheduledEventBatchID    int64
 		ScheduledEvent           *DataBlob
 		ScheduledTime            time.Time
 		StartedID                int64
@@ -228,12 +229,17 @@ type (
 
 	// InternalChildExecutionInfo has details for pending child executions  for Persistence Interface
 	InternalChildExecutionInfo struct {
-		Version         int64
-		InitiatedID     int64
-		InitiatedEvent  DataBlob
-		StartedID       int64
-		StartedEvent    *DataBlob
-		CreateRequestID string
+		Version               int64
+		InitiatedID           int64
+		InitiatedEventBatchID int64
+		InitiatedEvent        *DataBlob
+		StartedID             int64
+		StartedWorkflowID     string
+		StartedRunID          string
+		StartedEvent          *DataBlob
+		CreateRequestID       string
+		DomainName            string
+		WorkflowTypeName      string
 	}
 
 	// InternalBufferedReplicationTask has details to handle out of order receive of history events  for Persistence Interface

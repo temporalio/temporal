@@ -97,6 +97,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 	var lastEvent *shared.HistoryEvent
 	var lastDecision *decisionInfo
 	var newRunStateBuilder mutableState
+	var firstEvent *shared.HistoryEvent
+	if len(history) > 0 {
+		firstEvent = history[0]
+	}
 
 	// need to clear the stickness since workflow turned to passive
 	b.msBuilder.ClearStickyness()
@@ -177,7 +181,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeActivityTaskScheduled:
-			ai := b.msBuilder.ReplicateActivityTaskScheduledEvent(event)
+			ai := b.msBuilder.ReplicateActivityTaskScheduledEvent(firstEvent.GetEventId(), event)
 
 			b.transferTasks = append(b.transferTasks, b.scheduleActivityTransferTask(domainID, b.getTaskList(b.msBuilder),
 				ai.ScheduleID))
@@ -253,7 +257,8 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeStartChildWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			createRequestID := uuid.New()
-			cei := b.msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(event, createRequestID)
+			cei := b.msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(firstEvent.GetEventId(), event,
+				createRequestID)
 
 			attributes := event.StartChildWorkflowExecutionInitiatedEventAttributes
 			childDomainEntry, err := b.shard.GetDomainCache().GetDomain(attributes.GetDomain())
@@ -344,35 +349,35 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.msBuilder.ReplicateWorkflowExecutionCancelRequestedEvent(event)
 
 		case shared.EventTypeWorkflowExecutionCompleted:
-			b.msBuilder.ReplicateWorkflowExecutionCompletedEvent(event)
+			b.msBuilder.ReplicateWorkflowExecutionCompletedEvent(firstEvent.GetEventId(), event)
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionFailed:
-			b.msBuilder.ReplicateWorkflowExecutionFailedEvent(event)
+			b.msBuilder.ReplicateWorkflowExecutionFailedEvent(firstEvent.GetEventId(), event)
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionTimedOut:
-			b.msBuilder.ReplicateWorkflowExecutionTimedoutEvent(event)
+			b.msBuilder.ReplicateWorkflowExecutionTimedoutEvent(firstEvent.GetEventId(), event)
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionCanceled:
-			b.msBuilder.ReplicateWorkflowExecutionCanceledEvent(event)
+			b.msBuilder.ReplicateWorkflowExecutionCanceledEvent(firstEvent.GetEventId(), event)
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionTerminated:
-			b.msBuilder.ReplicateWorkflowExecutionTerminatedEvent(event)
+			b.msBuilder.ReplicateWorkflowExecutionTerminatedEvent(firstEvent.GetEventId(), event)
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
@@ -403,6 +408,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			newRunStateBuilder = newMutableStateBuilderWithReplicationState(
 				b.clusterMetadata.GetCurrentClusterName(),
 				b.shard.GetConfig(),
+				b.shard.GetEventsCache(),
 				b.logger,
 				startedEvent.GetVersion(),
 			)
