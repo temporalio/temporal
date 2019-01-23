@@ -21,10 +21,9 @@
 package filestore
 
 import (
-	"bytes"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -45,9 +44,10 @@ func (s *UtilSuite) SetupTest() {
 }
 
 func (s *UtilSuite) TestFileExists() {
-	dir, err := ioutil.TempDir("", "test.file.exists")
+	dir, err := ioutil.TempDir("", "TestFileExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
+	s.assertDirectoryExists(dir)
 
 	exists, err := fileExists(dir)
 	s.Error(err)
@@ -65,16 +65,13 @@ func (s *UtilSuite) TestFileExists() {
 }
 
 func (s *UtilSuite) TestDirectoryExists() {
-	dir, err := ioutil.TempDir("", "test.directory.exists")
+	dir, err := ioutil.TempDir("", "TestDirectoryExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
-
-	exists, err := directoryExists(dir)
-	s.NoError(err)
-	s.True(exists)
+	s.assertDirectoryExists(dir)
 
 	subdir := "subdir"
-	exists, err = directoryExists(filepath.Join(dir, subdir))
+	exists, err := directoryExists(filepath.Join(dir, subdir))
 	s.NoError(err)
 	s.False(exists)
 
@@ -87,19 +84,19 @@ func (s *UtilSuite) TestDirectoryExists() {
 }
 
 func (s *UtilSuite) TestMkdirAll() {
-	dir, err := ioutil.TempDir("", "test.mkdir.all")
+	dir, err := ioutil.TempDir("", "TestMkdirAll")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
-
 	s.assertDirectoryExists(dir)
+
 	s.NoError(mkdirAll(dir))
 	s.assertDirectoryExists(dir)
 
-	subdirPath := filepath.Join(dir, "subdir_1", "subdir_2", "subdir_3")
-	s.assertDirectoryNotExists(subdirPath)
-	s.NoError(mkdirAll(subdirPath))
-	s.assertDirectoryExists(subdirPath)
-	s.assertCorrectFileMode(subdirPath)
+	subDirPath := filepath.Join(dir, "subdir_1", "subdir_2", "subdir_3")
+	s.assertDirectoryNotExists(subDirPath)
+	s.NoError(mkdirAll(subDirPath))
+	s.assertDirectoryExists(subDirPath)
+	s.assertCorrectFileMode(subDirPath)
 
 	filename := "test-file-name"
 	s.createFile(dir, filename)
@@ -108,10 +105,9 @@ func (s *UtilSuite) TestMkdirAll() {
 }
 
 func (s *UtilSuite) TestWriteFile() {
-	dir, err := ioutil.TempDir("", "test.write.file")
+	dir, err := ioutil.TempDir("", "TestWriteFile")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
-
 	s.assertDirectoryExists(dir)
 
 	filename := "test-file-name"
@@ -129,10 +125,9 @@ func (s *UtilSuite) TestWriteFile() {
 }
 
 func (s *UtilSuite) TestReadFile() {
-	dir, err := ioutil.TempDir("", "test.read.file")
+	dir, err := ioutil.TempDir("", "TestReadFile")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
-
 	s.assertDirectoryExists(dir)
 
 	filename := "test-file-name"
@@ -141,10 +136,57 @@ func (s *UtilSuite) TestReadFile() {
 	s.Error(err)
 	s.Empty(data)
 
-	writeFile(fpath, []byte("file contents"))
+	err = writeFile(fpath, []byte("file contents"))
+	s.NoError(err)
 	data, err = readFile(fpath)
 	s.NoError(err)
 	s.Equal("file contents", string(data))
+}
+
+func (s *UtilSuite) TestDeleteFile() {
+	dir, err := ioutil.TempDir("", "TestDeleteFile")
+	s.NoError(err)
+	defer os.Remove(dir)
+	s.assertDirectoryExists(dir)
+
+	filename := "test-file-name"
+	fpath := filepath.Join(dir, filename)
+	deleted, err := deleteFile(fpath)
+	s.NoError(err)
+	s.False(deleted)
+
+	err = writeFile(fpath, []byte("file contents"))
+	s.NoError(err)
+	deleted, err = deleteFile(fpath)
+	s.NoError(err)
+	s.True(deleted)
+	exists, err := fileExists(fpath)
+	s.NoError(err)
+	s.False(exists)
+}
+
+func (s *UtilSuite) TestListFiles() {
+	dir, err := ioutil.TempDir("", "TestListFiles")
+	s.NoError(err)
+	defer os.Remove(dir)
+	s.assertDirectoryExists(dir)
+
+	filename := "test-file-name"
+	fpath := filepath.Join(dir, filename)
+	files, err := listFiles(fpath)
+	s.Error(err)
+	s.Nil(files)
+
+	subDirPath := filepath.Join(dir, "subdir")
+	s.NoError(mkdirAll(subDirPath))
+	s.assertDirectoryExists(subDirPath)
+	expectedFileNames := []string{"file_1", "file_2", "file_3"}
+	for _, f := range expectedFileNames {
+		s.createFile(dir, f)
+	}
+	actualFileNames, err := listFiles(dir)
+	s.NoError(err)
+	s.Equal(expectedFileNames, actualFileNames)
 }
 
 func (s *UtilSuite) TestSerializationBucketConfig() {
@@ -162,20 +204,14 @@ func (s *UtilSuite) TestSerializationBucketConfig() {
 }
 
 func (s *UtilSuite) TestSerializationBlob() {
-	inBlob := &blobstore.Blob{
-		Body:            bytes.NewReader([]byte("file contents")),
-		Tags:            map[string]string{"key1": "value1", "key2": "value2"},
-		CompressionType: blobstore.NoCompression,
-	}
+	inBlob := blob.NewBlob([]byte("file contents"), map[string]string{"key1": "value1", "key2": "value2"})
 	data, err := serializeBlob(inBlob)
 	s.NoError(err)
 
 	outBlob, err := deserializeBlob(data)
 	s.NoError(err)
 	s.Equal(inBlob.Tags, outBlob.Tags)
-	s.Equal(inBlob.CompressionType, outBlob.CompressionType)
-	outBody, err := ioutil.ReadAll(outBlob.Body)
-	s.Equal("file contents", string(outBody))
+	s.Equal("file contents", string(outBlob.Body))
 }
 
 func (s *UtilSuite) createFile(dir string, filename string) {

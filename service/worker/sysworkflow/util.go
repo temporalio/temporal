@@ -21,18 +21,70 @@
 package sysworkflow
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/dgryski/go-farm"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/blobstore/blob"
 	"strings"
 )
 
 const (
-	historyBlobFilenameExt = ".history"
+	// HistoryBlobKeyExt is the blob key extension on all history blobs
+	HistoryBlobKeyExt = "history"
 )
 
-// HistoryBlobFilename constructs name of history file from domainID, workflowID and runID
-func HistoryBlobFilename(domainID string, workflowID string, runID string) string {
-	hashInput := strings.Join([]string{domainID, workflowID, runID}, "")
-	hash := farm.Fingerprint64([]byte(hashInput))
-	return fmt.Sprintf("%v%v", hash, historyBlobFilenameExt)
+type (
+	// HistoryBlobHeader is the header attached to all history blobs
+	HistoryBlobHeader struct {
+		DomainName           *string `json:"domain_name,omitempty"`
+		DomainID             *string `json:"domain_id,omitempty"`
+		WorkflowID           *string `json:"workflow_id,omitempty"`
+		RunID                *string `json:"run_id,omitempty"`
+		CurrentPageToken     *string `json:"current_page_token,omitempty"`
+		NextPageToken        *string `json:"next_page_token,omitempty"`
+		FirstFailoverVersion *string `json:"first_failover_version,omitempty"`
+		LastFailoverVersion  *string `json:"last_failover_version,omitempty"`
+		FirstEventID         *int64  `json:"first_event_id,omitempty"`
+		LastEventID          *int64  `json:"last_event_id,omitempty"`
+		UploadDateTime       *string `json:"upload_date_time,omitempty"`
+		UploadCluster        *string `json:"upload_cluster,omitempty"`
+		EventCount           *int64  `json:"event_count,omitempty"`
+	}
+
+	// HistoryBlob is the serializable data that forms the body of a blob
+	HistoryBlob struct {
+		Header *HistoryBlobHeader `json:"header"`
+		Body   *shared.History    `json:"body"`
+	}
+)
+
+// NewHistoryBlobKey returns a key for history blob
+func NewHistoryBlobKey(domainID, workflowID, runID, pageToken, failoverVersion string) (blob.Key, error) {
+	if len(domainID) == 0 || len(workflowID) == 0 || len(runID) == 0 || len(pageToken) == 0 || len(failoverVersion) == 0 {
+		return nil, errors.New("all inputs required to be non-empty")
+	}
+	domainIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(domainID)))
+	workflowIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(workflowID)))
+	runIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(runID)))
+	combinedHash := strings.Join([]string{domainIDHash, workflowIDHash, runIDHash}, "")
+	return blob.NewKey(HistoryBlobKeyExt, combinedHash, pageToken, failoverVersion)
+}
+
+// ConvertHeaderToTags converts header into metadata tags for blob
+func ConvertHeaderToTags(header *HistoryBlobHeader) (map[string]string, error) {
+	var tempMap map[string]interface{}
+	bytes, err := json.Marshal(header)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(bytes, &tempMap); err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(tempMap))
+	for k, v := range tempMap {
+		result[k] = fmt.Sprintf("%v", v)
+	}
+	return result, nil
 }

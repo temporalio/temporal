@@ -21,12 +21,12 @@
 package filestore
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
 	"io/ioutil"
 	"os"
 	"path"
@@ -57,7 +57,7 @@ func (s *ClientSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *ClientSuite) TestNewClientInvalidConfig() {
+func (s *ClientSuite) TestNewClient_Fail_InvalidConfig() {
 	invalidCfg := &Config{
 		StoreDirectory: "/test/store/dir",
 		DefaultBucket: BucketConfig{
@@ -70,8 +70,8 @@ func (s *ClientSuite) TestNewClientInvalidConfig() {
 	s.Nil(client)
 }
 
-func (s *ClientSuite) TestSetupDirectoryFailure() {
-	dir, err := ioutil.TempDir("", "test.setup.directory.failure")
+func (s *ClientSuite) TestNewClient_Fail_SetupDirectoryFailure() {
+	dir, err := ioutil.TempDir("", "TestNewClient_Fail_SetupDirectoryFailure")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	os.Chmod(dir, os.FileMode(0600))
@@ -82,8 +82,8 @@ func (s *ClientSuite) TestSetupDirectoryFailure() {
 	s.Nil(client)
 }
 
-func (s *ClientSuite) TestWriteMetadataFilesFailure() {
-	dir, err := ioutil.TempDir("", "test.write.metadata.files.failure")
+func (s *ClientSuite) TestNewClient_Fail_WriteMetadataFilesFailure() {
+	dir, err := ioutil.TempDir("", "TestNewClient_Fail_WriteMetadataFilesFailure")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.NoError(mkdirAll(filepath.Join(dir, defaultBucketName, metadataFilename, "foo")))
@@ -94,124 +94,234 @@ func (s *ClientSuite) TestWriteMetadataFilesFailure() {
 	s.Nil(client)
 }
 
-func (s *ClientSuite) TestUploadBlobBucketNotExists() {
-	dir, err := ioutil.TempDir("", "test.upload.blob.bucket.not.exists")
+func (s *ClientSuite) TestUpload_Fail_BucketNotExists() {
+	dir, err := ioutil.TempDir("", "TestUpload_Fail_BucketNotExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
 
-	blob := s.constructBlob("blob body", map[string]string{"tagKey": "tagValue"})
-	blobFilename := "blob.blob"
-	s.Equal(blobstore.ErrBucketNotExists, client.UploadBlob(context.Background(), "bucket-not-exists", blobFilename, blob))
+	b := blob.NewBlob([]byte("blob body"), map[string]string{"tagKey": "tagValue"})
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	s.Equal(blobstore.ErrBucketNotExists, client.Upload(context.Background(), "bucket-not-exists", key, b))
 }
 
-func (s *ClientSuite) TestUploadBlobErrorOnWrite() {
-	dir, err := ioutil.TempDir("", "test.upload.blob.error.on.write")
+func (s *ClientSuite) TestUpload_Fail_ErrorOnWrite() {
+	dir, err := ioutil.TempDir("", "TestUpload_Fail_ErrorOnWrite")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
-	blobFilename := "blob.blob"
-	s.NoError(mkdirAll(path.Join(dir, defaultBucketName, blobFilename, "foo")))
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	s.NoError(mkdirAll(path.Join(dir, defaultBucketName, key.String(), "foo")))
 	client := s.constructClient(dir)
 
-	blob := s.constructBlob("blob body", map[string]string{"tagKey": "tagValue"})
-	s.Error(client.UploadBlob(context.Background(), defaultBucketName, blobFilename, blob))
+	b := blob.NewBlob([]byte("blob body"), map[string]string{"tagKey": "tagValue"})
+	s.Error(client.Upload(context.Background(), defaultBucketName, key, b))
 }
 
-func (s *ClientSuite) TestDownloadBlobBucketNotExists() {
-	dir, err := ioutil.TempDir("", "test.download.blob.bucket.not.exists")
+func (s *ClientSuite) TestDownload_Fail_BucketNotExists() {
+	dir, err := ioutil.TempDir("", "TestDownload_Fail_BucketNotExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
 
-	blob, err := client.DownloadBlob(context.Background(), "bucket-not-exists", "blobname")
+	key, err := blob.NewKeyFromString("blobname.ext")
+	s.NoError(err)
+	b, err := client.Download(context.Background(), "bucket-not-exists", key)
 	s.Equal(blobstore.ErrBucketNotExists, err)
-	s.Nil(blob)
+	s.Nil(b)
 }
 
-func (s *ClientSuite) TestDownloadBlobBlobNotExists() {
-	dir, err := ioutil.TempDir("", "test.download.blob.blob.not.exists")
+func (s *ClientSuite) TestDownload_Fail_BlobNotExists() {
+	dir, err := ioutil.TempDir("", "TestDownload_Fail_BlobNotExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
 
-	blob, err := client.DownloadBlob(context.Background(), defaultBucketName, "blobname")
+	key, err := blob.NewKeyFromString("blobname.ext")
+	s.NoError(err)
+	b, err := client.Download(context.Background(), defaultBucketName, key)
 	s.Equal(blobstore.ErrBlobNotExists, err)
-	s.Nil(blob)
+	s.Nil(b)
 }
 
-func (s *ClientSuite) TestDownloadBlobNoPermissions() {
-	dir, err := ioutil.TempDir("", "test.download.blob.no.permissions")
+func (s *ClientSuite) TestDownload_Fail_NoPermissions() {
+	dir, err := ioutil.TempDir("", "TestDownload_Fail_NoPermissions")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
 
-	blob := s.constructBlob("blob body", map[string]string{"tagKey": "tagValue"})
-	blobFilename := "blob.blob"
-	s.NoError(client.UploadBlob(context.Background(), defaultBucketName, blobFilename, blob))
-	os.Chmod(bucketItemPath(dir, defaultBucketName, blobFilename), os.FileMode(0000))
+	b := blob.NewBlob([]byte("blob body"), map[string]string{"tagKey": "tagValue"})
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
+	os.Chmod(bucketItemPath(dir, defaultBucketName, key.String()), os.FileMode(0000))
 
-	blob, err = client.DownloadBlob(context.Background(), defaultBucketName, blobFilename)
+	b, err = client.Download(context.Background(), defaultBucketName, key)
 	s.NotEqual(blobstore.ErrBlobNotExists, err)
 	s.Error(err)
-	s.Nil(blob)
+	s.Nil(b)
 }
 
-func (s *ClientSuite) TestDownloadBlobInvalidFormat() {
-	dir, err := ioutil.TempDir("", "test.download.blob.invalid.format")
+func (s *ClientSuite) TestDownload_Fail_BlobFormatInvalid() {
+	dir, err := ioutil.TempDir("", "TestDownload_Fail_BlobFormatInvalid")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
 	client := s.constructClient(dir)
-	blobFilename := "blob.blob"
-	s.NoError(writeFile(filepath.Join(dir, defaultBucketName, blobFilename), []byte("invalid")))
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	s.NoError(writeFile(filepath.Join(dir, defaultBucketName, key.String()), []byte("invalid")))
 
-	blob, err := client.DownloadBlob(context.Background(), defaultBucketName, blobFilename)
+	b, err := client.Download(context.Background(), defaultBucketName, key)
 	s.NotEqual(blobstore.ErrBlobNotExists, err)
 	s.Error(err)
-	s.Nil(blob)
+	s.Nil(b)
 }
 
-func (s *ClientSuite) TestUploadDownloadBlob() {
-	dir, err := ioutil.TempDir("", "test.upload.download.blob")
+func (s *ClientSuite) TestUploadDownload_Success() {
+	dir, err := ioutil.TempDir("", "TestUploadDownload_Success")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
 	client := s.constructClient(dir)
-	blob := s.constructBlob("body version 1", map[string]string{})
-	blobFilename := "blob.blob"
-	s.NoError(client.UploadBlob(context.Background(), defaultBucketName, blobFilename, blob))
-	downloadBlob, err := client.DownloadBlob(context.Background(), defaultBucketName, blobFilename)
+	b := blob.NewBlob([]byte("body version 1"), map[string]string{})
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
+	downloadBlob, err := client.Download(context.Background(), defaultBucketName, key)
 	s.NoError(err)
 	s.NotNil(downloadBlob)
 	s.assertBlobEquals(map[string]string{}, "body version 1", downloadBlob)
 
-	blob = s.constructBlob("body version 2", map[string]string{"key": "value"})
-	s.NoError(client.UploadBlob(context.Background(), defaultBucketName, blobFilename, blob))
-	downloadBlob, err = client.DownloadBlob(context.Background(), defaultBucketName, blobFilename)
+	b = blob.NewBlob([]byte("body version 2"), map[string]string{"key": "value"})
+	s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
+	downloadBlob, err = client.Download(context.Background(), defaultBucketName, key)
 	s.NoError(err)
 	s.NotNil(downloadBlob)
 	s.assertBlobEquals(map[string]string{"key": "value"}, "body version 2", downloadBlob)
 }
 
-func (s *ClientSuite) TestUploadDownloadBlobCustomBucket() {
-	dir, err := ioutil.TempDir("", "test.upload.download.blob.custom.bucket")
+func (s *ClientSuite) TestUploadDownload_Success_CustomBucket() {
+	dir, err := ioutil.TempDir("", "TestUploadDownload_Success_CustomBucket")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
 	client := s.constructClient(dir)
-	blob := s.constructBlob("blob body", map[string]string{})
-	blobFilename := "blob.blob"
+	b := blob.NewBlob([]byte("blob body"), map[string]string{})
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
 	customBucketName := fmt.Sprintf("%v-%v", customBucketNamePrefix, 3)
-	s.NoError(client.UploadBlob(context.Background(), customBucketName, blobFilename, blob))
-	downloadBlob, err := client.DownloadBlob(context.Background(), customBucketName, blobFilename)
+	s.NoError(client.Upload(context.Background(), customBucketName, key, b))
+	downloadBlob, err := client.Download(context.Background(), customBucketName, key)
 	s.NoError(err)
 	s.NotNil(downloadBlob)
 	s.assertBlobEquals(map[string]string{}, "blob body", downloadBlob)
 }
 
-func (s *ClientSuite) TestBucketMetadataBucketNotExists() {
-	dir, err := ioutil.TempDir("", "test.bucket.metadata.bucket.not.exists")
+func (s *ClientSuite) TestExists_Fail_BucketNotExists() {
+	dir, err := ioutil.TempDir("", "TestExists_Fail_BucketNotExists")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	exists, err := client.Exists(context.Background(), "bucket-not-exists", key)
+	s.Equal(blobstore.ErrBucketNotExists, err)
+	s.False(exists)
+}
+
+func (s *ClientSuite) TestExists_Success() {
+	dir, err := ioutil.TempDir("", "TestExists_Success")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	exists, err := client.Exists(context.Background(), defaultBucketName, key)
+	s.NoError(err)
+	s.False(exists)
+
+	b := blob.NewBlob([]byte("body"), map[string]string{})
+	s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
+	exists, err = client.Exists(context.Background(), defaultBucketName, key)
+	s.NoError(err)
+	s.True(exists)
+}
+
+func (s *ClientSuite) TestDelete_Fail_BucketNotExists() {
+	dir, err := ioutil.TempDir("", "TestDelete_Fail_BucketNotExists")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	deleted, err := client.Delete(context.Background(), "bucket-not-exists", key)
+	s.Equal(blobstore.ErrBucketNotExists, err)
+	s.False(deleted)
+}
+
+func (s *ClientSuite) TestDelete_Success() {
+	dir, err := ioutil.TempDir("", "TestDelete_Success")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	key, err := blob.NewKeyFromString("blob.blob")
+	s.NoError(err)
+	deleted, err := client.Delete(context.Background(), defaultBucketName, key)
+	s.NoError(err)
+	s.False(deleted)
+
+	b := blob.NewBlob([]byte("body"), map[string]string{})
+	s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
+	deleted, err = client.Delete(context.Background(), defaultBucketName, key)
+	s.NoError(err)
+	s.True(deleted)
+	exists, err := client.Exists(context.Background(), defaultBucketName, key)
+	s.NoError(err)
+	s.False(exists)
+}
+
+func (s *ClientSuite) TestListByPrefix_Fail_BucketNotExists() {
+	dir, err := ioutil.TempDir("", "TestListByPrefix_Fail_BucketNotExists")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	files, err := client.ListByPrefix(context.Background(), "bucket-not-exists", "foo")
+	s.Equal(blobstore.ErrBucketNotExists, err)
+	s.Nil(files)
+}
+
+func (s *ClientSuite) TestListByPrefix_Success() {
+	dir, err := ioutil.TempDir("", "TestListByPrefix_Success")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	allFiles := []string{"matching_1.ext", "matching_2.ext", "not_matching_1.ext", "not_matching_2.ext", "matching_3.ext"}
+	for _, f := range allFiles {
+		key, err := blob.NewKeyFromString(f)
+		s.NoError(err)
+		b := blob.NewBlob([]byte("blob body"), map[string]string{})
+		s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
+	}
+	matchingKeys, err := client.ListByPrefix(context.Background(), defaultBucketName, "matching")
+	s.NoError(err)
+	var matchingFilenames []string
+	for _, k := range matchingKeys {
+		matchingFilenames = append(matchingFilenames, k.String())
+	}
+	s.Equal([]string{"matching_1.ext", "matching_2.ext", "matching_3.ext"}, matchingFilenames)
+}
+
+func (s *ClientSuite) TestBucketMetadata_Fail_BucketNotExists() {
+	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_BucketNotExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
@@ -221,8 +331,8 @@ func (s *ClientSuite) TestBucketMetadataBucketNotExists() {
 	s.Nil(metadata)
 }
 
-func (s *ClientSuite) TestBucketMetadataCheckFileExistsError() {
-	dir, err := ioutil.TempDir("", "test.bucket.metadata.check.file.exists.error")
+func (s *ClientSuite) TestBucketMetadata_Fail_CheckFileExistsError() {
+	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_CheckFileExistsError")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
@@ -233,8 +343,8 @@ func (s *ClientSuite) TestBucketMetadataCheckFileExistsError() {
 	s.Nil(metadata)
 }
 
-func (s *ClientSuite) TestBucketMetadataFileNotExistsError() {
-	dir, err := ioutil.TempDir("", "test.bucket.metadata.file.not.exists.error")
+func (s *ClientSuite) TestBucketMetadata_Fail_FileNotExistsError() {
+	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_FileNotExistsError")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
@@ -245,8 +355,8 @@ func (s *ClientSuite) TestBucketMetadataFileNotExistsError() {
 	s.Nil(metadata)
 }
 
-func (s *ClientSuite) TestBucketMetadataFileInvalidForm() {
-	dir, err := ioutil.TempDir("", "test.bucket.metadata.file.invalid.form")
+func (s *ClientSuite) TestBucketMetadata_Fail_InvalidFileFormat() {
+	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_InvalidFileFormat")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
@@ -257,8 +367,8 @@ func (s *ClientSuite) TestBucketMetadataFileInvalidForm() {
 	s.Nil(metadata)
 }
 
-func (s *ClientSuite) TestBucketMetadataSuccess() {
-	dir, err := ioutil.TempDir("", "test.bucket.metadata.success")
+func (s *ClientSuite) TestBucketMetadata_Success() {
+	dir, err := ioutil.TempDir("", "TestBucketMetadata_Success")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	client := s.constructClient(dir)
@@ -268,14 +378,6 @@ func (s *ClientSuite) TestBucketMetadataSuccess() {
 	s.NotNil(metadata)
 	s.Equal(defaultBucketRetentionDays, metadata.RetentionDays)
 	s.Equal(defaultBucketOwner, metadata.Owner)
-}
-
-func (s *ClientSuite) constructBlob(body string, tags map[string]string) *blobstore.Blob {
-	return &blobstore.Blob{
-		Body:            bytes.NewReader([]byte(body)),
-		Tags:            tags,
-		CompressionType: blobstore.NoCompression,
-	}
 }
 
 func (s *ClientSuite) constructClient(storeDir string) blobstore.Client {
@@ -306,10 +408,7 @@ func (s *ClientSuite) constructConfig(storeDir string) *Config {
 	return cfg
 }
 
-func (s *ClientSuite) assertBlobEquals(expectedTags map[string]string, expectedBody string, actual *blobstore.Blob) {
-	s.Equal(blobstore.NoCompression, actual.CompressionType)
+func (s *ClientSuite) assertBlobEquals(expectedTags map[string]string, expectedBody string, actual *blob.Blob) {
 	s.Equal(expectedTags, actual.Tags)
-	actualBody, err := ioutil.ReadAll(actual.Body)
-	s.NoError(err)
-	s.Equal(expectedBody, string(actualBody))
+	s.Equal(expectedBody, string(actual.Body))
 }

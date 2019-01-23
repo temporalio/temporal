@@ -24,7 +24,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
-	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
@@ -35,32 +35,31 @@ const (
 	fileMode = os.FileMode(0600)
 )
 
+var (
+	errDirectoryExpected = errors.New("a path to a directory was expected")
+	errFileExpected      = errors.New("a path to a file was expected")
+)
+
 func fileExists(filepath string) (bool, error) {
-	info, err := os.Stat(filepath)
-	if err != nil {
+	if info, err := os.Stat(filepath); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, err
-	}
-
-	if info.IsDir() {
-		return false, errors.New("specified directory not file")
+	} else if info.IsDir() {
+		return false, errFileExpected
 	}
 	return true, nil
 }
 
 func directoryExists(path string) (bool, error) {
-	info, err := os.Stat(path)
-	if err != nil {
+	if info, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, err
-	}
-
-	if !info.IsDir() {
-		return false, errors.New("specified file not directory")
+	} else if !info.IsDir() {
+		return false, errDirectoryExpected
 	}
 	return true, nil
 }
@@ -91,6 +90,37 @@ func readFile(filepath string) ([]byte, error) {
 	return ioutil.ReadFile(filepath)
 }
 
+func deleteFile(filepath string) (bool, error) {
+	if err := os.Remove(filepath); err != nil {
+		if !os.IsNotExist(err) {
+			return false, err
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+func listFiles(path string) ([]string, error) {
+	if info, err := os.Stat(path); err != nil {
+		return nil, err
+	} else if !info.IsDir() {
+		return nil, errDirectoryExpected
+	}
+
+	children, err := ioutil.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, c := range children {
+		if c.IsDir() {
+			continue
+		}
+		files = append(files, c.Name())
+	}
+	return files, nil
+}
+
 func serializeBucketConfig(bucketCfg *BucketConfig) ([]byte, error) {
 	return yaml.Marshal(bucketCfg)
 }
@@ -103,39 +133,20 @@ func deserializeBucketConfig(data []byte) (*BucketConfig, error) {
 	return bucketCfg, nil
 }
 
-type serializedBlob struct {
-	Body []byte
-	Tags map[string]string
-}
-
-func serializeBlob(blob *blobstore.Blob) ([]byte, error) {
+func serializeBlob(blob *blob.Blob) ([]byte, error) {
 	buf := bytes.Buffer{}
 	encoder := gob.NewEncoder(&buf)
-	body, err := ioutil.ReadAll(blob.Body)
-	if err != nil {
-		return nil, err
-	}
-	serBlob := serializedBlob{
-		Body: body,
-		Tags: blob.Tags,
-	}
-	if err := encoder.Encode(serBlob); err != nil {
+	if err := encoder.Encode(blob); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
-func deserializeBlob(data []byte) (*blobstore.Blob, error) {
-	serBlob := &serializedBlob{}
-	dataReader := bytes.NewReader(data)
-	decoder := gob.NewDecoder(dataReader)
-	if err := decoder.Decode(serBlob); err != nil {
+func deserializeBlob(data []byte) (*blob.Blob, error) {
+	blob := &blob.Blob{}
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(blob); err != nil {
 		return nil, err
 	}
-
-	return &blobstore.Blob{
-		Body:            bytes.NewReader(serBlob.Body),
-		Tags:            serBlob.Tags,
-		CompressionType: blobstore.NoCompression,
-	}, nil
+	return blob, nil
 }
