@@ -105,8 +105,8 @@ kafka:
       cluster: test
   applications:
     visibility:
-      topic: cadence-visibility
-      dlq-topic: cadence-visibility-dlq
+      topic: cadence-visibility-dev
+      dlq-topic: cadence-visibility-dev-dlq
 
 elasticsearch:
   enable: false
@@ -114,5 +114,5 @@ elasticsearch:
     scheme: "http"
     host: "127.0.0.1:9200"
   indices:
-    visibility: visibility-dev
+    visibility: cadence-visibility-dev
 

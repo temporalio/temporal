@@ -69,6 +69,7 @@ type (
 		config                *Config
 		historyEventNotifier  historyEventNotifier
 		publisher             messaging.Producer
+		visibilityProducer    messaging.Producer
 		rateLimiter           common.TokenBucket
 		service.Service
 	}
@@ -151,6 +152,14 @@ func (h *Handler) Start() error {
 		}
 	}
 
+	if h.config.EnableVisibilityToKafka() {
+		var err error
+		h.visibilityProducer, err = h.GetMessagingClient().NewProducer(common.VisibilityAppName)
+		if err != nil {
+			h.GetLogger().Fatalf("Creating visibility producer failed: %v", err)
+		}
+	}
+
 	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
 	h.domainCache.Start()
 	h.controller = newShardController(h.Service, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr, h.historyV2Mgr,
@@ -181,7 +190,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.frontendServiceClient, h.historyEventNotifier, h.publisher, h.GetMessagingClient(), h.config)
+		h.frontendServiceClient, h.historyEventNotifier, h.publisher, h.visibilityProducer, h.config)
 }
 
 // Health is for health check
