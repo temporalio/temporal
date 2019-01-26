@@ -89,7 +89,7 @@ func (adh *AdminHandler) Start() error {
 	adh.Service.GetDispatcher().Register(adminserviceserver.New(adh))
 	adh.Service.Start()
 
-	adh.history = adh.Service.GetClientBean().GetHistoryClient()
+	adh.history = adh.GetClientBean().GetHistoryClient()
 	adh.metricsClient = adh.Service.GetMetricsClient()
 	adh.startWG.Done()
 	return nil

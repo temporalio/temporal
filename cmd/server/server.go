@@ -120,6 +120,8 @@ func (s *server) startService() common.Daemon {
 	enableGlobalDomain := dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, s.cfg.ClustersInfo.EnableGlobalDomain)
 	enableArchival := dc.GetBoolProperty(dynamicconfig.EnableArchival, s.cfg.Archival.Enabled)
 
+	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
+
 	params.ClusterMetadata = cluster.NewMetadata(
 		enableGlobalDomain,
 		s.cfg.ClustersInfo.FailoverVersionIncrement,

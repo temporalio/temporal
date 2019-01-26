@@ -308,6 +308,8 @@ const (
 	FrontendClientRequestCancelWorkflowExecutionScope
 	// FrontendClientResetStickyTaskListScope tracks RPC calls to frontend service
 	FrontendClientResetStickyTaskListScope
+	// FrontendClientResetWorkflowExecutionScope tracks RPC calls to frontend service
+	FrontendClientResetWorkflowExecutionScope
 	// FrontendClientRespondActivityTaskCanceledScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskCanceledScope
 	// FrontendClientRespondActivityTaskCanceledByIDScope tracks RPC calls to frontend service
@@ -759,6 +761,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientRegisterDomainScope:                   {operation: "FrontendClientRegisterDomain", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRequestCancelWorkflowExecutionScope:   {operation: "FrontendClientRequestCancelWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientResetStickyTaskListScope:              {operation: "FrontendClientResetStickyTaskList", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientResetWorkflowExecutionScope:           {operation: "FrontendClientResetWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCanceledScope:      {operation: "FrontendClientRespondActivityTaskCanceled", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCanceledByIDScope:  {operation: "FrontendClientRespondActivityTaskCanceledByID", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCompletedScope:     {operation: "FrontendClientRespondActivityTaskCompleted", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},

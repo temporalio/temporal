@@ -124,8 +124,12 @@ func NewMetadata(
 	if len(initialFailoverVersionClusters) != len(clusterInitialFailoverVersions) {
 		panic("Cluster to initial failover versions have duplicate initial versions")
 	}
-	if len(initialFailoverVersionClusters) != len(clusterToAddress) {
-		panic("Cluster to address size is different than Cluster to initial failover versions")
+
+	// only check whether a cluster in cluster -> initial failover versions exists in cluster -> address
+	for clusterName := range clusterInitialFailoverVersions {
+		if _, ok := clusterToAddress[clusterName]; !ok {
+			panic("Cluster -> initial failover version does not have an address")
+		}
 	}
 
 	defaultArchivalBucketSet := len(defaultArchivalBucket) != 0

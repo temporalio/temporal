@@ -18,10 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package public
 
 import (
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 )
 
 // Client is the interface exposed by frontend service client

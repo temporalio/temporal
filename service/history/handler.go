@@ -25,10 +25,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/logging"
-
 	"github.com/pborman/uuid"
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	hist "github.com/uber/cadence/.gen/go/history"
@@ -37,8 +35,10 @@ import (
 	"github.com/uber/cadence/client/frontend"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -61,6 +61,7 @@ type (
 		historyServiceClient  hc.Client
 		matchingServiceClient matching.Client
 		frontendServiceClient frontend.Client
+		publicClient          public.Client
 		hServiceResolver      membership.ServiceResolver
 		controller            *shardController
 		tokenSerializer       common.TaskTokenSerializer
@@ -120,20 +121,26 @@ func (h *Handler) Start() error {
 	h.Service.Start()
 
 	h.matchingServiceClient = matching.NewRetryableClient(
-		h.Service.GetClientBean().GetMatchingClient(),
+		h.GetClientBean().GetMatchingClient(),
 		common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
 
 	h.historyServiceClient = hc.NewRetryableClient(
-		h.Service.GetClientBean().GetHistoryClient(),
+		h.GetClientBean().GetHistoryClient(),
 		common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
 
 	h.frontendServiceClient = frontend.NewRetryableClient(
-		h.Service.GetClientBean().GetFrontendClient(),
+		h.GetClientBean().GetFrontendClient(),
 		common.CreateFrontendServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
+
+	h.publicClient = public.NewRetryableClient(
+		h.GetClientBean().GetPublicClient(),
+		common.CreatePublicClientRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
 
@@ -190,7 +197,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.frontendServiceClient, h.historyEventNotifier, h.publisher, h.visibilityProducer, h.config)
+		h.frontendServiceClient, h.publicClient, h.historyEventNotifier, h.publisher, h.visibilityProducer, h.config)
 }
 
 // Health is for health check

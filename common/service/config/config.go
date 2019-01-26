@@ -43,6 +43,8 @@ type (
 		Log Logger `yaml:"log"`
 		// ClustersInfo is the config containing all valid clusters and active cluster
 		ClustersInfo ClustersInfo `yaml:"clustersInfo"`
+		// DCRedirectionPolicy contains the frontend datacenter redirection policy
+		DCRedirectionPolicy DCRedirectionPolicy `yaml:"dcRedirectionPolicy"`
 		// Services is a map of service name to service config items
 		Services map[string]Service `yaml:"services"`
 		// Kafka is the config for connecting to kafka
@@ -212,6 +214,12 @@ type (
 		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service IP address
 		RPCAddress string `yaml:"rpcAddress"`
+	}
+
+	// DCRedirectionPolicy contains the frontend datacenter redirection policy
+	DCRedirectionPolicy struct {
+		Policy string `yaml:"policy"`
+		ToDC   string `yaml:"toDC"`
 	}
 
 	// Metrics contains the config items for metrics subsystem

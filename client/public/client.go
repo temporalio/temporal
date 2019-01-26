@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package public
 
 import (
 	"context"
@@ -27,9 +27,9 @@ import (
 	"go.uber.org/yarpc"
 
 	"github.com/pborman/uuid"
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.uber.org/cadence/.gen/go/shared"
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -314,22 +314,6 @@ func (c *clientImpl) ResetStickyTaskList(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.ResetStickyTaskList(ctx, request, opts...)
-}
-
-func (c *clientImpl) ResetWorkflowExecution(
-	ctx context.Context,
-	request *shared.ResetWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ResetWorkflowExecutionResponse, error) {
-
-	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ResetWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondActivityTaskCanceled(

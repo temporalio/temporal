@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/uber/cadence/client/public"
 	"time"
 
 	"github.com/uber/cadence/service/worker/sysworkflow"
@@ -136,6 +137,7 @@ func NewEngineWithShardContext(
 	matching matching.Client,
 	historyClient hc.Client,
 	frontendClient frontend.Client,
+	publicClient public.Client,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	visibilityProducer messaging.Producer,
@@ -167,7 +169,7 @@ func NewEngineWithShardContext(
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
-		archivalClient:       sysworkflow.NewArchivalClient(frontendClient, shard.GetConfig().NumSysWorkflows),
+		archivalClient:       sysworkflow.NewArchivalClient(publicClient, shard.GetConfig().NumSysWorkflows),
 	}
 
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, visibilityProducer, matching, historyClient, logger)

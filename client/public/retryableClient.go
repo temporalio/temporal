@@ -18,15 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package public
 
 import (
 	"context"
 
 	"go.uber.org/yarpc"
 
-	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
+	"go.uber.org/cadence/.gen/go/shared"
 )
 
 var _ Client = (*retryableClient)(nil)
@@ -284,22 +284,6 @@ func (c *retryableClient) ResetStickyTaskList(
 	op := func() error {
 		var err error
 		resp, err = c.client.ResetStickyTaskList(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ResetWorkflowExecution(
-	ctx context.Context,
-	request *shared.ResetWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ResetWorkflowExecutionResponse, error) {
-
-	var resp *shared.ResetWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ResetWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

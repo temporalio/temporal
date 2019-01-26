@@ -22,9 +22,8 @@ package frontend
 
 import (
 	"context"
-
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/yarpc"
 )
 
@@ -327,6 +326,24 @@ func (c *metricClient) ResetStickyTaskList(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskListScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ResetWorkflowExecution(
+	ctx context.Context,
+	request *shared.ResetWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ResetWorkflowExecutionResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientResetWorkflowExecutionScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientResetWorkflowExecutionScope, metrics.CadenceClientLatency)
+	resp, err := c.client.ResetWorkflowExecution(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientResetWorkflowExecutionScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }

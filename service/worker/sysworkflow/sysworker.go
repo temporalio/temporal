@@ -23,7 +23,7 @@ package sysworkflow
 import (
 	"context"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/client/frontend"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common/blobstore"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/worker"
@@ -47,10 +47,10 @@ func init() {
 }
 
 // NewSysWorker returns a new SysWorker
-func NewSysWorker(frontendClient frontend.Client, scope tally.Scope, blobstoreClient blobstore.Client) *SysWorker {
+func NewSysWorker(publicClient public.Client, scope tally.Scope, blobstoreClient blobstore.Client) *SysWorker {
 	logger, _ := zap.NewProduction()
 	actCtx := context.WithValue(context.Background(), blobstoreClientKey, blobstoreClient)
-	actCtx = context.WithValue(actCtx, frontendClientKey, frontendClient)
+	actCtx = context.WithValue(actCtx, frontendClientKey, publicClient)
 	wo := worker.Options{
 		Logger:                    logger,
 		MetricsScope:              scope.SubScope(SystemWorkflowScope),
@@ -58,7 +58,7 @@ func NewSysWorker(frontendClient frontend.Client, scope tally.Scope, blobstoreCl
 	}
 	return &SysWorker{
 		// TODO: after we do task list fan out workers should listen on all task lists
-		worker: worker.New(frontendClient, Domain, DecisionTaskList, wo),
+		worker: worker.New(publicClient, Domain, DecisionTaskList, wo),
 	}
 }
 

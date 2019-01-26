@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common/cluster"
 )
 
@@ -45,6 +46,7 @@ type (
 		GetHistoryClient() history.Client
 		GetMatchingClient() matching.Client
 		GetFrontendClient() frontend.Client
+		GetPublicClient() public.Client
 		GetRemoteAdminClient(cluster string) admin.Client
 		GetRemoteFrontendClient(cluster string) frontend.Client
 	}
@@ -58,6 +60,7 @@ type (
 		historyClient         history.Client
 		matchingClient        matching.Client
 		frontendClient        frontend.Client
+		publicClient          public.Client
 		remoteAdminClients    map[string]admin.Client
 		remoteFrontendClients map[string]frontend.Client
 	}
@@ -80,6 +83,11 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 	}
 
 	frontendClient, err := factory.NewFrontendClient()
+	if err != nil {
+		return nil, err
+	}
+
+	publicClient, err := factory.NewPublicClient()
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +127,7 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 		historyClient:         historyClient,
 		matchingClient:        matchingClient,
 		frontendClient:        frontendClient,
+		publicClient:          publicClient,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
@@ -134,6 +143,10 @@ func (h *clientBeanImpl) GetMatchingClient() matching.Client {
 
 func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
 	return h.frontendClient
+}
+
+func (h *clientBeanImpl) GetPublicClient() public.Client {
+	return h.publicClient
 }
 
 func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {

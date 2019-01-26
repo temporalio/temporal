@@ -79,7 +79,7 @@ func (h *Handler) Start() error {
 	h.domainCache.Start()
 	h.metricsClient = h.Service.GetMetricsClient()
 	h.engine = NewEngine(
-		h.taskPersistence, h.Service.GetClientBean().GetHistoryClient(), h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
+		h.taskPersistence, h.GetClientBean().GetHistoryClient(), h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
 	)
 	h.startWG.Done()
 	return nil

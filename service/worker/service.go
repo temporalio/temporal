@@ -22,6 +22,7 @@ package worker
 
 import (
 	"context"
+	"github.com/uber/cadence/client/public"
 	"time"
 
 	"github.com/uber/cadence/common/cache"
@@ -29,7 +30,6 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
@@ -170,28 +170,28 @@ func (s *Service) startIndexer(params *service.BootstrapParams, base service.Ser
 
 func (s *Service) startSysWorker(base service.Service, log bark.Logger, scope tally.Scope) {
 
-	frontendClient := frontend.NewRetryableClient(
-		base.GetClientBean().GetFrontendClient(),
-		common.CreateFrontendServiceRetryPolicy(),
+	publicClient := public.NewRetryableClient(
+		base.GetClientBean().GetPublicClient(),
+		common.CreatePublicClientRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
 
-	s.waitForFrontendStart(frontendClient, log)
-	sysWorker := sysworkflow.NewSysWorker(frontendClient, scope, s.params.BlobstoreClient)
+	s.waitForFrontendStart(publicClient, log)
+	sysWorker := sysworkflow.NewSysWorker(publicClient, scope, s.params.BlobstoreClient)
 	if err := sysWorker.Start(); err != nil {
 		sysWorker.Stop()
 		log.Fatalf("failed to start sysworker: %v", err)
 	}
 }
 
-func (s *Service) waitForFrontendStart(frontendClient frontend.Client, log bark.Logger) {
+func (s *Service) waitForFrontendStart(publicClient public.Client, log bark.Logger) {
 	name := sysworkflow.Domain
 	request := &shared.DescribeDomainRequest{
 		Name: &name,
 	}
 
 	for i := 0; i < FrontendRetryLimit; i++ {
-		if _, err := frontendClient.DescribeDomain(context.Background(), request); err == nil {
+		if _, err := publicClient.DescribeDomain(context.Background(), request); err == nil {
 			return
 		}
 		<-time.After(PollingDelay)

@@ -23,8 +23,6 @@ package frontend
 import (
 	"context"
 	"errors"
-	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/persistence"
 	"log"
 	"os"
 	"testing"
@@ -39,10 +37,12 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 	cs "github.com/uber/cadence/common/service"
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
 )

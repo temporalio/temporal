@@ -6,73 +6,73 @@ persistence:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_standby"
+        keyspace: "cadence_other"
         consistency: "One"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_visibility_standby"
+        keyspace: "cadence_visibility_other"
         consistency: "One"
 
 ringpop:
-  name: cadence_standby
+  name: cadence_other
   bootstrapMode: hosts
-  bootstrapHosts: ["127.0.0.1:8933", "127.0.0.1:8934", "127.0.0.1:8935", "127.0.0.1:8940"]
+  bootstrapHosts: ["127.0.0.1:9933", "127.0.0.1:9934", "127.0.0.1:9935", "127.0.0.1:9940"]
   maxJoinDuration: 30s
 
 services:
   frontend:
     rpc:
-      port: 8933
+      port: 9933
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "cadence_other"
     pprof:
-      port: 8936
+      port: 9936
 
   matching:
     rpc:
-      port: 8935
+      port: 9935
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "cadence_other"
     pprof:
-      port: 8938
+      port: 9938
 
   history:
     rpc:
-      port: 8934
+      port: 9934
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "cadence_other"
     pprof:
-      port: 8937
+      port: 9937
 
   worker:
     rpc:
-      port: 8940
+      port: 9940
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "cadence_other"
     pprof:
-      port: 8941
+      port: 9941
 
 clustersInfo:
   enableGlobalDomain: true
   failoverVersionIncrement: 10
   masterClusterName: "active"
-  currentClusterName: "standby"
+  currentClusterName: "other"
   clusterInitialFailoverVersion:
     active: 1
-    standby: 0
+    other: 2
   clusterAddress:
     active:
       rpcName: "cadence-frontend"
@@ -86,7 +86,7 @@ clustersInfo:
 
 dcRedirectionPolicy:
   policy: "forwarding"
-  toDC: "other"
+  toDC: "standby"
 
 kafka:
   clusters:

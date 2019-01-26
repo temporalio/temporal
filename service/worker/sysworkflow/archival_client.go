@@ -24,7 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/uber/cadence/client/frontend"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/client"
 	"math/rand"
@@ -64,9 +64,9 @@ type (
 )
 
 // NewArchivalClient creates a new ArchivalClient
-func NewArchivalClient(frontendClient frontend.Client, numSWFn dynamicconfig.IntPropertyFn) ArchivalClient {
+func NewArchivalClient(publicClient public.Client, numSWFn dynamicconfig.IntPropertyFn) ArchivalClient {
 	return &archivalClient{
-		cadenceClient: client.NewClient(frontendClient, Domain, &client.Options{}),
+		cadenceClient: client.NewClient(publicClient, Domain, &client.Options{}),
 		numSWFn:       numSWFn,
 	}
 }

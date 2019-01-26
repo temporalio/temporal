@@ -26,19 +26,22 @@ import (
 	"go.uber.org/yarpc"
 
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	publicClientInterface "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 )
 
 const (
+	publicCaller   = "cadence-public-client"
 	frontendCaller = "cadence-frontend-client"
 	historyCaller  = "history-service-client"
 	matchingCaller = "matching-service-client"
@@ -54,10 +57,12 @@ type Factory interface {
 	NewHistoryClient() (history.Client, error)
 	NewMatchingClient() (matching.Client, error)
 	NewFrontendClient() (frontend.Client, error)
+	NewPublicClient() (public.Client, error)
 
 	NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 	NewMatchingClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 	NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
+	NewPublicClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (public.Client, error)
 
 	NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
 	NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
@@ -91,6 +96,10 @@ func (cf *rpcClientFactory) NewMatchingClient() (matching.Client, error) {
 
 func (cf *rpcClientFactory) NewFrontendClient() (frontend.Client, error) {
 	return cf.NewFrontendClientWithTimeout(frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
+}
+
+func (cf *rpcClientFactory) NewPublicClient() (public.Client, error) {
+	return cf.NewPublicClientWithTimeout(public.DefaultTimeout, public.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error) {
@@ -176,6 +185,35 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	if cf.metricsClient != nil {
 		client = frontend.NewMetricClient(client, cf.metricsClient)
 	}
+	return client, nil
+}
+
+func (cf *rpcClientFactory) NewPublicClientWithTimeout(
+	timeout time.Duration,
+	longPollTimeout time.Duration,
+) (public.Client, error) {
+
+	// public client and frontend client are essentially the same,
+	// except the interface definition
+	resolver, err := cf.monitor.GetResolver(common.FrontendServiceName)
+	if err != nil {
+		return nil, err
+	}
+
+	keyResolver := func(key string) (string, error) {
+		host, err := resolver.Lookup(key)
+		if err != nil {
+			return "", err
+		}
+		return host.GetAddress(), nil
+	}
+
+	clientProvider := func(clientKey string) (interface{}, error) {
+		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(publicCaller, common.FrontendServiceName, clientKey)
+		return publicClientInterface.New(dispatcher.ClientConfig(common.FrontendServiceName)), nil
+	}
+
+	client := public.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	return client, nil
 }
 
