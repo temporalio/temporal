@@ -155,8 +155,7 @@ func (s *server) startService() common.Daemon {
 
 	// enable visibility to kafka and enable visibility to elastic search are using one config
 	if enableVisibilityToKafka {
-		esFactory := elasticsearch.NewFactory(&s.cfg.ElasticSearch)
-		esClient, err := esFactory.NewClient()
+		esClient, err := elasticsearch.NewClient(&s.cfg.ElasticSearch)
 		if err != nil {
 			log.Fatalf("error creating elastic search client: %v", err)
 		}

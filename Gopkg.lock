@@ -740,6 +740,7 @@
     "github.com/olekukonko/tablewriter",
     "github.com/olivere/elastic",
     "github.com/pborman/uuid",
+    "github.com/pkg/errors",
     "github.com/robfig/cron",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",

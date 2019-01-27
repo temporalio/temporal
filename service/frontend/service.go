@@ -26,6 +26,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -33,13 +34,15 @@ import (
 
 // Config represents configuration for cadence-frontend service
 type Config struct {
-	PersistenceMaxQPS        dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize    dynamicconfig.IntPropertyFnWithDomainFilter
-	EnableVisibilitySampling dynamicconfig.BoolPropertyFn
-	VisibilityListMaxQPS     dynamicconfig.IntPropertyFnWithDomainFilter
-	HistoryMaxPageSize       dynamicconfig.IntPropertyFnWithDomainFilter
-	RPS                      dynamicconfig.IntPropertyFn
-	MaxIDLengthLimit         dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS          dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize      dynamicconfig.IntPropertyFnWithDomainFilter
+	EnableVisibilitySampling   dynamicconfig.BoolPropertyFn
+	VisibilityListMaxQPS       dynamicconfig.IntPropertyFnWithDomainFilter
+	EnableVisibilityToKafka    dynamicconfig.BoolPropertyFn
+	EnableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithDomainFilter
+	HistoryMaxPageSize         dynamicconfig.IntPropertyFnWithDomainFilter
+	RPS                        dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit           dynamicconfig.IntPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -57,12 +60,14 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection) *Config {
+func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool) *Config {
 	return &Config{
 		PersistenceMaxQPS:              dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		VisibilityMaxPageSize:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableVisibilitySampling:       dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		VisibilityListMaxQPS:           dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
+		EnableVisibilityToKafka:        dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
+		EnableReadVisibilityFromES:     dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, false),
 		HistoryMaxPageSize:             dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                            dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		MaxIDLengthLimit:               dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -88,7 +93,7 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
 	return &Service{
 		params: params,
-		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),
+		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.ESConfig.Enable),
 		stopC:  make(chan struct{}),
 	}
 }
@@ -114,10 +119,16 @@ func (s *Service) Start() {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
 
-	visibility, err := pFactory.NewVisibilityManager(s.config.EnableVisibilitySampling()) // enable rate limit on list operations
+	visibilityFromDB, err := pFactory.NewVisibilityManager(s.config.EnableVisibilitySampling())
 	if err != nil {
 		log.Fatalf("failed to create visibility manager: %v", err)
 	}
+	var visibilityFromES persistence.VisibilityManager // TODO: wrap esVisibilityMgr with rate limiter, metrics, sampler
+	if s.config.EnableVisibilityToKafka() {
+		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
+		visibilityFromES = persistence.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, log)
+	}
+	visibility := persistence.NewVisibilityManagerWrapper(visibilityFromDB, visibilityFromES, s.config.EnableReadVisibilityFromES)
 
 	history, err := pFactory.NewHistoryManager()
 	if err != nil {
@@ -139,8 +150,7 @@ func (s *Service) Start() {
 		kafkaProducer = &mocks.KafkaProducer{}
 	}
 
-	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility,
-		kafkaProducer, params.BlobstoreClient)
+	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, params.BlobstoreClient)
 	wfHandler.Start()
 	switch params.DCRedirectionPolicy.Policy {
 	case DCRedirectionPolicyDefault:

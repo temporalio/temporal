@@ -103,9 +103,9 @@ kafka:
       brokers:
         - 127.0.0.1:9092
   topics:
-    cadence-visibility:
+    cadence-visibility-dev:
       cluster: test
-    cadence-visibility-dlq:
+    cadence-visibility-dev-dlq:
       cluster: test
   applications:
     visibility:

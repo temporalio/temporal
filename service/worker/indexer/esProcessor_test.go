@@ -24,10 +24,12 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/olivere/elastic"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/collection"
 	es "github.com/uber/cadence/common/elasticsearch"
+	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
 	msgMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
@@ -44,6 +46,7 @@ type esProcessorSuite struct {
 	esProcessor       *esProcessorImpl
 	mockBulkProcessor *mocks.ElasticBulkProcessor
 	mockMetricClient  *mmocks.Client
+	mockESClient      *esMocks.Client
 }
 
 var (
@@ -82,11 +85,14 @@ func (s *esProcessorSuite) SetupTest() {
 	p.processor = s.mockBulkProcessor
 
 	s.esProcessor = p
+
+	s.mockESClient = &esMocks.Client{}
 }
 
 func (s *esProcessorSuite) TearDownTest() {
 	s.mockBulkProcessor.AssertExpectations(s.T())
 	s.mockMetricClient.AssertExpectations(s.T())
+	s.mockESClient.AssertExpectations(s.T())
 }
 
 func (s *esProcessorSuite) TestNewESProcessorAndStart() {
@@ -96,11 +102,20 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 		ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
+	processorName := "test-processor"
 
-	esClient := &elastic.Client{}
-	p, err := NewESProcessorAndStart(config, esClient, "test-processor", bark.NewNopLogger(), &mmocks.Client{})
+	s.mockESClient.On("RunBulkProcessor", mock.Anything, mock.MatchedBy(func(input *es.BulkProcessorParameters) bool {
+		s.Equal(processorName, input.Name)
+		s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
+		s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
+		s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
+		s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
+		s.NotNil(input.Backoff)
+		s.NotNil(input.AfterFunc)
+		return true
+	})).Return(&elastic.BulkProcessor{}, nil).Once()
+	p, err := NewESProcessorAndStart(config, s.mockESClient, processorName, bark.NewNopLogger(), &mmocks.Client{})
 	s.NoError(err)
-	s.NotNil(p)
 
 	processor, ok := p.(*esProcessorImpl)
 	s.True(ok)

@@ -99,6 +99,7 @@ type (
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
 	GetClosedWorkflowExecutionRequest struct {
 		DomainUUID string
+		Domain     string // domain name is not persisted, but used as config filter key
 		Execution  s.WorkflowExecution
 	}
 

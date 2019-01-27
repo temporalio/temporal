@@ -75,7 +75,7 @@ const (
 )
 
 // NewESProcessorAndStart create new ESProcessor and start
-func NewESProcessorAndStart(config *Config, client *elastic.Client, processorName string,
+func NewESProcessorAndStart(config *Config, client es.Client, processorName string,
 	logger bark.Logger, metricsClient metrics.Client) (ESProcessor, error) {
 	p := &esProcessorImpl{
 		config: config,
@@ -85,15 +85,16 @@ func NewESProcessorAndStart(config *Config, client *elastic.Client, processorNam
 		metricsClient: metricsClient,
 	}
 
-	processor, err := client.BulkProcessor().
-		Name(processorName).
-		Workers(config.ESProcessorNumOfWorkers()).
-		BulkActions(config.ESProcessorBulkActions()).
-		BulkSize(config.ESProcessorBulkSize()).
-		FlushInterval(config.ESProcessorFlushInterval()).
-		Backoff(elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval)).
-		After(p.bulkAfterAction).
-		Do(context.Background())
+	params := &es.BulkProcessorParameters{
+		Name:          processorName,
+		NumOfWorkers:  config.ESProcessorNumOfWorkers(),
+		BulkActions:   config.ESProcessorBulkActions(),
+		BulkSize:      config.ESProcessorBulkSize(),
+		FlushInterval: config.ESProcessorFlushInterval(),
+		Backoff:       elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval),
+		AfterFunc:     p.bulkAfterAction,
+	}
+	processor, err := client.RunBulkProcessor(context.Background(), params)
 	if err != nil {
 		return nil, err
 	}

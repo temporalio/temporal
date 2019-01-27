@@ -48,11 +48,12 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
-	EnableGlobalDomain:       "system.enableGlobalDomain",
-	EnableNewKafkaClient:     "system.enableNewKafkaClient",
-	EnableVisibilitySampling: "system.enableVisibilitySampling",
-	EnableVisibilityToKafka:  "system.enableVisibilityToKafka",
-	EnableArchival:           "system.enableArchival",
+	EnableGlobalDomain:         "system.enableGlobalDomain",
+	EnableNewKafkaClient:       "system.enableNewKafkaClient",
+	EnableVisibilitySampling:   "system.enableVisibilitySampling",
+	EnableVisibilityToKafka:    "system.enableVisibilityToKafka",
+	EnableReadVisibilityFromES: "system.enableReadVisibilityFromES",
+	EnableArchival:             "system.enableArchival",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -189,6 +190,8 @@ const (
 	EnableVisibilitySampling
 	// EnableVisibilityToKafka is key for enable kafka
 	EnableVisibilityToKafka
+	// EnableReadVisibilityFromES is key for enable read from elastic search
+	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
 	// EnableArchival is key for enable archival

@@ -42,7 +42,7 @@ type indexProcessor struct {
 	consumerName    string
 	kafkaClient     messaging.Client
 	consumer        messaging.Consumer
-	esClient        *elastic.Client
+	esClient        es.Client
 	esProcessor     ESProcessor
 	esProcessorName string
 	esIndexName     string
@@ -67,7 +67,7 @@ var (
 	errUnknownMessageType = &shared.BadRequestError{Message: "unknown message type"}
 )
 
-func newIndexProcessor(appName, consumerName string, kafkaClient messaging.Client, esClient *elastic.Client,
+func newIndexProcessor(appName, consumerName string, kafkaClient messaging.Client, esClient es.Client,
 	esProcessorName, esIndexName string, config *Config, logger bark.Logger, metricsClient metrics.Client) *indexProcessor {
 	return &indexProcessor{
 		appName:         appName,
