@@ -86,6 +86,11 @@ var (
 	identityKey identityCtxKey = "identity"
 )
 
+const (
+	maxQueryWaitCount = 5
+	maxQueryLoopCount = 5
+)
+
 func (t *taskListID) String() string {
 	var r string
 	if t.taskType == persistence.TaskListTypeActivity {
@@ -428,8 +433,9 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *m.
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 	taskListKind := common.TaskListKindPtr(queryRequest.TaskList.GetKind())
 
+	var lastErr error
 query_loop:
-	for {
+	for i := 0; i < maxQueryWaitCount; i++ {
 		tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 		if err != nil {
 			return nil, err
@@ -459,11 +465,12 @@ query_loop:
 				return &workflow.QueryWorkflowResponse{QueryResult: result.result}, nil
 			}
 
+			lastErr = result.err // lastErr will not be nil
 			if result.err == errQueryBeforeFirstDecisionCompleted {
 				// query before first decision completed, so wait for first decision task to complete
 				expectedNextEventID := result.waitNextEventID
 			wait_loop:
-				for {
+				for j := 0; j < maxQueryWaitCount; j++ {
 					ms, err := e.historyService.GetMutableState(ctx, &h.GetMutableStateRequest{
 						DomainUUID:          queryRequest.DomainUUID,
 						Execution:           queryRequest.QueryRequest.Execution,
@@ -473,6 +480,15 @@ query_loop:
 						if ms.GetPreviousStartedEventId() > 0 {
 							// now we have at least one decision task completed, so retry query
 							continue query_loop
+						}
+
+						if !ms.GetIsWorkflowRunning() {
+							return nil, &workflow.QueryFailedError{Message: "workflow closed without making any progress"}
+						}
+
+						if expectedNextEventID >= ms.GetNextEventId() {
+							// this should not happen, check to prevent busy loop
+							return nil, &workflow.QueryFailedError{Message: "workflow not making any progress"}
 						}
 
 						// keep waiting
@@ -489,6 +505,7 @@ query_loop:
 			return nil, &workflow.QueryFailedError{Message: "timeout: workflow worker is not responding"}
 		}
 	}
+	return nil, &workflow.QueryFailedError{Message: "query failed with max retry" + lastErr.Error()}
 }
 
 type queryResult struct {
