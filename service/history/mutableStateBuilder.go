@@ -1584,11 +1584,16 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64, 
 
 	var event *workflow.HistoryEvent
 	// Only emit DecisionTaskFailedEvent for the very first time
-	if dt.Attempt == 0 {
+	if dt.Attempt == 0 || cause == workflow.DecisionTaskFailedCauseResetWorkflow {
 		event = e.hBuilder.AddDecisionTaskFailedEvent(attr)
 	}
 
 	e.ReplicateDecisionTaskFailedEvent()
+
+	// always clear decision attempt for reset
+	if cause == workflow.DecisionTaskFailedCauseResetWorkflow {
+		e.executionInfo.DecisionAttempt = 0
+	}
 	return event
 }
 
