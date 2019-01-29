@@ -1217,6 +1217,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(d
 		ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
 		Input:                               attributes.Input,
 		RetryPolicy:                         attributes.RetryPolicy,
+		CronSchedule:                        attributes.CronSchedule,
 	}
 
 	req := &h.StartWorkflowExecutionRequest{
@@ -1309,6 +1310,22 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 	}
 	if event.ParentInitiatedEventId != nil {
 		e.executionInfo.InitiatedID = event.GetParentInitiatedEventId()
+	}
+
+	if event.RetryPolicy != nil {
+		e.executionInfo.HasRetryPolicy = true
+		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
+		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
+		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
+		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
+		e.executionInfo.NonRetriableErrors = event.RetryPolicy.NonRetriableErrorReasons
+		if event.RetryPolicy.GetExpirationIntervalInSeconds() > 0 && event.GetExpirationTimestamp() > 0 {
+			e.executionInfo.ExpirationTime = time.Unix(0, event.GetExpirationTimestamp())
+		}
+	}
+
+	if event.CronSchedule != nil {
+		e.executionInfo.CronSchedule = event.GetCronSchedule()
 	}
 }
 
@@ -2367,16 +2384,20 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		PreviousRunID:        prevRunID,
 		ReplicationState:     newStateBuilder.GetReplicationState(),
 		HasRetryPolicy:       startedAttributes.RetryPolicy != nil,
-		InitialInterval:      e.executionInfo.InitialInterval,
-		BackoffCoefficient:   e.executionInfo.BackoffCoefficient,
-		MaximumInterval:      e.executionInfo.MaximumInterval,
-		MaximumAttempts:      e.executionInfo.MaximumAttempts,
-		NonRetriableErrors:   e.executionInfo.NonRetriableErrors,
+		CronSchedule:         startedAttributes.GetCronSchedule(),
 		EventStoreVersion:    newStateBuilder.GetEventStoreVersion(),
 		BranchToken:          newStateBuilder.GetCurrentBranch(),
-		CronSchedule:         e.executionInfo.CronSchedule,
-		ExpirationSeconds:    e.executionInfo.ExpirationSeconds,
 	}
+
+	if continueAsNew.HasRetryPolicy {
+		continueAsNew.InitialInterval = startedAttributes.RetryPolicy.GetInitialIntervalInSeconds()
+		continueAsNew.BackoffCoefficient = startedAttributes.RetryPolicy.GetBackoffCoefficient()
+		continueAsNew.MaximumInterval = startedAttributes.RetryPolicy.GetMaximumIntervalInSeconds()
+		continueAsNew.MaximumAttempts = startedAttributes.RetryPolicy.GetMaximumAttempts()
+		continueAsNew.ExpirationSeconds = startedAttributes.RetryPolicy.GetExpirationIntervalInSeconds()
+		continueAsNew.NonRetriableErrors = startedAttributes.RetryPolicy.NonRetriableErrorReasons
+	}
+
 	if continueAsNewAttributes.GetInitiator() == workflow.ContinueAsNewInitiatorRetryPolicy {
 		// retry
 		continueAsNew.Attempt = continueAsNew.Attempt + 1

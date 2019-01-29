@@ -1283,6 +1283,7 @@ Update_History_Loop:
 						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(cronBackoff.Seconds())),
 						Initiator:                           workflow.ContinueAsNewInitiatorCronSchedule.Ptr(),
 						LastCompletionResult:                attributes.Result,
+						CronSchedule:                        startAttributes.CronSchedule,
 					}
 
 					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion); err != nil {
@@ -1356,6 +1357,7 @@ Update_History_Loop:
 						FailureReason:                       failedAttributes.Reason,
 						FailureDetails:                      failedAttributes.Details,
 						LastCompletionResult:                startAttributes.LastCompletionResult,
+						CronSchedule:                        startAttributes.CronSchedule,
 					}
 
 					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion); err != nil {
