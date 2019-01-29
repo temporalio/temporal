@@ -236,6 +236,9 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return metrics.TimerActiveTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 
+	case persistence.TaskTypeArchiveHistoryEvent:
+		return metrics.TimerActiveTaskArchiveHistoryEventScope, t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
+
 	default:
 		return metrics.TimerActiveQueueProcessorScope, errUnknownTimerTask
 	}
@@ -752,9 +755,14 @@ Update_History_Loop:
 			return err
 		}
 
-		tBuilder := t.historyService.getTimerBuilder(context.getExecution())
+		executionInfo := context.getExecution()
+		tBuilder := t.historyService.getTimerBuilder(executionInfo)
 		var transferTasks, timerTasks []persistence.Task
-		tranT, timerT, err := getDeleteWorkflowTasksFromShard(t.shard, domainID, workflowExecution.GetWorkflowId(), tBuilder)
+		tranT, timerT, err := getWorkflowHistoryCleanupTasksFromShard(
+			t.shard,
+			domainID,
+			executionInfo.GetWorkflowId(),
+			tBuilder)
 		if err != nil {
 			return err
 		}
@@ -803,7 +811,10 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 
 	if createDeletionTask {
 		tBuilder := t.historyService.getTimerBuilder(context.getExecution())
-		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(executionInfo.DomainID, executionInfo.WorkflowID, tBuilder)
+		tranT, timerT, err := t.historyService.getWorkflowHistoryCleanupTasks(
+			executionInfo.DomainID,
+			executionInfo.WorkflowID,
+			tBuilder)
 		if err != nil {
 			return err
 		}

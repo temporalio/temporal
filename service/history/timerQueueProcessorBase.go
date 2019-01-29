@@ -22,6 +22,7 @@ package history
 
 import (
 	"errors"
+	"github.com/uber/cadence/service/worker/sysworkflow"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -254,6 +255,12 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task)
 				t.metricsClient.IncCounter(metrics.TimerActiveTaskDeleteHistoryEventScope, metrics.NewTimerCounter)
 			} else {
 				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDeleteHistoryEventScope, metrics.NewTimerCounter)
+			}
+		case persistence.TaskTypeArchiveHistoryEvent:
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskArchiveHistoryEventScope, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskArchiveHistoryEventScope, metrics.NewTimerCounter)
 			}
 		case persistence.TaskTypeActivityRetryTimer:
 			if isActive {
@@ -555,7 +562,6 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	if err != nil {
 		return err
 	} else if msBuilder == nil || msBuilder.IsWorkflowExecutionRunning() {
-		// this can happen if workflow is reset.
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
@@ -576,6 +582,34 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	}
 
 	return t.deleteWorkflowVisibility(task)
+}
+
+func (t *timerQueueProcessorBase) processArchiveHistoryEvent(task *persistence.TimerTaskInfo) (retError error) {
+
+	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(task))
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	if err != nil {
+		return err
+	} else if msBuilder == nil || msBuilder.IsWorkflowExecutionRunning() {
+		return nil
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
+	if err != nil {
+		return err
+	} else if !ok {
+		return nil
+	}
+	return t.historyService.archivalClient.Archive(&sysworkflow.ArchiveRequest{
+		DomainID:         task.DomainID,
+		WorkflowID:       task.WorkflowID,
+		RunID:            task.RunID,
+		LastWriteVersion: task.Version,
+	})
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflowExecution(task *persistence.TimerTaskInfo) error {
@@ -649,6 +683,8 @@ func (t *timerQueueProcessorBase) getTimerTaskType(taskType int) string {
 		return "WorkflowTimeout"
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return "DeleteHistoryEvent"
+	case persistence.TaskTypeArchiveHistoryEvent:
+		return "ArchiveHistoryEvent"
 	case persistence.TaskTypeActivityRetryTimer:
 		return "ActivityRetryTimerTask"
 	case persistence.TaskTypeWorkflowBackoffTimer:

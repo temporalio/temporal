@@ -177,6 +177,9 @@ func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTas
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 
+	case persistence.TaskTypeArchiveHistoryEvent:
+		return metrics.TimerStandbyTaskArchiveHistoryEventScope, t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
+
 	default:
 		return metrics.TimerStandbyQueueProcessorScope, errUnknownTimerTask
 	}

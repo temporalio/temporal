@@ -748,6 +748,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(appendV1Resp, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", mock.Anything).Return("active")
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
 	s.Nil(err)
@@ -1419,6 +1420,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", mock.Anything).Return(nil).Maybe()
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
 	_, err = s.historyEngine.ResetWorkflowExecution(context.Background(), request)
 	s.EqualError(err, "BadRequestError{Message: it is not allowed resetting to a point that workflow has pending request cancel }")
 }
@@ -2028,6 +2030,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(appendV1Resp, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", mock.Anything).Return("active")
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
 	s.Nil(err)
@@ -2711,6 +2714,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Once()
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", mock.Anything).Return("standby")
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
 	_, err = s.historyEngine.ResetWorkflowExecution(context.Background(), request)
 	s.EqualError(err, "DomainNotActiveError{Message: Domain: testDomainName is active in cluster: standby, while current cluster active is a standby cluster., DomainName: testDomainName, CurrentCluster: active, ActiveCluster: standby}")
 }

@@ -22,6 +22,7 @@ package sysworkflow
 
 import (
 	"context"
+	"fmt"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/logging"
 	"go.uber.org/cadence"
@@ -111,6 +112,7 @@ func selectSystemTask(scope tally.Scope, signal signal, ctx workflow.Context, lo
 
 // ArchivalActivity is the archival activity code
 func ArchivalActivity(ctx context.Context, request ArchiveRequest) error {
+	fmt.Printf("called archival activity: %+v\n", request)
 	// TODO: write this activity
 	return nil
 }

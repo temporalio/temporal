@@ -394,7 +394,10 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(currMutableState mutableS
 			Details:  nil,
 			Identity: common.StringPtr(identityHistoryService),
 		})
-		closeTask, cleanupTask, retError = w.eng.getDeleteWorkflowTasks(currMutableState.GetExecutionInfo().DomainID, currExecution.GetWorkflowId(), w.eng.getTimerBuilder(&currExecution))
+		closeTask, cleanupTask, retError = w.eng.getWorkflowHistoryCleanupTasks(
+			currMutableState.GetExecutionInfo().DomainID,
+			currExecution.GetWorkflowId(),
+			w.eng.getTimerBuilder(&currExecution))
 		if retError != nil {
 			return
 		}

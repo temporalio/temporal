@@ -1715,28 +1715,15 @@ Update_History_Loop:
 		}
 
 		if isComplete {
-			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
+			tranT, timerT, err := e.getWorkflowHistoryCleanupTasks(
+				domainID,
+				workflowExecution.GetWorkflowId(),
+				tBuilder)
 			if err != nil {
 				return nil, err
 			}
 			transferTasks = append(transferTasks, tranT)
 			timerTasks = append(timerTasks, timerT)
-
-			domainCfg := domainEntry.GetConfig()
-			if e.shard.GetService().GetClusterMetadata().IsArchivalEnabled() && domainCfg.ArchivalStatus == workflow.ArchivalStatusEnabled {
-				request := &sysworkflow.ArchiveRequest{
-					DomainName: domainEntry.GetInfo().Name,
-					DomainID:   domainEntry.GetInfo().ID,
-					WorkflowID: workflowExecution.GetWorkflowId(),
-					RunID:      workflowExecution.GetRunId(),
-					Bucket:     domainCfg.ArchivalBucket,
-				}
-
-				// TODO: this will actually be scheduling a timer to do archival
-				if err := e.archivalClient.Archive(request); err != nil {
-					return nil, err
-				}
-			}
 		}
 
 		// Generate a transaction ID for appending events to history
@@ -2610,7 +2597,10 @@ Update_History_Loop:
 
 		transferTasks, timerTasks := postActions.transferTasks, postActions.timerTasks
 		if postActions.deleteWorkflow {
-			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, execution.GetWorkflowId(), tBuilder)
+			tranT, timerT, err := e.getWorkflowHistoryCleanupTasks(
+				domainID,
+				execution.GetWorkflowId(),
+				tBuilder)
 			if err != nil {
 				return err
 			}
@@ -2677,21 +2667,19 @@ func (e *historyEngineImpl) updateWorkflowExecution(ctx context.Context, domainI
 		})
 }
 
-func (e *historyEngineImpl) getDeleteWorkflowTasks(
+func (e *historyEngineImpl) getWorkflowHistoryCleanupTasks(
 	domainID, workflowID string,
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
-	return getDeleteWorkflowTasksFromShard(e.shard, domainID, workflowID, tBuilder)
+	return getWorkflowHistoryCleanupTasksFromShard(e.shard, domainID, workflowID, tBuilder)
 }
 
-func getDeleteWorkflowTasksFromShard(shard ShardContext,
+func getWorkflowHistoryCleanupTasksFromShard(
+	shard ShardContext,
 	domainID, workflowID string,
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
-	// Create a transfer task to close workflow execution
-	closeTask := &persistence.CloseExecutionTask{}
 
-	// Generate a timer task to cleanup history events for this workflow execution
 	var retentionInDays int32
 	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
@@ -2701,9 +2689,15 @@ func getDeleteWorkflowTasksFromShard(shard ShardContext,
 	} else {
 		retentionInDays = domainEntry.GetRetentionDays(workflowID)
 	}
-	cleanupTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
 
-	return closeTask, cleanupTask, nil
+	clusterEnablesArchival := shard.GetService().GetClusterMetadata().IsArchivalEnabled()
+	domainEnablesArchival := domainEntry.GetConfig().ArchivalStatus == workflow.ArchivalStatusEnabled
+	if clusterEnablesArchival && domainEnablesArchival {
+		archivalTask := tBuilder.createArchiveHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
+		return &persistence.CloseExecutionTask{}, archivalTask, nil
+	}
+	deleteTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
+	return &persistence.CloseExecutionTask{}, deleteTask, nil
 }
 
 func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder mutableState,
