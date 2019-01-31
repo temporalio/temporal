@@ -42,7 +42,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/xdc"
 )
 
@@ -121,7 +120,6 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 
 	config := NewDynamicConfigForTest()
-	config.EnableHistoryRereplication = dynamicconfig.GetBoolPropertyFn(true)
 	shardContext := &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},

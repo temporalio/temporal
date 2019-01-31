@@ -427,10 +427,6 @@ RetryLoop:
 	err = p.historyClient.SyncActivity(ctx, req)
 	cancel()
 
-	if !p.config.EnableHistoryRereplication() {
-		return err
-	}
-
 	retryErr, ok := err.(*shared.RetryTaskError)
 	if !ok || retryErr.GetRunId() == "" {
 		return err
@@ -520,10 +516,6 @@ RetryLoop:
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	err = p.historyClient.ReplicateEvents(ctx, req)
 	cancel()
-
-	if !p.config.EnableHistoryRereplication() {
-		return err
-	}
 
 	retryErr, ok := err.(*shared.RetryTaskError)
 	if !ok || retryErr.GetRunId() == "" {

@@ -1613,26 +1613,25 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.True(activity1Called)
 	s.True(activity2Called)
 
-	// TODO when EnableSyncActivityHeartbeat is enabled by default, uncomment the code below
-	// historyResponse, err := client2.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-	// 	Domain: common.StringPtr(domainName),
-	// 	Execution: &workflow.WorkflowExecution{
-	// 		WorkflowId: common.StringPtr(id),
-	// 	},
-	// })
-	// s.Nil(err)
-	// history := historyResponse.History
-	// common.PrettyPrintHistory(history, s.logger)
+	historyResponse, err := client2.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+	})
+	s.Nil(err)
+	history := historyResponse.History
+	common.PrettyPrintHistory(history, s.logger)
 
-	// activityRetryFound := false
-	// for _, event := range history.Events {
-	// 	if event.GetEventType() == workflow.EventTypeActivityTaskStarted {
-	// 		attribute := event.ActivityTaskStartedEventAttributes
-	// 		s.True(attribute.GetAttempt() > 0)
-	// 		activityRetryFound = true
-	// 	}
-	// }
-	// s.True(activityRetryFound)
+	activityRetryFound := false
+	for _, event := range history.Events {
+		if event.GetEventType() == workflow.EventTypeActivityTaskStarted {
+			attribute := event.ActivityTaskStartedEventAttributes
+			s.True(attribute.GetAttempt() > 0)
+			activityRetryFound = true
+		}
+	}
+	s.True(activityRetryFound)
 }
 
 func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {

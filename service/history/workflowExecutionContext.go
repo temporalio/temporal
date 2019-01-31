@@ -583,9 +583,7 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 				replicationTasks = append(replicationTasks, c.msBuilder.CreateReplicationTask(0, nil))
 			}
 		}
-		if c.shard.GetConfig().EnableSyncActivityHeartbeat() {
-			replicationTasks = append(replicationTasks, updates.syncActivityTasks...)
-		}
+		replicationTasks = append(replicationTasks, updates.syncActivityTasks...)
 	}
 
 	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)

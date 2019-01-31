@@ -72,9 +72,6 @@ type (
 		logger                 bark.Logger
 		localSeqNumGen         SequenceNumberGenerator // This one used to order in-memory list.
 		timeSource             common.TimeSource
-
-		// temporarily hack to disable activity heartbeat timeout task generation
-		enableActivityHeartbeat bool
 	}
 
 	// TimerSequenceID - Visibility timer stamp + Sequence Number.
@@ -125,30 +122,14 @@ func (l *localSeqNumGenerator) NextSeq() int64 {
 // newTimerBuilder creates a timer builder.
 func newTimerBuilder(config *Config, logger bark.Logger, timeSource common.TimeSource) *timerBuilder {
 	return &timerBuilder{
-		userTimers:              timers{},
-		pendingUserTimers:       make(map[string]*persistence.TimerInfo),
-		activityTimers:          timers{},
-		pendingActivityTimers:   make(map[int64]*persistence.ActivityInfo),
-		config:                  config,
-		logger:                  logger.WithField(logging.TagWorkflowComponent, "timer-builder"),
-		localSeqNumGen:          &localSeqNumGenerator{counter: 1},
-		timeSource:              timeSource,
-		enableActivityHeartbeat: true,
-	}
-}
-
-// newTimerBuilderForStandby creates a timer builder for standby logic, this is temporary hack to disable activity heartbeat
-func newTimerBuilderForStandby(config *Config, logger bark.Logger, timeSource common.TimeSource) *timerBuilder {
-	return &timerBuilder{
-		userTimers:              timers{},
-		pendingUserTimers:       make(map[string]*persistence.TimerInfo),
-		activityTimers:          timers{},
-		pendingActivityTimers:   make(map[int64]*persistence.ActivityInfo),
-		config:                  config,
-		logger:                  logger.WithField(logging.TagWorkflowComponent, "timer-builder"),
-		localSeqNumGen:          &localSeqNumGenerator{counter: 1},
-		timeSource:              timeSource,
-		enableActivityHeartbeat: false,
+		userTimers:            timers{},
+		pendingUserTimers:     make(map[string]*persistence.TimerInfo),
+		activityTimers:        timers{},
+		pendingActivityTimers: make(map[int64]*persistence.ActivityInfo),
+		config:                config,
+		logger:                logger.WithField(logging.TagWorkflowComponent, "timer-builder"),
+		localSeqNumGen:        &localSeqNumGenerator{counter: 1},
+		timeSource:            timeSource,
 	}
 }
 
@@ -324,7 +305,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder mutableState) {
 					TimeoutSec:      v.StartToCloseTimeout,
 					TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) != 0}
 				tb.activityTimers = append(tb.activityTimers, td)
-				if v.HeartbeatTimeout > 0 && tb.enableActivityHeartbeat {
+				if v.HeartbeatTimeout > 0 {
 					lastHeartBeatTS := v.LastHeartBeatUpdatedTime
 					if lastHeartBeatTS.Before(v.StartedTime) {
 						lastHeartBeatTS = v.StartedTime

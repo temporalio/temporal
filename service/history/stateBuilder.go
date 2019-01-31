@@ -568,9 +568,6 @@ func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBui
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)
 
-	if !b.shard.GetConfig().EnableSyncActivityHeartbeat() {
-		return newTimerBuilderForStandby(b.shard.GetConfig(), b.logger, timeSource)
-	}
 	return newTimerBuilder(b.shard.GetConfig(), b.logger, timeSource)
 }
 

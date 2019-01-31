@@ -513,9 +513,6 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(timerTask *pe
 }
 
 func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(timerTask *persistence.TimerTaskInfo, nextEventID int64) error {
-	if !t.shard.GetConfig().EnableHistoryRereplication() {
-		return nil
-	}
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientLatency)
