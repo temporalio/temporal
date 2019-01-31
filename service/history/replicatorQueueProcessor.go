@@ -208,7 +208,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 	}
 
 	replicationTask, err := GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, p.logger, nil)
-	if err != nil {
+	if err != nil || replicationTask == nil {
 		return err
 	}
 
@@ -232,6 +232,11 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 			task.DomainID, task.WorkflowID, task.RunID, task.FirstEventID, task.NextEventID, task.EventStoreVersion, task.BranchToken)
 		if err != nil {
 			return nil, err
+		}
+		for _, event := range history.Events {
+			if task.Version != event.GetVersion() {
+				return nil, nil
+			}
 		}
 	}
 

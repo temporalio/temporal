@@ -392,7 +392,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 				taskTemplate.NewRunEventStoreVersion = resp.State.ExecutionInfo.EventStoreVersion
 				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.GetCurrentBranch()
 			}
-
+			taskTemplate.Version = firstEvent.GetVersion()
 			taskTemplate.FirstEventID = firstEvent.GetEventId()
 			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
 			task, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), batch)
