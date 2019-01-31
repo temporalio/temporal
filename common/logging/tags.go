@@ -167,4 +167,9 @@ const (
 	TagUserWorkflowID               = "user-workflow-id"
 	TagUserRunID                    = "user-run-id"
 	TagIterationsUntilContinueAsNew = "iterations-until-continue-as-new"
+	TagBucket                       = "bucket"
+	TagFileBlobstoreBlobPath        = "file-blobstore-blob-path"
+	TagBlobKey                      = "blob-key"
+	TagBlobKeyPrefix                = "blob-key-prefix"
+	TagFileBlobstoreMetadataPath    = "file-blobstore-metadata-path"
 )

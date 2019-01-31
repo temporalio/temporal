@@ -78,10 +78,11 @@ const (
 	AllShardsTagValue        = "ALL"
 	NoneShardsTagValue       = "NONE"
 
-	HistoryRoleTagValue  = "history"
-	MatchingRoleTagValue = "matching"
-	FrontendRoleTagValue = "frontend"
-	AdminRoleTagValue    = "admin"
+	HistoryRoleTagValue   = "history"
+	MatchingRoleTagValue  = "matching"
+	FrontendRoleTagValue  = "frontend"
+	AdminRoleTagValue     = "admin"
+	BlobstoreRoleTagValue = "blobstore"
 
 	SizeStatsTypeTagValue  = "size"
 	CountStatsTypeTagValue = "count"
@@ -373,6 +374,19 @@ const (
 	PersistenceCompleteForkBranchScope
 	// PersistenceGetHistoryTreeScope tracks GetHistoryTree calls made by service to persistence layer
 	PersistenceGetHistoryTreeScope
+
+	// BlobstoreClientUploadScope tracks Upload calls to blobstore
+	BlobstoreClientUploadScope
+	// BlobstoreClientDownloadScope tracks Download calls to blobstore
+	BlobstoreClientDownloadScope
+	// BlobstoreClientExistsScope tracks Exists calls to blobstore
+	BlobstoreClientExistsScope
+	// BlobstoreClientDeleteScope tracks Delete calls to blobstore
+	BlobstoreClientDeleteScope
+	// BlobstoreClientListByPrefixScope tracks ListByPrefix calls to blobstore
+	BlobstoreClientListByPrefixScope
+	// BlobstoreClientBucketMetadataScope tracks BucketMetadata calls to blobstore
+	BlobstoreClientBucketMetadataScope
 
 	NumCommonScopes
 )
@@ -716,6 +730,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteHistoryBranchScope:                      {operation: "DeleteHistoryBranch", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceCompleteForkBranchScope:                       {operation: "CompleteForkBranch", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+
+		BlobstoreClientUploadScope:         {operation: "Upload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDownloadScope:       {operation: "Download", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientExistsScope:         {operation: "Exists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDeleteScope:         {operation: "Delete", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientListByPrefixScope:   {operation: "ListByPrefix", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientBucketMetadataScope: {operation: "BucketMetadata", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
 
 		HistoryClientStartWorkflowExecutionScope:            {operation: "HistoryClientStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordActivityTaskHeartbeatScope:       {operation: "HistoryClientRecordActivityTaskHeartbeat", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},

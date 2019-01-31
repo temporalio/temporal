@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/blobstore/blob"
 	"io/ioutil"
@@ -65,7 +66,7 @@ func (s *ClientSuite) TestNewClient_Fail_InvalidConfig() {
 		},
 	}
 
-	client, err := NewClient(invalidCfg)
+	client, err := NewClient(invalidCfg, bark.NewNopLogger())
 	s.Error(err)
 	s.Nil(client)
 }
@@ -77,7 +78,7 @@ func (s *ClientSuite) TestNewClient_Fail_SetupDirectoryFailure() {
 	os.Chmod(dir, os.FileMode(0600))
 
 	cfg := s.constructConfig(dir)
-	client, err := NewClient(cfg)
+	client, err := NewClient(cfg, bark.NewNopLogger())
 	s.Error(err)
 	s.Nil(client)
 }
@@ -89,7 +90,7 @@ func (s *ClientSuite) TestNewClient_Fail_WriteMetadataFilesFailure() {
 	s.NoError(mkdirAll(filepath.Join(dir, defaultBucketName, metadataFilename, "foo")))
 
 	cfg := s.constructConfig(dir)
-	client, err := NewClient(cfg)
+	client, err := NewClient(cfg, bark.NewNopLogger())
 	s.Error(err)
 	s.Nil(client)
 }
@@ -117,7 +118,7 @@ func (s *ClientSuite) TestUpload_Fail_ErrorOnWrite() {
 	client := s.constructClient(dir)
 
 	b := blob.NewBlob([]byte("blob body"), map[string]string{"tagKey": "tagValue"})
-	s.Error(client.Upload(context.Background(), defaultBucketName, key, b))
+	s.Equal(ErrWriteFile, client.Upload(context.Background(), defaultBucketName, key, b))
 }
 
 func (s *ClientSuite) TestDownload_Fail_BucketNotExists() {
@@ -159,8 +160,7 @@ func (s *ClientSuite) TestDownload_Fail_NoPermissions() {
 	os.Chmod(bucketItemPath(dir, defaultBucketName, key.String()), os.FileMode(0000))
 
 	b, err = client.Download(context.Background(), defaultBucketName, key)
-	s.NotEqual(blobstore.ErrBlobNotExists, err)
-	s.Error(err)
+	s.Equal(ErrReadFile, err)
 	s.Nil(b)
 }
 
@@ -175,8 +175,7 @@ func (s *ClientSuite) TestDownload_Fail_BlobFormatInvalid() {
 	s.NoError(writeFile(filepath.Join(dir, defaultBucketName, key.String()), []byte("invalid")))
 
 	b, err := client.Download(context.Background(), defaultBucketName, key)
-	s.NotEqual(blobstore.ErrBlobNotExists, err)
-	s.Error(err)
+	s.Equal(blobstore.ErrBlobDeserialization, err)
 	s.Nil(b)
 }
 
@@ -331,18 +330,6 @@ func (s *ClientSuite) TestBucketMetadata_Fail_BucketNotExists() {
 	s.Nil(metadata)
 }
 
-func (s *ClientSuite) TestBucketMetadata_Fail_CheckFileExistsError() {
-	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_CheckFileExistsError")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	client := s.constructClient(dir)
-	s.NoError(os.Chmod(bucketDirectory(dir, defaultBucketName), os.FileMode(0000)))
-
-	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.Error(err)
-	s.Nil(metadata)
-}
-
 func (s *ClientSuite) TestBucketMetadata_Fail_FileNotExistsError() {
 	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_FileNotExistsError")
 	s.NoError(err)
@@ -351,7 +338,7 @@ func (s *ClientSuite) TestBucketMetadata_Fail_FileNotExistsError() {
 	s.NoError(os.Remove(bucketItemPath(dir, defaultBucketName, metadataFilename)))
 
 	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.Error(err)
+	s.Equal(ErrReadFile, err)
 	s.Nil(metadata)
 }
 
@@ -363,7 +350,7 @@ func (s *ClientSuite) TestBucketMetadata_Fail_InvalidFileFormat() {
 	s.NoError(writeFile(bucketItemPath(dir, defaultBucketName, metadataFilename), []byte("invalid")))
 
 	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.Error(err)
+	s.Equal(ErrBucketConfigDeserialization, err)
 	s.Nil(metadata)
 }
 
@@ -382,7 +369,7 @@ func (s *ClientSuite) TestBucketMetadata_Success() {
 
 func (s *ClientSuite) constructClient(storeDir string) blobstore.Client {
 	cfg := s.constructConfig(storeDir)
-	client, err := NewClient(cfg)
+	client, err := NewClient(cfg, bark.NewNopLogger())
 	s.NoError(err)
 	s.NotNil(client)
 	return client

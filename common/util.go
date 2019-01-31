@@ -71,6 +71,10 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
+	retryBlobstoreClientInitialInterval    = time.Second
+	retryBlobstoreClientMaxInterval        = 10 * time.Second
+	retryBlobstoreClientExpirationInterval = time.Minute
+
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "COMPLETE_RESULT_EXCEEDS_LIMIT"
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -179,6 +183,15 @@ func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
+// CreateBlobstoreClientRetryPolicy creates a retry policy for blobstore client
+func CreateBlobstoreClientRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(retryBlobstoreClientInitialInterval)
+	policy.SetMaximumInterval(retryBlobstoreClientMaxInterval)
+	policy.SetExpirationInterval(retryBlobstoreClientExpirationInterval)
+
+	return policy
+}
+
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
@@ -192,6 +205,22 @@ func IsPersistenceTransientError(err error) bool {
 // IsKafkaTransientError check if the error is a transient kafka error
 func IsKafkaTransientError(err error) bool {
 	return true
+}
+
+// IsBlobstoreTransientError checks if the error is a retryable error.
+func IsBlobstoreTransientError(err error) bool {
+	return !IsBlobstoreNonRetryableError(err)
+}
+
+// IsBlobstoreNonRetryableError checks if the error is a non retryable error.
+func IsBlobstoreNonRetryableError(err error) bool {
+	switch err.(type) {
+	case *workflow.BadRequestError:
+		return true
+	case *workflow.EntityNotExistsError:
+		return true
+	}
+	return false
 }
 
 // IsServiceTransientError checks if the error is a retryable error.
