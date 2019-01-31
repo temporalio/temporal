@@ -1,16 +1,27 @@
-dist: trusty
 sudo: required
 
 language: go
-directories:
-    - $HOME/.glide/cache
+
+dist: trusty
+
 go:
   - 1.11.1
 
-env:
-  global:
-  - ZOOKEEPER_PEERS=localhost:2181
-  - KAFKA_PEERS=localhost:9092
+matrix:
+  include:
+  - go: "1.11.1"
+    services:
+      - mysql
+    env:
+      - TEST_SUITE=unit
+  - go: "1.11.1"
+    env:
+      - TEST_SUITE=integration
+  - go: "1.11.1"
+    env:
+      - TEST_SUITE=xdc
+      - ZOOKEEPER_PEERS=localhost:2181
+      - KAFKA_PEERS=localhost:9092
 
 addons:
   apt:
@@ -22,15 +33,9 @@ addons:
       - python-dev
       - python-pip
 
-services:
-  - mysql
 
 before_install:
   - pip install --user ccm
-  - wget http://www.us.apache.org/dist/kafka/1.1.1/kafka_2.12-1.1.1.tgz -O kafka.tgz
-  - mkdir -p kafka && tar xzf kafka.tgz -C kafka --strip-components 1
-  - nohup bash -c "cd kafka && bin/zookeeper-server-start.sh config/zookeeper.properties &"
-  - nohup bash -c "cd kafka && bin/kafka-server-start.sh config/server.properties &"
 
 install:
   - go get -u github.com/Masterminds/glide
@@ -39,12 +44,15 @@ install:
   - go get github.com/mattn/goveralls
   - go get golang.org/x/tools/cmd/cover
   - ccm create test -v 3.9 -n 1 -s
+  - if [ "$TEST_SUITE" == "xdc" ]; then bash ./scripts/travis/install-xdc-deps.sh ; fi
 
 before_script:
-  - mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'uber'@'localhost' IDENTIFIED BY 'uber';"
+  - if [ "$TEST_SUITE" == "unit" ]; then bash ./scripts/travis/setup-mysql.sh ; fi
 
 script:
-  - travis_wait 40 make cover_ci
+  - if [ "$TEST_SUITE" == "unit" ]; then travis_wait 20 make cover_ci ; else echo 'skipping unit tests'; fi
+  - if [ "$TEST_SUITE" == "integration" ]; then travis_wait 20 make cover_integration_ci ; else echo 'skipping integration tests'; fi
+  - if [ "$TEST_SUITE" == "xdc" ]; then travis_wait 20 make cover_xdc_ci ; else echo 'skipping xdc tests'; fi
 
 after_success:
   - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)

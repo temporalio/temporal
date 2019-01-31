@@ -129,16 +129,6 @@ cover_profile: clean bins_nothrift
 	@mkdir -p $(BUILD)
 	@echo "mode: atomic" > $(BUILD)/cover.out
 
-	@echo Running integration test
-	@mkdir -p $(BUILD)/$(INTEG_TEST_DIR)
-	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
-
-	@echo Running integration test for cross dc
-	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_DIR)
-	@time go test $(INTEG_TEST_XDC_ROOT) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
-
 	@echo Running package tests:
 	@for dir in $(PKG_TEST_DIRS); do \
 		mkdir -p $(BUILD)/"$$dir"; \
@@ -146,10 +136,34 @@ cover_profile: clean bins_nothrift
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out; \
 	done;
 
+cover_integration_profile: clean bins_nothrift
+	@mkdir -p $(BUILD)
+	@echo "mode: atomic" > $(BUILD)/cover.out
+
+	@echo Running integration test
+	@mkdir -p $(BUILD)/$(INTEG_TEST_DIR)
+	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
+	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
+
+cover_xdc_profile: clean bins_nothrift
+	@mkdir -p $(BUILD)
+	@echo "mode: atomic" > $(BUILD)/cover.out
+
+	@echo Running integration test for cross dc
+	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_DIR)
+	@time go test $(INTEG_TEST_XDC_ROOT) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
+	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
+
 cover: cover_profile
 	go tool cover -html=$(BUILD)/cover.out;
 
 cover_ci: cover_profile
+	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
+
+cover_integration_ci: cover_integration_profile
+	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
+
+cover_xdc_ci: cover_xdc_profile
 	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
 
 lint: dep-ensured
