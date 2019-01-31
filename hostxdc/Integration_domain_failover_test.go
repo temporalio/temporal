@@ -440,6 +440,17 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		return []byte("Activity Result."), false, nil
 	}
 
+	queryType := "test-query"
+	queryHandler := func(task *workflow.PollForDecisionTaskResponse) ([]byte, error) {
+		s.NotNil(task.Query)
+		s.NotNil(task.Query.QueryType)
+		if *task.Query.QueryType == queryType {
+			return []byte("query-result"), nil
+		}
+
+		return nil, errors.New("unknown-query-type")
+	}
+
 	poller := host.TaskPoller{
 		Engine:          client1,
 		Domain:          domainName,
@@ -447,6 +458,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
+		QueryHandler:    queryHandler,
 		Logger:          s.logger,
 		T:               s.T(),
 	}
@@ -458,6 +470,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
+		QueryHandler:    queryHandler,
 		Logger:          s.logger,
 		T:               s.T(),
 	}
@@ -466,6 +479,65 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
+
+	type QueryResult struct {
+		Resp *workflow.QueryWorkflowResponse
+		Err  error
+	}
+	queryResultCh := make(chan QueryResult)
+	queryWorkflowFn := func(client wsc.Interface, queryType string) {
+		queryResp, err := client.QueryWorkflow(createContext(), &workflow.QueryWorkflowRequest{
+			Domain: common.StringPtr(domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(*we.RunId),
+			},
+			Query: &workflow.WorkflowQuery{
+				QueryType: common.StringPtr(queryType),
+			},
+		})
+		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
+	}
+
+	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
+	go queryWorkflowFn(client1, queryType)
+	// process that query task, which should respond via RespondQueryTaskCompleted
+	for {
+		// loop until process the query task
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessQueryTask: %v", err)
+		s.Nil(errInner)
+		if isQueryTask {
+			break
+		}
+	}
+	// wait until query result is ready
+	queryResult := <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	queryResultString := string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
+
+	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
+	go queryWorkflowFn(client2, queryType)
+	// process that query task, which should respond via RespondQueryTaskCompleted
+	for {
+		// loop until process the query task
+		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessQueryTask: %v", err)
+		s.Nil(errInner)
+		if isQueryTask {
+			break
+		}
+	}
+	// wait until query result is ready
+	queryResult = <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	queryResultString = string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
 
 	// update domain to fail over
 	updateReq := &workflow.UpdateDomainRequest{
@@ -503,6 +575,47 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 	s.Nil(err)
 	s.True(eventsReplicated)
+
+	// Make sure query is still working after failover
+	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
+	go queryWorkflowFn(client1, queryType)
+	// process that query task, which should respond via RespondQueryTaskCompleted
+	for {
+		// loop until process the query task
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(errInner)
+		if isQueryTask {
+			break
+		}
+	}
+	// wait until query result is ready
+	queryResult = <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	queryResultString = string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
+
+	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
+	go queryWorkflowFn(client2, queryType)
+	// process that query task, which should respond via RespondQueryTaskCompleted
+	for {
+		// loop until process the query task
+		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(errInner)
+		if isQueryTask {
+			break
+		}
+	}
+	// wait until query result is ready
+	queryResult = <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	queryResultString = string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
 
 	// make process in cluster 2
 	err = poller2.PollAndProcessActivityTask(false)

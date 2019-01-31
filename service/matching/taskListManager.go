@@ -231,6 +231,7 @@ func newTaskListManagerWithRateLimiter(
 		metricsClient:       e.metricsClient,
 		taskAckManager:      newAckManager(e.logger),
 		tasksForPoll:        make(chan *getTaskResult),
+		queryTasksForPoll:   make(chan *getTaskResult),
 		config:              config,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
@@ -280,7 +281,11 @@ type taskListManagerImpl struct {
 	// only if there is waiting poll that consumes from it. Tasks in taskBuffer will blocking-add to
 	// this channel
 	tasksForPoll chan *getTaskResult
-	notifyCh     chan struct{} // Used as signal to notify pump of new tasks
+	// queryTasksForPoll is used for delivering query tasks to pollers.
+	// It must be unbuffered as query tasks are always Sync Matched.  We use a separate channel for query tasks because
+	// unlike activity/decision tasks, query tasks are enabled for dispatch on both active and standby clusters
+	queryTasksForPoll chan *getTaskResult
+	notifyCh          chan struct{} // Used as signal to notify pump of new tasks
 	// Note: We need two shutdown channels so we can stop task pump independently of the deliverBuffer
 	// loop in getTasksPump in unit tests
 	shutdownCh              chan struct{}  // Delivers stop to the pump that populates taskBuffer
@@ -404,7 +409,7 @@ func (c *taskListManagerImpl) SyncMatchQueryTask(ctx context.Context, queryTask 
 
 	request := &getTaskResult{task: taskInfo, C: make(chan *syncMatchResponse, 1), queryTask: queryTask}
 	select {
-	case c.tasksForPoll <- request:
+	case c.queryTasksForPoll <- request:
 		<-request.C
 		return nil
 	case <-ctx.Done():
@@ -558,6 +563,12 @@ func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, erro
 
 	select {
 	case result := <-tasksForPoll:
+		if result.syncMatch {
+			c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
+		}
+		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
+		return result, nil
+	case result := <-c.queryTasksForPoll:
 		if result.syncMatch {
 			c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
 		}
