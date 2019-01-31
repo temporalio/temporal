@@ -351,7 +351,6 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, 
 	if retError != nil {
 		return
 	}
-
 	// replay received signals back to mutableState/history:
 	retError = w.replayReceivedSignals(ctx, receivedSignals, continueRunID, newMutableState, currMutableState)
 	if retError != nil {
@@ -372,7 +371,6 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, 
 		RecordVisibility: true,
 	})
 
-	setTaskInfo(newMutableState.GetCurrentVersion(), time.Now(), transferTasks, timerTasks)
 	// fork a new history branch
 	forkResp, retError := w.eng.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseMutableState.GetCurrentBranch(),

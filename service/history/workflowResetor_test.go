@@ -747,7 +747,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(appendV1Resp, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", mock.Anything).Return("active")
 	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)

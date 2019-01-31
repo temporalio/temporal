@@ -192,7 +192,20 @@ func (c *workflowExecutionContextImpl) resetMutableState(prevRunID string, reset
 // 1. append history to new run
 // 2. append history to current run if current run is not closed
 // 3. update mutableState(terminate current run if not closed) and create new run
-func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task, newMutableState mutableState, transferTasks, timerTasks, replicationTasks []persistence.Task, baseRunID string, baseRunNextEventID, prevRunVersion int64) (retError error) {
+func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task,
+	newMutableState mutableState, newTransferTasks, newTimerTasks, replicationTasks []persistence.Task, baseRunID string, baseRunNextEventID, prevRunVersion int64) (retError error) {
+
+	now := time.Now()
+	currTransferTasks := []persistence.Task{}
+	currTimerTasks := []persistence.Task{}
+	if closeTask != nil {
+		currTransferTasks = append(currTransferTasks, closeTask)
+	}
+	if cleanupTask != nil {
+		currTimerTasks = append(currTimerTasks, cleanupTask)
+	}
+	setTaskInfo(currMutableState.GetCurrentVersion(), now, currTransferTasks, currTimerTasks)
+	setTaskInfo(newMutableState.GetCurrentVersion(), now, newTransferTasks, newTimerTasks)
 
 	transactionID, retError := c.shard.GetNextTransferTaskID()
 	if retError != nil {
@@ -240,14 +253,6 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState m
 		}
 	}
 
-	var currTransferTasks, currTimerTasks []persistence.Task
-	if closeTask != nil {
-		currTransferTasks = []persistence.Task{closeTask}
-	}
-	if cleanupTask != nil {
-		currTimerTasks = []persistence.Task{cleanupTask}
-	}
-
 	// NOTE: workflow_state in current record is either completed(2) or running(1), there is no 0(created)
 	prevRunState := persistence.WorkflowStateCompleted
 	if updateCurr {
@@ -270,8 +275,8 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState m
 
 		InsertExecutionInfo:    newMutableState.GetExecutionInfo(),
 		InsertReplicationState: newMutableState.GetReplicationState(),
-		InsertTransferTasks:    transferTasks,
-		InsertTimerTasks:       timerTasks,
+		InsertTransferTasks:    newTransferTasks,
+		InsertTimerTasks:       newTimerTasks,
 		InsertReplicationTasks: replicationTasks,
 
 		InsertTimerInfos:         snapshotRequest.InsertTimerInfos,
