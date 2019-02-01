@@ -150,10 +150,10 @@ CREATE TABLE tasks (
   run_id CHAR(64) NOT NULL,
   schedule_id BIGINT NOT NULL,
   task_list_name VARCHAR(255) NOT NULL,
-  task_list_type TINYINT NOT NULL,
+  task_type TINYINT NOT NULL, -- {Activity, Decision}
   task_id BIGINT NOT NULL,
   expiry_ts TIMESTAMP(3) NOT NULL,
-  PRIMARY KEY (shard_id, domain_id, task_list_name, task_list_type, task_id)
+  PRIMARY KEY (shard_id, domain_id, task_list_name, task_type, task_id)
 );
 
 CREATE TABLE task_lists (

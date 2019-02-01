@@ -26,66 +26,23 @@ import (
 	"database/sql"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/sql/storage"
+	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 	"github.com/uber/cadence/common/service/config"
 )
 
-type (
-	sqlHistoryManager struct {
-		sqlStore
-		shardID int
-	}
-
-	eventsRow struct {
-		DomainID     string
-		WorkflowID   string
-		RunID        string
-		FirstEventID int64
-		BatchVersion int64
-		RangeID      int64
-		TxID         int64
-		Data         []byte
-		DataEncoding string
-	}
-)
-
-const (
-	appendHistorySQLQuery = `INSERT INTO events (` +
-		`domain_id,workflow_id,run_id,first_event_id,batch_version,range_id,tx_id,data,data_encoding)` +
-		`VALUES (:domain_id,:workflow_id,:run_id,:first_event_id,:batch_version,:range_id,:tx_id,:data,:data_encoding);`
-
-	overwriteHistorySQLQuery = `UPDATE events
-SET
-batch_version = :batch_version,
-range_id = :range_id,
-tx_id = :tx_id,
-data = :data,
-data_encoding = :data_encoding
-WHERE
-domain_id = :domain_id AND 
-workflow_id = :workflow_id AND 
-run_id = :run_id AND 
-first_event_id = :first_event_id`
-
-	getWorkflowExecutionHistorySQLQuery = `SELECT first_event_id, batch_version, data, data_encoding ` +
-		`FROM events ` +
-		`WHERE domain_id = ? AND workflow_id = ? AND run_id = ? AND first_event_id >= ? AND first_event_id < ? ` +
-		`ORDER BY first_event_id LIMIT ?`
-
-	deleteWorkflowExecutionHistorySQLQuery = `DELETE FROM events WHERE domain_id = ? AND workflow_id = ? AND run_id = ?`
-
-	lockEventSQLQuery = `SELECT range_id, tx_id FROM events ` +
-		`WHERE domain_id = ? AND workflow_id = ? AND run_id = ? AND first_event_id = ? ` +
-		`FOR UPDATE`
-)
+type sqlHistoryManager struct {
+	sqlStore
+	shardID int
+}
 
 // newHistoryPersistence creates an instance of HistoryManager
 func newHistoryPersistence(cfg config.SQL, logger bark.Logger) (p.HistoryStore, error) {
-	var db, err = newConnection(cfg)
+	var db, err = storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +55,7 @@ func newHistoryPersistence(cfg config.SQL, logger bark.Logger) (p.HistoryStore, 
 }
 
 func (m *sqlHistoryManager) AppendHistoryEvents(request *p.InternalAppendHistoryEventsRequest) error {
-	arg := &eventsRow{
+	row := &sqldb.EventsRow{
 		DomainID:     request.DomainID,
 		WorkflowID:   *request.Execution.WorkflowId,
 		RunID:        *request.Execution.RunId,
@@ -110,9 +67,10 @@ func (m *sqlHistoryManager) AppendHistoryEvents(request *p.InternalAppendHistory
 		DataEncoding: string(request.Events.Encoding),
 	}
 	if request.Overwrite {
-		return m.overWriteHistoryEvents(request, arg)
+		return m.overWriteHistoryEvents(request, row)
 	}
-	if _, err := m.db.NamedExec(appendHistorySQLQuery, arg); err != nil {
+	_, err := m.db.InsertIntoEvents(row)
+	if err != nil {
 		if sqlErr, ok := err.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryEvents: event already exist: %v", err)}
 		}
@@ -135,14 +93,14 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.InternalGetWo
 		offset = newOffset
 	}
 
-	var rows []eventsRow
-	err := m.db.Select(&rows, getWorkflowExecutionHistorySQLQuery,
-		request.DomainID,
-		request.Execution.WorkflowId,
-		request.Execution.RunId,
-		offset+1,
-		request.NextEventID,
-		request.PageSize)
+	rows, err := m.db.SelectFromEvents(&sqldb.EventsFilter{
+		DomainID:     request.DomainID,
+		WorkflowID:   *request.Execution.WorkflowId,
+		RunID:        *request.Execution.RunId,
+		FirstEventID: common.Int64Ptr(offset + 1),
+		NextEventID:  &request.NextEventID,
+		PageSize:     &request.PageSize,
+	})
 
 	// TODO: Ensure that no last empty page is requested
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
@@ -185,7 +143,9 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.InternalGetWo
 }
 
 func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWorkflowExecutionHistoryRequest) error {
-	if _, err := m.db.Exec(deleteWorkflowExecutionHistorySQLQuery, request.DomainID, request.Execution.WorkflowId, request.Execution.RunId); err != nil {
+	_, err := m.db.DeleteFromEvents(&sqldb.EventsFilter{
+		DomainID: request.DomainID, WorkflowID: *request.Execution.WorkflowId, RunID: *request.Execution.RunId})
+	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteWorkflowExecutionHistory: %v", err),
 		}
@@ -193,12 +153,12 @@ func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWork
 	return nil
 }
 
-func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHistoryEventsRequest, row *eventsRow) error {
-	return m.txExecute("AppendHistoryEvents", func(tx *sqlx.Tx) error {
+func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHistoryEventsRequest, row *sqldb.EventsRow) error {
+	return m.txExecute("AppendHistoryEvents", func(tx sqldb.Tx) error {
 		if err := lockEventForUpdate(tx, request); err != nil {
 			return err
 		}
-		result, err := tx.NamedExec(overwriteHistorySQLQuery, row)
+		result, err := tx.UpdateEvents(row)
 		if err != nil {
 			return err
 		}
@@ -213,9 +173,13 @@ func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHist
 	})
 }
 
-func lockEventForUpdate(tx *sqlx.Tx, req *p.InternalAppendHistoryEventsRequest) error {
-	var row eventsRow
-	err := tx.Get(&row, lockEventSQLQuery, req.DomainID, *req.Execution.WorkflowId, *req.Execution.RunId, req.FirstEventID)
+func lockEventForUpdate(tx sqldb.Tx, req *p.InternalAppendHistoryEventsRequest) error {
+	row, err := tx.LockEvents(&sqldb.EventsFilter{
+		DomainID:     req.DomainID,
+		WorkflowID:   *req.Execution.WorkflowId,
+		RunID:        *req.Execution.RunId,
+		FirstEventID: &req.FirstEventID,
+	})
 	if err != nil {
 		return err
 	}

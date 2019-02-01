@@ -27,15 +27,15 @@ import (
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
 // TODO: Rename all SQL Managers to Stores
 type sqlStore struct {
-	db     *sqlx.DB
+	db     sqldb.Interface
 	logger bark.Logger
 }
 
@@ -49,8 +49,8 @@ func (m *sqlStore) Close() {
 	}
 }
 
-func (m *sqlStore) txExecute(operation string, f func(tx *sqlx.Tx) error) error {
-	tx, err := m.db.Beginx()
+func (m *sqlStore) txExecute(operation string, f func(tx sqldb.Tx) error) error {
+	tx, err := m.db.BeginTx()
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err),

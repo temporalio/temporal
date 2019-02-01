@@ -27,100 +27,21 @@ import (
 
 	"github.com/uber-common/bark"
 
-	"github.com/jmoiron/sqlx"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/sql/storage"
+	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 	"github.com/uber/cadence/common/service/config"
 )
 
-type (
-	sqlShardManager struct {
-		sqlStore
-		currentClusterName string
-	}
-
-	shardsRow struct {
-		ShardID                   int64
-		Owner                     string
-		RangeID                   int64
-		StolenSinceRenew          int64
-		UpdatedAt                 time.Time
-		ReplicationAckLevel       int64
-		TransferAckLevel          int64
-		TimerAckLevel             time.Time
-		ClusterTransferAckLevel   []byte
-		ClusterTimerAckLevel      []byte
-		DomainNotificationVersion int64
-	}
-)
-
-const (
-	createShardSQLQuery = `INSERT INTO shards 
-(shard_id, 
-owner, 
-range_id,
-stolen_since_renew,
-updated_at,
-replication_ack_level,
-transfer_ack_level,
-timer_ack_level,
-cluster_transfer_ack_level,
-cluster_timer_ack_level,
-domain_notification_version)
-VALUES
-(:shard_id, 
-:owner, 
-:range_id,
-:stolen_since_renew,
-:updated_at,
-:replication_ack_level,
-:transfer_ack_level,
-:timer_ack_level,
-:cluster_transfer_ack_level,
-:cluster_timer_ack_level,
-:domain_notification_version)`
-
-	getShardSQLQuery = `SELECT
-shard_id,
-owner,
-range_id,
-stolen_since_renew,
-updated_at,
-replication_ack_level,
-transfer_ack_level,
-timer_ack_level,
-cluster_transfer_ack_level,
-cluster_timer_ack_level,
-domain_notification_version
-FROM shards WHERE
-shard_id = ?
-`
-
-	updateShardSQLQuery = `UPDATE
-shards 
-SET
-shard_id = :shard_id,
-owner = :owner,
-range_id = :range_id,
-stolen_since_renew = :stolen_since_renew,
-updated_at = :updated_at,
-replication_ack_level = :replication_ack_level,
-transfer_ack_level = :transfer_ack_level,
-timer_ack_level = :timer_ack_level,
-cluster_transfer_ack_level = :cluster_transfer_ack_level,
-cluster_timer_ack_level = :cluster_timer_ack_level,
-domain_notification_version = :domain_notification_version
-WHERE
-shard_id = :shard_id
-`
-
-	lockShardSQLQuery     = `SELECT range_id FROM shards WHERE shard_id = ? FOR UPDATE`
-	readLockShardSQLQuery = `SELECT range_id FROM shards WHERE shard_id = ? LOCK IN SHARE MODE`
-)
+type sqlShardManager struct {
+	sqlStore
+	currentClusterName string
+}
 
 // newShardPersistence creates an instance of ShardManager
 func newShardPersistence(cfg config.SQL, currentClusterName string, log bark.Logger) (persistence.ShardManager, error) {
-	var db, err = newConnection(cfg)
+	var db, err = storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +55,6 @@ func newShardPersistence(cfg config.SQL, currentClusterName string, log bark.Log
 }
 
 func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) error {
-	var row *shardsRow
 	if _, err := m.GetShard(&persistence.GetShardRequest{
 		ShardID: request.ShardInfo.ShardID,
 	}); err == nil {
@@ -150,7 +70,7 @@ func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) e
 		}
 	}
 
-	if _, err := m.db.NamedExec(createShardSQLQuery, &row); err != nil {
+	if _, err := m.db.InsertIntoShards(row); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err),
 		}
@@ -160,8 +80,8 @@ func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) e
 }
 
 func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persistence.GetShardResponse, error) {
-	var row shardsRow
-	if err := m.db.Get(&row, getShardSQLQuery, request.ShardID); err != nil {
+	row, err := m.db.SelectFromShards(&sqldb.ShardsFilter{ShardID: int64(request.ShardID)})
+	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &workflow.EntityNotExistsError{
 				Message: fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err),
@@ -220,11 +140,11 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
 		}
 	}
-	return m.txExecute("UpdateShard", func(tx *sqlx.Tx) error {
+	return m.txExecute("UpdateShard", func(tx sqldb.Tx) error {
 		if err := lockShard(tx, request.ShardInfo.ShardID, request.PreviousRangeID); err != nil {
 			return err
 		}
-		result, err := tx.NamedExec(updateShardSQLQuery, &row)
+		result, err := tx.UpdateShards(row)
 		if err != nil {
 			return err
 		}
@@ -240,11 +160,8 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 }
 
 // initiated by the owning shard
-func lockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
-	var rangeID int64
-
-	err := tx.Get(&rangeID, lockShardSQLQuery, shardID)
-
+func lockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
+	rangeID, err := tx.WriteLockShards(&sqldb.ShardsFilter{ShardID: int64(shardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &workflow.InternalServiceError{
@@ -256,7 +173,7 @@ func lockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
 		}
 	}
 
-	if rangeID != oldRangeID {
+	if int64(rangeID) != oldRangeID {
 		return &persistence.ShardOwnershipLostError{
 			ShardID: shardID,
 			Msg:     fmt.Sprintf("Failed to update shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
@@ -267,11 +184,8 @@ func lockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
 }
 
 // initiated by the owning shard
-func readLockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
-	var rangeID int64
-
-	err := tx.Get(&rangeID, readLockShardSQLQuery, shardID)
-
+func readLockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
+	rangeID, err := tx.ReadLockShards(&sqldb.ShardsFilter{ShardID: int64(shardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &workflow.InternalServiceError{
@@ -283,7 +197,7 @@ func readLockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
 		}
 	}
 
-	if rangeID != oldRangeID {
+	if int64(rangeID) != oldRangeID {
 		return &persistence.ShardOwnershipLostError{
 			ShardID: shardID,
 			Msg:     fmt.Sprintf("Failed to lock shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
@@ -292,7 +206,7 @@ func readLockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
 	return nil
 }
 
-func shardInfoToShardsRow(s persistence.ShardInfo) (*shardsRow, error) {
+func shardInfoToShardsRow(s persistence.ShardInfo) (*sqldb.ShardsRow, error) {
 	clusterTransferAckLevel, err := gobSerialize(s.ClusterTransferAckLevel)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -307,7 +221,7 @@ func shardInfoToShardsRow(s persistence.ShardInfo) (*shardsRow, error) {
 		}
 	}
 
-	return &shardsRow{
+	return &sqldb.ShardsRow{
 		ShardID:                   int64(s.ShardID),
 		Owner:                     s.Owner,
 		RangeID:                   s.RangeID,

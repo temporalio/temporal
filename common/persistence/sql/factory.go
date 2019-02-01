@@ -24,9 +24,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/sql/storage"
+	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -40,7 +41,7 @@ type (
 		execStoreFactory *executionStoreFactory
 	}
 	executionStoreFactory struct {
-		db     *sqlx.DB
+		db     sqldb.Interface
 		logger bark.Logger
 	}
 )
@@ -128,7 +129,7 @@ func (f *Factory) newExecutionStoreFactory() (*executionStoreFactory, error) {
 }
 
 func newExecutionStoreFactory(cfg config.SQL, logger bark.Logger) (*executionStoreFactory, error) {
-	db, err := newConnection(cfg)
+	db, err := storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err
 	}

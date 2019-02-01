@@ -24,57 +24,19 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/jmoiron/sqlx"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
-const (
-	deleteSignalsRequestedSetSQLQuery = `DELETE FROM signals_requested_sets
-WHERE
-shard_id = :shard_id AND
-domain_id = :domain_id AND
-workflow_id = :workflow_id AND
-run_id = :run_id
-`
-
-	addToSignalsRequestedSetSQLQuery = `INSERT IGNORE INTO signals_requested_sets
-(shard_id, domain_id, workflow_id, run_id, signal_id) VALUES
-(:shard_id, :domain_id, :workflow_id, :run_id, :signal_id)`
-
-	removeFromSignalsRequestedSetSQLQuery = `DELETE FROM signals_requested_sets
-WHERE 
-shard_id = :shard_id AND
-domain_id = :domain_id AND
-workflow_id = :workflow_id AND
-run_id = :run_id AND
-signal_id = :signal_id`
-
-	getSignalsRequestedSetSQLQuery = `SELECT signal_id FROM signals_requested_sets WHERE
-shard_id = ? AND
-domain_id = ? AND
-workflow_id = ? AND
-run_id = ?`
-)
-
-type (
-	signalsRequestedSetsRow struct {
-		ShardID    int64
-		DomainID   string
-		WorkflowID string
-		RunID      string
-		SignalID   string
-	}
-)
-
-func updateSignalsRequested(tx *sqlx.Tx,
+func updateSignalsRequested(tx sqldb.Tx,
 	signalRequestedIDs []string,
 	deleteSignalRequestID string,
 	shardID int,
 	domainID, workflowID, runID string) error {
 	if len(signalRequestedIDs) > 0 {
-		signalsRequestedSetsRows := make([]signalsRequestedSetsRow, len(signalRequestedIDs))
+		rows := make([]sqldb.SignalsRequestedSetsRow, len(signalRequestedIDs))
 		for i, v := range signalRequestedIDs {
-			signalsRequestedSetsRows[i] = signalsRequestedSetsRow{
+			rows[i] = sqldb.SignalsRequestedSetsRow{
 				ShardID:    int64(shardID),
 				DomainID:   domainID,
 				WorkflowID: workflowID,
@@ -82,15 +44,7 @@ func updateSignalsRequested(tx *sqlx.Tx,
 				SignalID:   v,
 			}
 		}
-
-		query, args, err := tx.BindNamed(addToSignalsRequestedSetSQLQuery, signalsRequestedSetsRows)
-		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update signals requested. Failed to bind query. Error: %v", err),
-			}
-		}
-
-		if _, err := tx.Exec(query, args...); err != nil {
+		if _, err := tx.InsertIntoSignalsRequestedSets(rows); err != nil {
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err),
 			}
@@ -98,12 +52,12 @@ func updateSignalsRequested(tx *sqlx.Tx,
 	}
 
 	if deleteSignalRequestID != "" {
-		if _, err := tx.NamedExec(removeFromSignalsRequestedSetSQLQuery, &signalsRequestedSetsRow{
+		if _, err := tx.DeleteFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
 			ShardID:    int64(shardID),
 			DomainID:   domainID,
 			WorkflowID: workflowID,
 			RunID:      runID,
-			SignalID:   deleteSignalRequestID,
+			SignalID:   &deleteSignalRequestID,
 		}); err != nil {
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err),
@@ -114,31 +68,31 @@ func updateSignalsRequested(tx *sqlx.Tx,
 	return nil
 }
 
-func getSignalsRequested(tx *sqlx.Tx,
+func getSignalsRequested(tx sqldb.Tx,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[string]struct{}, error) {
-	var signals []string
-	if err := tx.Select(&signals, getSignalsRequestedSetSQLQuery,
-		shardID,
-		domainID,
-		workflowID,
-		runID); err != nil && err != sql.ErrNoRows {
+	rows, err := tx.SelectFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
+		ShardID:    int64(shardID),
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      runID,
+	})
+	if err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get signals requested. Error: %v", err),
 		}
 	}
-
 	var ret = make(map[string]struct{})
-	for _, s := range signals {
-		ret[s] = struct{}{}
+	for _, s := range rows {
+		ret[s.SignalID] = struct{}{}
 	}
 	return ret, nil
 }
 
-func deleteSignalsRequestedSet(tx *sqlx.Tx, shardID int, domainID, workflowID, runID string) error {
-	if _, err := tx.NamedExec(deleteSignalsRequestedSetSQLQuery, &signalsRequestedSetsRow{
+func deleteSignalsRequestedSet(tx sqldb.Tx, shardID int, domainID, workflowID, runID string) error {
+	if _, err := tx.DeleteFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,

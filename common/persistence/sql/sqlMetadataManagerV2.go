@@ -30,151 +30,20 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/uber/cadence/common/persistence/sql/storage"
+	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 	"github.com/uber/cadence/common/service/config"
 )
 
-type (
-	// Implements MetadataManager
-	sqlMetadataManagerV2 struct {
-		sqlStore
-		activeClusterName string
-	}
-
-	domainCommon struct {
-		// TODO Extracting the fields from DomainInfo since we don't support scanning into DomainInfo.Data
-		ID          string
-		Name        string
-		Status      int
-		Description string
-		OwnerEmail  string
-		Data        *[]byte
-
-		persistence.DomainConfig
-		// TODO Extracting the fields from DomainReplicationConfig since we don't currently support
-		// TODO scanning into DomainReplicationConfig.Clusters
-		//DomainReplicationConfig: *(request.ReplicationConfig),
-		ActiveClusterName string
-		Clusters          *[]byte
-		ConfigVersion     int64
-		FailoverVersion   int64
-	}
-
-	flatUpdateDomainRequest struct {
-		domainCommon
-		FailoverNotificationVersion int64
-		NotificationVersion         int64
-	}
-
-	domainRow struct {
-		domainCommon
-		FailoverNotificationVersion int64
-		NotificationVersion         int64
-		IsGlobalDomain              bool
-	}
-)
-
-const (
-	createDomainSQLQuery = `INSERT INTO domains (
-		id,
-		name,
-		retention, 
-		emit_metric,
-		archival_bucket,
-		archival_status,
-		config_version,
-		status, 
-		description, 
-		owner_email,
-		failover_version, 
-		is_global_domain,
-		active_cluster_name, 
-		clusters, 
-		notification_version,
-		failover_notification_version,
-		data
-		)
-		VALUES(
-		:id,
-		:name,
-		:retention, 
-		:emit_metric,
-		:archival_bucket,
-		:archival_status,
-		:config_version,
-		:status, 
-		:description, 
-		:owner_email,
-		:failover_version, 
-		:is_global_domain,
-		:active_cluster_name, 
-		:clusters,
-		:notification_version,
-		:failover_notification_version,
-		:data
-		)`
-
-	getDomainPart = `SELECT
-		id,
-		retention, 
-		emit_metric,
-		archival_bucket,
-		archival_status,
-		config_version,
-		name, 
-		status, 
-		description, 
-		owner_email,
-		failover_version, 
-		is_global_domain,
-		active_cluster_name, 
-		clusters,
-		notification_version,
-		failover_notification_version,
-		data
-FROM domains
-`
-	getDomainByIDSQLQuery = getDomainPart +
-		`WHERE id = :id`
-	getDomainByNameSQLQuery = getDomainPart +
-		`WHERE name = :name`
-
-	updateDomainSQLQuery = `UPDATE domains
-SET
-		retention = :retention, 
-		emit_metric = :emit_metric,
-		archival_bucket = :archival_bucket,
-		archival_status = :archival_status,
-		config_version = :config_version,
-		status = :status, 
-		description = :description, 
-		owner_email = :owner_email,
-		failover_version = :failover_version, 
-		active_cluster_name = :active_cluster_name,  
-		clusters = :clusters,
-		notification_version = :notification_version,
-		failover_notification_version = :failover_notification_version,
-		data = :data
-WHERE
-name = :name AND
-id = :id`
-
-	deleteDomainByIDSQLQuery   = `DELETE FROM domains WHERE id = :id`
-	deleteDomainByNameSQLQuery = `DELETE FROM domains WHERE name = :name`
-
-	listDomainsSQLQuery = getDomainPart
-
-	getMetadataSQLQuery    = `SELECT notification_version FROM domain_metadata`
-	lockMetadataSQLQuery   = `SELECT notification_version FROM domain_metadata FOR UPDATE`
-	updateMetadataSQLQuery = `UPDATE domain_metadata
-SET notification_version = :notification_version + 1 
-WHERE notification_version = :notification_version`
-)
+type sqlMetadataManagerV2 struct {
+	sqlStore
+	activeClusterName string
+}
 
 // newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
 func newMetadataPersistenceV2(cfg config.SQL, currentClusterName string,
 	logger bark.Logger) (persistence.MetadataManager, error) {
-	var db, err = newConnection(cfg)
+	var db, err = storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -187,11 +56,8 @@ func newMetadataPersistenceV2(cfg config.SQL, currentClusterName string,
 	}, nil
 }
 
-func updateMetadata(tx *sqlx.Tx, oldNotificationVersion int64) error {
-	result, err := tx.NamedExec(updateMetadataSQLQuery,
-		struct {
-			NotificationVersion int64
-		}{oldNotificationVersion})
+func updateMetadata(tx sqldb.Tx, oldNotificationVersion int64) error {
+	result, err := tx.UpdateDomainMetadata(&sqldb.DomainMetadataRow{NotificationVersion: oldNotificationVersion})
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to update domain metadata. Error: %v", err),
@@ -212,9 +78,8 @@ func updateMetadata(tx *sqlx.Tx, oldNotificationVersion int64) error {
 	return nil
 }
 
-func lockMetadata(tx *sqlx.Tx) error {
-	var notificationVersion int
-	err := tx.Get(&notificationVersion, lockMetadataSQLQuery)
+func lockMetadata(tx sqldb.Tx) error {
+	err := tx.LockDomainMetadata()
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to lock domain metadata. Error: %v", err),
@@ -224,7 +89,6 @@ func lockMetadata(tx *sqlx.Tx) error {
 }
 
 func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainRequest) (*persistence.CreateDomainResponse, error) {
-	// Encode request.Info.Data
 	data, err := gobSerialize(request.Info.Data)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -232,7 +96,6 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 		}
 	}
 
-	// Encode request.ReplicationConfig.Clusters
 	clusters, err := gobSerialize(persistence.SerializeClusterConfigs(request.ReplicationConfig.Clusters))
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -246,25 +109,22 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 	}
 
 	var resp *persistence.CreateDomainResponse
-	err = m.txExecute("CreateDomain", func(tx *sqlx.Tx) error {
-		if _, err1 := tx.NamedExec(createDomainSQLQuery, &domainRow{
-			domainCommon: domainCommon{
-				Name:        request.Info.Name,
-				ID:          request.Info.ID,
-				Status:      request.Info.Status,
-				Description: request.Info.Description,
-				OwnerEmail:  request.Info.OwnerEmail,
-				Data:        &data,
-
-				DomainConfig: *(request.Config),
-
-				ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
-				Clusters:          &clusters,
-
-				ConfigVersion:   request.ConfigVersion,
-				FailoverVersion: request.FailoverVersion,
-			},
-
+	err = m.txExecute("CreateDomain", func(tx sqldb.Tx) error {
+		if _, err1 := tx.InsertIntoDomain(&sqldb.DomainRow{
+			Name:                        request.Info.Name,
+			ID:                          request.Info.ID,
+			Status:                      request.Info.Status,
+			Description:                 request.Info.Description,
+			OwnerEmail:                  request.Info.OwnerEmail,
+			Data:                        data,
+			Retention:                   int(request.Config.Retention),
+			EmitMetric:                  request.Config.EmitMetric,
+			ArchivalBucket:              request.Config.ArchivalBucket,
+			ArchivalStatus:              int(request.Config.ArchivalStatus),
+			ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
+			Clusters:                    clusters,
+			ConfigVersion:               request.ConfigVersion,
+			FailoverVersion:             request.FailoverVersion,
 			NotificationVersion:         metadata.NotificationVersion,
 			FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
 			IsGlobalDomain:              request.IsGlobalDomain,
@@ -289,30 +149,24 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 }
 
 func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) (*persistence.GetDomainResponse, error) {
-	var err error
-	var stmt *sqlx.NamedStmt
-
-	if len(request.Name) > 0 {
-		if len(request.ID) > 0 {
-			return nil, &workflow.BadRequestError{
-				Message: "GetDomain operation failed.  Both ID and Name specified in request.",
-			}
+	filter := &sqldb.DomainFilter{}
+	switch {
+	case request.Name != "" && request.ID != "":
+		return nil, &workflow.BadRequestError{
+			Message: "GetDomain operation failed.  Both ID and Name specified in request.",
 		}
-		stmt, err = m.db.PrepareNamed(getDomainByNameSQLQuery)
-	} else if len(request.ID) > 0 {
-		stmt, err = m.db.PrepareNamed(getDomainByIDSQLQuery)
-	} else {
+	case request.Name != "":
+		filter.Name = &request.Name
+	case request.ID != "":
+		filter.ID = &request.ID
+	default:
 		return nil, &workflow.BadRequestError{
 			Message: "GetDomain operation failed.  Both ID and Name are empty.",
 		}
 	}
 
+	rows, err := m.db.SelectFromDomain(filter)
 	if err != nil {
-		return nil, err
-	}
-
-	var result domainRow
-	if err = stmt.Get(&result, request); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			// We did not return in the above for-loop because there were no rows.
@@ -328,11 +182,10 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 			return nil, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("GetDomain operation failed. Error %v", err),
 			}
-
 		}
 	}
 
-	response, err := m.domainRowToGetDomainResponse(&result)
+	response, err := m.domainRowToGetDomainResponse(&rows[0])
 	if err != nil {
 		return nil, err
 	}
@@ -340,10 +193,10 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	return response, nil
 }
 
-func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(result *domainRow) (*persistence.GetDomainResponse, error) {
+func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow) (*persistence.GetDomainResponse, error) {
 	var data map[string]string
-	if result.Data != nil {
-		if err := gobDeserialize(*result.Data, &data); err != nil {
+	if row.Data != nil {
+		if err := gobDeserialize(row.Data, &data); err != nil {
 			return nil, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Error in deserializing DomainInfo.Data. Error: %v", err),
 			}
@@ -351,8 +204,8 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(result *domainRow) (
 	}
 
 	var clusters []map[string]interface{}
-	if result.Clusters != nil {
-		if err := gobDeserialize(*result.Clusters, &clusters); err != nil {
+	if row.Clusters != nil {
+		if err := gobDeserialize(row.Clusters, &clusters); err != nil {
 			return nil, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Error in deserializing ReplicationConfig.Clusters. Error: %v", err),
 			}
@@ -362,23 +215,28 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(result *domainRow) (
 	return &persistence.GetDomainResponse{
 		TableVersion: persistence.DomainTableVersionV2,
 		Info: &persistence.DomainInfo{
-			ID:          result.ID,
-			Name:        result.Name,
-			Status:      result.Status,
-			Description: result.Description,
-			OwnerEmail:  result.OwnerEmail,
+			ID:          row.ID,
+			Name:        row.Name,
+			Status:      row.Status,
+			Description: row.Description,
+			OwnerEmail:  row.OwnerEmail,
 			Data:        data,
 		},
-		Config: &result.DomainConfig,
+		Config: &persistence.DomainConfig{
+			Retention:      int32(row.Retention),
+			EmitMetric:     row.EmitMetric,
+			ArchivalBucket: row.ArchivalBucket,
+			ArchivalStatus: workflow.ArchivalStatus(row.ArchivalStatus),
+		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, result.ActiveClusterName),
+			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, row.ActiveClusterName),
 			Clusters:          persistence.GetOrUseDefaultClusters(m.activeClusterName, persistence.DeserializeClusterConfigs(clusters)),
 		},
-		IsGlobalDomain:              result.IsGlobalDomain,
-		FailoverVersion:             result.FailoverVersion,
-		ConfigVersion:               result.ConfigVersion,
-		NotificationVersion:         result.NotificationVersion,
-		FailoverNotificationVersion: result.FailoverNotificationVersion,
+		IsGlobalDomain:              row.IsGlobalDomain,
+		FailoverVersion:             row.FailoverVersion,
+		ConfigVersion:               row.ConfigVersion,
+		NotificationVersion:         row.NotificationVersion,
+		FailoverNotificationVersion: row.FailoverNotificationVersion,
 	}, nil
 }
 
@@ -397,25 +255,24 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 		}
 	}
 
-	return m.txExecute("UpdateDomain", func(tx *sqlx.Tx) error {
-		result, err := tx.NamedExec(updateDomainSQLQuery, &flatUpdateDomainRequest{
-			domainCommon: domainCommon{
-				Name:        request.Info.Name,
-				ID:          request.Info.ID,
-				Status:      request.Info.Status,
-				Description: request.Info.Description,
-				OwnerEmail:  request.Info.OwnerEmail,
-				Data:        &data,
-
-				DomainConfig: *(request.Config),
-
-				ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
-				Clusters:          &clusters,
-				ConfigVersion:     request.ConfigVersion,
-				FailoverVersion:   request.FailoverVersion,
-			},
-			FailoverNotificationVersion: request.FailoverNotificationVersion,
+	return m.txExecute("UpdateDomain", func(tx sqldb.Tx) error {
+		result, err := tx.UpdateDomain(&sqldb.DomainRow{
+			Name:                        request.Info.Name,
+			ID:                          request.Info.ID,
+			Status:                      request.Info.Status,
+			Description:                 request.Info.Description,
+			OwnerEmail:                  request.Info.OwnerEmail,
+			Data:                        data,
+			Retention:                   int(request.Config.Retention),
+			EmitMetric:                  request.Config.EmitMetric,
+			ArchivalBucket:              request.Config.ArchivalBucket,
+			ArchivalStatus:              int(request.Config.ArchivalStatus),
+			ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
+			Clusters:                    clusters,
+			ConfigVersion:               request.ConfigVersion,
+			FailoverVersion:             request.FailoverVersion,
 			NotificationVersion:         request.NotificationVersion,
+			FailoverNotificationVersion: request.FailoverNotificationVersion,
 		})
 		if err != nil {
 			return err
@@ -435,32 +292,31 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
-	return m.txExecute("DeleteDomain", func(tx *sqlx.Tx) error {
-		_, err := tx.NamedExec(deleteDomainByIDSQLQuery, request)
+	return m.txExecute("DeleteDomain", func(tx sqldb.Tx) error {
+		_, err := tx.DeleteFromDomain(&sqldb.DomainFilter{ID: &request.ID})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomainByName(request *persistence.DeleteDomainByNameRequest) error {
-	return m.txExecute("DeleteDomainByName", func(tx *sqlx.Tx) error {
-		_, err := m.db.NamedExec(deleteDomainByNameSQLQuery, request)
+	return m.txExecute("DeleteDomainByName", func(tx sqldb.Tx) error {
+		_, err := tx.DeleteFromDomain(&sqldb.DomainFilter{Name: &request.Name})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, error) {
-	var notificationVersion int64
-	row := m.db.QueryRow(getMetadataSQLQuery)
-	if err := row.Scan(&notificationVersion); err != nil {
+	row, err := m.db.SelectFromDomainMetadata()
+	if err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("GetMetadata operation failed. Error: %v", err),
 		}
 	}
-	return &persistence.GetMetadataResponse{NotificationVersion: notificationVersion}, nil
+	return &persistence.GetMetadataResponse{NotificationVersion: row.NotificationVersion}, nil
 }
 
 func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.ListDomainsResponse, error) {
-	rows, err := m.db.Queryx(listDomainsSQLQuery)
+	rows, err := m.db.SelectFromDomain(&sqldb.DomainFilter{})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &persistence.ListDomainsResponse{}, nil
@@ -471,30 +327,13 @@ func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsReque
 	}
 
 	var domains []*persistence.GetDomainResponse
-
-	for i := 0; rows.Next(); i++ {
-		var row domainRow
-		if err := rows.StructScan(&row); err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ListDomains operation failed. Failed to scan domain row. Error: %v", err),
-			}
-		}
-
+	for _, row := range rows {
 		resp, err := m.domainRowToGetDomainResponse(&row)
 		if err != nil {
 			return nil, err
 		}
-
 		domains = append(domains, resp)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListDomains operation failed. Failed while iterating through domain rows. Error: %v", err),
-		}
-	}
-
-	return &persistence.ListDomainsResponse{
-		Domains: domains,
-	}, nil
+	return &persistence.ListDomainsResponse{Domains: domains}, nil
 }
