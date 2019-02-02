@@ -833,7 +833,10 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 				p.HeartbeatDetails = ai.Details
 			}
 			// TODO: move to mutable state instead of loading it from event
-			scheduledEvent, _ := msBuilder.GetActivityScheduledEvent(ai.ScheduleID)
+			scheduledEvent, ok := msBuilder.GetActivityScheduledEvent(ai.ScheduleID)
+			if !ok {
+				return nil, &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
+			}
 			p.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
 			p.LastStartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
 			p.Attempt = common.Int32Ptr(ai.Attempt)
@@ -991,9 +994,9 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 				return nil, ErrActivityTaskNotFound
 			}
 
-			scheduledEvent, exists := msBuilder.GetActivityScheduledEvent(scheduleID)
-			if !exists {
-				return nil, &workflow.InternalServiceError{Message: "Corrupted workflow execution state."}
+			scheduledEvent, ok := msBuilder.GetActivityScheduledEvent(scheduleID)
+			if !ok {
+				return nil, &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
 			}
 			response.ScheduledEvent = scheduledEvent
 			response.ScheduledTimestampOfThisAttempt = common.Int64Ptr(ai.ScheduledTime.UnixNano())

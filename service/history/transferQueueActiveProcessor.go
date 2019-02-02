@@ -368,7 +368,10 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	replyToParentWorkflow := msBuilder.HasParentExecution() && executionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew
 	var completionEvent *workflow.HistoryEvent
 	if replyToParentWorkflow {
-		completionEvent, _ = msBuilder.GetCompletionEvent()
+		completionEvent, ok = msBuilder.GetCompletionEvent()
+		if !ok {
+			return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
+		}
 	}
 	parentDomainID := executionInfo.ParentDomainID
 	parentWorkflowID := executionInfo.ParentWorkflowID
@@ -728,8 +731,8 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 	}
 
 	initiatedEvent, ok := msBuilder.GetChildExecutionInitiatedEvent(initiatedEventID)
-	attributes := initiatedEvent.StartChildWorkflowExecutionInitiatedEventAttributes
 	if ok && ci.StartedID == common.EmptyEventID {
+		attributes := initiatedEvent.StartChildWorkflowExecutionInitiatedEventAttributes
 		// Found pending child execution and it is not marked as started
 		// Let's try and start the child execution
 		startRequest := &h.StartWorkflowExecutionRequest{
