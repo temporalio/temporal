@@ -628,7 +628,10 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persiste
 
 		domainID := task.DomainID
 		targetDomainID := domainID
-		scheduledEvent, _ := msBuilder.GetActivityScheduledEvent(scheduledID)
+		scheduledEvent, ok := msBuilder.GetActivityScheduledEvent(scheduledID)
+		if !ok {
+			return &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
+		}
 		if scheduledEvent.ActivityTaskScheduledEventAttributes.Domain != nil {
 			domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.ActivityTaskScheduledEventAttributes.GetDomain())
 			if err != nil {
