@@ -93,7 +93,7 @@ func NewMetadata(
 	defaultArchivalBucket string,
 ) Metadata {
 
-	if len(clusterInitialFailoverVersions) < 0 {
+	if len(clusterInitialFailoverVersions) == 0 {
 		panic("Empty initial failover versions for cluster")
 	} else if len(masterClusterName) == 0 {
 		panic("Master cluster name is empty")
