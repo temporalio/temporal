@@ -309,7 +309,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	addr := c.String(FlagHistoryAddress)
 	printFully := c.Bool(FlagPrintFullyDetail)
 
-	if len(wid) <= 0 && !c.IsSet(FlagShardID) && len(addr) <= 0 {
+	if len(wid) == 0 && !c.IsSet(FlagShardID) && len(addr) == 0 {
 		ErrorAndExit("at least one of them is required to provide to lookup host: workflowID, shardID and host address", nil)
 		return
 	}
