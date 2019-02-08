@@ -21,7 +21,6 @@
 package main
 
 import (
-	"github.com/uber/cadence/common/blobstore/filestore"
 	"log"
 	"time"
 
@@ -37,6 +36,7 @@ import (
 	"github.com/uber/cadence/service/matching"
 	"github.com/uber/cadence/service/worker"
 
+	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/messaging"
 	"go.uber.org/zap"
@@ -137,24 +137,17 @@ func (s *server) startService() common.Daemon {
 
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 	params.ESConfig = &s.cfg.ElasticSearch
-	enableVisibilityToKafka := dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)()
+	params.ESConfig.Enable = dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)() // force override with dynamic config
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, enableVisibilityToKafka)
-	} else if enableVisibilityToKafka {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, enableVisibilityToKafka)
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, params.ESConfig.Enable)
+	} else if params.ESConfig.Enable {
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, params.ESConfig.Enable)
 	} else {
 		params.MessagingClient = nil
 	}
 
-	if params.ClusterMetadata.IsArchivalEnabled() {
-		params.BlobstoreClient, err = filestore.NewClient(&s.cfg.Archival.Filestore, params.Logger)
-		if err != nil {
-			log.Fatalf("error creating blobstore: %v", err)
-		}
-	}
-
 	// enable visibility to kafka and enable visibility to elastic search are using one config
-	if enableVisibilityToKafka {
+	if params.ESConfig.Enable {
 		esClient, err := elasticsearch.NewClient(&s.cfg.ElasticSearch)
 		if err != nil {
 			log.Fatalf("error creating elastic search client: %v", err)
@@ -165,7 +158,13 @@ func (s *server) startService() common.Daemon {
 		if !ok || len(indexName) == 0 {
 			log.Fatalf("elastic search config missing visibility index")
 		}
-		params.ESConfig.Enable = enableVisibilityToKafka // force to use dynamic config
+	}
+
+	if params.ClusterMetadata.IsArchivalEnabled() {
+		params.BlobstoreClient, err = filestore.NewClient(&s.cfg.Archival.Filestore, params.Logger)
+		if err != nil {
+			log.Fatalf("error creating blobstore: %v", err)
+		}
 	}
 
 	params.Logger.Info("Starting service " + s.name)

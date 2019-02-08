@@ -81,51 +81,40 @@ func (c *kafkaClient) NewConsumer(app, consumerName string, concurrency int) (Co
 	topics := c.config.getTopicsForApplication(app)
 	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(topics.Topic)
 	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(topics.DLQTopic)
-	topicList := uberKafka.ConsumerTopicList{
-		uberKafka.ConsumerTopic{
-			Topic: uberKafka.Topic{
-				Name:    topics.Topic,
-				Cluster: kafkaClusterNameForTopic,
-			},
-			DLQ: uberKafka.Topic{
-				Name:    topics.DLQTopic,
-				Cluster: kafkaClusterNameForDLQTopic,
-			},
-		},
-	}
 
-	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
-	consumerConfig.Concurrency = concurrency
-	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
+	topic := createUberKafkaTopic(topics.Topic, kafkaClusterNameForTopic)
+	dlq := createUberKafkaTopic(topics.DLQTopic, kafkaClusterNameForDLQTopic)
 
-	uConsumer, err := c.client.NewConsumer(consumerConfig)
-	if err != nil {
-		return nil, err
-	}
-	return newKafkaConsumer(uConsumer, c.logger), nil
+	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
 }
 
 // NewConsumerWithClusterName is used to create a Kafka consumer for consuming replication tasks
 func (c *kafkaClient) NewConsumerWithClusterName(currentCluster, sourceCluster, consumerName string, concurrency int) (Consumer, error) {
 	currentTopics := c.config.getTopicsForCadenceCluster(currentCluster)
 	sourceTopics := c.config.getTopicsForCadenceCluster(sourceCluster)
+	kafkaClusterNameForTopic := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
+	kafkaClusterNameForDLQTopic := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
 
-	topicKafkaCluster := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
-	dqlTopicKafkaCluster := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
+	topic := createUberKafkaTopic(sourceTopics.Topic, kafkaClusterNameForTopic)
+	dlq := createUberKafkaTopic(currentTopics.DLQTopic, kafkaClusterNameForDLQTopic)
 
+	return c.newConsumerHelper(topic, dlq, consumerName, concurrency)
+}
+
+func createUberKafkaTopic(name, cluster string) *uberKafka.Topic {
+	return &uberKafka.Topic{
+		Name:    name,
+		Cluster: cluster,
+	}
+}
+
+func (c *kafkaClient) newConsumerHelper(topic, dlq *uberKafka.Topic, consumerName string, concurrency int) (Consumer, error) {
 	topicList := uberKafka.ConsumerTopicList{
 		uberKafka.ConsumerTopic{
-			Topic: uberKafka.Topic{
-				Name:    sourceTopics.Topic,
-				Cluster: topicKafkaCluster,
-			},
-			DLQ: uberKafka.Topic{
-				Name:    currentTopics.DLQTopic,
-				Cluster: dqlTopicKafkaCluster,
-			},
+			Topic: *topic,
+			DLQ:   *dlq,
 		},
 	}
-
 	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
 	consumerConfig.Concurrency = concurrency
 	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
@@ -140,7 +129,17 @@ func (c *kafkaClient) NewConsumerWithClusterName(currentCluster, sourceCluster, 
 // NewProducer is used to create a Kafka producer
 func (c *kafkaClient) NewProducer(app string) (Producer, error) {
 	topics := c.config.getTopicsForApplication(app)
-	kafkaClusterName := c.config.getKafkaClusterForTopic(topics.Topic)
+	return c.newProducerHelper(topics.Topic)
+}
+
+// NewProducerWithClusterName is used to create a Kafka producer for shipping replication tasks
+func (c *kafkaClient) NewProducerWithClusterName(sourceCluster string) (Producer, error) {
+	topics := c.config.getTopicsForCadenceCluster(sourceCluster)
+	return c.newProducerHelper(topics.Topic)
+}
+
+func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
+	kafkaClusterName := c.config.getKafkaClusterForTopic(topic)
 	brokers := c.config.getBrokersForKafkaCluster(kafkaClusterName)
 
 	producer, err := sarama.NewSyncProducer(brokers, nil)
@@ -149,21 +148,8 @@ func (c *kafkaClient) NewProducer(app string) (Producer, error) {
 	}
 
 	if c.metricsClient != nil {
-		return NewMetricProducer(NewKafkaProducer(topics.Topic, producer, c.logger), c.metricsClient), nil
+		c.logger.Info("Create producer with metricsClient")
+		return NewMetricProducer(NewKafkaProducer(topic, producer, c.logger), c.metricsClient), nil
 	}
-	return NewKafkaProducer(topics.Topic, producer, c.logger), nil
-}
-
-// NewProducerWithClusterName is used to create a Kafka producer for shipping replication tasks
-func (c *kafkaClient) NewProducerWithClusterName(sourceCluster string) (Producer, error) {
-	topics := c.config.getTopicsForCadenceCluster(sourceCluster)
-	kafkaClusterName := c.config.getKafkaClusterForTopic(topics.Topic)
-	brokers := c.config.getBrokersForKafkaCluster(kafkaClusterName)
-
-	producer, err := sarama.NewSyncProducer(brokers, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewKafkaProducer(topics.Topic, producer, c.logger), nil
+	return NewKafkaProducer(topic, producer, c.logger), nil
 }

@@ -61,6 +61,8 @@ var _ VisibilityManager = (*esVisibilityManager)(nil)
 
 var (
 	errOperationNotSupported = errors.New("operation not support")
+
+	oneMilliSecondInNano = int64(1000)
 )
 
 // NewElasticSearchVisibilityManager create a visibility manager connecting to ElasticSearch
@@ -284,7 +286,10 @@ func (v *esVisibilityManager) getSearchResult(request *ListWorkflowExecutionsReq
 	} else {
 		rangeQuery = elastic.NewRangeQuery(es.CloseTime)
 	}
-	rangeQuery = rangeQuery.Gte(request.EarliestStartTime).Lte(request.LatestStartTime) // TODO rename request fields for close time
+	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
+	rangeQuery = rangeQuery.
+		Gte(request.EarliestStartTime - oneMilliSecondInNano).
+		Lte(request.LatestStartTime + oneMilliSecondInNano) // TODO rename request fields for close time
 
 	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery)
 	if matchQuery != nil {

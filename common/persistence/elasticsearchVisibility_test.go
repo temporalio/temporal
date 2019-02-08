@@ -322,9 +322,12 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	matchDomainQuery := elastic.NewMatchQuery(es.DomainID, request.DomainUUID)
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
 
+	earliestTime := request.EarliestStartTime - oneMilliSecondInNano
+	lastestTime := request.LatestStartTime + oneMilliSecondInNano
+
 	// test for open
 	isOpen := true
-	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
+	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(lastestTime)
 	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery).MustNot(existClosedStatusQuery)
 	params := &es.SearchParameters{
 		Index:    testIndex,
@@ -338,7 +341,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 	// test for closed
 	isOpen = false
-	rangeQuery = elastic.NewRangeQuery(es.CloseTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
+	rangeQuery = elastic.NewRangeQuery(es.CloseTime).Gte(earliestTime).Lte(lastestTime)
 	boolQuery = elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery).Must(existClosedStatusQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc()}
