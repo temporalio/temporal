@@ -229,6 +229,7 @@ type (
 		TaskID       *int64
 		MinTaskID    *int64
 		MaxTaskID    *int64
+		PageSize     *int
 	}
 
 	// TaskListsRow represents a row in task_lists table
@@ -565,7 +566,11 @@ type (
 		WriteLockShards(filter *ShardsFilter) (int, error)
 
 		InsertIntoTasks(rows []TasksRow) (sql.Result, error)
+		// SelectFromTasks retrieves one or more rows from the tasks table
+		// Required filter params - {domainID, tasklistName, taskType, minTaskID, maxTaskID, pageSize}
 		SelectFromTasks(filter *TasksFilter) ([]TasksRow, error)
+		// DeleteFromTasks deletes a row from tasks table
+		// Required filter params - {domainID, tasklistName, taskType, taskID}
 		DeleteFromTasks(filter *TasksFilter) (sql.Result, error)
 
 		InsertIntoTaskLists(row *TaskListsRow) (sql.Result, error)

@@ -58,7 +58,7 @@ task_type = :task_type
 
 	getTaskQry = `SELECT workflow_id, run_id, schedule_id, task_id ` +
 		`FROM tasks ` +
-		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? AND task_id <= ?`
+		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? AND task_id <= ? LIMIT ?`
 
 	createTaskQry = `INSERT INTO ` +
 		`tasks(domain_id, workflow_id, run_id, schedule_id, task_list_name, task_type, task_id, expiry_ts) ` +
@@ -81,7 +81,7 @@ func (mdb *DB) SelectFromTasks(filter *sqldb.TasksFilter) ([]sqldb.TasksRow, err
 	var err error
 	var rows []sqldb.TasksRow
 	err = mdb.conn.Select(&rows, getTaskQry, filter.DomainID,
-		filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID)
+		filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
 	if err != nil {
 		return nil, err
 	}

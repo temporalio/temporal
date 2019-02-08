@@ -137,12 +137,12 @@ func updateActivityInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getActivityInfoMap(tx sqldb.Tx,
+func getActivityInfoMap(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[int64]*persistence.InternalActivityInfo, error) {
-	rows, err := tx.SelectFromActivityInfoMaps(&sqldb.ActivityInfoMapsFilter{
+	rows, err := db.SelectFromActivityInfoMaps(&sqldb.ActivityInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -279,12 +279,12 @@ func updateTimerInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getTimerInfoMap(tx sqldb.Tx,
+func getTimerInfoMap(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[string]*persistence.TimerInfo, error) {
-	rows, err := tx.SelectFromTimerInfoMaps(&sqldb.TimerInfoMapsFilter{
+	rows, err := db.SelectFromTimerInfoMaps(&sqldb.TimerInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -378,12 +378,12 @@ func updateChildExecutionInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getChildExecutionInfoMap(tx sqldb.Tx,
+func getChildExecutionInfoMap(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[int64]*persistence.InternalChildExecutionInfo, error) {
-	rows, err := tx.SelectFromChildExecutionInfoMaps(&sqldb.ChildExecutionInfoMapsFilter{
+	rows, err := db.SelectFromChildExecutionInfoMaps(&sqldb.ChildExecutionInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -490,12 +490,12 @@ func updateRequestCancelInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getRequestCancelInfoMap(tx sqldb.Tx,
+func getRequestCancelInfoMap(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[int64]*persistence.RequestCancelInfo, error) {
-	rows, err := tx.SelectFromRequestCancelInfoMaps(&sqldb.RequestCancelInfoMapsFilter{
+	rows, err := db.SelectFromRequestCancelInfoMaps(&sqldb.RequestCancelInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -592,12 +592,12 @@ func updateSignalInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getSignalInfoMap(tx sqldb.Tx,
+func getSignalInfoMap(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[int64]*persistence.SignalInfo, error) {
-	rows, err := tx.SelectFromSignalInfoMaps(&sqldb.SignalInfoMapsFilter{
+	rows, err := db.SelectFromSignalInfoMaps(&sqldb.SignalInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -700,12 +700,12 @@ func updateBufferedReplicationTasks(tx sqldb.Tx,
 	return nil
 }
 
-func getBufferedReplicationTasks(tx sqldb.Tx,
+func getBufferedReplicationTasks(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[int64]*persistence.InternalBufferedReplicationTask, error) {
-	rows, err := tx.SelectFromBufferedReplicationTasks(&sqldb.BufferedReplicationTaskMapsFilter{
+	rows, err := db.SelectFromBufferedReplicationTasks(&sqldb.BufferedReplicationTaskMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,

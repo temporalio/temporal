@@ -161,32 +161,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.
 }
 
 func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecutionRequest) (*p.InternalGetWorkflowExecutionResponse, error) {
-	tx, err := m.db.BeginTx()
-	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetWorkflowExecution operation failed. Failed to start transaction. Error: %v", err),
-		}
-	}
-	defer tx.Rollback()
-
-	// Have to lock next_event_id so that things aren't modified while we are getting
-	// all the other parts of mutable state
-	// TODO Replace with repeatable read transaction level
-
-	if _, err := lockNextEventID(tx, m.shardID, request.DomainID, *request.Execution.WorkflowId, *request.Execution.RunId); err != nil {
-		switch err.(type) {
-		case *workflow.EntityNotExistsError:
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err),
-			}
-		default:
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution operation failed. Failed to write-lock executions row. Error: %v", err),
-			}
-		}
-	}
-
-	execution, err := tx.SelectFromExecutions(&sqldb.ExecutionsFilter{
+	execution, err := m.db.SelectFromExecutions(&sqldb.ExecutionsFilter{
 		ShardID: m.shardID, DomainID: request.DomainID, WorkflowID: *request.Execution.WorkflowId, RunID: *request.Execution.RunId})
 
 	if err != nil {
@@ -281,7 +256,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 	}
 	{
 		var err error
-		state.ActivitInfos, err = getActivityInfoMap(tx,
+		state.ActivitInfos, err = getActivityInfoMap(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -295,7 +270,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.TimerInfos, err = getTimerInfoMap(tx,
+		state.TimerInfos, err = getTimerInfoMap(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -309,7 +284,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.ChildExecutionInfos, err = getChildExecutionInfoMap(tx,
+		state.ChildExecutionInfos, err = getChildExecutionInfoMap(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -323,7 +298,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.RequestCancelInfos, err = getRequestCancelInfoMap(tx,
+		state.RequestCancelInfos, err = getRequestCancelInfoMap(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -337,7 +312,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.SignalInfos, err = getSignalInfoMap(tx,
+		state.SignalInfos, err = getSignalInfoMap(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -351,7 +326,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.BufferedEvents, err = getBufferedEvents(tx,
+		state.BufferedEvents, err = getBufferedEvents(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -365,7 +340,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.BufferedReplicationTasks, err = getBufferedReplicationTasks(tx,
+		state.BufferedReplicationTasks, err = getBufferedReplicationTasks(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -379,7 +354,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.SignalRequestedIDs, err = getSignalsRequested(tx,
+		state.SignalRequestedIDs, err = getSignalsRequested(m.db,
 			m.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
@@ -394,8 +369,8 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 	return &p.InternalGetWorkflowExecutionResponse{State: &state}, nil
 }
 
-func getBufferedEvents(tx sqldb.Tx, shardID int, domainID string, workflowID string, runID string) (result []*p.DataBlob, err error) {
-	rows, err := tx.SelectFromBufferedEvents(&sqldb.BufferedEventsFilter{
+func getBufferedEvents(db sqldb.Interface, shardID int, domainID string, workflowID string, runID string) (result []*p.DataBlob, err error) {
+	rows, err := db.SelectFromBufferedEvents(&sqldb.BufferedEventsFilter{
 		ShardID:    shardID,
 		DomainID:   domainID,
 		WorkflowID: workflowID,

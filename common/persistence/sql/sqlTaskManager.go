@@ -213,6 +213,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 		TaskType:     int64(request.TaskType),
 		MinTaskID:    &request.ReadLevel,
 		MaxTaskID:    &request.MaxReadLevel,
+		PageSize:     &request.BatchSize,
 	})
 	if err != nil {
 		return nil, &workflow.InternalServiceError{

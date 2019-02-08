@@ -205,8 +205,8 @@ CREATE TABLE events (
 	run_id         VARCHAR(64) NOT NULL,
 	first_event_id BIGINT NOT NULL,
 	batch_version  BIGINT,
-	range_id       INT NOT NULL,
-	tx_id          INT NOT NULL,
+	range_id       BIGINT NOT NULL,
+	tx_id          BIGINT NOT NULL,
 	data MEDIUMBLOB NOT NULL,
 	data_encoding  VARCHAR(64) NOT NULL,
 	PRIMARY KEY (domain_id, workflow_id, run_id, first_event_id)

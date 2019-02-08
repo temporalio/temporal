@@ -68,12 +68,12 @@ func updateSignalsRequested(tx sqldb.Tx,
 	return nil
 }
 
-func getSignalsRequested(tx sqldb.Tx,
+func getSignalsRequested(db sqldb.Interface,
 	shardID int,
 	domainID,
 	workflowID,
 	runID string) (map[string]struct{}, error) {
-	rows, err := tx.SelectFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
+	rows, err := db.SelectFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
