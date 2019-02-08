@@ -744,6 +744,7 @@ Update_History_Loop:
 			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
 			Initiator:                           continueAsNewInitiator.Ptr(),
 			FailureReason:                       common.StringPtr(timeoutReason),
+			CronSchedule:                        common.StringPtr(msBuilder.GetExecutionInfo().CronSchedule),
 		}
 		domainEntry, err := getActiveDomainEntryFromShard(t.shard, &domainID)
 		if err != nil {
