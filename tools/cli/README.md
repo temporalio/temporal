@@ -1,7 +1,7 @@
 ## What
-Cadence CLI provide an command-line tool for users to perform various tasks on Cadence.  
-Users can perform operations like register, update and describe on domain;  
-also start workflow, show workflow history, signal workflow ... and many other tasks.    
+Cadence CLI is a command-line tool to perform various tasks on a Cadence server.
+It can perform domain operations such as register, update, and describe as well as workflow operations like
+start workflow, show workflow history, and signal workflow.
 
 ## How
 - Run `make bins`
@@ -9,10 +9,10 @@ also start workflow, show workflow history, signal workflow ... and many other t
 - (Optional) You could also use docker image `ubercadence/cli`, by replacing all the following `./cadence ...` with `docker run --rm ubercadence/cli:master ...`
 
 ## Quick Start
-Run `./cadence` to view help message. There are some top level commands and global options.   
-Run `./cadence domain` to view help message about operations on domain  
-Run `./cadence workflow` to view help message about operations on workflow  
-Run `./cadence tasklist` to view help message about operations on tasklist  
+Run `./cadence` for help on top level commands and global options   
+Run `./cadence domain` for help on domain operations  
+Run `./cadence workflow` for help on workflow operations  
+Run `./cadence tasklist` for help on tasklist operations  
 (`./cadence help`, `./cadence help [domain|workflow]` will also print help messages)
 
 **Note:** make sure you have cadence server running before using CLI 
@@ -29,19 +29,21 @@ Run `./cadence tasklist` to view help message about operations on tasklist
 ./cadence --domain samples-domain domain describe  
 ```
 
-**Tips:**  
-to avoid repeated input global option **domain**, user can export domain-name in environment variable CADENCE_CLI_DOMAIN.
+**Tip:**  
+To avoid repeatedly including the global option **--domain**, 
+export domain-name to the CADENCE_CLI_DOMAIN environment variable.
 ```
 export CADENCE_CLI_DOMAIN=samples-domain
-
-# then just run commands without --domain flag, like
+```
+Then commands can omit the **--domain** flag:
+```
 ./cadence domain desc
 ```
 
 ### Workflow operation examples
-(The following examples assume you already export CADENCE_CLI_DOMAIN environment variable as Tips above)
+(The following examples assume the CADENCE_CLI_DOMAIN environment variable is set using the tip above)
 
-- Run workflow: Start a workflow and see it's progress, this command doesn't finish until workflow completes
+- Run workflow: Start a workflow and see it's progress. This command doesn't finish until workflow completes.
 ```
 ./cadence workflow run --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"'
 
@@ -55,36 +57,35 @@ To run a workflow, user must specify
 3. Execution start to close timeout in seconds (--et), 
 
 Example uses [this cadence-samples workflow](https://github.com/samarabbas/cadence-samples/blob/master/cmd/samples/recipes/helloworld/helloworld_workflow.go) 
-and it takes a string as input, so there is the `-i '"cadence"'`. Single quote `''` is used to wrap input as json. 
+and takes a string as input with the `-i '"cadence"'` parameter. Single quotes (`''`) are used to wrap input as json. 
 
-**Note:** you need to start worker so that workflow can make progress.  
+**Note:** you need to start the worker so that workflow can make progress.  
 (Run `make && ./bin/helloworld -m worker` in cadence-samples to start the worker)
 
 - Show running workers of a tasklist
 ```
 ./cadence tasklist desc --tl helloWorldGroup
-
 ```
 
-- Start workflow: 
+- Start workflow
 ```
 ./cadence workflow start --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"'
 
 # view help messages for workflow start
 ./cadence workflow start -h
 
-# for workflow with multiple input, seperate each json with space/newline like
+# for workflow with multiple input, separate each json with space/newline like
 ./cadence workflow start --tl helloWorldGroup --wt main.WorkflowWith3Args --et 60 -i '"your_input_string" 123 {"Name":"my-string", "Age":12345}'
 ```
-Workflow `start` command is similar to `run` command and takes same flag options. But it just start the workflow and immediately return workflow_id and run_id.  
-User need to run `show` to view workflow history/progress.  
+The workflow `start` command is similar to the `run` command, but immediately returns the workflow_id and 
+run_id after starting the workflow. Use the `show` command to view the workflow's history/progress.  
 
 **Re-use the same workflow id when starting/running workflow**
 
-Use option `--workflowidreusepolicy` or `--wrp` to configure workflow id re-use policy.  
-**Option 0 AllowDuplicateFailedOnly:** Allow start a workflow execution using the same workflow ID when workflow not running, and the last execution close state is in *[terminated, cancelled, timeouted, failed]*.  
-**Option 1 AllowDuplicate:** Allow start a workflow execution using the same workflow ID when workflow not running.  
-**Option 2 RejectDuplicate:** Do not allow start a workflow execution using the same workflow ID at all.  
+Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-use policy.  
+**Option 0 AllowDuplicateFailedOnly:** Allow starting a workflow execution using the same workflow ID when a workflow with the same workflow ID is not already running and the last execution close state is one of *[terminated, cancelled, timedout, failed]*.  
+**Option 1 AllowDuplicate:** Allow starting a workflow execution using the same workflow ID when a workflow with the same workflow ID is not already running.  
+**Option 2 RejectDuplicate:** Do not allow starting a workflow execution using the same workflow ID as a previous workflow.  
 ```
 # use AllowDuplicateFailedOnly option to start a workflow
 ./cadence workflow start --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"' --wid "<duplicated workflow id>" --wrp 0
@@ -107,14 +108,14 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure workflow id re-use 
 
 - Show workflow execution info
 ```
-./cadence workflow descibe -w 3ea6b242-b23c-4279-bb13-f215661b4717 -r 866ae14c-88cf-4f1e-980f-571e031d71b0
+./cadence workflow describe -w 3ea6b242-b23c-4279-bb13-f215661b4717 -r 866ae14c-88cf-4f1e-980f-571e031d71b0
 # a shortcut of this is (without -w -r flag)
-./cadence workflow descibeid 3ea6b242-b23c-4279-bb13-f215661b4717 866ae14c-88cf-4f1e-980f-571e031d71b0
+./cadence workflow describeid 3ea6b242-b23c-4279-bb13-f215661b4717 866ae14c-88cf-4f1e-980f-571e031d71b0
 
 # if run_id is not provided, it will show the latest workflow execution of that workflow_id
-./cadence workflow descibe -w 3ea6b242-b23c-4279-bb13-f215661b4717
+./cadence workflow describe -w 3ea6b242-b23c-4279-bb13-f215661b4717
 # a shortcut of this is
-./cadence workflow descibeid 3ea6b242-b23c-4279-bb13-f215661b4717
+./cadence workflow describeid 3ea6b242-b23c-4279-bb13-f215661b4717
 ```
 
 - List closed or open workflow executions
@@ -147,5 +148,5 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure workflow id re-use 
 # terminate
 ./cadence workflow terminate -w <wid> -r <rid> --reason 
 ```
-Terminate a running workflow execution will record WorkflowExecutionTerminated event as closing event in the history. No more decision task will be scheduled for terminated workflow execution.  
-Cancel a running workflow execution will record WorkflowExecutionCancelRequested event in the history, and a new decision task will be scheduled. Workflow has a chance to do some clean up work after cancellation.
+Terminating a running workflow execution will record a WorkflowExecutionTerminated event as the closing event in the history. No more decision tasks will be scheduled for a terminated workflow execution.  
+Canceling a running workflow execution will record a WorkflowExecutionCancelRequested event in the history, and a new decision task will be scheduled. The workflow has a chance to do some clean up work after cancellation.
