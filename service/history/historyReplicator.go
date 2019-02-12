@@ -412,7 +412,10 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Cont
 	// we need to check the current workflow execution
 	_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
 	if err != nil {
-		return err
+		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+			return err
+		}
+		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
 	}
 	currentRunID := currentMutableState.GetExecutionInfo().RunID
 	currentLastWriteVersion := currentMutableState.GetLastWriteVersion()

@@ -398,23 +398,21 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	decisionTimeoutSecond := int32(11)
 	newRunID := uuid.New()
 
-	continueAsNewEvenType := shared.EventTypeWorkflowExecutionContinuedAsNew
 	continueAsNewEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(130),
 		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &continueAsNewEvenType,
+		EventType: shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr(),
 		WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: common.StringPtr(newRunID),
 		},
 	}
 
-	newRunStartedEvenType := shared.EventTypeWorkflowExecutionStarted
 	newRunStartedEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(1),
 		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &newRunStartedEvenType,
+		EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
 		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
 			ParentWorkflowDomain: common.StringPtr(parentName),
 			ParentWorkflowExecution: &shared.WorkflowExecution{
@@ -429,13 +427,24 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		},
 	}
 
-	newRunDecisionEvenType := shared.EventTypeDecisionTaskScheduled
-	newRunDecisionAttempt := int64(123)
-	newRunDecisionEvent := &shared.HistoryEvent{
+	newRunSignalEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(2),
 		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &newRunDecisionEvenType,
+		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
+		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+			SignalName: common.StringPtr("some random signal name"),
+			Input:      []byte("some random signal input"),
+			Identity:   common.StringPtr("some random identity"),
+		},
+	}
+
+	newRunDecisionAttempt := int64(123)
+	newRunDecisionEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(3),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
 			StartToCloseTimeoutSeconds: common.Int32Ptr(decisionTimeoutSecond),
@@ -491,7 +500,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 
-	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunDecisionEvent}}
+	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
 	s.mockMutableState.On("ClearStickyness").Once()
 	_, _, newRunStateBuilder, err := s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events, 0, 0)
 	s.Nil(err)
@@ -512,6 +521,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		newRunStateBuilder.GetExecutionInfo().CreateRequestID,
 		newRunStartedEvent.WorkflowExecutionStartedEventAttributes,
 	)
+	expectedNewRunStateBuilder.ReplicateWorkflowExecutionSignaled(newRunSignalEvent)
 	expectedNewRunStateBuilder.ReplicateDecisionTaskScheduledEvent(
 		newRunDecisionEvent.GetVersion(),
 		newRunDecisionEvent.GetEventId(),
@@ -707,23 +717,21 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	decisionTimeoutSecond := int32(11)
 	newRunID := uuid.New()
 
-	continueAsNewEvenType := shared.EventTypeWorkflowExecutionContinuedAsNew
 	continueAsNewEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(130),
 		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &continueAsNewEvenType,
+		EventType: shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr(),
 		WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: common.StringPtr(newRunID),
 		},
 	}
 
-	newRunStartedEvenType := shared.EventTypeWorkflowExecutionStarted
 	newRunStartedEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(1),
 		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &newRunStartedEvenType,
+		EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
 		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
 			ParentWorkflowDomain: common.StringPtr(parentName),
 			ParentWorkflowExecution: &shared.WorkflowExecution{
@@ -738,13 +746,24 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		},
 	}
 
-	newRunDecisionEvenType := shared.EventTypeDecisionTaskScheduled
-	newRunDecisionAttempt := int64(123)
-	newRunDecisionEvent := &shared.HistoryEvent{
+	newRunSignalEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(2),
 		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &newRunDecisionEvenType,
+		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
+		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+			SignalName: common.StringPtr("some random signal name"),
+			Input:      []byte("some random signal input"),
+			Identity:   common.StringPtr("some random identity"),
+		},
+	}
+
+	newRunDecisionAttempt := int64(123)
+	newRunDecisionEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(3),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
 			StartToCloseTimeoutSeconds: common.Int32Ptr(decisionTimeoutSecond),
@@ -800,7 +819,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 
-	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunDecisionEvent}}
+	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
 	s.mockMutableState.On("ClearStickyness").Once()
 	_, _, newRunStateBuilder, err := stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events, 0, persistence.EventStoreVersionV2)
 	s.Nil(err)
@@ -821,6 +840,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		newRunStateBuilder.GetExecutionInfo().CreateRequestID,
 		newRunStartedEvent.WorkflowExecutionStartedEventAttributes,
 	)
+	expectedNewRunStateBuilder.ReplicateWorkflowExecutionSignaled(newRunSignalEvent)
 	expectedNewRunStateBuilder.ReplicateDecisionTaskScheduledEvent(
 		newRunDecisionEvent.GetVersion(),
 		newRunDecisionEvent.GetEventId(),

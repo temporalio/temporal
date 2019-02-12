@@ -688,6 +688,22 @@ func (s *historyReplicatorSuite) TestApplyStartEvent() {
 
 }
 
+func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_MissingCurrent() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	version := int64(123)
+
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(nil, &shared.EntityNotExistsError{})
+
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, version,
+		s.logger, &h.ReplicateEventsRequest{})
+	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+}
+
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingNotLessThanCurrent_CurrentRunning() {
 	domainName := "some random domain name"
 	domainID := validDomainID

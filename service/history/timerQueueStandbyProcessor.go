@@ -382,8 +382,10 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(timerTask *
 
 	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
 
-		if msBuilder.GetNextEventID() > common.FirstEventID+1 {
-			// first decision already scheduled
+		if msBuilder.GetPreviousStartedEventID() != common.EmptyEventID ||
+			msBuilder.HasPendingDecisionTask() {
+			// if there is one decision already been processed
+			// or has pending decision, meaning workflow has already running
 			return nil
 		}
 
