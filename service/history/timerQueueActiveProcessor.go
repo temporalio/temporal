@@ -197,47 +197,67 @@ func (t *timerQueueActiveProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
 }
 
+func (t *timerQueueActiveProcessorImpl) getTaskFilter() timerTaskFilter {
+	return t.timerTaskFilter
+}
+
 // NotifyNewTimers - Notify the processor about the new active timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueActiveProcessorImpl) notifyNewTimers(timerTasks []persistence.Task) {
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }
 
-func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTaskInfo) (int, error) {
-	ok, err := t.timerTaskFilter(timerTask)
-	if err != nil {
-		return metrics.TimerActiveQueueProcessorScope, err
-	} else if !ok {
-		t.timerQueueAckMgr.completeTimerTask(timerTask)
-		t.logger.Debugf("Discarding timer: (%v, %v), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
-			timerTask.TaskID, timerTask.VisibilityTimestamp, timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType, timerTask.EventID, err)
-		return metrics.TimerActiveQueueProcessorScope, nil
-	}
+func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTaskInfo, shouldProcessTask bool) (int, error) {
 
+	var err error
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		return metrics.TimerActiveTaskUserTimerScope, t.processExpiredUserTimer(timerTask)
+		if shouldProcessTask {
+			err = t.processExpiredUserTimer(timerTask)
+		}
+		return metrics.TimerActiveTaskUserTimerScope, err
 
 	case persistence.TaskTypeActivityTimeout:
-		return metrics.TimerActiveTaskActivityTimeoutScope, t.processActivityTimeout(timerTask)
+		if shouldProcessTask {
+			err = t.processActivityTimeout(timerTask)
+		}
+		return metrics.TimerActiveTaskActivityTimeoutScope, err
 
 	case persistence.TaskTypeDecisionTimeout:
-		return metrics.TimerActiveTaskDecisionTimeoutScope, t.processDecisionTimeout(timerTask)
+		if shouldProcessTask {
+			err = t.processDecisionTimeout(timerTask)
+		}
+		return metrics.TimerActiveTaskDecisionTimeoutScope, err
 
 	case persistence.TaskTypeWorkflowTimeout:
-		return metrics.TimerActiveTaskWorkflowTimeoutScope, t.processWorkflowTimeout(timerTask)
+		if shouldProcessTask {
+			err = t.processWorkflowTimeout(timerTask)
+		}
+		return metrics.TimerActiveTaskWorkflowTimeoutScope, err
 
 	case persistence.TaskTypeActivityRetryTimer:
-		return metrics.TimerActiveTaskActivityRetryTimerScope, t.processActivityRetryTimer(timerTask)
+		if shouldProcessTask {
+			err = t.processActivityRetryTimer(timerTask)
+		}
+		return metrics.TimerActiveTaskActivityRetryTimerScope, err
 
 	case persistence.TaskTypeWorkflowBackoffTimer:
-		return metrics.TimerActiveTaskWorkflowBackoffTimerScope, t.processWorkflowBackoffTimer(timerTask)
+		if shouldProcessTask {
+			err = t.processWorkflowBackoffTimer(timerTask)
+		}
+		return metrics.TimerActiveTaskWorkflowBackoffTimerScope, err
 
 	case persistence.TaskTypeDeleteHistoryEvent:
-		return metrics.TimerActiveTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
+		if shouldProcessTask {
+			err = t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
+		}
+		return metrics.TimerActiveTaskDeleteHistoryEventScope, err
 
 	case persistence.TaskTypeArchiveHistoryEvent:
-		return metrics.TimerActiveTaskArchiveHistoryEventScope, t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
+		if shouldProcessTask {
+			err = t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
+		}
+		return metrics.TimerActiveTaskArchiveHistoryEventScope, err
 
 	default:
 		return metrics.TimerActiveQueueProcessorScope, errUnknownTimerTask

@@ -40,7 +40,7 @@ type (
 		options            *QueueProcessorOptions
 		executionManager   persistence.ExecutionManager
 		cache              *historyCache
-		transferTaskFilter transferTaskFilter
+		transferTaskFilter queueTaskFilter
 		logger             bark.Logger
 		metricsClient      metrics.Client
 		*transferQueueProcessorBase
@@ -71,7 +71,11 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 		logging.TagWorkflowCluster: clusterName,
 	})
 
-	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
+	transferTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		task, ok := qTask.(*persistence.TransferTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyStandbyTask(clusterName, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
@@ -109,41 +113,57 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	return processor
 }
 
+func (t *transferQueueStandbyProcessorImpl) getTaskFilter() queueTaskFilter {
+	return t.transferTaskFilter
+}
+
 func (t *transferQueueStandbyProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
 }
 
-func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) (int, error) {
+func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo, shouldProcessTask bool) (int, error) {
 	task, ok := qTask.(*persistence.TransferTaskInfo)
 	if !ok {
 		return metrics.TransferStandbyQueueProcessorScope, errUnexpectedQueueTask
 	}
-	ok, err := t.transferTaskFilter(task)
-	if err != nil {
-		return metrics.TransferStandbyQueueProcessorScope, err
-	} else if !ok {
-		return metrics.TransferStandbyQueueProcessorScope, nil
-	}
 
+	var err error
 	lastAttempt := false
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
-		return metrics.TransferStandbyTaskActivityScope, t.processActivityTask(task)
+		if shouldProcessTask {
+			err = t.processActivityTask(task)
+		}
+		return metrics.TransferStandbyTaskActivityScope, err
 
 	case persistence.TransferTaskTypeDecisionTask:
-		return metrics.TransferStandbyTaskDecisionScope, t.processDecisionTask(task)
+		if shouldProcessTask {
+			err = t.processDecisionTask(task)
+		}
+		return metrics.TransferStandbyTaskDecisionScope, err
 
 	case persistence.TransferTaskTypeCloseExecution:
-		return metrics.TransferStandbyTaskCloseExecutionScope, t.processCloseExecution(task)
+		// guarantee the processing of workflow execution close
+		err = t.processCloseExecution(task)
+		return metrics.TransferStandbyTaskCloseExecutionScope, err
 
 	case persistence.TransferTaskTypeCancelExecution:
-		return metrics.TransferStandbyTaskCancelExecutionScope, t.processCancelExecution(task, lastAttempt)
+		if shouldProcessTask {
+			err = t.processCancelExecution(task, lastAttempt)
+		}
+		return metrics.TransferStandbyTaskCancelExecutionScope, err
 
 	case persistence.TransferTaskTypeSignalExecution:
-		return metrics.TransferStandbyTaskSignalExecutionScope, t.processSignalExecution(task, lastAttempt)
+		if shouldProcessTask {
+			err = t.processSignalExecution(task, lastAttempt)
+		}
+		return metrics.TransferStandbyTaskSignalExecutionScope, err
 
 	case persistence.TransferTaskTypeStartChildExecution:
-		return metrics.TransferStandbyTaskStartChildExecutionScope, t.processStartChildExecution(task, lastAttempt)
+		if shouldProcessTask {
+			err = t.processStartChildExecution(task, lastAttempt)
+		}
+		return metrics.TransferStandbyTaskStartChildExecutionScope, err
 
 	default:
 		return metrics.TransferStandbyQueueProcessorScope, errUnknownTransferTask

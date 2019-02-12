@@ -408,12 +408,37 @@ func (t *timerQueueProcessorBase) retryTasks() {
 func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
 
 	var scope int
+	var shouldProcessTask bool
 	var err error
 	startTime := time.Now()
 	logger := t.initializeLoggerForTask(task)
 	attempt := 0
+	incAttempt := func() {
+		attempt++
+		if attempt >= t.config.TimerTaskMaxRetryCount() {
+			t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+			logging.LogCriticalErrorEvent(logger, "Critical error processing timer task, retrying.", err)
+		}
+	}
+
+FilterLoop:
+	for {
+		select {
+		case <-t.shutdownCh:
+			// this must return without ack
+			return
+		default:
+			shouldProcessTask, err = t.timerProcessor.getTaskFilter()(task)
+			if err == nil {
+				break FilterLoop
+			}
+			incAttempt()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
 	op := func() error {
-		scope, err = t.processTaskOnce(notificationChan, task, logger)
+		scope, err = t.processTaskOnce(notificationChan, task, shouldProcessTask, logger)
 		return t.handleTaskError(scope, startTime, notificationChan, err, logger)
 	}
 	retryCondition := func(err error) bool {
@@ -438,26 +463,19 @@ func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan stru
 				t.ackTaskOnce(task, scope)
 				return
 			}
-
-			attempt++
-
-			if attempt >= t.config.TimerTaskMaxRetryCount() {
-				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-				logging.LogCriticalErrorEvent(logger, "Critical error processing timer task, retrying.", err)
-			}
+			incAttempt()
 		}
 	}
 }
 
-func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo, logger bark.Logger) (int, error) {
-
+func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo, shouldProcessTask bool, logger bark.Logger) (int, error) {
 	select {
 	case <-notificationChan:
 	default:
 	}
 
 	startTime := time.Now()
-	scope, err := t.timerProcessor.process(task)
+	scope, err := t.timerProcessor.process(task, shouldProcessTask)
 	t.metricsClient.IncCounter(scope, metrics.TaskRequests)
 	t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
 

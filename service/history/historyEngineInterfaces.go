@@ -102,7 +102,8 @@ type (
 	}
 
 	processor interface {
-		process(task queueTaskInfo) (int, error)
+		process(task queueTaskInfo, shouldProcessTask bool) (int, error)
+		getTaskFilter() queueTaskFilter
 		readTasks(readLevel int64) ([]queueTaskInfo, bool, error)
 		updateAckLevel(taskID int64) error
 		queueShutdown() error
@@ -129,7 +130,8 @@ type (
 
 	timerProcessor interface {
 		notifyNewTimers(timerTask []persistence.Task)
-		process(task *persistence.TimerTaskInfo) (int, error)
+		process(task *persistence.TimerTaskInfo, shouldProcessTask bool) (int, error)
+		getTaskFilter() timerTaskFilter
 	}
 
 	timerQueueAckMgr interface {

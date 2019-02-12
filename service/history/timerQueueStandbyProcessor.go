@@ -134,50 +134,60 @@ func (t *timerQueueStandbyProcessorImpl) retryTasks() {
 	t.timerQueueProcessorBase.retryTasks()
 }
 
+func (t *timerQueueStandbyProcessorImpl) getTaskFilter() timerTaskFilter {
+	return t.timerTaskFilter
+}
+
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(timerTasks []persistence.Task) {
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }
 
-func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTaskInfo) (int, error) {
-	ok, err := t.timerTaskFilter(timerTask)
-	if err != nil {
-		return metrics.TimerStandbyQueueProcessorScope, err
-	} else if !ok {
-		t.timerQueueAckMgr.completeTimerTask(timerTask)
-		return metrics.TimerStandbyQueueProcessorScope, nil
-	}
+func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTaskInfo, shouldProcessTask bool) (int, error) {
 
-	taskID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
-	t.logger.Debugf("Processing timer: (%s), for WorkflowID: %v, RunID: %v, Type: %v, TimeoutType: %v, EventID: %v",
-		taskID, timerTask.WorkflowID, timerTask.RunID, t.timerQueueProcessorBase.getTimerTaskType(timerTask.TaskType),
-		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
-
+	var err error
 	lastAttempt := false
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		return metrics.TimerStandbyTaskUserTimerScope, t.processExpiredUserTimer(timerTask, lastAttempt)
+		if shouldProcessTask {
+			err = t.processExpiredUserTimer(timerTask, lastAttempt)
+		}
+		return metrics.TimerStandbyTaskUserTimerScope, err
 
 	case persistence.TaskTypeActivityTimeout:
-		return metrics.TimerStandbyTaskActivityTimeoutScope, t.processActivityTimeout(timerTask, lastAttempt)
+		if shouldProcessTask {
+			err = t.processActivityTimeout(timerTask, lastAttempt)
+		}
+		return metrics.TimerStandbyTaskActivityTimeoutScope, err
 
 	case persistence.TaskTypeDecisionTimeout:
-		return metrics.TimerStandbyTaskDecisionTimeoutScope, t.processDecisionTimeout(timerTask, lastAttempt)
+		if shouldProcessTask {
+			err = t.processDecisionTimeout(timerTask, lastAttempt)
+		}
+		return metrics.TimerStandbyTaskDecisionTimeoutScope, err
 
 	case persistence.TaskTypeWorkflowTimeout:
-		return metrics.TimerStandbyTaskWorkflowTimeoutScope, t.processWorkflowTimeout(timerTask, lastAttempt)
+		// guarantee the processing of workflow execution history deletion
+		err = t.processWorkflowTimeout(timerTask, lastAttempt)
+		return metrics.TimerStandbyTaskWorkflowTimeoutScope, err
 
 	case persistence.TaskTypeActivityRetryTimer:
-		return metrics.TimerStandbyTaskActivityRetryTimerScope, nil // retry backoff timer should not get created on passive cluster
+		// retry backoff timer should not get created on passive cluster
+		return metrics.TimerStandbyTaskActivityRetryTimerScope, err
 
 	case persistence.TaskTypeWorkflowBackoffTimer:
-		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope, t.processWorkflowBackoffTimer(timerTask, lastAttempt)
+		if shouldProcessTask {
+			err = t.processWorkflowBackoffTimer(timerTask, lastAttempt)
+		}
+		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope, err
 
 	case persistence.TaskTypeDeleteHistoryEvent:
+		// guarantee the processing of workflow execution history deletion
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 
 	case persistence.TaskTypeArchiveHistoryEvent:
+		// guarantee the processing of workflow execution history archival
 		return metrics.TimerStandbyTaskArchiveHistoryEventScope, t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
 
 	default:

@@ -43,7 +43,7 @@ var (
 )
 
 type (
-	transferTaskFilter func(timer *persistence.TransferTaskInfo) (bool, error)
+	queueTaskFilter func(qTask queueTaskInfo) (bool, error)
 
 	transferQueueProcessorImpl struct {
 		isGlobalDomainEnabled bool

@@ -271,12 +271,42 @@ func (p *queueProcessorBase) retryTasks() {
 func (p *queueProcessorBase) processTaskAndAck(notificationChan <-chan struct{}, task queueTaskInfo) {
 
 	var scope int
+	var shouldProcessTask bool
 	var err error
 	startTime := time.Now()
 	logger := p.initializeLoggerForTask(task)
 	attempt := 0
+	incAttempt := func() {
+		attempt++
+		if attempt >= p.options.MaxRetryCount() {
+			p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+			switch task.(type) {
+			case *persistence.TransferTaskInfo:
+				logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task, retrying.", err)
+			case *persistence.ReplicationTaskInfo:
+				logging.LogCriticalErrorEvent(logger, "Critical error processing replication task, retrying.", err)
+			}
+		}
+	}
+
+FilterLoop:
+	for {
+		select {
+		case <-p.shutdownCh:
+			// this must return without ack
+			return
+		default:
+			shouldProcessTask, err = p.processor.getTaskFilter()(task)
+			if err == nil {
+				break FilterLoop
+			}
+			incAttempt()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
 	op := func() error {
-		scope, err = p.processTaskOnce(notificationChan, task, logger)
+		scope, err = p.processTaskOnce(notificationChan, task, shouldProcessTask, logger)
 		return p.handleTaskError(scope, startTime, notificationChan, err, logger)
 	}
 	retryCondition := func(err error) bool {
@@ -301,31 +331,19 @@ func (p *queueProcessorBase) processTaskAndAck(notificationChan <-chan struct{},
 				p.ackTaskOnce(task, scope)
 				return
 			}
-
-			attempt++
-
-			if attempt >= p.options.MaxRetryCount() {
-				p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-				switch task.(type) {
-				case *persistence.TransferTaskInfo:
-					logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task, retrying.", err)
-				case *persistence.ReplicationTaskInfo:
-					logging.LogCriticalErrorEvent(logger, "Critical error processing replication task, retrying.", err)
-				}
-			}
+			incAttempt()
 		}
 	}
 }
 
-func (p *queueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task queueTaskInfo, logger bark.Logger) (int, error) {
-
+func (p *queueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task queueTaskInfo, shouldProcessTask bool, logger bark.Logger) (int, error) {
 	select {
 	case <-notificationChan:
 	default:
 	}
 
 	startTime := time.Now()
-	scope, err := p.processor.process(task)
+	scope, err := p.processor.process(task, shouldProcessTask)
 	p.metricsClient.IncCounter(scope, metrics.TaskRequests)
 	p.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
 

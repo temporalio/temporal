@@ -47,7 +47,7 @@ type (
 		options            *QueueProcessorOptions
 		historyClient      history.Client
 		cache              *historyCache
-		transferTaskFilter transferTaskFilter
+		transferTaskFilter queueTaskFilter
 		logger             bark.Logger
 		metricsClient      metrics.Client
 		maxReadAckLevel    maxReadAckLevel
@@ -76,7 +76,11 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: currentClusterName,
 	})
-	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
+	transferTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		task, ok := qTask.(*persistence.TransferTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyActiveTask(task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
@@ -137,7 +141,11 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		logging.TagDomainIDs:       domainIDs,
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
-	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
+	transferTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		task, ok := qTask.(*persistence.TransferTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyFailoverActiveTask(domainIDs, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
@@ -183,42 +191,57 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	return updateTransferAckLevel, processor
 }
 
+func (t *transferQueueActiveProcessorImpl) getTaskFilter() queueTaskFilter {
+	return t.transferTaskFilter
+}
+
 func (t *transferQueueActiveProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
 }
 
-func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo) (int, error) {
+func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo, shouldProcessTask bool) (int, error) {
 	task, ok := qTask.(*persistence.TransferTaskInfo)
 	if !ok {
 		return metrics.TransferActiveQueueProcessorScope, errUnexpectedQueueTask
 	}
-	ok, err := t.transferTaskFilter(task)
-	if err != nil {
-		return metrics.TransferActiveQueueProcessorScope, err
-	} else if !ok {
-		t.logger.Debugf("Discarding task: (%s), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
-			task.TaskID, task.WorkflowID, task.RunID, task.TaskType, task.ScheduleID, err)
-		return metrics.TransferActiveQueueProcessorScope, nil
-	}
 
+	var err error
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
-		return metrics.TransferActiveTaskActivityScope, t.processActivityTask(task)
+		if shouldProcessTask {
+			err = t.processActivityTask(task)
+		}
+		return metrics.TransferActiveTaskActivityScope, err
 
 	case persistence.TransferTaskTypeDecisionTask:
-		return metrics.TransferActiveTaskDecisionScope, t.processDecisionTask(task)
+		if shouldProcessTask {
+			err = t.processDecisionTask(task)
+		}
+		return metrics.TransferActiveTaskDecisionScope, err
 
 	case persistence.TransferTaskTypeCloseExecution:
-		return metrics.TransferActiveTaskCloseExecutionScope, t.processCloseExecution(task)
+		if shouldProcessTask {
+			err = t.processCloseExecution(task)
+		}
+		return metrics.TransferActiveTaskCloseExecutionScope, err
 
 	case persistence.TransferTaskTypeCancelExecution:
-		return metrics.TransferActiveTaskCancelExecutionScope, t.processCancelExecution(task)
+		if shouldProcessTask {
+			err = t.processCancelExecution(task)
+		}
+		return metrics.TransferActiveTaskCancelExecutionScope, err
 
 	case persistence.TransferTaskTypeSignalExecution:
-		return metrics.TransferActiveTaskSignalExecutionScope, t.processSignalExecution(task)
+		if shouldProcessTask {
+			err = t.processSignalExecution(task)
+		}
+		return metrics.TransferActiveTaskSignalExecutionScope, err
 
 	case persistence.TransferTaskTypeStartChildExecution:
-		return metrics.TransferActiveTaskStartChildExecutionScope, t.processStartChildExecution(task)
+		if shouldProcessTask {
+			err = t.processStartChildExecution(task)
+		}
+		return metrics.TransferActiveTaskStartChildExecutionScope, err
 
 	default:
 		return metrics.TransferActiveQueueProcessorScope, errUnknownTransferTask

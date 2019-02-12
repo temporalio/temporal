@@ -36,16 +36,17 @@ import (
 
 type (
 	replicatorQueueProcessorImpl struct {
-		currentClusterNamer string
-		shard               ShardContext
-		historyCache        *historyCache
-		executionMgr        persistence.ExecutionManager
-		historyMgr          persistence.HistoryManager
-		historyV2Mgr        persistence.HistoryV2Manager
-		replicator          messaging.Producer
-		metricsClient       metrics.Client
-		options             *QueueProcessorOptions
-		logger              bark.Logger
+		currentClusterNamer   string
+		shard                 ShardContext
+		historyCache          *historyCache
+		replicationTaskFilter queueTaskFilter
+		executionMgr          persistence.ExecutionManager
+		historyMgr            persistence.HistoryManager
+		historyV2Mgr          persistence.HistoryV2Manager
+		replicator            messaging.Producer
+		metricsClient         metrics.Client
+		options               *QueueProcessorOptions
+		logger                bark.Logger
 		*queueProcessorBase
 		queueAckMgr
 
@@ -82,17 +83,22 @@ func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache,
 		logging.TagWorkflowComponent: logging.TagValueReplicatorQueueComponent,
 	})
 
+	replicationTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		return true, nil
+	}
+
 	processor := &replicatorQueueProcessorImpl{
-		currentClusterNamer: currentClusterNamer,
-		shard:               shard,
-		historyCache:        historyCache,
-		executionMgr:        executionMgr,
-		historyMgr:          historyMgr,
-		historyV2Mgr:        historyV2Mgr,
-		replicator:          replicator,
-		metricsClient:       shard.GetMetricsClient(),
-		options:             options,
-		logger:              logger,
+		currentClusterNamer:   currentClusterNamer,
+		shard:                 shard,
+		historyCache:          historyCache,
+		replicationTaskFilter: replicationTaskFilter,
+		executionMgr:          executionMgr,
+		historyMgr:            historyMgr,
+		historyV2Mgr:          historyV2Mgr,
+		replicator:            replicator,
+		metricsClient:         shard.GetMetricsClient(),
+		options:               options,
+		logger:                logger,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
@@ -103,11 +109,17 @@ func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache,
 	return processor
 }
 
-func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) (int, error) {
+func (p *replicatorQueueProcessorImpl) getTaskFilter() queueTaskFilter {
+	return p.replicationTaskFilter
+}
+
+func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo, shouldProcessTask bool) (int, error) {
 	task, ok := qTask.(*persistence.ReplicationTaskInfo)
 	if !ok {
 		return metrics.ReplicatorQueueProcessorScope, errUnexpectedQueueTask
 	}
+	// replication queue should always process all tasks
+	// so should not do anything to shouldProcessTask variable
 
 	switch task.TaskType {
 	case persistence.ReplicationTaskTypeSyncActivity:

@@ -147,7 +147,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		},
 	}).Return(nil, &shared.EntityNotExistsError{})
 
-	_, err := s.replicatorQueueProcessor.process(task)
+	_, err := s.replicatorQueueProcessor.process(task, true)
 	s.Nil(err)
 }
 
@@ -187,7 +187,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	})
 	msBuilder.On("IsWorkflowExecutionRunning").Return(false)
 
-	_, err := s.replicatorQueueProcessor.process(task)
+	_, err := s.replicatorQueueProcessor.process(task, true)
 	s.Nil(err)
 }
 
@@ -247,7 +247,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		}, nil,
 	).Once()
 
-	_, err := s.replicatorQueueProcessor.process(task)
+	_, err := s.replicatorQueueProcessor.process(task, true)
 	s.Nil(err)
 }
 
@@ -341,7 +341,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(task)
+	_, err := s.replicatorQueueProcessor.process(task, true)
 	s.Nil(err)
 }
 
@@ -435,6 +435,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(task)
+	_, err := s.replicatorQueueProcessor.process(task, true)
 	s.Nil(err)
 }

@@ -30,19 +30,19 @@ type MockProcessor struct {
 }
 
 // process is mock implementation for process of Processor
-func (_m *MockProcessor) process(task queueTaskInfo) (int, error) {
-	ret := _m.Called(task)
+func (_m *MockProcessor) process(task queueTaskInfo, shouldProcessTask bool) (int, error) {
+	ret := _m.Called(task, shouldProcessTask)
 
 	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(queueTaskInfo, bool) int); ok {
+		r0 = rf(task, shouldProcessTask)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(queueTaskInfo, bool) error); ok {
+		r1 = rf(task, shouldProcessTask)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -50,13 +50,29 @@ func (_m *MockProcessor) process(task queueTaskInfo) (int, error) {
 	return r0, r1
 }
 
+// getTaskFilter is mock implementation for process of timerProcessor
+func (_m *MockProcessor) getTaskFilter() queueTaskFilter {
+	ret := _m.Called()
+
+	var r0 queueTaskFilter
+	if rf, ok := ret.Get(0).(func() queueTaskFilter); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(queueTaskFilter)
+		}
+	}
+
+	return r0
+}
+
 // readTasks is mock implementation for readTasks of Processor
 func (_m *MockProcessor) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
 	ret := _m.Called(readLevel)
 
 	var r0 []queueTaskInfo
-	if rf, ok := ret.Get(0).(func() []queueTaskInfo); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(int64) []queueTaskInfo); ok {
+		r0 = rf(readLevel)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]queueTaskInfo)
@@ -64,15 +80,15 @@ func (_m *MockProcessor) readTasks(readLevel int64) ([]queueTaskInfo, bool, erro
 	}
 
 	var r1 bool
-	if rf, ok := ret.Get(1).(func() bool); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(int64) bool); ok {
+		r1 = rf(readLevel)
 	} else {
 		r1 = ret.Get(1).(bool)
 	}
 
 	var r2 error
-	if rf, ok := ret.Get(2).(func() error); ok {
-		r2 = rf()
+	if rf, ok := ret.Get(2).(func(int64) error); ok {
+		r2 = rf(readLevel)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -85,8 +101,8 @@ func (_m *MockProcessor) completeTask(taskID int64) error {
 	ret := _m.Called(taskID)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(taskID)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -98,8 +114,8 @@ func (_m *MockProcessor) updateAckLevel(taskID int64) error {
 	ret := _m.Called(taskID)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(taskID)
 	} else {
 		r0 = ret.Error(0)
 	}

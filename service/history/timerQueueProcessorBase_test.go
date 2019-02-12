@@ -141,16 +141,50 @@ func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_ShutDown() {
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, &persistence.TimerTaskInfo{})
 }
 
-func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_NoErr() {
+func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr() {
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
-	s.mockProcessor.On("process", task).Return(s.scope, nil).Once()
+	var taskFilterErr timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+		return false, errors.New("some random error")
+	}
+	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+		return true, nil
+	}
+	s.mockProcessor.On("getTaskFilter").Return(taskFilterErr).Once()
+	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
+	s.mockProcessor.On("process", task, true).Return(s.scope, nil).Once()
 	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
 }
 
-func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_ErrNoErr() {
+func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
+	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
+	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+		return true, nil
+	}
+	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
+	s.mockProcessor.On("process", task, false).Return(s.scope, nil).Once()
+	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
+	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
+}
+
+func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
+	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
+	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+		return true, nil
+	}
+	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
+	s.mockProcessor.On("process", task, false).Return(s.scope, nil).Once()
+	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
+	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
+}
+
+func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
+	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+		return true, nil
+	}
+	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scope, err).Once()
 	s.mockProcessor.On("process", task).Return(s.scope, nil).Once()
 	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
