@@ -945,8 +945,13 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(request *h.SyncActivityReque
 	ai.Version = request.GetVersion()
 	ai.ScheduledTime = time.Unix(0, request.GetScheduledTime())
 	ai.StartedID = request.GetStartedId()
-	ai.StartedTime = time.Unix(0, request.GetStartedTime())
-	ai.LastHeartBeatUpdatedTime = time.Unix(0, request.GetLastHeartbeatTime())
+	if ai.StartedID == common.EmptyEventID {
+		ai.StartedTime = time.Time{}
+		ai.LastHeartBeatUpdatedTime = time.Time{}
+	} else {
+		ai.StartedTime = time.Unix(0, request.GetStartedTime())
+		ai.LastHeartBeatUpdatedTime = time.Unix(0, request.GetLastHeartbeatTime())
+	}
 	ai.Details = request.GetDetails()
 	ai.Attempt = request.GetAttempt()
 	if resetActivityTimerTaskStatus {
@@ -2727,6 +2732,7 @@ func (e *mutableStateBuilder) CreateActivityRetryTimer(ai *persistence.ActivityI
 	retryTask := prepareActivityNextRetry(e.GetCurrentVersion(), ai, failureReason)
 	if retryTask != nil {
 		e.updateActivityInfos[ai] = struct{}{}
+		e.syncActivityTasks[ai.ScheduleID] = struct{}{}
 	}
 
 	return retryTask
