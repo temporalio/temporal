@@ -140,6 +140,13 @@ func (s *esProcessorSuite) TestAdd() {
 	s.esProcessor.Add(request, key, mockKafkaMsg)
 	s.Equal(1, s.esProcessor.mapToKafkaMsg.Size())
 	mockKafkaMsg.AssertExpectations(s.T())
+
+	// handle duplicate
+	mockKafkaMsg.On("Ack").Return(nil).Once()
+	s.mockBulkProcessor.On("Add", request).Return().Once()
+	s.esProcessor.Add(request, key, mockKafkaMsg)
+	s.Equal(1, s.esProcessor.mapToKafkaMsg.Size())
+	mockKafkaMsg.AssertExpectations(s.T())
 }
 
 func (s *esProcessorSuite) TestBulkAfterAction() {
