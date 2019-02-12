@@ -56,9 +56,9 @@ func newHistoryPersistence(cfg config.SQL, logger bark.Logger) (p.HistoryStore, 
 
 func (m *sqlHistoryManager) AppendHistoryEvents(request *p.InternalAppendHistoryEventsRequest) error {
 	row := &sqldb.EventsRow{
-		DomainID:     request.DomainID,
+		DomainID:     sqldb.MustParseUUID(request.DomainID),
 		WorkflowID:   *request.Execution.WorkflowId,
-		RunID:        *request.Execution.RunId,
+		RunID:        sqldb.MustParseUUID(*request.Execution.RunId),
 		FirstEventID: request.FirstEventID,
 		BatchVersion: request.EventBatchVersion,
 		RangeID:      request.RangeID,
@@ -94,9 +94,9 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.InternalGetWo
 	}
 
 	rows, err := m.db.SelectFromEvents(&sqldb.EventsFilter{
-		DomainID:     request.DomainID,
+		DomainID:     sqldb.MustParseUUID(request.DomainID),
 		WorkflowID:   *request.Execution.WorkflowId,
-		RunID:        *request.Execution.RunId,
+		RunID:        sqldb.MustParseUUID(*request.Execution.RunId),
 		FirstEventID: common.Int64Ptr(offset + 1),
 		NextEventID:  &request.NextEventID,
 		PageSize:     &request.PageSize,
@@ -144,7 +144,10 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.InternalGetWo
 
 func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWorkflowExecutionHistoryRequest) error {
 	_, err := m.db.DeleteFromEvents(&sqldb.EventsFilter{
-		DomainID: request.DomainID, WorkflowID: *request.Execution.WorkflowId, RunID: *request.Execution.RunId})
+		DomainID:   sqldb.MustParseUUID(request.DomainID),
+		WorkflowID: *request.Execution.WorkflowId,
+		RunID:      sqldb.MustParseUUID(*request.Execution.RunId),
+	})
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteWorkflowExecutionHistory: %v", err),
@@ -155,7 +158,7 @@ func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWork
 
 func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHistoryEventsRequest, row *sqldb.EventsRow) error {
 	return m.txExecute("AppendHistoryEvents", func(tx sqldb.Tx) error {
-		if err := lockEventForUpdate(tx, request); err != nil {
+		if err := lockEventForUpdate(tx, request, row); err != nil {
 			return err
 		}
 		result, err := tx.UpdateEvents(row)
@@ -173,11 +176,11 @@ func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHist
 	})
 }
 
-func lockEventForUpdate(tx sqldb.Tx, req *p.InternalAppendHistoryEventsRequest) error {
+func lockEventForUpdate(tx sqldb.Tx, req *p.InternalAppendHistoryEventsRequest, row *sqldb.EventsRow) error {
 	row, err := tx.LockEvents(&sqldb.EventsFilter{
-		DomainID:     req.DomainID,
+		DomainID:     row.DomainID,
 		WorkflowID:   *req.Execution.WorkflowId,
-		RunID:        *req.Execution.RunId,
+		RunID:        row.RunID,
 		FirstEventID: &req.FirstEventID,
 	})
 	if err != nil {

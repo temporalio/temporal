@@ -71,6 +71,10 @@ ignored = ["github.com/uber/cadence/.gen"]
   version = "1.0.0"
 
 [[constraint]]
+  name = "github.com/google/uuid"
+  version = "1.1.0"
+
+[[constraint]]
   branch = "master"
   name = "github.com/sirupsen/logrus"
 

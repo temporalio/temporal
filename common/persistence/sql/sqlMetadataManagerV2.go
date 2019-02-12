@@ -112,7 +112,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 	err = m.txExecute("CreateDomain", func(tx sqldb.Tx) error {
 		if _, err1 := tx.InsertIntoDomain(&sqldb.DomainRow{
 			Name:                        request.Info.Name,
-			ID:                          request.Info.ID,
+			ID:                          sqldb.MustParseUUID(request.Info.ID),
 			Status:                      request.Info.Status,
 			Description:                 request.Info.Description,
 			OwnerEmail:                  request.Info.OwnerEmail,
@@ -158,7 +158,7 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	case request.Name != "":
 		filter.Name = &request.Name
 	case request.ID != "":
-		filter.ID = &request.ID
+		filter.ID = sqldb.UUIDPtr(sqldb.MustParseUUID(request.ID))
 	default:
 		return nil, &workflow.BadRequestError{
 			Message: "GetDomain operation failed.  Both ID and Name are empty.",
@@ -215,7 +215,7 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow
 	return &persistence.GetDomainResponse{
 		TableVersion: persistence.DomainTableVersionV2,
 		Info: &persistence.DomainInfo{
-			ID:          row.ID,
+			ID:          row.ID.String(),
 			Name:        row.Name,
 			Status:      row.Status,
 			Description: row.Description,
@@ -258,7 +258,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 	return m.txExecute("UpdateDomain", func(tx sqldb.Tx) error {
 		result, err := tx.UpdateDomain(&sqldb.DomainRow{
 			Name:                        request.Info.Name,
-			ID:                          request.Info.ID,
+			ID:                          sqldb.MustParseUUID(request.Info.ID),
 			Status:                      request.Info.Status,
 			Description:                 request.Info.Description,
 			OwnerEmail:                  request.Info.OwnerEmail,
@@ -293,7 +293,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 
 func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
 	return m.txExecute("DeleteDomain", func(tx sqldb.Tx) error {
-		_, err := tx.DeleteFromDomain(&sqldb.DomainFilter{ID: &request.ID})
+		_, err := tx.DeleteFromDomain(&sqldb.DomainFilter{ID: sqldb.UUIDPtr(sqldb.MustParseUUID(request.ID))})
 		return err
 	})
 }

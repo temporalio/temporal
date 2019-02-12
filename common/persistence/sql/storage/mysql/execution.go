@@ -426,8 +426,8 @@ func (mdb *DB) DeleteFromCurrentExecutions(filter *sqldb.CurrentExecutionsFilter
 }
 
 // LockCurrentExecutions acquires a write lock on a single row in current_executions table
-func (mdb *DB) LockCurrentExecutions(filter *sqldb.CurrentExecutionsFilter) (string, error) {
-	var runID string
+func (mdb *DB) LockCurrentExecutions(filter *sqldb.CurrentExecutionsFilter) (sqldb.UUID, error) {
+	var runID sqldb.UUID
 	err := mdb.conn.Get(&runID, lockCurrentExecutionQry, filter.ShardID, filter.DomainID, filter.WorkflowID)
 	return runID, err
 }
