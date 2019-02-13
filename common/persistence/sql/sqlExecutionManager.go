@@ -214,8 +214,17 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		ClientFeatureVersion:         execution.ClientFeatureVersion,
 		ClientImpl:                   execution.ClientImpl,
 		SignalCount:                  int32(execution.SignalCount),
+		HistorySize:                  execution.HistorySize,
 		CronSchedule:                 execution.CronSchedule,
 		CompletionEventBatchID:       common.EmptyEventID,
+		HasRetryPolicy:               execution.HasRetryPolicy,
+		Attempt:                      int32(execution.Attempt),
+		InitialInterval:              int32(execution.InitialInterval),
+		BackoffCoefficient:           execution.BackoffCoefficient,
+		MaximumInterval:              int32(execution.MaximumInterval),
+		MaximumAttempts:              int32(execution.MaximumAttempts),
+		ExpirationSeconds:            int32(execution.ExpirationSeconds),
+		ExpirationTime:               execution.ExpirationTime,
 	}
 
 	if execution.ExecutionContext != nil && len(*execution.ExecutionContext) > 0 {
@@ -261,6 +270,16 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		state.ExecutionInfo.CompletionEvent = p.NewDataBlob(*execution.CompletionEvent,
 			common.EncodingType(*execution.CompletionEventEncoding))
 	}
+
+	if execution.NonRetryableErrors != nil {
+		err := gobDeserialize(execution.NonRetryableErrors, &state.ExecutionInfo.NonRetriableErrors)
+		if err != nil {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to deserialize nonRetryableErrors: %v", err),
+			}
+		}
+	}
+
 	{
 		var err error
 		state.ActivitInfos, err = getActivityInfoMap(m.db,
@@ -1154,7 +1173,16 @@ func createExecution(
 		ClientFeatureVersion:         "",
 		ClientImpl:                   "",
 		SignalCount:                  int(request.SignalCount),
+		HistorySize:                  request.HistorySize,
 		CronSchedule:                 request.CronSchedule,
+		HasRetryPolicy:               request.HasRetryPolicy,
+		Attempt:                      int(request.Attempt),
+		InitialInterval:              int(request.InitialInterval),
+		BackoffCoefficient:           request.BackoffCoefficient,
+		MaximumInterval:              int(request.MaximumInterval),
+		MaximumAttempts:              int(request.MaximumAttempts),
+		ExpirationSeconds:            int(request.ExpirationSeconds),
+		ExpirationTime:               request.ExpirationTime,
 	}
 
 	if request.ReplicationState != nil {
@@ -1177,6 +1205,20 @@ func createExecution(
 		row.ParentDomainID = sqldb.UUIDPtr(sqldb.MustParseUUID(request.ParentDomainID))
 		row.ParentWorkflowID = request.ParentExecution.WorkflowId
 		row.ParentRunID = sqldb.UUIDPtr(sqldb.MustParseUUID(*request.ParentExecution.RunId))
+	}
+
+	if request.ExecutionContext != nil {
+		row.ExecutionContext = &request.ExecutionContext
+	}
+
+	if request.NonRetriableErrors != nil {
+		blob, err := gobSerialize(request.NonRetriableErrors)
+		if err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("CreateWorkflowExecution: failed to serialize nonRetryableErrors: %v", err),
+			}
+		}
+		row.NonRetryableErrors = blob
 	}
 
 	_, err := tx.InsertIntoExecutions(row)
@@ -1582,6 +1624,7 @@ func updateExecution(tx sqldb.Tx,
 		WorkflowTypeName:             executionInfo.WorkflowTypeName,
 		WorkflowTimeoutSeconds:       int64(executionInfo.WorkflowTimeout),
 		DecisionTaskTimeoutMinutes:   int64(executionInfo.DecisionTimeoutValue),
+		ExecutionContext:             &executionInfo.ExecutionContext,
 		State:                        int64(executionInfo.State),
 		CloseStatus:                  int64(executionInfo.CloseStatus),
 		LastFirstEventID:             int64(executionInfo.LastFirstEventID),
@@ -1606,8 +1649,17 @@ func updateExecution(tx sqldb.Tx,
 		LastWriteVersion:             common.EmptyVersion,
 		CurrentVersion:               common.EmptyVersion,
 		SignalCount:                  int(executionInfo.SignalCount),
+		HistorySize:                  executionInfo.HistorySize,
 		CronSchedule:                 executionInfo.CronSchedule,
 		CompletionEventBatchID:       &executionInfo.CompletionEventBatchID,
+		HasRetryPolicy:               executionInfo.HasRetryPolicy,
+		Attempt:                      int(executionInfo.Attempt),
+		InitialInterval:              int(executionInfo.InitialInterval),
+		BackoffCoefficient:           executionInfo.BackoffCoefficient,
+		MaximumInterval:              int(executionInfo.MaximumInterval),
+		MaximumAttempts:              int(executionInfo.MaximumAttempts),
+		ExpirationSeconds:            int(executionInfo.ExpirationSeconds),
+		ExpirationTime:               executionInfo.ExpirationTime,
 	}
 
 	if executionInfo.ExecutionContext != nil {
@@ -1627,7 +1679,7 @@ func updateExecution(tx sqldb.Tx,
 		lastReplicationInfo, err := gobSerialize(&replicationState.LastReplicationInfo)
 		if err != nil {
 			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Failed to serialize LastReplicationInfo. Error: %v", err),
+				Message: fmt.Sprintf("updateExecution operation failed. Failed to serialize LastReplicationInfo. Error: %v", err),
 			}
 		}
 		row.LastReplicationInfo = &lastReplicationInfo
@@ -1645,6 +1697,16 @@ func updateExecution(tx sqldb.Tx,
 		var i int64 = 1
 		row.CancelRequested = &i
 		row.CancelRequestID = &executionInfo.CancelRequestID
+	}
+
+	if executionInfo.NonRetriableErrors != nil {
+		blob, err := gobSerialize(executionInfo.NonRetriableErrors)
+		if err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("updateExecution: failed to serialize nonRetryableErrors: %v", err),
+			}
+		}
+		row.NonRetryableErrors = blob
 	}
 
 	result, err := tx.UpdateExecutions(row)

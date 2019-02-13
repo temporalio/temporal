@@ -110,8 +110,17 @@ CREATE TABLE executions(
 	client_feature_version VARCHAR(255) NOT NULL, -- 4.
 	client_impl VARCHAR(255) NOT NULL, -- 5.
 	signal_count INT NOT NULL,
+	history_size BIGINT NOT NULL,
 	cron_schedule VARCHAR(255),
-	-- TODO: fix sql to support workflow retry. https://github.com/uber/cadence/issues/1339
+	has_retry_policy BOOLEAN NOT NULL,-- If there is a retry policy
+	attempt INT NOT NULL,
+  initial_interval INT NOT NULL,    -- initial retry interval, in seconds
+  backoff_coefficient DOUBLE NOT NULL,
+  maximum_interval INT NOT NULL,    -- max retry interval in seconds
+  maximum_attempts INT NOT NULL,    -- max number of attempts including initial non-retry attempt
+  expiration_seconds INT NOT NULL,
+  expiration_time DATETIME(6) NOT NULL, -- retry expiration time
+  non_retryable_errors BLOB,
 	PRIMARY KEY (shard_id, domain_id, workflow_id, run_id)
 );
 

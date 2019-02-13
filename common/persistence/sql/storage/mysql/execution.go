@@ -55,8 +55,19 @@ client_library_version,
 client_feature_version,
 client_impl,
 signal_count,
+history_size,
 completion_event_encoding,
-cron_schedule`
+cron_schedule,
+has_retry_policy,
+attempt,
+initial_interval,
+backoff_coefficient,
+maximum_interval,
+maximum_attempts,
+expiration_seconds,
+expiration_time,
+non_retryable_errors
+`
 
 	executionsColumnsTags = `:shard_id,
 :domain_id,
@@ -86,8 +97,18 @@ cron_schedule`
 :client_feature_version,
 :client_impl,
 :signal_count,
+:history_size,
 :completion_event_encoding,
-:cron_schedule`
+:cron_schedule,
+:has_retry_policy,
+:attempt,
+:initial_interval,
+:backoff_coefficient,
+:maximum_interval,
+:maximum_attempts,
+:expiration_seconds,
+:expiration_time,
+:non_retryable_errors`
 
 	executionsBlobColumns = `completion_event,
 execution_context`
@@ -173,7 +194,19 @@ current_version = :current_version,
 last_write_version = :last_write_version,
 last_write_event_id = :last_write_event_id,
 last_replication_info = :last_replication_info,
-signal_count = :signal_count
+signal_count = :signal_count,
+history_size = :history_size,
+cron_schedule = :cron_schedule,
+has_retry_policy = :has_retry_policy,
+attempt = :attempt,
+initial_interval = :initial_interval,
+backoff_coefficient = :backoff_coefficient,
+maximum_interval = :maximum_interval,
+maximum_attempts = :maximum_attempts,
+expiration_seconds = :expiration_seconds,
+expiration_time = :expiration_time,
+non_retryable_errors = :non_retryable_errors
+
 WHERE
 shard_id = :shard_id AND
 domain_id = :domain_id AND
@@ -369,6 +402,7 @@ shard_id=? AND domain_id=? AND workflow_id=? AND run_id=?`
 func (mdb *DB) InsertIntoExecutions(row *sqldb.ExecutionsRow) (sql.Result, error) {
 	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 	row.LastUpdatedTime = mdb.converter.ToMySQLDateTime(row.LastUpdatedTime)
+	row.ExpirationTime = mdb.converter.ToMySQLDateTime(row.ExpirationTime)
 	return mdb.conn.NamedExec(createExecutionQry, row)
 }
 
@@ -376,6 +410,7 @@ func (mdb *DB) InsertIntoExecutions(row *sqldb.ExecutionsRow) (sql.Result, error
 func (mdb *DB) UpdateExecutions(row *sqldb.ExecutionsRow) (sql.Result, error) {
 	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 	row.LastUpdatedTime = mdb.converter.ToMySQLDateTime(row.LastUpdatedTime)
+	row.ExpirationTime = mdb.converter.ToMySQLDateTime(row.ExpirationTime)
 	return mdb.conn.NamedExec(updateExecutionQry, row)
 }
 
@@ -388,6 +423,7 @@ func (mdb *DB) SelectFromExecutions(filter *sqldb.ExecutionsFilter) (*sqldb.Exec
 	}
 	row.StartTime = mdb.converter.FromMySQLDateTime(row.StartTime)
 	row.LastUpdatedTime = mdb.converter.FromMySQLDateTime(row.LastUpdatedTime)
+	row.ExpirationTime = mdb.converter.FromMySQLDateTime(row.ExpirationTime)
 	return &row, err
 }
 

@@ -1496,7 +1496,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	activityInfos := make(map[int64]*p.InternalActivityInfo)
 	aMap := result["activity_map"].(map[int64]map[string]interface{})
 	for key, value := range aMap {
-		info := createActivityInfo(value)
+		info := createActivityInfo(request.DomainID, value)
 		activityInfos[key] = info
 	}
 	state.ActivitInfos = activityInfos
@@ -3819,7 +3819,7 @@ func createReplicationTaskInfo(result map[string]interface{}) *p.ReplicationTask
 	return info
 }
 
-func createActivityInfo(result map[string]interface{}) *p.InternalActivityInfo {
+func createActivityInfo(domainID string, result map[string]interface{}) *p.InternalActivityInfo {
 	info := &p.InternalActivityInfo{}
 	var sharedEncoding common.EncodingType
 	var scheduledEventData, startedEventData []byte
@@ -3887,6 +3887,7 @@ func createActivityInfo(result map[string]interface{}) *p.InternalActivityInfo {
 			sharedEncoding = common.EncodingType(v.(string))
 		}
 	}
+	info.DomainID = domainID
 	info.ScheduledEvent = p.NewDataBlob(scheduledEventData, sharedEncoding)
 	info.StartedEvent = p.NewDataBlob(startedEventData, sharedEncoding)
 

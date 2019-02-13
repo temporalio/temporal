@@ -156,7 +156,17 @@ type (
 		ClientFeatureVersion         string
 		ClientImpl                   string
 		SignalCount                  int
+		HistorySize                  int64
 		CronSchedule                 string
+		HasRetryPolicy               bool
+		Attempt                      int
+		InitialInterval              int
+		BackoffCoefficient           float64
+		MaximumInterval              int
+		MaximumAttempts              int
+		ExpirationSeconds            int
+		ExpirationTime               time.Time
+		NonRetryableErrors           []byte
 	}
 
 	// ExecutionsFilter contains the column names within domain table that
