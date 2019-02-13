@@ -387,6 +387,11 @@ func newAdminKafkaCommands() []cli.Command {
 					Name:  FlagHeadersModeWithAlias,
 					Usage: "Output headers of messages in format: DomainID, WorkflowID, RunID, FirstEventID, NextEventID",
 				},
+				cli.IntFlag{
+					Name:  FlagMessageTypeWithAlias,
+					Usage: "Kafka message type (0: replicationTasks; 1: visibility)",
+					Value: 0,
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminKafkaParse(c)

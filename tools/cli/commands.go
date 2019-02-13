@@ -158,6 +158,8 @@ const (
 	FlagSkipErrorModeWithAlias     = FlagSkipErrorMode + ", serr"
 	FlagHeadersMode                = "headers"
 	FlagHeadersModeWithAlias       = FlagHeadersMode + ", he"
+	FlagMessageType                = "message_type"
+	FlagMessageTypeWithAlias       = FlagMessageType + ", mt"
 )
 
 const (

@@ -43,6 +43,7 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -57,6 +58,14 @@ import (
 )
 
 type filterFn func(*replicator.ReplicationTask) bool
+type filterFnForVisibility func(*indexer.Message) bool
+
+type kafkaMessageType int
+
+const (
+	kafkaMessageTypeReplicationTask kafkaMessageType = iota
+	kafkaMessageTypeVisibilityMsg
+)
 
 const (
 	bufferSize                 = 4096
@@ -70,26 +79,52 @@ var (
 	r = regexp.MustCompile(`Partition: .*?, Offset: .*?, Key: .*?`)
 )
 
+type writerChannel struct {
+	Type                   kafkaMessageType
+	ReplicationTaskChannel chan *replicator.ReplicationTask
+	VisibilityMsgChannel   chan *indexer.Message
+}
+
+func newWriterChannel(messageType kafkaMessageType) *writerChannel {
+	ch := &writerChannel{
+		Type: messageType,
+	}
+	switch messageType {
+	case kafkaMessageTypeReplicationTask:
+		ch.ReplicationTaskChannel = make(chan *replicator.ReplicationTask, chanBufferSize)
+	case kafkaMessageTypeVisibilityMsg:
+		ch.VisibilityMsgChannel = make(chan *indexer.Message, chanBufferSize)
+	}
+	return ch
+}
+
+func (ch *writerChannel) Close() {
+	if ch.ReplicationTaskChannel != nil {
+		close(ch.ReplicationTaskChannel)
+	}
+	if ch.VisibilityMsgChannel != nil {
+		close(ch.VisibilityMsgChannel)
+	}
+}
+
 // AdminKafkaParse parses the output of k8read and outputs replication tasks
 func AdminKafkaParse(c *cli.Context) {
 	inputFile := getInputFile(c.String(FlagInputFile))
 	outputFile := getOutputFile(c.String(FlagOutputFilename))
-	filter := buildFilterFn(c.String(FlagWorkflowID), c.String(FlagRunID))
 
 	defer inputFile.Close()
 	defer outputFile.Close()
 
 	readerCh := make(chan []byte, chanBufferSize)
-	writerCh := make(chan *replicator.ReplicationTask, chanBufferSize)
+	writerCh := newWriterChannel(kafkaMessageType(c.Int(FlagMessageType)))
 	doneCh := make(chan struct{})
 
 	var skippedCount int32
 	skipErrMode := c.Bool(FlagSkipErrorMode)
-	headerMode := c.Bool(FlagHeadersMode)
 
 	go startReader(inputFile, readerCh)
 	go startParser(readerCh, writerCh, skipErrMode, &skippedCount)
-	go startWriter(outputFile, writerCh, filter, doneCh, skipErrMode, &skippedCount, headerMode)
+	go startWriter(outputFile, writerCh, doneCh, &skippedCount, c)
 
 	<-doneCh
 
@@ -109,6 +144,18 @@ func buildFilterFn(workflowID, runID string) filterFn {
 			return false
 		}
 		if len(runID) != 0 && *task.HistoryTaskAttributes.RunId != runID {
+			return false
+		}
+		return true
+	}
+}
+
+func buildFilterFnForVisibility(workflowID, runID string) filterFnForVisibility {
+	return func(msg *indexer.Message) bool {
+		if len(workflowID) != 0 && msg.GetWorkflowID() != workflowID {
+			return false
+		}
+		if len(runID) != 0 && msg.GetRunID() != runID {
 			return false
 		}
 		return true
@@ -165,8 +212,8 @@ func startReader(file *os.File, readerCh chan<- []byte) {
 	}
 }
 
-func startParser(readerCh <-chan []byte, writerCh chan<- *replicator.ReplicationTask, skipErrors bool, skippedCount *int32) {
-	defer close(writerCh)
+func startParser(readerCh <-chan []byte, writerCh *writerChannel, skipErrors bool, skippedCount *int32) {
+	defer writerCh.Close()
 
 	var buffer []byte
 Loop:
@@ -186,28 +233,46 @@ Loop:
 }
 
 func startWriter(
-	output *os.File,
-	writerCh <-chan *replicator.ReplicationTask,
-	filter filterFn,
+	outputFile *os.File,
+	writerCh *writerChannel,
 	doneCh chan struct{},
-	skipErrors bool,
 	skippedCount *int32,
-	headerMode bool,
+	c *cli.Context,
 ) {
 
 	defer close(doneCh)
 
+	skipErrMode := c.Bool(FlagSkipErrorMode)
+	headerMode := c.Bool(FlagHeadersMode)
+
+	switch writerCh.Type {
+	case kafkaMessageTypeReplicationTask:
+		writeReplicationTask(outputFile, writerCh, skippedCount, skipErrMode, headerMode, c)
+	case kafkaMessageTypeVisibilityMsg:
+		writeVisibilityMessage(outputFile, writerCh, skippedCount, skipErrMode, headerMode, c)
+	}
+}
+
+func writeReplicationTask(
+	outputFile *os.File,
+	writerCh *writerChannel,
+	skippedCount *int32,
+	skipErrMode bool,
+	headerMode bool,
+	c *cli.Context,
+) {
+	filter := buildFilterFn(c.String(FlagWorkflowID), c.String(FlagRunID))
 Loop:
 	for {
 		select {
-		case task, ok := <-writerCh:
+		case task, ok := <-writerCh.ReplicationTaskChannel:
 			if !ok {
 				break Loop
 			}
 			if filter(task) {
 				jsonStr, err := json.Marshal(task)
 				if err != nil {
-					if !skipErrors {
+					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
 					} else {
 						atomic.AddInt32(skippedCount, 1)
@@ -228,7 +293,53 @@ Loop:
 						*task.HistoryTaskAttributes.NextEventId,
 					)
 				}
-				output.WriteString(fmt.Sprintf("%v\n", outStr))
+				outputFile.WriteString(fmt.Sprintf("%v\n", outStr))
+			}
+		}
+	}
+}
+
+func writeVisibilityMessage(
+	outputFile *os.File,
+	writerCh *writerChannel,
+	skippedCount *int32,
+	skipErrMode bool,
+	headerMode bool,
+	c *cli.Context,
+) {
+	filter := buildFilterFnForVisibility(c.String(FlagWorkflowID), c.String(FlagRunID))
+Loop:
+	for {
+		select {
+		case msg, ok := <-writerCh.VisibilityMsgChannel:
+			if !ok {
+				break Loop
+			}
+			if filter(msg) {
+				jsonStr, err := json.Marshal(msg)
+				if err != nil {
+					if !skipErrMode {
+						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
+					} else {
+						atomic.AddInt32(skippedCount, 1)
+						continue Loop
+					}
+				}
+
+				var outStr string
+				if !headerMode {
+					outStr = string(jsonStr)
+				} else {
+					outStr = fmt.Sprintf(
+						"%v, %v, %v, %v, %v",
+						msg.GetDomainID(),
+						msg.GetWorkflowID(),
+						msg.GetRunID(),
+						msg.GetMessageType().String(),
+						msg.GetVersion(),
+					)
+				}
+				outputFile.WriteString(fmt.Sprintf("%v\n", outStr))
 			}
 		}
 	}
@@ -243,12 +354,21 @@ func splitBuffer(buffer []byte) ([]byte, []byte) {
 	return buffer[:splitIndex], buffer[splitIndex:]
 }
 
-func parse(bytes []byte, skipErrors bool, skippedCount *int32, writerCh chan<- *replicator.ReplicationTask) {
+func parse(bytes []byte, skipErrors bool, skippedCount *int32, writerCh *writerChannel) {
 	messages, skippedGetMsgCount := getMessages(bytes, skipErrors)
-	tasks, skippedDeserializeCount := deserializeMessages(messages, skipErrors)
-	atomic.AddInt32(skippedCount, skippedGetMsgCount+skippedDeserializeCount)
-	for _, t := range tasks {
-		writerCh <- t
+	switch writerCh.Type {
+	case kafkaMessageTypeReplicationTask:
+		msgs, skippedDeserializeCount := deserializeMessages(messages, skipErrors)
+		atomic.AddInt32(skippedCount, skippedGetMsgCount+skippedDeserializeCount)
+		for _, msg := range msgs {
+			writerCh.ReplicationTaskChannel <- msg
+		}
+	case kafkaMessageTypeVisibilityMsg:
+		msgs, skippedDeserializeCount := deserializeVisibilityMessages(messages, skipErrors)
+		atomic.AddInt32(skippedCount, skippedGetMsgCount+skippedDeserializeCount)
+		for _, msg := range msgs {
+			writerCh.VisibilityMsgChannel <- msg
+		}
 	}
 }
 
@@ -300,6 +420,34 @@ func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicator.Repl
 }
 
 func decode(message []byte, val *replicator.ReplicationTask) error {
+	reader := bytes.NewReader(message[1:])
+	wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
+	if err != nil {
+		return err
+	}
+	return val.FromWire(wireVal)
+}
+
+func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*indexer.Message, int32) {
+	var visibilityMessages []*indexer.Message
+	var skipped int32
+	for _, m := range messages {
+		var msg indexer.Message
+		err := decodeVisibility(m, &msg)
+		if err != nil {
+			if !skipErrors {
+				ErrorAndExit(malformedMessage, err)
+			} else {
+				skipped++
+				continue
+			}
+		}
+		visibilityMessages = append(visibilityMessages, &msg)
+	}
+	return visibilityMessages, skipped
+}
+
+func decodeVisibility(message []byte, val *indexer.Message) error {
 	reader := bytes.NewReader(message[1:])
 	wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
 	if err != nil {
