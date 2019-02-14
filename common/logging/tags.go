@@ -102,6 +102,7 @@ const (
 	TagValueIndexerProcessorComponent         = "indexer-processor"
 	TagValueIndexerESProcessorComponent       = "indexer-es-processor"
 	TagValueESVisibilityManager               = "es-visibility-manager"
+	TagValueArchivalSystemWorkflowComponent   = "archival-system-workflow"
 
 	// TagHistoryBuilderAction values
 	TagValueActionWorkflowStarted                 = "add-workflowexecution-started-event"
@@ -163,13 +164,16 @@ const (
 	TagTreeID   = "tree-id"
 	TagBranchID = "branch-id"
 
-	// system workflow tags
-	TagUserWorkflowID               = "user-workflow-id"
-	TagUserRunID                    = "user-run-id"
-	TagIterationsUntilContinueAsNew = "iterations-until-continue-as-new"
-	TagBucket                       = "bucket"
-	TagFileBlobstoreBlobPath        = "file-blobstore-blob-path"
-	TagBlobKey                      = "blob-key"
-	TagBlobKeyPrefix                = "blob-key-prefix"
-	TagFileBlobstoreMetadataPath    = "file-blobstore-metadata-path"
+	// archival tags
+	TagArchiveRequestDomainID            = "archive-request-domain-id"
+	TagArchiveRequestWorkflowID          = "archive-request-workflow-id"
+	TagArchiveRequestRunID               = "archive-request-run-id"
+	TagArchiveRequestEventStoreVersion   = "archive-request-event-store-version"
+	TagArchiveRequestLastFirstEventID    = "archive-request-last-first-event-id"
+	TagNumberOfSignalsUntilContinueAsNew = "number-of-signals-until-continue-as-new"
+	TagBucket                            = "bucket"
+	TagFileBlobstoreBlobPath             = "file-blobstore-blob-path"
+	TagBlobKey                           = "blob-key"
+	TagBlobKeyPrefix                     = "blob-key-prefix"
+	TagFileBlobstoreMetadataPath         = "file-blobstore-metadata-path"
 )

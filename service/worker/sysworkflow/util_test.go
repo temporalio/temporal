@@ -42,31 +42,29 @@ func (s *UtilSuite) SetupTest() {
 
 func (s *UtilSuite) TestNewHistoryBlobKey() {
 	testCases := []struct {
-		domainID             string
-		workflowID           string
-		runID                string
-		pageToken            string
-		closeFailoverVersion string
-		expectError          bool
-		expectBuiltKey       string
+		domainID       string
+		workflowID     string
+		runID          string
+		pageToken      string
+		expectError    bool
+		expectBuiltKey string
 	}{
 		{
 			domainID:    "",
 			expectError: true,
 		},
 		{
-			domainID:             "testDomainID",
-			workflowID:           "testWorkflowID",
-			runID:                "testRunID",
-			pageToken:            "testPageToken",
-			closeFailoverVersion: "testCloseFailoverVersion",
-			expectError:          false,
-			expectBuiltKey:       "17971674567288329890367046253745284795510285995943906173973_testPageToken_testCloseFailoverVersion.history",
+			domainID:       "testDomainID",
+			workflowID:     "testWorkflowID",
+			runID:          "testRunID",
+			pageToken:      "testPageToken",
+			expectError:    false,
+			expectBuiltKey: "17971674567288329890367046253745284795510285995943906173973_testPageToken.history",
 		},
 	}
 
 	for _, tc := range testCases {
-		key, err := NewHistoryBlobKey(tc.domainID, tc.workflowID, tc.runID, tc.pageToken, tc.closeFailoverVersion)
+		key, err := NewHistoryBlobKey(tc.domainID, tc.workflowID, tc.runID, tc.pageToken)
 		if tc.expectError {
 			s.Error(err)
 			s.Nil(key)

@@ -22,48 +22,86 @@ package sysworkflow
 
 import (
 	"context"
-	"github.com/uber-go/tally"
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/worker"
 	"go.uber.org/cadence/workflow"
-	"go.uber.org/zap"
 )
 
 type (
+	// SysWorker is a cadence client worker which enables running arbitrary system workflows
+	SysWorker interface {
+		Start() error
+		Stop()
+	}
+
+	sysworker struct {
+		worker      worker.Worker
+		domainCache cache.DomainCache
+	}
+
+	// SysWorkerContainer contains everything needed to bootstrap SysWorker and all hosted system workflows
+	SysWorkerContainer struct {
+		PublicClient     public.Client
+		MetricsClient    metrics.Client
+		Logger           bark.Logger
+		ClusterMetadata  cluster.Metadata
+		HistoryManager   persistence.HistoryManager
+		HistoryV2Manager persistence.HistoryV2Manager
+		Blobstore        blobstore.Client
+		DomainCache      cache.DomainCache
+		Config           *Config
+
+		HistoryBlobIterator HistoryBlobIterator // this is only set in testing code
+	}
+
 	// Config for SysWorker
-	Config struct{}
-	// SysWorker is the cadence client worker responsible for running system workflows
-	SysWorker struct {
-		worker worker.Worker
+	Config struct {
+		EnableArchivalCompression dynamicconfig.BoolPropertyFnWithDomainFilter
+		HistoryPageSize           dynamicconfig.IntPropertyFnWithDomainFilter
+		TargetArchivalBlobSize    dynamicconfig.IntPropertyFnWithDomainFilter
 	}
 )
 
+// these globals exist as a work around because no primitive exists to pass such objects to workflow code
+var (
+	globalLogger        bark.Logger
+	globalMetricsClient metrics.Client
+)
+
 func init() {
-	workflow.RegisterWithOptions(SystemWorkflow, workflow.RegisterOptions{Name: SystemWorkflowFnName})
-	activity.RegisterWithOptions(ArchivalActivity, activity.RegisterOptions{Name: ArchivalActivityFnName})
-	activity.RegisterWithOptions(BackfillActivity, activity.RegisterOptions{Name: BackfillActivityFnName})
+	workflow.RegisterWithOptions(ArchiveSystemWorkflow, workflow.RegisterOptions{Name: archiveSystemWorkflowFnName})
+	activity.RegisterWithOptions(ArchivalUploadActivity, activity.RegisterOptions{Name: archivalUploadActivityFnName})
+	activity.RegisterWithOptions(ArchivalDeleteHistoryActivity, activity.RegisterOptions{Name: archivalDeleteHistoryActivityFnName})
 }
 
 // NewSysWorker returns a new SysWorker
-func NewSysWorker(publicClient public.Client, scope tally.Scope, blobstoreClient blobstore.Client) *SysWorker {
-	logger, _ := zap.NewProduction()
-	actCtx := context.WithValue(context.Background(), blobstoreClientKey, blobstoreClient)
-	actCtx = context.WithValue(actCtx, frontendClientKey, publicClient)
+func NewSysWorker(container *SysWorkerContainer) SysWorker {
+	logger := container.Logger.WithFields(bark.Fields{
+		logging.TagWorkflowComponent: logging.TagValueArchivalSystemWorkflowComponent,
+	})
+	globalLogger = logger
+	globalMetricsClient = container.MetricsClient
+	actCtx := context.WithValue(context.Background(), sysWorkerContainerKey, container)
 	wo := worker.Options{
-		Logger:                    logger,
-		MetricsScope:              scope.SubScope(SystemWorkflowScope),
 		BackgroundActivityContext: actCtx,
 	}
-	return &SysWorker{
-		// TODO: after we do task list fan out workers should listen on all task lists
-		worker: worker.New(publicClient, Domain, DecisionTaskList, wo),
+	return &sysworker{
+		worker:      worker.New(container.PublicClient, SystemDomainName, decisionTaskList, wo),
+		domainCache: container.DomainCache,
 	}
 }
 
 // Start the SysWorker
-func (w *SysWorker) Start() error {
+func (w *sysworker) Start() error {
 	if err := w.worker.Start(); err != nil {
 		w.worker.Stop()
 		return err
@@ -72,6 +110,7 @@ func (w *SysWorker) Start() error {
 }
 
 // Stop the SysWorker
-func (w *SysWorker) Stop() {
+func (w *sysworker) Stop() {
 	w.worker.Stop()
+	w.domainCache.Stop()
 }

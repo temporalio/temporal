@@ -89,14 +89,12 @@ func (s *integrationCrossDCSuite) SetupSuite() {
 func (s *integrationCrossDCSuite) TearDownSuite() {
 }
 
-func (s *integrationCrossDCSuite) SetupTest() {
-	s.setupTest(false, false)
-}
-
 func (s *integrationCrossDCSuite) TearDownTest() {
-	s.host.Stop()
-	s.host = nil
-	s.TearDownWorkflowStore()
+	if s.host != nil {
+		s.host.Stop()
+		s.host = nil
+		s.TearDownWorkflowStore()
+	}
 }
 
 func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterCluster bool) {

@@ -585,7 +585,8 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
 	if err != nil {
 		return err
-	} else if !ok {
+	}
+	if !ok {
 		return nil
 	}
 
@@ -622,12 +623,34 @@ func (t *timerQueueProcessorBase) processArchiveHistoryEvent(task *persistence.T
 	} else if !ok {
 		return nil
 	}
-	return t.historyService.archivalClient.Archive(&sysworkflow.ArchiveRequest{
-		DomainID:         task.DomainID,
-		WorkflowID:       task.WorkflowID,
-		RunID:            task.RunID,
-		LastWriteVersion: task.Version,
-	})
+
+	req := &sysworkflow.ArchiveRequest{
+		DomainID:             task.DomainID,
+		WorkflowID:           task.WorkflowID,
+		RunID:                task.RunID,
+		EventStoreVersion:    msBuilder.GetEventStoreVersion(),
+		BranchToken:          msBuilder.GetCurrentBranch(),
+		LastFirstEventID:     msBuilder.GetLastFirstEventID(),
+		CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
+	}
+	err = t.deleteWorkflowExecution(task)
+	if err != nil {
+		return err
+	}
+
+	if err := t.historyService.archivalClient.Archive(req); err != nil {
+		t.logger.WithFields(bark.Fields{
+			logging.TagHistoryShardID:      t.shard.GetShardID(),
+			logging.TagTaskID:              task.GetTaskID(),
+			logging.TagTaskType:            task.GetTaskType(),
+			logging.TagDomainID:            task.DomainID,
+			logging.TagWorkflowExecutionID: task.WorkflowID,
+			logging.TagWorkflowRunID:       task.RunID,
+			logging.TagErr:                 err,
+		}).Error("failed to initiate archival")
+		return err
+	}
+	return nil
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflowExecution(task *persistence.TimerTaskInfo) error {

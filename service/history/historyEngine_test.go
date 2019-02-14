@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/uber/cadence/service/worker/sysworkflow"
 	"os"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ type (
 		*require.Assertions
 		mockHistoryEngine   *historyEngineImpl
 		mockMatchingClient  *mocks.MatchingClient
-		mockArchivalClient  *mocks.ArchivalClient
+		mockArchivalClient  *sysworkflow.ArchivalClientMock
 		mockHistoryClient   *mocks.HistoryClient
 		mockMetadataMgr     *mocks.MetadataManager
 		mockVisibilityMgr   *mocks.VisibilityManager
@@ -106,7 +107,7 @@ func (s *engineSuite) SetupTest() {
 
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
-	s.mockArchivalClient = &mocks.ArchivalClient{}
+	s.mockArchivalClient = &sysworkflow.ArchivalClientMock{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}

@@ -34,7 +34,6 @@ import (
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/frontend"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
@@ -136,7 +135,6 @@ func NewEngineWithShardContext(
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
 	historyClient hc.Client,
-	frontendClient frontend.Client,
 	publicClient public.Client,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,

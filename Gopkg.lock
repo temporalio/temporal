@@ -544,6 +544,7 @@
     "internal/common/cache",
     "internal/common/metrics",
     "internal/common/util",
+    "testsuite",
     "worker",
     "workflow",
   ]
@@ -770,6 +771,7 @@
     "go.uber.org/cadence/activity",
     "go.uber.org/cadence/client",
     "go.uber.org/cadence/encoded",
+    "go.uber.org/cadence/testsuite",
     "go.uber.org/cadence/worker",
     "go.uber.org/cadence/workflow",
     "go.uber.org/multierr",

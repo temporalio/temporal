@@ -35,6 +35,10 @@ const (
 	BufferedEventID int64 = -123
 	// TransientEventID is the id of the transient event
 	TransientEventID int64 = -124
+	// FirstBlobPageToken is the page token identifying the first blob for each history archival
+	FirstBlobPageToken = 1
+	// LastBlobNextPageToken is the next page token on the last blob for each history archival
+	LastBlobNextPageToken = -1
 )
 
 const (

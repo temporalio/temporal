@@ -22,7 +22,6 @@ package sysworkflow
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -33,73 +32,56 @@ import (
 type (
 	// ArchiveRequest is request to Archive
 	ArchiveRequest struct {
-		DomainID         string
-		WorkflowID       string
-		RunID            string
-		LastWriteVersion int64
-	}
-
-	// BackfillRequest is request to Backfill
-	BackfillRequest struct {
-		// TODO: fill out any fields needed for backfill
+		DomainID             string
+		WorkflowID           string
+		RunID                string
+		EventStoreVersion    int32
+		BranchToken          []byte
+		LastFirstEventID     int64
+		CloseFailoverVersion int64
 	}
 
 	// ArchivalClient is used to archive workflow histories
 	ArchivalClient interface {
 		Archive(*ArchiveRequest) error
-		Backfill(*BackfillRequest) error
 	}
 
 	archivalClient struct {
 		cadenceClient client.Client
 		numSWFn       dynamicconfig.IntPropertyFn
 	}
-
-	signal struct {
-		RequestType    RequestType
-		ArchiveRequest *ArchiveRequest
-		BackillRequest *BackfillRequest
-	}
 )
 
 // NewArchivalClient creates a new ArchivalClient
-func NewArchivalClient(publicClient public.Client, numSWFn dynamicconfig.IntPropertyFn) ArchivalClient {
+func NewArchivalClient(
+	publicClient public.Client,
+	numSWFn dynamicconfig.IntPropertyFn,
+) ArchivalClient {
 	return &archivalClient{
-		cadenceClient: client.NewClient(publicClient, Domain, &client.Options{}),
+		cadenceClient: client.NewClient(publicClient, SystemDomainName, &client.Options{}),
 		numSWFn:       numSWFn,
 	}
 }
 
 // Archive starts an archival task
 func (c *archivalClient) Archive(request *ArchiveRequest) error {
-	workflowID := fmt.Sprintf("%v-%v", WorkflowIDPrefix, rand.Intn(c.numSWFn()))
+	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numSWFn()))
 	workflowOptions := client.StartWorkflowOptions{
-		ID: workflowID,
-		// TODO: once we have higher load, this should select one random of X task lists to do load balancing
-		TaskList:                        DecisionTaskList,
-		ExecutionStartToCloseTimeout:    WorkflowStartToCloseTimeout,
-		DecisionTaskStartToCloseTimeout: DecisionTaskStartToCloseTimeout,
+		ID:                              workflowID,
+		TaskList:                        decisionTaskList,
+		ExecutionStartToCloseTimeout:    workflowStartToCloseTimeout,
+		DecisionTaskStartToCloseTimeout: decisionTaskStartToCloseTimeout,
 		WorkflowIDReusePolicy:           client.WorkflowIDReusePolicyAllowDuplicate,
 	}
-	signal := signal{
-		RequestType:    archivalRequest,
-		ArchiveRequest: request,
-	}
-
+	var carryoverRequests []ArchiveRequest
 	_, err := c.cadenceClient.SignalWithStartWorkflow(
 		context.Background(),
 		workflowID,
-		SignalName,
-		signal,
+		signalName,
+		*request,
 		workflowOptions,
-		SystemWorkflowFnName,
+		archiveSystemWorkflowFnName,
+		carryoverRequests,
 	)
-
 	return err
-}
-
-// Backfill starts a backfill task
-func (c *archivalClient) Backfill(request *BackfillRequest) error {
-	// TODO: implement this once backfill is supported
-	return errors.New("not implemented")
 }
