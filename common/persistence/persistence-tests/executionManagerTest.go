@@ -821,7 +821,7 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 // TestDeleteCurrentWorkflow test
 func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	if s.ExecutionManager.GetName() != "cassandra" {
-		s.T().Skip("SQL doesn't support retention yet")
+		s.T().Skip("this test is only applicable for cassandra (uses TTL based deletes)")
 	}
 	finishedCurrentExecutionRetentionTTL := int32(3) // 3 seconds
 	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
@@ -862,6 +862,60 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	// execution record should still be there
 	info0, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
+}
+
+// TestUpdateDeleteWorkflow verifies that an update workflow (with FinishExecution set to true)
+// followed by DeleteWorkflowExecution  clears all state associated with the workflow. The
+// reason for having this test is because cassandra deletes current_executions row with TTL
+// as part of the UpdateWFExecution API whereas SQL deletes current_executions entry as part of
+// timer task / DeleteWorkflowExecution API - so, an update followed by delete should clear
+// all state in both sql/cassandra
+func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
+	finishedCurrentExecutionRetentionTTL := int32(2)
+	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("update-delete-workflow-test"),
+		RunId:      common.StringPtr("6cae4054-6ba7-46d3-8755-e3c2db6f74ea"),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.NoError(err0)
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	runID0, err1 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
+	s.NoError(err1)
+	s.Equal(*workflowExecution.RunId, runID0)
+
+	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err2)
+
+	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
+	updatedInfo1.NextEventID = int64(6)
+	updatedInfo1.LastProcessedEvent = int64(2)
+	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3), finishedCurrentExecutionRetentionTTL)
+	s.NoError(err3)
+
+	runID4, err4 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
+	s.NoError(err4)
+	s.Equal(*workflowExecution.RunId, runID4)
+
+	// simulate a timer_task deleting execution after retention
+	err5 := s.DeleteWorkflowExecution(info0.ExecutionInfo)
+	s.NoError(err5)
+
+	time.Sleep(time.Duration(finishedCurrentExecutionRetentionTTL*2) * time.Second)
+
+	runID0, err1 = s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
+	s.Error(err1)
+	s.Empty(runID0)
+	_, ok := err1.(*gen.EntityNotExistsError)
+	s.True(ok)
+
+	// execution record should still be there
+	info0, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Error(err2)
+	_, ok = err2.(*gen.EntityNotExistsError)
+	s.True(ok)
 }
 
 // TestGetCurrentWorkflow test
@@ -983,14 +1037,14 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(p.TransferTaskTypeCloseExecution, task3.TaskType)
 	s.Equal("", task3.TargetRunID)
 
-	err8 := s.DeleteWorkflowExecution(info1)
+	err8 := s.CompleteTransferTask(task3.TaskID)
 	s.NoError(err8)
 
-	err9 := s.CompleteTransferTask(task3.TaskID)
-	s.NoError(err9)
+	_, err9 := s.CreateWorkflowExecution(domainID, newExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Error(err9, "createWFExecution (brand_new) must fail when there is a previous instance of workflow state already in DB")
 
-	_, err10 := s.CreateWorkflowExecution(domainID, newExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Error(err10, "Error expected.")
+	err10 := s.DeleteWorkflowExecution(info1)
+	s.NoError(err10)
 }
 
 // TestCancelTransferTaskTasks test

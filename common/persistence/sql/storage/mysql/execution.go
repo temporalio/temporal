@@ -277,16 +277,17 @@ task_id <= ?
 (shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version) VALUES
 (:shard_id, :domain_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version, :last_write_version)`
 
-	deleteCurrentExecutionQry = "DELETE FROM current_executions WHERE shard_id=? AND domain_id=? AND workflow_id=?"
+	deleteCurrentExecutionQry = "DELETE FROM current_executions WHERE shard_id=? AND domain_id=? AND workflow_id=? AND run_id=?"
 
 	getCurrentExecutionQry = `SELECT
+shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version
+FROM current_executions WHERE shard_id = ? AND domain_id = ? AND workflow_id = ?`
+
+	lockCurrentExecutionJoinExecutionsQry = `SELECT
 ce.shard_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
 FROM current_executions ce
 INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
-WHERE ce.shard_id = ? AND ce.domain_id = ? AND ce.workflow_id = ?
-`
-
-	getCurrentExecutionQryForUpdate = getCurrentExecutionQry + " FOR UPDATE"
+WHERE ce.shard_id = ? AND ce.domain_id = ? AND ce.workflow_id = ? FOR UPDATE`
 
 	lockCurrentExecutionQry = `SELECT run_id FROM current_executions WHERE
 shard_id = ? AND
@@ -458,7 +459,7 @@ func (mdb *DB) SelectFromCurrentExecutions(filter *sqldb.CurrentExecutionsFilter
 
 // DeleteFromCurrentExecutions deletes a single row in current_executions table
 func (mdb *DB) DeleteFromCurrentExecutions(filter *sqldb.CurrentExecutionsFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteCurrentExecutionQry, filter.ShardID, filter.DomainID, filter.WorkflowID)
+	return mdb.conn.Exec(deleteCurrentExecutionQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
 }
 
 // LockCurrentExecutions acquires a write lock on a single row in current_executions table
@@ -472,7 +473,7 @@ func (mdb *DB) LockCurrentExecutions(filter *sqldb.CurrentExecutionsFilter) (sql
 // write lock on the result
 func (mdb *DB) LockCurrentExecutionsJoinExecutions(filter *sqldb.CurrentExecutionsFilter) ([]sqldb.CurrentExecutionsRow, error) {
 	var rows []sqldb.CurrentExecutionsRow
-	err := mdb.conn.Select(&rows, getCurrentExecutionQryForUpdate, filter.ShardID, filter.DomainID, filter.WorkflowID)
+	err := mdb.conn.Select(&rows, lockCurrentExecutionJoinExecutionsQry, filter.ShardID, filter.DomainID, filter.WorkflowID)
 	return rows, err
 }
 

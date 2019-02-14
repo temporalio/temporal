@@ -566,10 +566,6 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 			startVersion = request.ReplicationState.StartVersion
 			lastWriteVersion = request.ReplicationState.LastWriteVersion
 		}
-		if request.FinishExecution {
-			m.logger.Info("Finish Execution")
-			// TODO when finish execution, the current record should be marked with a TTL
-		} //else {
 		// this is only to update the current record
 		if err := continueAsNew(tx,
 			m.shardID,
@@ -586,7 +582,6 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 				Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update current execution. Error: %v", err),
 			}
 		}
-		//}
 	}
 	return nil
 }
@@ -838,17 +833,29 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx sqldb.Tx, request *p.Intern
 }
 
 func (m *sqlExecutionManager) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
-	if _, err := m.db.DeleteFromExecutions(&sqldb.ExecutionsFilter{
-		ShardID:    m.shardID,
-		DomainID:   sqldb.MustParseUUID(request.DomainID),
-		WorkflowID: request.WorkflowID,
-		RunID:      sqldb.MustParseUUID(request.RunID),
-	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err),
+	domainID := sqldb.MustParseUUID(request.DomainID)
+	runID := sqldb.MustParseUUID(request.RunID)
+	return m.txExecute("deleteWorkflowExecution", func(tx sqldb.Tx) error {
+		if _, err := tx.DeleteFromExecutions(&sqldb.ExecutionsFilter{
+			ShardID:    m.shardID,
+			DomainID:   domainID,
+			WorkflowID: request.WorkflowID,
+			RunID:      runID,
+		}); err != nil {
+			return err
 		}
-	}
-	return nil
+		// its possible for a new run of the same workflow to have started after the run we are deleting
+		// here was finished. In that case, current_executions table will have the same workflowID but different
+		// runID. The following code will delete the row from current_executions if and only if the runID is
+		// same as the one we are trying to delete here
+		_, err := tx.DeleteFromCurrentExecutions(&sqldb.CurrentExecutionsFilter{
+			ShardID:    int64(m.shardID),
+			DomainID:   domainID,
+			WorkflowID: request.WorkflowID,
+			RunID:      runID,
+		})
+		return err
+	})
 }
 
 func (m *sqlExecutionManager) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.GetCurrentExecutionResponse, error) {
