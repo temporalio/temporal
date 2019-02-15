@@ -77,6 +77,10 @@ type (
 		Port int `yaml:"port"`
 		// BindOnLocalHost is true if localhost is the bind address
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
+		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0`) -
+		// check net.ParseIP for supported syntax, only IPv4 is supported,
+		// mutually exclusive with `BindOnLocalHost` option
+		BindOnIP string `yaml:"bindOnIP"`
 		// DisableLogging disables all logging for rpc
 		DisableLogging bool `yaml:"disableLogging"`
 		// LogLevel is the desired log level

@@ -86,8 +86,20 @@ func (d *RPCFactory) CreateDispatcherForOutbound(
 }
 
 func (d *RPCFactory) getListenIP() net.IP {
+	if d.config.BindOnLocalHost && len(d.config.BindOnIP) > 0 {
+		d.logger.Fatalf("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
+	}
+
 	if d.config.BindOnLocalHost {
 		return net.IPv4(127, 0, 0, 1)
+	}
+
+	if len(d.config.BindOnIP) > 0 {
+		ip := net.ParseIP(d.config.BindOnIP)
+		if ip != nil && ip.To4() != nil {
+			return ip.To4()
+		}
+		d.logger.Fatalf("ListenIP failed, unable to parse bindOnIP value %q or it is not IPv4 address", d.config.BindOnIP)
 	}
 	ip, err := ListenIP()
 	if err != nil {
