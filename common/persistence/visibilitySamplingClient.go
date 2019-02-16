@@ -43,7 +43,7 @@ type visibilitySamplingClient struct {
 	rateLimitersForClosed *domainToBucketMap
 	rateLimitersForList   *domainToBucketMap
 	persistence           VisibilityManager
-	config                *config.SamplingConfig
+	config                *config.VisibilityConfig
 	metricClient          metrics.Client
 	logger                bark.Logger
 }
@@ -51,7 +51,7 @@ type visibilitySamplingClient struct {
 var _ VisibilityManager = (*visibilitySamplingClient)(nil)
 
 // NewVisibilitySamplingClient creates a client to manage visibility with sampling
-func NewVisibilitySamplingClient(persistence VisibilityManager, config *config.SamplingConfig, metricClient metrics.Client, logger bark.Logger) VisibilityManager {
+func NewVisibilitySamplingClient(persistence VisibilityManager, config *config.VisibilityConfig, metricClient metrics.Client, logger bark.Logger) VisibilityManager {
 	return &visibilitySamplingClient{
 		persistence:           persistence,
 		rateLimitersForOpen:   newDomainToBucketMap(),

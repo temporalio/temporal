@@ -53,7 +53,7 @@ type (
 		// NewExecutionManager returns a new execution manager for a given shardID
 		NewExecutionManager(shardID int) (p.ExecutionManager, error)
 		// NewVisibilityManager returns a new visibility manager
-		NewVisibilityManager(enableSampling bool) (p.VisibilityManager, error)
+		NewVisibilityManager() (p.VisibilityManager, error)
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
 	// Examples of datastores are cassandra, mysql etc
@@ -263,17 +263,21 @@ func (f *factoryImpl) NewExecutionManager(shardID int) (p.ExecutionManager, erro
 }
 
 // NewVisibilityManager returns a new visibility manager
-func (f *factoryImpl) NewVisibilityManager(enableSampling bool) (p.VisibilityManager, error) {
+func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	ds := f.datastores[storeTypeVisibility]
 	result, err := ds.factory.NewVisibilityStore()
 	if err != nil {
 		return nil, err
 	}
+	visConfig := f.config.VisibilityConfig
+	if visConfig != nil && visConfig.EnableReadFromClosedExecutionV2() && f.isCassandra() {
+		result, err = cassandra.NewVisibilityPersistenceV2(result, f.getCassandraConfig(), f.logger)
+	}
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
-	if enableSampling {
-		result = p.NewVisibilitySamplingClient(result, &f.config.SamplingConfig, f.metricsClient, f.logger)
+	if visConfig != nil && visConfig.EnableSampling() {
+		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
 	}
 	if f.metricsClient != nil {
 		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, f.logger)
@@ -285,6 +289,16 @@ func (f *factoryImpl) NewVisibilityManager(enableSampling bool) (p.VisibilityMan
 func (f *factoryImpl) Close() {
 	ds := f.datastores[storeTypeExecution]
 	ds.factory.Close()
+}
+
+func (f *factoryImpl) isCassandra() bool {
+	cfg := f.config
+	return cfg.DataStores[cfg.VisibilityStore].SQL == nil
+}
+
+func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
+	cfg := f.config
+	return cfg.DataStores[cfg.VisibilityStore].Cassandra
 }
 
 func newStore(cfg config.DataStore, tb common.TokenBucket, clusterName string, maxConnsOverride int, logger bark.Logger) Datastore {

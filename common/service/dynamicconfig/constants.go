@@ -48,12 +48,13 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
-	EnableGlobalDomain:         "system.enableGlobalDomain",
-	EnableNewKafkaClient:       "system.enableNewKafkaClient",
-	EnableVisibilitySampling:   "system.enableVisibilitySampling",
-	EnableVisibilityToKafka:    "system.enableVisibilityToKafka",
-	EnableReadVisibilityFromES: "system.enableReadVisibilityFromES",
-	EnableArchival:             "system.enableArchival",
+	EnableGlobalDomain:              "system.enableGlobalDomain",
+	EnableNewKafkaClient:            "system.enableNewKafkaClient",
+	EnableVisibilitySampling:        "system.enableVisibilitySampling",
+	EnableReadFromClosedExecutionV2: "system.enableReadFromClosedExecutionV2",
+	EnableVisibilityToKafka:         "system.enableVisibilityToKafka",
+	EnableReadVisibilityFromES:      "system.enableReadVisibilityFromES",
+	EnableArchival:                  "system.enableArchival",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -189,6 +190,8 @@ const (
 	EnableNewKafkaClient
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
+	// EnableReadFromClosedExecutionV2 is key for enable read from cadence_visibility.closed_executions_v2
+	EnableReadFromClosedExecutionV2
 	// EnableVisibilityToKafka is key for enable kafka
 	EnableVisibilityToKafka
 	// EnableReadVisibilityFromES is key for enable read from elastic search
@@ -263,9 +266,9 @@ const (
 	HistoryRPS
 	// HistoryPersistenceMaxQPS is the max qps history host can query DB
 	HistoryPersistenceMaxQPS
-	// HistoryVisibilityOpenMaxQPS is max qps one history host can query visibility open_executions
+	// HistoryVisibilityOpenMaxQPS is max qps one history host can write visibility open_executions
 	HistoryVisibilityOpenMaxQPS
-	// HistoryVisibilityClosedMaxQPS is max qps one history host can query visibility closed_executions
+	// HistoryVisibilityClosedMaxQPS is max qps one history host can write visibility closed_executions
 	HistoryVisibilityClosedMaxQPS
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval

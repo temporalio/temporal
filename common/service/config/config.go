@@ -117,8 +117,8 @@ type (
 		NumHistoryShards int `yaml:"numHistoryShards" validate:"nonzero"`
 		// DataStores contains the configuration for all datastores
 		DataStores map[string]DataStore `yaml:"datastores"`
-		// SamplingConfig is config for visibility sampling
-		SamplingConfig SamplingConfig
+		// VisibilityConfig is config for visibility sampling
+		VisibilityConfig *VisibilityConfig
 	}
 
 	// DataStore is the configuration for a single datastore
@@ -129,8 +129,12 @@ type (
 		SQL *SQL `yaml:"sql"`
 	}
 
-	// SamplingConfig is config for visibility sampling
-	SamplingConfig struct {
+	// VisibilityConfig is config for visibility sampling
+	VisibilityConfig struct {
+		// EnableSampling for visibility
+		EnableSampling dynamicconfig.BoolPropertyFn
+		// EnableReadFromClosedExecutionV2 read closed from v2 table
+		EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
 		// VisibilityOpenMaxQPS max QPS for record open workflows
 		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
 		// VisibilityClosedMaxQPS max QPS for record closed workflows

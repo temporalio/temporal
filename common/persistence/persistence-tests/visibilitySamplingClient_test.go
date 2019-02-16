@@ -65,7 +65,7 @@ func (s *VisibilitySamplingSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 
 	s.persistence = &mocks.VisibilityManager{}
-	config := &c.SamplingConfig{
+	config := &c.VisibilityConfig{
 		VisibilityOpenMaxQPS:   dynamicconfig.GetIntPropertyFilteredByDomain(1),
 		VisibilityClosedMaxQPS: dynamicconfig.GetIntPropertyFilteredByDomain(10),
 		VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByDomain(1),
