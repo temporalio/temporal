@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package elasticsearch
 
 import (
 	"context"
@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/logging"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 const esPersistenceName = "elasticsearch"
@@ -57,7 +58,7 @@ type (
 	}
 )
 
-var _ VisibilityManager = (*esVisibilityManager)(nil)
+var _ p.VisibilityManager = (*esVisibilityManager)(nil)
 
 var (
 	errOperationNotSupported = errors.New("operation not support")
@@ -66,7 +67,7 @@ var (
 )
 
 // NewElasticSearchVisibilityManager create a visibility manager connecting to ElasticSearch
-func NewElasticSearchVisibilityManager(esClient es.Client, index string, logger bark.Logger) VisibilityManager {
+func NewElasticSearchVisibilityManager(esClient es.Client, index string, logger bark.Logger) p.VisibilityManager {
 	return &esVisibilityManager{
 		esClient: esClient,
 		index:    index,
@@ -80,16 +81,16 @@ func (v *esVisibilityManager) GetName() string {
 	return esPersistenceName
 }
 
-func (v *esVisibilityManager) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
+func (v *esVisibilityManager) RecordWorkflowExecutionStarted(request *p.RecordWorkflowExecutionStartedRequest) error {
 	return errOperationNotSupported
 }
 
-func (v *esVisibilityManager) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
+func (v *esVisibilityManager) RecordWorkflowExecutionClosed(request *p.RecordWorkflowExecutionClosedRequest) error {
 	return errOperationNotSupported
 }
 
 func (v *esVisibilityManager) ListOpenWorkflowExecutions(
-	request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -108,7 +109,7 @@ func (v *esVisibilityManager) ListOpenWorkflowExecutions(
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutions(
-	request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -127,7 +128,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutions(
 }
 
 func (v *esVisibilityManager) ListOpenWorkflowExecutionsByType(
-	request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -147,7 +148,7 @@ func (v *esVisibilityManager) ListOpenWorkflowExecutionsByType(
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutionsByType(
-	request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -167,7 +168,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutionsByType(
 }
 
 func (v *esVisibilityManager) ListOpenWorkflowExecutionsByWorkflowID(
-	request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -187,7 +188,7 @@ func (v *esVisibilityManager) ListOpenWorkflowExecutionsByWorkflowID(
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutionsByWorkflowID(
-	request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -207,7 +208,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutionsByWorkflowID(
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutionsByStatus(
-	request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.ListWorkflowExecutionsResponse, error) {
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -227,7 +228,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (v *esVisibilityManager) GetClosedWorkflowExecution(
-	request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
+	request *p.GetClosedWorkflowExecutionRequest) (*p.GetClosedWorkflowExecutionResponse, error) {
 
 	matchDomainQuery := elastic.NewMatchQuery(es.DomainID, request.DomainUUID)
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
@@ -251,7 +252,7 @@ func (v *esVisibilityManager) GetClosedWorkflowExecution(
 		}
 	}
 
-	response := &GetClosedWorkflowExecutionResponse{}
+	response := &p.GetClosedWorkflowExecutionResponse{}
 	actualHits := searchResult.Hits.Hits
 	if len(actualHits) == 0 {
 		return response, nil
@@ -275,7 +276,7 @@ func (v *esVisibilityManager) getNextPageToken(token []byte) (*esVisibilityPageT
 	return result, nil
 }
 
-func (v *esVisibilityManager) getSearchResult(request *ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
+func (v *esVisibilityManager) getSearchResult(request *p.ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
 	matchQuery *elastic.MatchQuery, isOpen bool) (*elastic.SearchResult, error) {
 
 	matchDomainQuery := elastic.NewMatchQuery(es.DomainID, request.DomainUUID)
@@ -289,7 +290,7 @@ func (v *esVisibilityManager) getSearchResult(request *ListWorkflowExecutionsReq
 	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
 	rangeQuery = rangeQuery.
 		Gte(request.EarliestStartTime - oneMilliSecondInNano).
-		Lte(request.LatestStartTime + oneMilliSecondInNano) // TODO rename request fields for close time
+		Lte(request.LatestStartTime + oneMilliSecondInNano)
 
 	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery)
 	if matchQuery != nil {
@@ -317,9 +318,9 @@ func (v *esVisibilityManager) getSearchResult(request *ListWorkflowExecutionsReq
 }
 
 func (v *esVisibilityManager) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
-	token *esVisibilityPageToken, isOpen bool) (*ListWorkflowExecutionsResponse, error) {
+	token *esVisibilityPageToken, isOpen bool) (*p.ListWorkflowExecutionsResponse, error) {
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 

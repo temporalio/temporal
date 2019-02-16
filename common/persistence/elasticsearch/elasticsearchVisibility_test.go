@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package elasticsearch
 
 import (
 	"encoding/json"
@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
 	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
+	p "github.com/uber/cadence/common/persistence"
 	"strings"
 	"testing"
 )
@@ -58,7 +59,7 @@ var (
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
 	testCloseStatus  = 1
 
-	testRequest = &ListWorkflowExecutionsRequest{
+	testRequest = &p.ListWorkflowExecutionsRequest{
 		DomainUUID:        testDomainID,
 		Domain:            testDomain,
 		PageSize:          testPageSize,
@@ -145,7 +146,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 
-	request := &ListWorkflowExecutionsByTypeRequest{
+	request := &p.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowTypeName:              testWorkflowType,
 	}
@@ -168,7 +169,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 
-	request := &ListWorkflowExecutionsByTypeRequest{
+	request := &p.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowTypeName:              testWorkflowType,
 	}
@@ -191,7 +192,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 
-	request := &ListWorkflowExecutionsByWorkflowIDRequest{
+	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowID:                    testWorkflowID,
 	}
@@ -214,7 +215,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 
-	request := &ListWorkflowExecutionsByWorkflowIDRequest{
+	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowID:                    testWorkflowID,
 	}
@@ -237,7 +238,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 
-	request := &ListClosedWorkflowExecutionsByStatusRequest{
+	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		Status:                        workflow.WorkflowExecutionCloseStatus(testCloseStatus),
 	}
@@ -260,7 +261,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
 		return true
 	})).Return(testSearchResult, nil).Once()
-	request := &GetClosedWorkflowExecutionRequest{
+	request := &p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
 		Execution: workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(testWorkflowID),
@@ -286,7 +287,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 		s.False(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
 		return true
 	})).Return(testSearchResult, nil).Once()
-	request := &GetClosedWorkflowExecutionRequest{
+	request := &p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
 		Execution: workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(testWorkflowID),

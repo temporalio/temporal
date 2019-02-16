@@ -449,6 +449,27 @@ const (
 	// BlobstoreClientBucketMetadataScope tracks BucketMetadata calls to blobstore
 	BlobstoreClientBucketMetadataScope
 
+	// ElasticsearchRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to persistence layer
+	ElasticsearchRecordWorkflowExecutionStartedScope
+	// ElasticsearchRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to persistence layer
+	ElasticsearchRecordWorkflowExecutionClosedScope
+	// ElasticsearchListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to persistence layer
+	ElasticsearchListOpenWorkflowExecutionsScope
+	// ElasticsearchListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to persistence layer
+	ElasticsearchListClosedWorkflowExecutionsScope
+	// ElasticsearchListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to persistence layer
+	ElasticsearchListOpenWorkflowExecutionsByTypeScope
+	// ElasticsearchListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to persistence layer
+	ElasticsearchListClosedWorkflowExecutionsByTypeScope
+	// ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to persistence layer
+	ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope
+	// ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to persistence layer
+	ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope
+	// ElasticsearchListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
+	ElasticsearchListClosedWorkflowExecutionsByStatusScope
+	// ElasticsearchGetClosedWorkflowExecutionScope tracks GetClosedWorkflowExecution calls made by service to persistence layer
+	ElasticsearchGetClosedWorkflowExecutionScope
+
 	NumCommonScopes
 )
 
@@ -912,6 +933,17 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRereplicationByTimerTaskScope:           {operation: "HistoryRereplicationByTimerTask"},
 		HistoryRereplicationByHistoryReplicationScope:  {operation: "HistoryRereplicationByHistoryReplication"},
 		HistoryRereplicationByActivityReplicationScope: {operation: "HistoryRereplicationByActivityReplication"},
+
+		ElasticsearchRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted"},
+		ElasticsearchRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed"},
+		ElasticsearchListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions"},
+		ElasticsearchListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions"},
+		ElasticsearchListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType"},
+		ElasticsearchListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType"},
+		ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
+		ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
+		ElasticsearchListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
+		ElasticsearchGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1103,6 +1135,12 @@ const (
 	HistorySize
 	HistoryCount
 	EventBlobSize
+
+	ElasticsearchRequests
+	ElasticsearchFailures
+	ElasticsearchLatency
+	ElasticsearchErrBadRequestCounter
+	ElasticsearchErrBusyCounter
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1307,6 +1345,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistorySize:                                         {metricName: "history-size", metricType: Timer},
 		HistoryCount:                                        {metricName: "history-count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event-blob-size", metricType: Timer},
+		ElasticsearchRequests:                               {metricName: "elasticsearch.requests", metricType: Counter},
+		ElasticsearchFailures:                               {metricName: "elasticsearch.errors", metricType: Counter},
+		ElasticsearchLatency:                                {metricName: "elasticsearch.latency", metricType: Timer},
+		ElasticsearchErrBadRequestCounter:                   {metricName: "elasticsearch.errors.bad-request", metricType: Counter},
+		ElasticsearchErrBusyCounter:                         {metricName: "elasticsearch.errors.busy", metricType: Counter},
 	},
 	Frontend: {},
 	History: {

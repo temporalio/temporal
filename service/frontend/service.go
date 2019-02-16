@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/elasticsearch"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
@@ -42,6 +43,7 @@ type Config struct {
 	VisibilityListMaxQPS            dynamicconfig.IntPropertyFnWithDomainFilter
 	EnableVisibilityToKafka         dynamicconfig.BoolPropertyFn
 	EnableReadVisibilityFromES      dynamicconfig.BoolPropertyFnWithDomainFilter
+	ESVisibilityListMaxQPS          dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                             dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
@@ -71,6 +73,7 @@ func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool) *Conf
 		VisibilityListMaxQPS:            dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
 		EnableVisibilityToKafka:         dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
 		EnableReadVisibilityFromES:      dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, false),
+		ESVisibilityListMaxQPS:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
 		HistoryMaxPageSize:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                             dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		MaxIDLengthLimit:                dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -130,10 +133,20 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create visibility manager: %v", err)
 	}
-	var visibilityFromES persistence.VisibilityManager // TODO: wrap esVisibilityMgr with rate limiter, metrics, sampler
+	var visibilityFromES persistence.VisibilityManager
 	if s.config.EnableVisibilityToKafka() {
 		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
-		visibilityFromES = persistence.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, log)
+		visibilityFromES = elasticsearch.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, log)
+		// wrap with rate limiter
+		esRateLimiter := common.NewTokenBucket(s.config.PersistenceMaxQPS(), common.NewRealTimeSource())
+		visibilityFromES = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
+		// wrap with advanced rate limit for list
+		visibilityConfigForES := &config.VisibilityConfig{
+			VisibilityListMaxQPS: s.config.ESVisibilityListMaxQPS,
+		}
+		visibilityFromES = persistence.NewVisibilitySamplingClient(visibilityFromES, visibilityConfigForES, base.GetMetricsClient(), log)
+		// wrap with metrics
+		visibilityFromES = elasticsearch.NewVisibilityMetricsClient(visibilityFromES, base.GetMetricsClient(), log)
 	}
 	visibility := persistence.NewVisibilityManagerWrapper(visibilityFromDB, visibilityFromES, s.config.EnableReadVisibilityFromES)
 
