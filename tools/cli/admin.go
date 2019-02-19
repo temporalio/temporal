@@ -565,3 +565,53 @@ clusters:
 		},
 	}
 }
+
+func newAdminElasticSearchCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "catIndex",
+			Aliases: []string{"cind"},
+			Usage:   "Cat Indices on ElasticSearch",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagURL,
+					Usage: "URL of ElasticSearch cluster",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminCatIndices(c)
+			},
+		},
+		{
+			Name:    "index",
+			Aliases: []string{"ind"},
+			Usage:   "Index docs on ElasticSearch",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagURL,
+					Usage: "URL of ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagMuttleyDestinationWithAlias,
+					Usage: "Optional muttely destination to ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagIndex,
+					Usage: "ElasticSearch target index",
+				},
+				cli.StringFlag{
+					Name:  FlagInputFileWithAlias,
+					Usage: "Input file of indexer.Message in json format, separated by newline",
+				},
+				cli.IntFlag{
+					Name:  FlagBatchSizeWithAlias,
+					Usage: "Optional batch size of actions for bulk operations",
+					Value: 1000,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminIndex(c)
+			},
+		},
+	}
+}

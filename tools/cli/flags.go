@@ -134,6 +134,12 @@ const (
 	FlagHeadersModeWithAlias        = FlagHeadersMode + ", he"
 	FlagMessageType                 = "message_type"
 	FlagMessageTypeWithAlias        = FlagMessageType + ", mt"
+	FlagURL                         = "url"
+	FlagMuttleyDestination          = "muttely_destination"
+	FlagMuttleyDestinationWithAlias = FlagMuttleyDestination + ", muttley"
+	FlagIndex                       = "index"
+	FlagBatchSize                   = "batch_size"
+	FlagBatchSizeWithAlias          = FlagBatchSize + ", bs"
 )
 
 var flagsForExecution = []cli.Flag{
