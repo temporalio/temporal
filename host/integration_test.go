@@ -998,7 +998,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		Identity:                            common.StringPtr(identity),
 		RetryPolicy: &workflow.RetryPolicy{
 			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			MaximumAttempts:             common.Int32Ptr(3),
+			MaximumAttempts:             common.Int32Ptr(5),
 			MaximumIntervalInSeconds:    common.Int32Ptr(1),
 			NonRetriableErrorReasons:    []string{"bad-bug"},
 			BackoffCoefficient:          common.Float64Ptr(1),
@@ -1019,7 +1019,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		executions = append(executions, execution)
 		attemptCount++
-		if attemptCount == 3 {
+		if attemptCount == 5 {
 			return nil, []*workflow.Decision{
 				{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -1050,23 +1050,177 @@ func (s *integrationSuite) TestWorkflowRetry() {
 
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
-
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-
-	s.Equal(3, attemptCount)
-
 	events := s.getHistory(s.domainName, executions[0])
 	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
 	events = s.getHistory(s.domainName, executions[1])
 	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
 	events = s.getHistory(s.domainName, executions[2])
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+	events = s.getHistory(s.domainName, executions[3])
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(int32(3), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+	events = s.getHistory(s.domainName, executions[4])
 	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
+	s.Equal(int32(4), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+}
+
+func (s *integrationSuite) TestWorkflowRetryFailures() {
+	id := "integration-wf-retry-failures-test"
+	wt := "integration-wf-retry-failures-type"
+	tl := "integration-wf-retry-failures-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	workflowImpl := func(attempts int, errorReason string, executions *[]*workflow.WorkflowExecution) decisionTaskHandler {
+		attemptCount := 0
+
+		dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+			previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+			*executions = append(*executions, execution)
+			attemptCount++
+			if attemptCount == attempts {
+				return nil, []*workflow.Decision{
+					{
+						DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+						CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+							Result: []byte("succeed-after-retry"),
+						},
+					}}, nil
+			}
+			return nil, []*workflow.Decision{
+				{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
+					FailWorkflowExecutionDecisionAttributes: &workflow.FailWorkflowExecutionDecisionAttributes{
+						//Reason:  common.StringPtr("retryable-error"),
+						Reason:  common.StringPtr(errorReason),
+						Details: nil,
+					},
+				}}, nil
+		}
+
+		return dtHandler
+	}
+
+	// Fail using attempt
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+		RetryPolicy: &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			MaximumAttempts:             common.Int32Ptr(3),
+			MaximumIntervalInSeconds:    common.Int32Ptr(1),
+			NonRetriableErrorReasons:    []string{"bad-bug"},
+			BackoffCoefficient:          common.Float64Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(100),
+		},
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	executions := []*workflow.WorkflowExecution{}
+	dtHandler := workflowImpl(5, "retryable-error", &executions)
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+	events := s.getHistory(s.domainName, executions[0])
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+	events = s.getHistory(s.domainName, executions[1])
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+	events = s.getHistory(s.domainName, executions[2])
+	s.Equal(workflow.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
+	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+
+	// Fail error reason
+	request = &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+		RetryPolicy: &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			MaximumAttempts:             common.Int32Ptr(3),
+			MaximumIntervalInSeconds:    common.Int32Ptr(1),
+			NonRetriableErrorReasons:    []string{"bad-bug"},
+			BackoffCoefficient:          common.Float64Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(100),
+		},
+	}
+
+	we, err0 = s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	executions = []*workflow.WorkflowExecution{}
+	dtHandler = workflowImpl(5, "bad-bug", &executions)
+	poller = &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+	events = s.getHistory(s.domainName, executions[0])
+	s.Equal(workflow.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
+	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+
 }
 
 func (s *integrationSuite) TestCronWorkflow() {

@@ -2405,7 +2405,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 
 	if continueAsNewAttributes.GetInitiator() == workflow.ContinueAsNewInitiatorRetryPolicy {
 		// retry
-		continueAsNew.Attempt = continueAsNew.Attempt + 1
+		continueAsNew.Attempt = startedAttributes.GetAttempt()
 		continueAsNew.ExpirationTime = e.executionInfo.ExpirationTime
 	} else {
 		// by cron or decider
