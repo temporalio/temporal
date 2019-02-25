@@ -381,8 +381,9 @@ func (r *historyReplicator) ApplyEvents(ctx context.Context, request *h.Replicat
 			// mutable state for the target workflow ID & run ID combination does not exist
 			// we need to check the existing workflow ID
 			release(err)
+			lastEvent := request.History.Events[len(request.History.Events)-1]
 			return r.ApplyOtherEventsMissingMutableState(ctx, domainID, request.WorkflowExecution.GetWorkflowId(),
-				request.WorkflowExecution.GetRunId(), firstEvent.GetVersion(), logger, request)
+				request.WorkflowExecution.GetRunId(), firstEvent.GetVersion(), lastEvent.GetTimestamp(), logger, request)
 		}
 
 		logger.WithField(logging.TagCurrentVersion, msBuilder.GetReplicationState().LastWriteVersion)
@@ -408,7 +409,7 @@ func (r *historyReplicator) ApplyStartEvent(ctx context.Context, context workflo
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Context, domainID string, workflowID string,
-	runID string, incomingVersion int64, logger bark.Logger, request *h.ReplicateEventsRequest) error {
+	runID string, incomingVersion int64, incomingTimestamp int64, logger bark.Logger, request *h.ReplicateEventsRequest) error {
 	// we need to check the current workflow execution
 	_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
 	if err != nil {
@@ -425,6 +426,19 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Cont
 		logger.Info("Dropping replication task.")
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 		return nil
+	} else if currentLastWriteVersion < incomingVersion && !request.GetResetWorkflow() {
+		err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
+		if err != nil {
+			if _, ok := err.(*shared.EntityNotExistsError); !ok {
+				return err
+			}
+			// if workflow is completed just when the call is made, will get EntityNotExistsError
+			// we are not sure whether the workflow to be terminated ends with continue as new or not
+			// so when encounter EntityNotExistsError, just contiue to execute, if err occurs,
+			// there will be retry on the worker level
+		}
+		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+
 	}
 	// currentLastWriteVersion <= incomingVersion
 	logger.Debugf("Retrying replication task. Current RunID: %v, Current LastWriteVersion: %v, Incoming Version: %v.",
@@ -924,12 +938,8 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 
 	// current workflow is completed
 	if currentState == persistence.WorkflowStateCompleted {
-		if currentLastWriteVersion > incomingVersion {
-			logger.Info("Dropping stale start replication task.")
-			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
-			deleteHistory()
-			return nil
-		}
+		// allow the application of workflow creation if currentLastWriteVersion > incomingVersion
+		// because this can be caused by missing replication events
 		// proceed to create workflow
 		isBrandNew = false
 		return createWorkflow(isBrandNew, currentRunID, currentLastWriteVersion)
