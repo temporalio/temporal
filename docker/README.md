@@ -69,10 +69,11 @@ docker run -e CASSANDRA_CONSISTENCY=Quorum \            -- Default cassandra con
 ```
 Update docker-compose.yml when releasing new version
 =========================
-0. Creat new version tag in the repo
+0. Create new version tag in the repo
 1. Build the new docker image and push into docker hub
 ```bash
 docker build . -t ubercadence/server:THE.LATEST.VERSION  --build-arg git_branch=vTHE.LATEST.VERSION 
+docker login
 docker push ubercadence/server:THE.LATEST.VERSION
 ```
 2. Remember to update the docker-compose.yml to use latest version and check in to master
