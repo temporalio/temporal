@@ -60,9 +60,10 @@ func ArchiveSystemWorkflow(ctx workflow.Context, carryoverRequests []ArchiveRequ
 		logging.TagWorkflowRunID:       sysWorkflowInfo.WorkflowExecution.RunID,
 	}), ctx, false)
 	logger.Info("started system workflow")
+
 	metricsClient := NewReplayMetricsClient(globalMetricsClient, ctx)
-	metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerWorkflowStarted)
-	sw := metricsClient.StartTimer(metrics.SystemWorkflowScope, metrics.SysWorkerContinueAsNewLatency)
+	metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerWorkflowStarted)
+	sw := metricsClient.StartTimer(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerContinueAsNewLatency)
 	requestsHandled := 0
 
 	// step 1: start workers to process archival requests in parallel
@@ -92,7 +93,7 @@ func ArchiveSystemWorkflow(ctx workflow.Context, carryoverRequests []ArchiveRequ
 		if more := ch.Receive(ctx, &request); !more {
 			break
 		}
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerReceivedSignal)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerReceivedSignal)
 		requestsHandled++
 		workQueue.Send(ctx, request)
 	}
@@ -109,14 +110,14 @@ func ArchiveSystemWorkflow(ctx workflow.Context, carryoverRequests []ArchiveRequ
 		if ok := ch.ReceiveAsync(&request); !ok {
 			break
 		}
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerReceivedSignal)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerReceivedSignal)
 		co = append(co, request)
 	}
 
 	// step 6: schedule new run
 	ctx = workflow.WithExecutionStartToCloseTimeout(ctx, workflowStartToCloseTimeout)
 	ctx = workflow.WithWorkflowTaskStartToCloseTimeout(ctx, decisionTaskStartToCloseTimeout)
-	metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerContinueAsNew)
+	metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerContinueAsNew)
 	sw.Stop()
 	logger.WithFields(bark.Fields{
 		logging.TagNumberOfSignalsUntilContinueAsNew: requestsHandled,
@@ -157,11 +158,11 @@ func handleRequest(request ArchiveRequest, ctx workflow.Context, logger bark.Log
 			logging.TagArchiveRequestWorkflowID:        request.WorkflowID,
 			logging.TagArchiveRequestRunID:             request.RunID,
 			logging.TagArchiveRequestEventStoreVersion: request.EventStoreVersion,
-			logging.TagArchiveRequestLastFirstEventID:  request.LastFirstEventID,
+			logging.TagArchiveRequestNextEventID:       request.NextEventID,
 		}).Error("ArchivalUploadActivity encountered non-retryable error")
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerArchivalUploadActivityNonRetryableFailures)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerArchivalUploadActivityNonRetryableFailures)
 	} else {
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerArchivalUploadSuccessful)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerArchivalUploadSuccessful)
 	}
 	lao := workflow.LocalActivityOptions{
 		ScheduleToCloseTimeout: 10 * time.Second,
@@ -178,7 +179,7 @@ func handleRequest(request ArchiveRequest, ctx workflow.Context, logger bark.Log
 	}
 	err := workflow.ExecuteLocalActivity(workflow.WithLocalActivityOptions(ctx, lao), ArchivalDeleteHistoryActivity, request).Get(ctx, nil)
 	if err == nil {
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerArchivalDeleteHistorySuccessful)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerArchivalDeleteHistorySuccessful)
 		return
 	}
 	logger.WithFields(bark.Fields{
@@ -187,7 +188,7 @@ func handleRequest(request ArchiveRequest, ctx workflow.Context, logger bark.Log
 		logging.TagArchiveRequestWorkflowID:        request.WorkflowID,
 		logging.TagArchiveRequestRunID:             request.RunID,
 		logging.TagArchiveRequestEventStoreVersion: request.EventStoreVersion,
-		logging.TagArchiveRequestLastFirstEventID:  request.LastFirstEventID,
+		logging.TagArchiveRequestNextEventID:       request.NextEventID,
 	}).Warn("ArchivalDeleteHistoryActivity could not be completed as a local activity, attempting to run as normal activity")
 	deleteActOpts := workflow.ActivityOptions{
 		ScheduleToStartTimeout: time.Minute,
@@ -214,11 +215,11 @@ func handleRequest(request ArchiveRequest, ctx workflow.Context, logger bark.Log
 			logging.TagArchiveRequestWorkflowID:        request.WorkflowID,
 			logging.TagArchiveRequestRunID:             request.RunID,
 			logging.TagArchiveRequestEventStoreVersion: request.EventStoreVersion,
-			logging.TagArchiveRequestLastFirstEventID:  request.LastFirstEventID,
+			logging.TagArchiveRequestNextEventID:       request.NextEventID,
 		}).Error("ArchivalDeleteHistoryActivity encountered non-retryable error")
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerArchivalDeleteHistoryActivityNonRetryableFailures)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerArchivalDeleteHistoryActivityNonRetryableFailures)
 	} else {
-		metricsClient.IncCounter(metrics.SystemWorkflowScope, metrics.SysWorkerArchivalDeleteHistorySuccessful)
+		metricsClient.IncCounter(metrics.ArchiveSystemWorkflowScope, metrics.SysWorkerArchivalDeleteHistorySuccessful)
 	}
 }
 
@@ -241,7 +242,7 @@ func ArchivalUploadActivity(ctx context.Context, request ArchiveRequest) error {
 		logging.TagArchiveRequestWorkflowID:        request.WorkflowID,
 		logging.TagArchiveRequestRunID:             request.RunID,
 		logging.TagArchiveRequestEventStoreVersion: request.EventStoreVersion,
-		logging.TagArchiveRequestLastFirstEventID:  request.LastFirstEventID,
+		logging.TagArchiveRequestNextEventID:       request.NextEventID,
 	})
 	metricsClient := container.MetricsClient
 	domainCache := container.DomainCache
@@ -336,7 +337,7 @@ func ArchivalDeleteHistoryActivity(ctx context.Context, request ArchiveRequest) 
 		logging.TagArchiveRequestWorkflowID:        request.WorkflowID,
 		logging.TagArchiveRequestRunID:             request.RunID,
 		logging.TagArchiveRequestEventStoreVersion: request.EventStoreVersion,
-		logging.TagArchiveRequestLastFirstEventID:  request.LastFirstEventID,
+		logging.TagArchiveRequestNextEventID:       request.NextEventID,
 	})
 	metricsClient := container.MetricsClient
 	if request.EventStoreVersion == persistence.EventStoreVersionV2 {

@@ -22,12 +22,15 @@ package sysworkflow
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/blobstore/blob"
+	"strconv"
 	"strings"
+
+	"github.com/dgryski/go-farm"
+
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore/blob"
 )
 
 type (
@@ -37,8 +40,8 @@ type (
 		DomainID             *string `json:"domain_id,omitempty"`
 		WorkflowID           *string `json:"workflow_id,omitempty"`
 		RunID                *string `json:"run_id,omitempty"`
-		CurrentPageToken     *string `json:"current_page_token,omitempty"`
-		NextPageToken        *string `json:"next_page_token,omitempty"`
+		CurrentPageToken     *int    `json:"current_page_token,omitempty"`
+		NextPageToken        *int    `json:"next_page_token,omitempty"`
 		FirstFailoverVersion *int64  `json:"first_failover_version,omitempty"`
 		LastFailoverVersion  *int64  `json:"last_failover_version,omitempty"`
 		FirstEventID         *int64  `json:"first_event_id,omitempty"`
@@ -56,16 +59,28 @@ type (
 	}
 )
 
+var (
+	errInvalidKeyInput = &shared.BadRequestError{Message: "invalid input to construct history blob key"}
+)
+
 // NewHistoryBlobKey returns a key for history blob
-func NewHistoryBlobKey(domainID, workflowID, runID, pageToken string) (blob.Key, error) {
-	if len(domainID) == 0 || len(workflowID) == 0 || len(runID) == 0 || len(pageToken) == 0 {
-		return nil, errors.New("all inputs required to be non-empty")
+func NewHistoryBlobKey(domainID, workflowID, runID string, pageToken int) (blob.Key, error) {
+	if len(domainID) == 0 || len(workflowID) == 0 || len(runID) == 0 {
+		return nil, errInvalidKeyInput
+	}
+	if pageToken < common.FirstBlobPageToken {
+		return nil, errInvalidKeyInput
 	}
 	domainIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(domainID)))
 	workflowIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(workflowID)))
 	runIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(runID)))
 	combinedHash := strings.Join([]string{domainIDHash, workflowIDHash, runIDHash}, "")
-	return blob.NewKey(historyBlobKeyExt, combinedHash, pageToken)
+	return blob.NewKey(historyBlobKeyExt, combinedHash, StringPageToken(pageToken))
+}
+
+// StringPageToken converts input blob page token to string form
+func StringPageToken(pageToken int) string {
+	return strconv.Itoa(pageToken)
 }
 
 // ConvertHeaderToTags converts header into metadata tags for blob

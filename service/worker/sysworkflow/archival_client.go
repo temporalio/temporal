@@ -37,7 +37,7 @@ type (
 		RunID                string
 		EventStoreVersion    int32
 		BranchToken          []byte
-		LastFirstEventID     int64
+		NextEventID          int64
 		CloseFailoverVersion int64
 	}
 

@@ -623,21 +623,22 @@ func (t *timerQueueProcessorBase) processArchiveHistoryEvent(task *persistence.T
 	} else if !ok {
 		return nil
 	}
-
 	req := &sysworkflow.ArchiveRequest{
 		DomainID:             task.DomainID,
 		WorkflowID:           task.WorkflowID,
 		RunID:                task.RunID,
 		EventStoreVersion:    msBuilder.GetEventStoreVersion(),
 		BranchToken:          msBuilder.GetCurrentBranch(),
-		LastFirstEventID:     msBuilder.GetLastFirstEventID(),
+		NextEventID:          msBuilder.GetNextEventID(),
 		CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
 	}
 	err = t.deleteWorkflowExecution(task)
 	if err != nil {
 		return err
 	}
-
+	// calling clear here to force accesses of mutable state to read database
+	// if this is not called then callers will get mutable state even though its been removed from database
+	context.clear()
 	if err := t.historyService.archivalClient.Archive(req); err != nil {
 		t.logger.WithFields(bark.Fields{
 			logging.TagHistoryShardID:      t.shard.GetShardID(),

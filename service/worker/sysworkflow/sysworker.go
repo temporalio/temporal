@@ -86,7 +86,7 @@ func init() {
 // NewSysWorker returns a new SysWorker
 func NewSysWorker(container *SysWorkerContainer) SysWorker {
 	logger := container.Logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueArchivalSystemWorkflowComponent,
+		logging.TagWorkflowComponent: logging.TagValueArchiveSystemWorkflowComponent,
 	})
 	globalLogger = logger
 	globalMetricsClient = container.MetricsClient

@@ -22,7 +22,6 @@ package sysworkflow
 
 import (
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/uber-common/bark"
@@ -62,7 +61,7 @@ type (
 		runID                string
 		eventStoreVersion    int32
 		branchToken          []byte
-		lastFirstEventID     int64
+		nextEventID          int64
 		config               *Config
 		domain               string
 		clusterName          string
@@ -98,7 +97,7 @@ func NewHistoryBlobIterator(
 		runID:                request.RunID,
 		eventStoreVersion:    request.EventStoreVersion,
 		branchToken:          request.BranchToken,
-		lastFirstEventID:     request.LastFirstEventID,
+		nextEventID:          request.NextEventID,
 		config:               container.Config,
 		domain:               domainName,
 		clusterName:          clusterName,
@@ -134,8 +133,8 @@ func (i *historyBlobIterator) Next() (*HistoryBlob, error) {
 		DomainID:             &i.domainID,
 		WorkflowID:           &i.workflowID,
 		RunID:                &i.runID,
-		CurrentPageToken:     common.StringPtr(strconv.Itoa(i.blobPageToken)),
-		NextPageToken:        common.StringPtr(strconv.Itoa(common.LastBlobNextPageToken)),
+		CurrentPageToken:     common.IntPtr(i.blobPageToken),
+		NextPageToken:        common.IntPtr(common.LastBlobNextPageToken),
 		FirstFailoverVersion: firstEvent.Version,
 		LastFailoverVersion:  lastEvent.Version,
 		FirstEventID:         firstEvent.EventId,
@@ -147,7 +146,7 @@ func (i *historyBlobIterator) Next() (*HistoryBlob, error) {
 	}
 	if i.HasNext() {
 		i.blobPageToken++
-		header.NextPageToken = common.StringPtr(strconv.Itoa(i.blobPageToken))
+		header.NextPageToken = common.IntPtr(i.blobPageToken)
 	}
 	return &HistoryBlob{
 		Header: header,
@@ -197,7 +196,7 @@ func (i *historyBlobIterator) readHistory(pageToken []byte) ([]*shared.HistoryEv
 		req := &persistence.ReadHistoryBranchRequest{
 			BranchToken:   i.branchToken,
 			MinEventID:    common.FirstEventID,
-			MaxEventID:    i.lastFirstEventID,
+			MaxEventID:    i.nextEventID,
 			PageSize:      i.config.HistoryPageSize(i.domain),
 			NextPageToken: pageToken,
 		}
@@ -210,7 +209,7 @@ func (i *historyBlobIterator) readHistory(pageToken []byte) ([]*shared.HistoryEv
 			RunId:      common.StringPtr(i.runID),
 		},
 		FirstEventID:  common.FirstEventID,
-		NextEventID:   i.lastFirstEventID,
+		NextEventID:   i.nextEventID,
 		PageSize:      i.config.HistoryPageSize(i.domain),
 		NextPageToken: pageToken,
 	}

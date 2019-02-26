@@ -32,7 +32,6 @@ import (
 	hist "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceserver"
 	gen "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/frontend"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/client/public"
@@ -60,7 +59,6 @@ type (
 		domainCache           cache.DomainCache
 		historyServiceClient  hc.Client
 		matchingServiceClient matching.Client
-		frontendServiceClient frontend.Client
 		publicClient          public.Client
 		hServiceResolver      membership.ServiceResolver
 		controller            *shardController
@@ -129,12 +127,6 @@ func (h *Handler) Start() error {
 	h.historyServiceClient = hc.NewRetryableClient(
 		h.GetClientBean().GetHistoryClient(),
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
-	h.frontendServiceClient = frontend.NewRetryableClient(
-		h.GetClientBean().GetFrontendClient(),
-		common.CreateFrontendServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
 

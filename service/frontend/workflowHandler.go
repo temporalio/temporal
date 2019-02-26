@@ -37,12 +37,14 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/.gen/go/shared"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/logging"
@@ -50,6 +52,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/service/worker/sysworkflow"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -87,6 +90,10 @@ type (
 		BranchToken       []byte
 		ReplicationInfo   map[string]*gen.ReplicationInfo
 	}
+
+	getHistoryContinuationTokenArchival struct {
+		BlobstorePageToken int
+	}
 )
 
 var (
@@ -111,6 +118,7 @@ var (
 	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
+	errDomainArchivalBucketNotSet                 = &gen.BadRequestError{Message: "Domain config does not have archival bucket set."}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -1860,6 +1868,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
+	if wh.historyArchived(ctx, getRequest, domainID) {
+		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
+	}
+
 	// this function return the following 5 things,
 	// 1. the workflow run ID
 	// 2. the last first event ID (the event ID of the last batch of events in the history)
@@ -3069,6 +3081,21 @@ func serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
 	return bytes, err
 }
 
+func deserializeHistoryTokenArchival(bytes []byte) (*getHistoryContinuationTokenArchival, error) {
+	token := &getHistoryContinuationTokenArchival{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
+}
+
+func serializeHistoryTokenArchival(token *getHistoryContinuationTokenArchival) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	bytes, err := json.Marshal(token)
+	return bytes, err
+}
+
 func createServiceBusyError() *gen.ServiceBusyError {
 	err := &gen.ServiceBusyError{}
 	err.Message = "Too many outstanding requests to the cadence service"
@@ -3097,4 +3124,82 @@ func (wh *WorkflowHandler) bucketName(customBucketName *string) string {
 
 func (wh *WorkflowHandler) customBucketNameProvided(customBucketName *string) bool {
 	return customBucketName != nil && len(*customBucketName) != 0
+}
+
+func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *gen.GetWorkflowExecutionHistoryRequest, domainID string) bool {
+	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
+		return false
+	}
+	getMutableStateRequest := &h.GetMutableStateRequest{
+		DomainUUID: common.StringPtr(domainID),
+		Execution:  request.Execution,
+	}
+	_, err := wh.history.GetMutableState(ctx, getMutableStateRequest)
+	if err == nil {
+		return false
+	}
+	switch err.(type) {
+	case *shared.EntityNotExistsError:
+		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
+		return true
+	}
+	return false
+}
+
+func (wh *WorkflowHandler) getArchivedHistory(
+	ctx context.Context,
+	request *gen.GetWorkflowExecutionHistoryRequest,
+	domainID string,
+	scope int,
+) (*gen.GetWorkflowExecutionHistoryResponse, error) {
+
+	entry, err := wh.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	archivalBucket := entry.GetConfig().ArchivalBucket
+	if archivalBucket == "" {
+		return nil, wh.error(errDomainArchivalBucketNotSet, scope)
+	}
+	var token *getHistoryContinuationTokenArchival
+	if request.NextPageToken != nil {
+		token, err = deserializeHistoryTokenArchival(request.NextPageToken)
+		if err != nil {
+			return nil, wh.error(errInvalidNextPageToken, scope)
+		}
+	} else {
+		token = &getHistoryContinuationTokenArchival{
+			BlobstorePageToken: common.FirstBlobPageToken,
+		}
+	}
+	key, err := sysworkflow.NewHistoryBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), token.BlobstorePageToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	b, err := wh.blobstoreClient.Download(ctx, archivalBucket, key)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	unwrappedBlob, wrappingLayers, err := blob.Unwrap(b)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	historyBlob := &sysworkflow.HistoryBlob{}
+	switch *wrappingLayers.EncodingFormat {
+	case blob.JSONEncoding:
+		if err := json.Unmarshal(unwrappedBlob.Body, historyBlob); err != nil {
+			return nil, wh.error(err, scope)
+		}
+	}
+	token = &getHistoryContinuationTokenArchival{
+		BlobstorePageToken: *historyBlob.Header.NextPageToken,
+	}
+	if token.BlobstorePageToken == common.LastBlobNextPageToken {
+		token = nil
+	}
+	nextToken, err := serializeHistoryTokenArchival(token)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return createGetWorkflowExecutionHistoryResponse(historyBlob.Body, nextToken), nil
 }

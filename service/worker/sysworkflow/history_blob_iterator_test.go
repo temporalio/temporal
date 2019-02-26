@@ -33,7 +33,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"strconv"
 	"testing"
 )
 
@@ -41,7 +40,7 @@ const (
 	testDomainID                      = "test-domain-id"
 	testWorkflowID                    = "test-workflow-id"
 	testRunID                         = "test-run-id"
-	testLastFirstEventID              = 1800
+	testNextEventID                   = 1800
 	testDomain                        = "test-domain"
 	testClusterName                   = "test-cluster-name"
 	testCloseFailoverVersion          = 100
@@ -344,8 +343,8 @@ func (s *HistoryBlobIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	s.Equal(strconv.Itoa(common.FirstBlobPageToken), *blob.Header.CurrentPageToken)
-	s.Equal(strconv.Itoa(common.LastBlobNextPageToken), *blob.Header.NextPageToken)
+	s.Equal(common.FirstBlobPageToken, *blob.Header.CurrentPageToken)
+	s.Equal(common.LastBlobNextPageToken, *blob.Header.NextPageToken)
 	s.Equal(int64(1), *blob.Header.FirstFailoverVersion)
 	s.Equal(int64(5), *blob.Header.LastFailoverVersion)
 	s.Equal(int64(1), *blob.Header.FirstEventID)
@@ -396,8 +395,8 @@ func (s *HistoryBlobIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	s.Equal(strconv.Itoa(common.FirstBlobPageToken), *blob.Header.CurrentPageToken)
-	s.Equal(strconv.Itoa(common.FirstBlobPageToken+1), *blob.Header.NextPageToken)
+	s.Equal(common.FirstBlobPageToken, *blob.Header.CurrentPageToken)
+	s.Equal(common.FirstBlobPageToken+1, *blob.Header.NextPageToken)
 	s.Equal(int64(1), *blob.Header.FirstFailoverVersion)
 	s.Equal(int64(2), *blob.Header.LastFailoverVersion)
 	s.Equal(int64(1), *blob.Header.FirstEventID)
@@ -440,11 +439,11 @@ func (s *HistoryBlobIteratorSuite) TestNext_Success_TenCallsToNext() {
 		s.NotNil(blob)
 		s.Equal(common.FirstEventID+int64(i*100), *blob.Header.FirstEventID)
 		s.Equal(int64(100+(i*100)), *blob.Header.LastEventID)
-		s.Equal(strconv.Itoa(i+1), *blob.Header.CurrentPageToken)
+		s.Equal(i+1, *blob.Header.CurrentPageToken)
 		if i == 9 {
-			s.Equal(strconv.Itoa(common.LastBlobNextPageToken), *blob.Header.NextPageToken)
+			s.Equal(common.LastBlobNextPageToken, *blob.Header.NextPageToken)
 		} else {
-			s.Equal(strconv.Itoa(i+2), *blob.Header.NextPageToken)
+			s.Equal(i+2, *blob.Header.NextPageToken)
 		}
 		s.Equal(int64(100), *blob.Header.EventCount)
 		if i < 9 {
@@ -475,7 +474,7 @@ func (s *HistoryBlobIteratorSuite) constructMockHistoryManager(returnErrorOnPage
 				RunId:      common.StringPtr(testRunID),
 			},
 			FirstEventID:  common.FirstEventID,
-			NextEventID:   testLastFirstEventID,
+			NextEventID:   testNextEventID,
 			PageSize:      testDefaultPersistencePageSize,
 			NextPageToken: pageToken,
 		}
@@ -547,7 +546,7 @@ func (s *HistoryBlobIteratorSuite) constructTestHistoryBlobIterator(
 		RunID:                testRunID,
 		EventStoreVersion:    int32(eventStoreVersion),
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	container := &SysWorkerContainer{

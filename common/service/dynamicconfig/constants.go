@@ -153,7 +153,7 @@ var keys = map[Key]string{
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
-	NumSystemWorkflows:                                    "history.numSystemWorkflows",
+	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
 
 	WorkerPersistenceMaxQPS:                  "worker.persistenceMaxQPS",
 	WorkerReplicatorConcurrency:              "worker.replicatorConcurrency",
@@ -385,8 +385,8 @@ const (
 	ShardSyncMinInterval
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding
-	// NumSystemWorkflows is key for number of system workflows running in total
-	NumSystemWorkflows
+	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
+	NumArchiveSystemWorkflows
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection

@@ -45,7 +45,7 @@ func (s *UtilSuite) TestNewHistoryBlobKey() {
 		domainID       string
 		workflowID     string
 		runID          string
-		pageToken      string
+		pageToken      int
 		expectError    bool
 		expectBuiltKey string
 	}{
@@ -57,9 +57,16 @@ func (s *UtilSuite) TestNewHistoryBlobKey() {
 			domainID:       "testDomainID",
 			workflowID:     "testWorkflowID",
 			runID:          "testRunID",
-			pageToken:      "testPageToken",
+			pageToken:      common.FirstBlobPageToken,
 			expectError:    false,
-			expectBuiltKey: "17971674567288329890367046253745284795510285995943906173973_testPageToken.history",
+			expectBuiltKey: "17971674567288329890367046253745284795510285995943906173973_1.history",
+		},
+		{
+			domainID:    "testDomainID",
+			workflowID:  "testWorkflowID",
+			runID:       "testRunID",
+			pageToken:   -1,
+			expectError: true,
 		},
 	}
 

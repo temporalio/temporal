@@ -755,8 +755,8 @@ const (
 	ESProcessorScope
 	// IndexProcessorScope is scope used by all metric emitted by index processor
 	IndexProcessorScope
-	// SystemWorkflowScope is scope used by all metrics emitted by SystemWorkflow
-	SystemWorkflowScope
+	// ArchiveSystemWorkflowScope is scope used by all metrics emitted by ArchiveSystemWorkflow
+	ArchiveSystemWorkflowScope
 	// ArchivalUploadActivity is scope used by all metrics emitted by ArchivalUploadActivity
 	ArchivalUploadActivityScope
 	// ArchivalDeleteHistoryActivity is scope used by all metrics emitted by ArchivalDeleteHistoryActivity
@@ -1086,7 +1086,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SyncActivityTaskScope:              {operation: "SyncActivityTask"},
 		ESProcessorScope:                   {operation: "ESProcessor"},
 		IndexProcessorScope:                {operation: "IndexProcessor"},
-		SystemWorkflowScope:                {operation: "SystemWorkflow"},
+		ArchiveSystemWorkflowScope:         {operation: "ArchiveSystemWorkflow"},
 		ArchivalUploadActivityScope:        {operation: "ArchivalUploadActivity"},
 		ArchivalDeleteHistoryActivityScope: {operation: "ArchivalDeleteHistoryActivity"},
 		HistoryBlobIteratorScope:           {operation: "HistoryBlobIterator"},

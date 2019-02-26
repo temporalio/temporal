@@ -102,7 +102,7 @@ const (
 	TagValueIndexerProcessorComponent         = "indexer-processor"
 	TagValueIndexerESProcessorComponent       = "indexer-es-processor"
 	TagValueESVisibilityManager               = "es-visibility-manager"
-	TagValueArchivalSystemWorkflowComponent   = "archival-system-workflow"
+	TagValueArchiveSystemWorkflowComponent    = "archive-system-workflow"
 
 	// TagHistoryBuilderAction values
 	TagValueActionWorkflowStarted                 = "add-workflowexecution-started-event"
@@ -169,7 +169,7 @@ const (
 	TagArchiveRequestWorkflowID          = "archive-request-workflow-id"
 	TagArchiveRequestRunID               = "archive-request-run-id"
 	TagArchiveRequestEventStoreVersion   = "archive-request-event-store-version"
-	TagArchiveRequestLastFirstEventID    = "archive-request-last-first-event-id"
+	TagArchiveRequestNextEventID         = "archive-request-next-event-id"
 	TagNumberOfSignalsUntilContinueAsNew = "number-of-signals-until-continue-as-new"
 	TagBucket                            = "bucket"
 	TagFileBlobstoreBlobPath             = "file-blobstore-blob-path"

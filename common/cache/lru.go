@@ -220,7 +220,10 @@ func (c *lru) Release(key interface{}) {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
-	elt := c.byKey[key]
+	elt, ok := c.byKey[key]
+	if !ok {
+		return
+	}
 	entry := elt.Value.(*entryImpl)
 	entry.refCount--
 }

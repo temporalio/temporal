@@ -44,7 +44,7 @@ const (
 	testCurrentClusterName = "test-current-cluster-name"
 )
 
-type SystemWorkflowSuite struct {
+type ArchiveSystemWorkflowSuite struct {
 	*require.Assertions
 	suite.Suite
 	logger        bark.Logger
@@ -52,17 +52,17 @@ type SystemWorkflowSuite struct {
 }
 
 func TestSystemWorkflowSuite(t *testing.T) {
-	suite.Run(t, new(SystemWorkflowSuite))
+	suite.Run(t, new(ArchiveSystemWorkflowSuite))
 }
 
-func (s *SystemWorkflowSuite) SetupTest() {
+func (s *ArchiveSystemWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.logger = bark.NewNopLogger()
 	s.metricsClient = &metricsMocks.Client{}
 	s.metricsClient.On("IncCounter", mock.Anything, mock.Anything)
 }
 
-func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Fail_GetDomainByID() {
+func (s *ArchiveSystemWorkflowSuite) TestArchivalUploadActivity_Fail_GetDomainByID() {
 	domainCache := &cache.DomainCacheMock{}
 	domainCache.On("GetDomainByID", mock.Anything).Return(nil, errors.New("failed to get domain cache entry"))
 	container := &SysWorkerContainer{
@@ -80,7 +80,7 @@ func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Fail_GetDomainByID() {
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -88,7 +88,7 @@ func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Fail_GetDomainByID() {
 	s.Contains(err.Error(), "failed to get domain from domain cache")
 }
 
-func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Nop_ClusterNotEnablesArchival() {
+func (s *ArchiveSystemWorkflowSuite) TestArchivalUploadActivity_Nop_ClusterNotEnablesArchival() {
 	domainCache, mockClusterMetadata := s.domainCache(false, true)
 	container := &SysWorkerContainer{
 		Logger:          s.logger,
@@ -106,7 +106,7 @@ func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Nop_ClusterNotEnablesAr
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -115,7 +115,7 @@ func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Nop_ClusterNotEnablesAr
 	s.NoError(err)
 }
 
-func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Nop_DomainNotEnablesArchival() {
+func (s *ArchiveSystemWorkflowSuite) TestArchivalUploadActivity_Nop_DomainNotEnablesArchival() {
 	domainCache, mockClusterMetadata := s.domainCache(true, false)
 	container := &SysWorkerContainer{
 		Logger:          s.logger,
@@ -133,7 +133,7 @@ func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Nop_DomainNotEnablesArc
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -142,7 +142,7 @@ func (s *SystemWorkflowSuite) TestArchivalUploadActivity_Nop_DomainNotEnablesArc
 	s.NoError(err)
 }
 
-func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotGetNextHistoryBlob() {
+func (s *ArchiveSystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotGetNextHistoryBlob() {
 	domainCache, mockClusterMetadata := s.domainCache(true, true)
 	mockHistoryBlobIterator := &HistoryBlobIteratorMock{}
 	mockHistoryBlobIterator.On("HasNext").Return(true)
@@ -164,7 +164,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotGetNextHistor
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -172,13 +172,13 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotGetNextHistor
 	s.Contains(err.Error(), "failed to get next blob from iterator")
 }
 
-func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotConstructBlobKey() {
+func (s *ArchiveSystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotConstructBlobKey() {
 	domainCache, mockClusterMetadata := s.domainCache(true, true)
 	mockHistoryBlobIterator := &HistoryBlobIteratorMock{}
 	mockHistoryBlobIterator.On("HasNext").Return(true)
 	historyBlob := &HistoryBlob{
 		Header: &HistoryBlobHeader{
-			CurrentPageToken: common.StringPtr("1"),
+			CurrentPageToken: common.IntPtr(1),
 		},
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
@@ -199,7 +199,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotConstructBlob
 		WorkflowID:           "", // this causes an error when creating the blob key
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -207,13 +207,13 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotConstructBlob
 	s.Contains(err.Error(), "failed to construct blob key")
 }
 
-func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotCheckBlobExists() {
+func (s *ArchiveSystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotCheckBlobExists() {
 	domainCache, mockClusterMetadata := s.domainCache(true, true)
 	mockHistoryBlobIterator := &HistoryBlobIteratorMock{}
 	mockHistoryBlobIterator.On("HasNext").Return(true)
 	historyBlob := &HistoryBlob{
 		Header: &HistoryBlobHeader{
-			CurrentPageToken: common.StringPtr("1"),
+			CurrentPageToken: common.IntPtr(1),
 		},
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
@@ -237,7 +237,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotCheckBlobExis
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -245,14 +245,14 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotCheckBlobExis
 	s.Contains(err.Error(), "failed to check if blob exists already")
 }
 
-func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Nop_BlobAlreadyExists() {
+func (s *ArchiveSystemWorkflowSuite) TestArchiveUploadActivity_Nop_BlobAlreadyExists() {
 	domainCache, mockClusterMetadata := s.domainCache(true, true)
 	mockHistoryBlobIterator := &HistoryBlobIteratorMock{}
 	mockHistoryBlobIterator.On("HasNext").Return(true).Once()
 	mockHistoryBlobIterator.On("HasNext").Return(false).Once()
 	historyBlob := &HistoryBlob{
 		Header: &HistoryBlobHeader{
-			CurrentPageToken: common.StringPtr("1"),
+			CurrentPageToken: common.IntPtr(1),
 		},
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
@@ -276,7 +276,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Nop_BlobAlreadyExists() 
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -284,14 +284,14 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Nop_BlobAlreadyExists() 
 	mockBlobstore.AssertNotCalled(s.T(), "Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotUploadBlob() {
+func (s *ArchiveSystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotUploadBlob() {
 	domainCache, mockClusterMetadata := s.domainCache(true, true)
 	mockHistoryBlobIterator := &HistoryBlobIteratorMock{}
 	mockHistoryBlobIterator.On("HasNext").Return(true).Once()
 	mockHistoryBlobIterator.On("HasNext").Return(false).Once()
 	historyBlob := &HistoryBlob{
 		Header: &HistoryBlobHeader{
-			CurrentPageToken: common.StringPtr("1"),
+			CurrentPageToken: common.IntPtr(1),
 		},
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
@@ -317,7 +317,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotUploadBlob() 
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -325,14 +325,14 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Fail_CannotUploadBlob() 
 	s.Contains(err.Error(), "failed to upload blob")
 }
 
-func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Success() {
+func (s *ArchiveSystemWorkflowSuite) TestArchiveUploadActivity_Success() {
 	domainCache, mockClusterMetadata := s.domainCache(true, true)
 	mockHistoryBlobIterator := &HistoryBlobIteratorMock{}
 	mockHistoryBlobIterator.On("HasNext").Return(true).Once()
 	mockHistoryBlobIterator.On("HasNext").Return(false).Once()
 	historyBlob := &HistoryBlob{
 		Header: &HistoryBlobHeader{
-			CurrentPageToken: common.StringPtr("1"),
+			CurrentPageToken: common.IntPtr(1),
 		},
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
@@ -358,7 +358,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Success() {
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
-		LastFirstEventID:     testLastFirstEventID,
+		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	_, err := env.ExecuteActivity("ArchivalUploadActivity", request)
@@ -366,7 +366,7 @@ func (s *SystemWorkflowSuite) TestArchiveUploadActivity_Success() {
 	mockBlobstore.AssertCalled(s.T(), "Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-func (s *SystemWorkflowSuite) domainCache(domainEnablesArchival, clusterEnablesArchival bool) (cache.DomainCache, cluster.Metadata) {
+func (s *ArchiveSystemWorkflowSuite) domainCache(domainEnablesArchival, clusterEnablesArchival bool) (cache.DomainCache, cluster.Metadata) {
 	domainArchivalStatus := shared.ArchivalStatusDisabled
 	if domainEnablesArchival {
 		domainArchivalStatus = shared.ArchivalStatusEnabled
