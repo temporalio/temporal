@@ -14,7 +14,10 @@ docker-compose up
 
 View metrics at localhost:8080/dashboard    
 View Cadence-Web at localhost:8088  
-Use Cadence-CLI with `docker run --rm ubercadence/cli:master`
+Use Cadence-CLI with `docker run --network=host --rm ubercadence/cli:master`
+
+For example to register new domain 'test-domain' with 1 retention day
+`docker run --network=host --rm ubercadence/cli:master --do test-domain domain register -rd 1`
 
 
 Using a pre-built image
