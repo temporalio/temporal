@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/service/worker/indexer/mocks"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -145,6 +146,27 @@ func (s *esProcessorSuite) TestAdd() {
 	mockKafkaMsg.On("Ack").Return(nil).Once()
 	s.esProcessor.Add(request, key, mockKafkaMsg)
 	s.Equal(1, s.esProcessor.mapToKafkaMsg.Size())
+	mockKafkaMsg.AssertExpectations(s.T())
+}
+
+func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
+	request := elastic.NewBulkIndexRequest()
+	mockKafkaMsg := &msgMocks.Message{}
+	key := "test-key"
+
+	addFunc := func(wg *sync.WaitGroup) {
+		s.esProcessor.Add(request, key, mockKafkaMsg)
+		wg.Done()
+	}
+	duplicates := 5
+	wg := &sync.WaitGroup{}
+	wg.Add(duplicates)
+	s.mockBulkProcessor.On("Add", request).Return().Once()
+	mockKafkaMsg.On("Ack").Return(nil).Times(duplicates - 1)
+	for i := 0; i < duplicates; i++ {
+		addFunc(wg)
+	}
+	wg.Wait()
 	mockKafkaMsg.AssertExpectations(s.T())
 }
 
