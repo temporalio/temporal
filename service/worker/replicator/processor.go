@@ -506,6 +506,10 @@ RetryLoop:
 		break RetryLoop
 	}
 
+	if !p.isRetryTaskError(err) {
+		return err
+	}
+
 	// here we lock on the current workflow (run ID being empty) to ensure only one message will actually
 	// try to fix the missing kafka message.
 	workflowIdendifier := definition.NewWorkflowIdentifier(attr.GetDomainId(), attr.GetWorkflowId(), "")

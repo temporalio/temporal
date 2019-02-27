@@ -154,6 +154,7 @@ var keys = map[Key]string{
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
+	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 
 	WorkerPersistenceMaxQPS:                  "worker.persistenceMaxQPS",
 	WorkerReplicatorConcurrency:              "worker.replicatorConcurrency",
@@ -195,6 +196,8 @@ const (
 	EnableReadFromClosedExecutionV2
 	// EnableVisibilityToKafka is key for enable kafka
 	EnableVisibilityToKafka
+	// EmitShardDiffLog whether emit the shard diff log
+	EmitShardDiffLog
 	// EnableReadVisibilityFromES is key for enable read from elastic search
 	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter

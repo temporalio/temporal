@@ -917,10 +917,11 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
 	timerFailoverInProgress := len(s.shardInfo.TimerFailoverLevels)
 
-	if logWarnTransferLevelDiff < diffTransferLevel ||
-		logWarnTimerLevelDiff < diffTimerLevel ||
-		logWarnTransferLevelDiff < transferLag ||
-		logWarnTimerLevelDiff < timerLag {
+	if s.config.EmitShardDiffLog() &&
+		(logWarnTransferLevelDiff < diffTransferLevel ||
+			logWarnTimerLevelDiff < diffTimerLevel ||
+			logWarnTransferLevelDiff < transferLag ||
+			logWarnTimerLevelDiff < timerLag) {
 
 		logger := s.logger.WithFields(bark.Fields{
 			logging.TagHistoryShardTime:           s.standbyClusterCurrentTime,
