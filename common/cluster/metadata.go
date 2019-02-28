@@ -22,6 +22,9 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -50,13 +53,13 @@ type (
 		// GetAllClientAddress return the frontend address for each cluster name
 		GetAllClientAddress() map[string]config.Address
 
-		// IsArchivalEnabled whether archival is enabled
-		IsArchivalEnabled() bool
-		// GetDefaultArchivalBucket returns the default archival bucket name
-		GetDefaultArchivalBucket() string
+		// ArchivalConfig returns the archival config of the cluster
+		ArchivalConfig() *ArchivalConfig
 	}
 
 	metadataImpl struct {
+		logger        bark.Logger
+		metricsClient metrics.Client
 		// EnableGlobalDomain whether the global domain is enabled,
 		// this attr should be discarded when cross DC is made public
 		enableGlobalDomain dynamicconfig.BoolPropertyFn
@@ -74,23 +77,25 @@ type (
 		// clusterToAddress contains the cluster name to corresponding frontend client
 		clusterToAddress map[string]config.Address
 
-		// enableArchival whether archival is enabled
-		enableArchival dynamicconfig.BoolPropertyFn
-		// defaultArchivalBucket is the default archival bucket name used for this cluster
-		defaultArchivalBucket string
+		// archivalStatus is cluster's archival status
+		archivalStatus dynamicconfig.StringPropertyFn
+		// defaultBucket is the default archival bucket name used for this cluster
+		defaultBucket string
 	}
 )
 
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
+	logger bark.Logger,
+	metricsClient metrics.Client,
 	enableGlobalDomain dynamicconfig.BoolPropertyFn,
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
 	clusterInitialFailoverVersions map[string]int64,
 	clusterToAddress map[string]config.Address,
-	enableArchival dynamicconfig.BoolPropertyFn,
-	defaultArchivalBucket string,
+	archivalStatus dynamicconfig.StringPropertyFn,
+	defaultBucket string,
 ) Metadata {
 
 	if len(clusterInitialFailoverVersions) == 0 {
@@ -132,14 +137,18 @@ func NewMetadata(
 		}
 	}
 
-	defaultArchivalBucketSet := len(defaultArchivalBucket) != 0
-	if enableArchival() && !defaultArchivalBucketSet {
-		panic("Archival enabled but no default bucket set")
-	} else if !enableArchival() && defaultArchivalBucketSet {
-		panic("Archival not enabled but default bucket set")
+	status, err := GetArchivalStatus(archivalStatus())
+	if err != nil {
+		panic(err)
+	}
+	archivalConfig := NewArchivalConfig(status, defaultBucket)
+	if !archivalConfig.IsValid() {
+		panic("Archival config is not valid")
 	}
 
 	return &metadataImpl{
+		logger:                         logger,
+		metricsClient:                  metricsClient,
 		enableGlobalDomain:             enableGlobalDomain,
 		failoverVersionIncrement:       failoverVersionIncrement,
 		masterClusterName:              masterClusterName,
@@ -147,8 +156,8 @@ func NewMetadata(
 		clusterInitialFailoverVersions: clusterInitialFailoverVersions,
 		initialFailoverVersionClusters: initialFailoverVersionClusters,
 		clusterToAddress:               clusterToAddress,
-		enableArchival:                 enableArchival,
-		defaultArchivalBucket:          defaultArchivalBucket,
+		archivalStatus:                 archivalStatus,
+		defaultBucket:                  defaultBucket,
 	}
 }
 
@@ -219,12 +228,19 @@ func (metadata *metadataImpl) GetAllClientAddress() map[string]config.Address {
 	return metadata.clusterToAddress
 }
 
-// IsArchivalEnabled whether archival is enabled
-func (metadata *metadataImpl) IsArchivalEnabled() bool {
-	return metadata.enableArchival()
-}
-
-// GetDefaultArchivalBucket returns the default archival bucket name
-func (metadata *metadataImpl) GetDefaultArchivalBucket() string {
-	return metadata.defaultArchivalBucket
+// ArchivalConfig returns the archival config of the cluster.
+// This method always return a well formed ArchivalConfig of which there are only three forms:
+// 1. ArchivalDisabled and empty DefaultBucket
+// 2. ArchivalPaused and non-empty DefaultBucket
+// 3. ArchivalEnabled and non-empty DefaultBucket
+func (metadata *metadataImpl) ArchivalConfig() (retCfg *ArchivalConfig) {
+	status, err := GetArchivalStatus(metadata.archivalStatus())
+	if err != nil {
+		metadata.logger.WithFields(bark.Fields{
+			logging.TagClusterArchivalStatus: metadata.archivalStatus(),
+			logging.TagErr:                   err,
+		}).Error("error getting archival config, invalid archival status in dynamic config")
+		metadata.metricsClient.IncCounter(metrics.ClusterMetadataArchivalConfigScope, metrics.ArchivalConfigFailures)
+	}
+	return NewArchivalConfig(status, metadata.defaultBucket)
 }

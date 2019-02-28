@@ -116,7 +116,6 @@ const (
 	TaskTypeDeleteHistoryEvent
 	TaskTypeActivityRetryTimer
 	TaskTypeWorkflowBackoffTimer
-	TaskTypeArchiveHistoryEvent
 )
 
 // UnknownNumRowsAffected is returned when the number of rows that an API affected cannot be determined
@@ -397,13 +396,6 @@ type (
 
 	// DeleteHistoryEventTask identifies a timer task for deletion of history events of completed execution.
 	DeleteHistoryEventTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-	}
-
-	// ArchiveHistoryEventTask identifies a timer task for archival of history events of completed execution.
-	ArchiveHistoryEventTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
@@ -1625,41 +1617,6 @@ func (a *DeleteHistoryEventTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *DeleteHistoryEventTask) SetVisibilityTimestamp(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
-}
-
-// GetType returns the type of the archive execution task
-func (a *ArchiveHistoryEventTask) GetType() int {
-	return TaskTypeArchiveHistoryEvent
-}
-
-// GetVersion returns the version of the archive execution task
-func (a *ArchiveHistoryEventTask) GetVersion() int64 {
-	return a.Version
-}
-
-// SetVersion sets the version of the archive execution task
-func (a *ArchiveHistoryEventTask) SetVersion(version int64) {
-	a.Version = version
-}
-
-// GetTaskID returns the sequence ID of the archive execution task
-func (a *ArchiveHistoryEventTask) GetTaskID() int64 {
-	return a.TaskID
-}
-
-// SetTaskID sets the sequence ID of the archive execution task
-func (a *ArchiveHistoryEventTask) SetTaskID(id int64) {
-	a.TaskID = id
-}
-
-// GetVisibilityTimestamp get the visibility timestamp
-func (a *ArchiveHistoryEventTask) GetVisibilityTimestamp() time.Time {
-	return a.VisibilityTimestamp
-}
-
-// SetVisibilityTimestamp set the visibility timestamp
-func (a *ArchiveHistoryEventTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 

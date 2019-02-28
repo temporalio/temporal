@@ -25,10 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/uber/cadence/client/public"
 	"time"
-
-	"github.com/uber/cadence/service/worker/sysworkflow"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -36,6 +33,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -45,6 +43,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/worker/sysworkflow"
 	"go.uber.org/yarpc"
 )
 
@@ -2691,13 +2690,6 @@ func getWorkflowHistoryCleanupTasksFromShard(
 		}
 	} else {
 		retentionInDays = domainEntry.GetRetentionDays(workflowID)
-	}
-
-	clusterEnablesArchival := shard.GetService().GetClusterMetadata().IsArchivalEnabled()
-	domainEnablesArchival := domainEntry.GetConfig().ArchivalStatus == workflow.ArchivalStatusEnabled
-	if clusterEnablesArchival && domainEnablesArchival {
-		archivalTask := tBuilder.createArchiveHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
-		return &persistence.CloseExecutionTask{}, archivalTask, nil
 	}
 	deleteTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
 	return &persistence.CloseExecutionTask{}, deleteTask, nil

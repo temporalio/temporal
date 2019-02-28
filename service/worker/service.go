@@ -118,7 +118,7 @@ func (s *Service) Start() {
 	if base.GetClusterMetadata().IsGlobalDomainEnabled() {
 		s.startReplicator(base, pFactory)
 	}
-	if base.GetClusterMetadata().IsArchivalEnabled() {
+	if base.GetClusterMetadata().ArchivalConfig().ConfiguredForArchival() {
 		s.startSysWorker(base, pFactory)
 	}
 	if s.params.ESConfig.Enable {

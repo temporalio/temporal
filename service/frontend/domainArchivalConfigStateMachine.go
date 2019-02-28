@@ -21,54 +21,68 @@
 package frontend
 
 import (
-	"fmt"
 	"github.com/uber/cadence/.gen/go/shared"
 )
 
+// domainArchivalConfigStateMachine is only used by workflowHandler.
+// It is simply meant to simplify the logic around archival domain state changes.
+// Logically this class can be thought of as part of workflowHandler.
+
 type (
-	archivalConfigState struct {
+	// archivalState represents the state of archival config
+	// the only invalid state is {bucket="", status=enabled}
+	// once bucket is set it is immutable
+	// the initial state is {bucket="", status=disabled}, this is what all domains initially default to
+	archivalState struct {
 		bucket string
 		status shared.ArchivalStatus
 	}
 
-	archivalConfigUpdate struct {
-		defaultBucket   string
-		requestedBucket *string
-		requestedStatus *shared.ArchivalStatus
+	// archivalEvent represents a change request to archival config state
+	// the only restriction placed on events is that defaultBucket is not empty
+	// setting requestedBucket to empty string means user is not attempting to set bucket
+	// status can be nil, enabled, or disabled (nil indicates no update by user is being attempted)
+	archivalEvent struct {
+		defaultBucket string
+		bucket        string
+		status        *shared.ArchivalStatus
 	}
 )
 
+// the following errors represents impossible code states that should never occur
 var (
-	errCannotProvideBucket       = &shared.BadRequestError{Message: "Request can only provide bucket name if request also gives status of enabled or disabled."}
-	errDisallowedBucketMetadata  = &shared.BadRequestError{Message: "Cannot set bucket owner or bucket retention (must update bucket manually)."}
-	errStateChangeToNeverEnabled = &shared.BadRequestError{Message: "Cannot change state to never enabled."}
-	errBucketNameUpdate          = &shared.BadRequestError{Message: "Cannot update bucket name after archival status has been moved out of never_enabled for the first time."}
-	errCannotProvideEmptyBucket  = &shared.BadRequestError{Message: "Cannot provide empty bucket name."}
-	errNoDefaultBucket           = &shared.BadRequestError{Message: "No default bucket provided, is cluster correctly configured for archival?"}
-	errCannotHandleStateChange   = &shared.BadRequestError{Message: "Encountered current state and update that cannot be handled (this should be impossible)"}
+	errInvalidState            = &shared.BadRequestError{Message: "Encountered illegal state: archival is enabled but bucket is not set (should be impossible)"}
+	errInvalidEvent            = &shared.BadRequestError{Message: "Encountered illegal event: default bucket is not set (should be impossible)"}
+	errCannotHandleStateChange = &shared.BadRequestError{Message: "Encountered current state and event that cannot be handled (should be impossible)"}
 )
 
-func neverEnabledState() *archivalConfigState {
-	return &archivalConfigState{
+// the following errors represents bad user input
+var (
+	errDisallowedBucketMetadata = &shared.BadRequestError{Message: "Cannot set bucket owner or bucket retention (must update bucket manually)"}
+	errBucketNameUpdate         = &shared.BadRequestError{Message: "Cannot update existing bucket name"}
+)
+
+func neverEnabledState() *archivalState {
+	return &archivalState{
 		bucket: "",
-		status: shared.ArchivalStatusNeverEnabled,
+		status: shared.ArchivalStatusDisabled,
 	}
 }
 
-func registerRequestToArchivalConfig(request *shared.RegisterDomainRequest, defaultBucket string) (*archivalConfigUpdate, error) {
-	requestArchivalConfig := &archivalConfigUpdate{
-		defaultBucket:   defaultBucket,
-		requestedBucket: request.ArchivalBucketName,
-		requestedStatus: request.ArchivalStatus,
+func (wh *WorkflowHandler) toArchivalRegisterEvent(request *shared.RegisterDomainRequest, defaultBucket string) (*archivalEvent, error) {
+	event := &archivalEvent{
+		defaultBucket: defaultBucket,
+		bucket:        request.GetArchivalBucketName(),
+		status:        request.ArchivalStatus,
 	}
-	if err := requestArchivalConfig.validate(); err != nil {
+	if err := event.validate(); err != nil {
 		return nil, err
 	}
-	return requestArchivalConfig, nil
+	return event, nil
 }
 
-func updateRequestToArchivalConfig(request *shared.UpdateDomainRequest, defaultBucket string) (*archivalConfigUpdate, error) {
-	requestArchivalConfig := &archivalConfigUpdate{
+func (wh *WorkflowHandler) toArchivalUpdateEvent(request *shared.UpdateDomainRequest, defaultBucket string) (*archivalEvent, error) {
+	event := &archivalEvent{
 		defaultBucket: defaultBucket,
 	}
 	if request.Configuration != nil {
@@ -76,161 +90,169 @@ func updateRequestToArchivalConfig(request *shared.UpdateDomainRequest, defaultB
 		if cfg.ArchivalBucketOwner != nil || cfg.ArchivalRetentionPeriodInDays != nil {
 			return nil, errDisallowedBucketMetadata
 		}
-		requestArchivalConfig.requestedBucket = cfg.ArchivalBucketName
-		requestArchivalConfig.requestedStatus = cfg.ArchivalStatus
+		event.bucket = cfg.GetArchivalBucketName()
+		event.status = cfg.ArchivalStatus
 	}
-	if err := requestArchivalConfig.validate(); err != nil {
+	if err := event.validate(); err != nil {
 		return nil, err
 	}
-	return requestArchivalConfig, nil
+	return event, nil
 }
 
-func (u *archivalConfigUpdate) validate() error {
-	if len(u.defaultBucket) == 0 {
-		return errNoDefaultBucket
-	}
-	if u.requestedBucket != nil && len(*u.requestedBucket) == 0 {
-		return errCannotProvideEmptyBucket
-	}
-	if (u.requestedStatus == nil || *u.requestedStatus == shared.ArchivalStatusNeverEnabled) && u.requestedBucket != nil {
-		return errCannotProvideBucket
+func (e *archivalEvent) validate() error {
+	if len(e.defaultBucket) == 0 {
+		return errInvalidEvent
 	}
 	return nil
 }
 
-func (s *archivalConfigState) validate() error {
-	neverEnabledValid := s.status == shared.ArchivalStatusNeverEnabled && len(s.bucket) == 0
-	disabledValid := s.status == shared.ArchivalStatusDisabled && len(s.bucket) != 0
-	enabledValid := s.status == shared.ArchivalStatusEnabled && len(s.bucket) != 0
-	if !neverEnabledValid && !disabledValid && !enabledValid {
-		return &shared.BadRequestError{Message: fmt.Sprintf("Encountered invalid current state (this is bad it means database is in invalid state): %+v", *s)}
+func (s *archivalState) validate() error {
+	if s.status == shared.ArchivalStatusEnabled && len(s.bucket) == 0 {
+		return errInvalidState
 	}
 	return nil
 }
 
-func (s *archivalConfigState) updateState(update *archivalConfigUpdate) (nextState *archivalConfigState, changed bool, err error) {
+func (s *archivalState) getNextState(e *archivalEvent) (nextState *archivalState, changed bool, err error) {
 	defer func() {
+		// ensure that any existing bucket name was not mutated
+		if nextState != nil && len(s.bucket) != 0 && s.bucket != nextState.bucket {
+			nextState = nil
+			changed = false
+			err = errCannotHandleStateChange
+		}
+
+		// ensure that next state is valid
 		if nextState != nil {
 			if nextStateErr := nextState.validate(); nextStateErr != nil {
 				nextState = nil
 				changed = false
-				err = errCannotHandleStateChange
+				err = nextStateErr
 			}
 		}
 	}()
 
-	if s == nil || update == nil {
+	if s == nil || e == nil {
 		return nil, false, errCannotHandleStateChange
 	}
 	if err := s.validate(); err != nil {
 		return nil, false, err
 	}
-	if err := update.validate(); err != nil {
+	if err := e.validate(); err != nil {
 		return nil, false, err
 	}
 
 	/**
+	At this point state and event are both non-nil and valid.
 
-	At this point the following invariants are met:
-	- state and update are both not nil
-	- update has a valid default bucket name
-	- state is one of the following
-		- {status:never_enabled, bucket:""}
-		- {status:disabled, bucket:"some_bucket"}
-		- {status:enabled, bucket:"some_bucket"}
-	- update is one of the following
-		- {requestStatus:nil, requestBucket:nil, defaultBucket:"some_bucket"}
-		- {requestStatus:never_enabled, requestBucket:nil, defaultBucket:"some_bucket"}
-		- {requestStatus:disabled, requestBucket:nil, defaultBucket:"some_bucket"}
-		- {requestStatus:disabled, requestBucket:"some_bucket", defaultBucket:"some_bucket"}
-		- {requestStatus:enabled, requestBucket:nil, defaultBucket:"some_bucket"}
-		- {requestStatus:enabled, requestBucket:"some_bucket", defaultBucket:"some_bucket"}
+	State can be any one of the following:
+	{status=enabled,  bucket="foo"}
+	{status=disabled, bucket="foo"}
+	{status=disabled, bucket=""}
 
+	Event can be any one of the following:
+	{status=enabled,  bucket="foo", defaultBucket="bar"}
+	{status=enabled,  bucket="",    defaultBucket="bar"}
+	{status=disabled, bucket="foo", defaultBucket="bar"}
+	{status=disabled, bucket="",    defaultBucket="bar"}
+	{status=nil,      bucket="foo", defaultBucket="bar"}
+	{status=nil,      bucket="",    defaultBucket="bar"}
 	*/
 
-	switch s.status {
-	case shared.ArchivalStatusNeverEnabled:
-		if update.requestedStatus == nil {
+	stateBucketSet := len(s.bucket) != 0
+	eventBucketSet := len(e.bucket) != 0
+
+	// factor this case out to ensure that bucket name is immutable
+	if stateBucketSet && eventBucketSet && s.bucket != e.bucket {
+		return nil, false, errBucketNameUpdate
+	}
+
+	// state 1
+	if s.status == shared.ArchivalStatusEnabled && stateBucketSet {
+		if e.status != nil && *e.status == shared.ArchivalStatusEnabled && eventBucketSet {
 			return s, false, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusNeverEnabled {
-			return s, false, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusDisabled {
-			if update.requestedBucket == nil {
-				return &archivalConfigState{
-					bucket: update.defaultBucket,
-					status: shared.ArchivalStatusDisabled,
-				}, true, nil
-			}
-			return &archivalConfigState{
-				bucket: *update.requestedBucket,
-				status: shared.ArchivalStatusDisabled,
-			}, true, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusEnabled {
-			if update.requestedBucket == nil {
-				return &archivalConfigState{
-					bucket: update.defaultBucket,
-					status: shared.ArchivalStatusEnabled,
-				}, true, nil
-			}
-			return &archivalConfigState{
-				bucket: *update.requestedBucket,
-				status: shared.ArchivalStatusEnabled,
-			}, true, nil
 		}
-	case shared.ArchivalStatusDisabled:
-		if update.requestedStatus == nil {
+		if e.status != nil && *e.status == shared.ArchivalStatusEnabled && !eventBucketSet {
 			return s, false, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusNeverEnabled {
-			return nil, false, errStateChangeToNeverEnabled
-		} else if *update.requestedStatus == shared.ArchivalStatusDisabled {
-			if update.requestedBucket == nil {
-				return s, false, nil
-			}
-			if *update.requestedBucket != s.bucket {
-				return nil, false, errBucketNameUpdate
-			}
-			return s, false, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusEnabled {
-			if update.requestedBucket == nil {
-				return &archivalConfigState{
-					bucket: s.bucket,
-					status: shared.ArchivalStatusEnabled,
-				}, true, nil
-			}
-			if *update.requestedBucket != s.bucket {
-				return nil, false, errBucketNameUpdate
-			}
-			return &archivalConfigState{
-				bucket: s.bucket,
-				status: shared.ArchivalStatusEnabled,
-			}, true, nil
 		}
-	case shared.ArchivalStatusEnabled:
-		if update.requestedStatus == nil {
-			return s, false, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusNeverEnabled {
-			return nil, false, errStateChangeToNeverEnabled
-		} else if *update.requestedStatus == shared.ArchivalStatusDisabled {
-			if update.requestedBucket == nil {
-				return &archivalConfigState{
-					bucket: s.bucket,
-					status: shared.ArchivalStatusDisabled,
-				}, true, nil
-			}
-			if *update.requestedBucket != s.bucket {
-				return nil, false, errBucketNameUpdate
-			}
-			return &archivalConfigState{
+		if e.status != nil && *e.status == shared.ArchivalStatusDisabled && eventBucketSet {
+			return &archivalState{
 				bucket: s.bucket,
 				status: shared.ArchivalStatusDisabled,
 			}, true, nil
-		} else if *update.requestedStatus == shared.ArchivalStatusEnabled {
-			if update.requestedBucket == nil {
-				return s, false, nil
-			}
-			if *update.requestedBucket != s.bucket {
-				return nil, false, errBucketNameUpdate
-			}
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusDisabled && !eventBucketSet {
+			return &archivalState{
+				bucket: s.bucket,
+				status: shared.ArchivalStatusDisabled,
+			}, true, nil
+		}
+		if e.status == nil && eventBucketSet {
+			return s, false, nil
+		}
+		if e.status == nil && !eventBucketSet {
+			return s, false, nil
+		}
+	}
+
+	// state 2
+	if s.status == shared.ArchivalStatusDisabled && stateBucketSet {
+		if e.status != nil && *e.status == shared.ArchivalStatusEnabled && eventBucketSet {
+			return &archivalState{
+				status: shared.ArchivalStatusEnabled,
+				bucket: s.bucket,
+			}, true, nil
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusEnabled && !eventBucketSet {
+			return &archivalState{
+				status: shared.ArchivalStatusEnabled,
+				bucket: s.bucket,
+			}, true, nil
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusDisabled && eventBucketSet {
+			return s, false, nil
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusDisabled && !eventBucketSet {
+			return s, false, nil
+		}
+		if e.status == nil && eventBucketSet {
+			return s, false, nil
+		}
+		if e.status == nil && !eventBucketSet {
+			return s, false, nil
+		}
+	}
+
+	// state 3
+	if s.status == shared.ArchivalStatusDisabled && !stateBucketSet {
+		if e.status != nil && *e.status == shared.ArchivalStatusEnabled && eventBucketSet {
+			return &archivalState{
+				status: shared.ArchivalStatusEnabled,
+				bucket: e.bucket,
+			}, true, nil
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusEnabled && !eventBucketSet {
+			return &archivalState{
+				status: shared.ArchivalStatusEnabled,
+				bucket: e.defaultBucket,
+			}, true, nil
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusDisabled && eventBucketSet {
+			return &archivalState{
+				status: shared.ArchivalStatusDisabled,
+				bucket: e.bucket,
+			}, true, nil
+		}
+		if e.status != nil && *e.status == shared.ArchivalStatusDisabled && !eventBucketSet {
+			return s, false, nil
+		}
+		if e.status == nil && eventBucketSet {
+			return &archivalState{
+				status: shared.ArchivalStatusDisabled,
+				bucket: e.bucket,
+			}, true, nil
+		}
+		if e.status == nil && !eventBucketSet {
 			return s, false, nil
 		}
 	}

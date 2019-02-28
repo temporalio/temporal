@@ -54,7 +54,7 @@ var keys = map[Key]string{
 	EnableReadFromClosedExecutionV2: "system.enableReadFromClosedExecutionV2",
 	EnableVisibilityToKafka:         "system.enableVisibilityToKafka",
 	EnableReadVisibilityFromES:      "system.enableReadVisibilityFromES",
-	EnableArchival:                  "system.enableArchival",
+	ArchivalStatus:                  "system.archivalStatus",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -202,8 +202,8 @@ const (
 	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
-	// EnableArchival is key for enable archival
-	EnableArchival
+	// ArchivalStatus is key for the status of archival
+	ArchivalStatus
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError

@@ -82,7 +82,7 @@ dcRedirectionPolicy:
   toDC: ""
 
 archival:
-  enabled: true
+  status: enabled
   filestore:
     storeDirectory: "/tmp/development/blobstore/"
     defaultBucket:

@@ -127,7 +127,7 @@ kafka:
       dlq-topic: other-dlq
 
 archival:
-  enabled: true
+  status: enabled
   filestore:
     storeDirectory: "/tmp/dev_standby/blobstore/"
     defaultBucket:

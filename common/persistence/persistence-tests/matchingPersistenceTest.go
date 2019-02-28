@@ -153,6 +153,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 	}
 }
 
+// TestCompleteTasksLessThan test
 func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	domainID := uuid.New()
 	taskList := "range-complete-task-tl0"
@@ -321,6 +322,7 @@ func (s *MatchingPersistenceSuite) deleteAllTaskList() {
 	}
 }
 
+// TestListWithOneTaskList test
 func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 	if s.TaskMgr.GetName() == "cassandra" {
 		s.T().Skip("ListTaskList API is currently not supported in cassandra")
@@ -379,6 +381,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 	s.deleteAllTaskList()
 }
 
+// TestListWithMultipleTaskList test
 func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 	if s.TaskMgr.GetName() == "cassandra" {
 		s.T().Skip("ListTaskList API is currently not supported in cassandra")

@@ -253,9 +253,10 @@ func ArchivalUploadActivity(ctx context.Context, request ArchiveRequest) error {
 		metricsClient.IncCounter(metrics.ArchivalUploadActivityScope, metrics.SysWorkerGetDomainFailures)
 		return errArchivalUploadActivityGetDomain
 	}
-	if !clusterMetadata.IsArchivalEnabled() {
-		// for now if archival is disabled simply abort the activity
-		// a more in depth design meeting is needed to decide the correct way to handle backfilling/pausing archival
+
+	// if signal is being handled when cluster is paused or enabled then keep processing signal
+	// only if cluster sets archival to disabled should the activity be aborted
+	if !clusterMetadata.ArchivalConfig().ConfiguredForArchival() {
 		logger.Warn("archival is not enabled for cluster, skipping archival upload")
 		metricsClient.IncCounter(metrics.ArchivalUploadActivityScope, metrics.SysWorkerArchivalNotEnabledForCluster)
 		return nil

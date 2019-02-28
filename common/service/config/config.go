@@ -262,8 +262,8 @@ type (
 
 	// Archival contains the config for archival
 	Archival struct {
-		// Enabled whether archival is enabled
-		Enabled bool `yaml:"enabled"`
+		// Status is the status of archival either: enabled, disabled, or paused
+		Status string `yaml:"status"`
 		// Filestore the configuration for file based blobstore
 		Filestore filestore.Config `yaml:"filestore"`
 	}

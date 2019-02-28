@@ -162,7 +162,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 			Retention:      100,
 			EmitMetric:     false,
 			ArchivalBucket: "",
-			ArchivalStatus: gen.ArchivalStatusNeverEnabled,
+			ArchivalStatus: gen.ArchivalStatusDisabled,
 		},
 		&p.DomainReplicationConfig{},
 		isGlobalDomain,
@@ -840,7 +840,7 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 				Retention:      326,
 				EmitMetric:     false,
 				ArchivalBucket: "",
-				ArchivalStatus: gen.ArchivalStatusNeverEnabled,
+				ArchivalStatus: gen.ArchivalStatusDisabled,
 			},
 			ReplicationConfig: &p.DomainReplicationConfig{
 				ActiveClusterName: clusterActive2,

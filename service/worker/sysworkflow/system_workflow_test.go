@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"go.uber.org/cadence/testsuite"
 	"go.uber.org/cadence/worker"
+	"math/rand"
 	"testing"
 )
 
@@ -371,9 +372,20 @@ func (s *ArchiveSystemWorkflowSuite) domainCache(domainEnablesArchival, clusterE
 	if domainEnablesArchival {
 		domainArchivalStatus = shared.ArchivalStatusEnabled
 	}
+	clusterArchivalStatus := cluster.ArchivalDisabled
+	clusterDefaultBucket := ""
+	if clusterEnablesArchival {
+		clusterDefaultBucket = "default-bucket"
+		num := rand.Intn(2)
+		if num == 0 {
+			clusterArchivalStatus = cluster.ArchivalPaused
+		} else {
+			clusterArchivalStatus = cluster.ArchivalEnabled
+		}
+	}
 	mockMetadataMgr := &mocks.MetadataManager{}
 	mockClusterMetadata := &mocks.ClusterMetadata{}
-	mockClusterMetadata.On("IsArchivalEnabled").Return(clusterEnablesArchival)
+	mockClusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterDefaultBucket))
 	mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	mockClusterMetadata.On("GetCurrentClusterName").Return(testCurrentClusterName)
 	mockMetadataMgr.On("GetDomain", mock.Anything).Return(

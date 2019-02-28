@@ -118,24 +118,24 @@ func (s *server) startService() common.Daemon {
 	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 	enableGlobalDomain := dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, s.cfg.ClustersInfo.EnableGlobalDomain)
-	enableArchival := dc.GetBoolProperty(dynamicconfig.EnableArchival, s.cfg.Archival.Enabled)
+	archivalStatus := dc.GetStringProperty(dynamicconfig.ArchivalStatus, s.cfg.Archival.Status)
 
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
 
+	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 	params.ClusterMetadata = cluster.NewMetadata(
+		params.Logger,
+		params.MetricsClient,
 		enableGlobalDomain,
 		s.cfg.ClustersInfo.FailoverVersionIncrement,
 		s.cfg.ClustersInfo.MasterClusterName,
 		s.cfg.ClustersInfo.CurrentClusterName,
 		s.cfg.ClustersInfo.ClusterInitialFailoverVersions,
 		s.cfg.ClustersInfo.ClusterAddress,
-		enableArchival,
+		archivalStatus,
 		s.cfg.Archival.Filestore.DefaultBucket.Name,
 	)
 	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
-	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop
-
-	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 	params.ESConfig = &s.cfg.ElasticSearch
 	params.ESConfig.Enable = dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)() // force override with dynamic config
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {
@@ -160,7 +160,7 @@ func (s *server) startService() common.Daemon {
 		}
 	}
 
-	if params.ClusterMetadata.IsArchivalEnabled() {
+	if params.ClusterMetadata.ArchivalConfig().ConfiguredForArchival() {
 		params.BlobstoreClient, err = filestore.NewClient(&s.cfg.Archival.Filestore, params.Logger)
 		if err != nil {
 			log.Fatalf("error creating blobstore: %v", err)

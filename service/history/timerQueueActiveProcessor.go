@@ -253,12 +253,6 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 		}
 		return metrics.TimerActiveTaskDeleteHistoryEventScope, err
 
-	case persistence.TaskTypeArchiveHistoryEvent:
-		if shouldProcessTask {
-			err = t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
-		}
-		return metrics.TimerActiveTaskArchiveHistoryEventScope, err
-
 	default:
 		return metrics.TimerActiveQueueProcessorScope, errUnknownTimerTask
 	}

@@ -358,7 +358,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	retention := int32(10)
 	emitMetric := true
 	archivalBucket := ""
-	archivalStatus := shared.ArchivalStatusNeverEnabled
+	archivalStatus := shared.ArchivalStatusDisabled
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)

@@ -2373,15 +2373,13 @@ func (v *ActivityType) GetName() (o string) {
 type ArchivalStatus int32
 
 const (
-	ArchivalStatusNeverEnabled ArchivalStatus = 0
-	ArchivalStatusDisabled     ArchivalStatus = 1
-	ArchivalStatusEnabled      ArchivalStatus = 2
+	ArchivalStatusDisabled ArchivalStatus = 0
+	ArchivalStatusEnabled  ArchivalStatus = 1
 )
 
 // ArchivalStatus_Values returns all recognized values of ArchivalStatus.
 func ArchivalStatus_Values() []ArchivalStatus {
 	return []ArchivalStatus{
-		ArchivalStatusNeverEnabled,
 		ArchivalStatusDisabled,
 		ArchivalStatusEnabled,
 	}
@@ -2391,12 +2389,9 @@ func ArchivalStatus_Values() []ArchivalStatus {
 // containing its name.
 //
 //   var v ArchivalStatus
-//   err := v.UnmarshalText([]byte("NEVER_ENABLED"))
+//   err := v.UnmarshalText([]byte("DISABLED"))
 func (v *ArchivalStatus) UnmarshalText(value []byte) error {
 	switch s := string(value); s {
-	case "NEVER_ENABLED":
-		*v = ArchivalStatusNeverEnabled
-		return nil
 	case "DISABLED":
 		*v = ArchivalStatusDisabled
 		return nil
@@ -2422,10 +2417,8 @@ func (v *ArchivalStatus) UnmarshalText(value []byte) error {
 func (v ArchivalStatus) MarshalText() ([]byte, error) {
 	switch int32(v) {
 	case 0:
-		return []byte("NEVER_ENABLED"), nil
-	case 1:
 		return []byte("DISABLED"), nil
-	case 2:
+	case 1:
 		return []byte("ENABLED"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
@@ -2439,10 +2432,8 @@ func (v ArchivalStatus) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddInt32("value", int32(v))
 	switch int32(v) {
 	case 0:
-		enc.AddString("name", "NEVER_ENABLED")
-	case 1:
 		enc.AddString("name", "DISABLED")
-	case 2:
+	case 1:
 		enc.AddString("name", "ENABLED")
 	}
 	return nil
@@ -2485,10 +2476,8 @@ func (v ArchivalStatus) String() string {
 	w := int32(v)
 	switch w {
 	case 0:
-		return "NEVER_ENABLED"
-	case 1:
 		return "DISABLED"
-	case 2:
+	case 1:
 		return "ENABLED"
 	}
 	return fmt.Sprintf("ArchivalStatus(%d)", w)
@@ -2509,10 +2498,8 @@ func (v ArchivalStatus) Equals(rhs ArchivalStatus) bool {
 func (v ArchivalStatus) MarshalJSON() ([]byte, error) {
 	switch int32(v) {
 	case 0:
-		return ([]byte)("\"NEVER_ENABLED\""), nil
-	case 1:
 		return ([]byte)("\"DISABLED\""), nil
-	case 2:
+	case 1:
 		return ([]byte)("\"ENABLED\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil

@@ -186,10 +186,6 @@ func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTas
 		// guarantee the processing of workflow execution history deletion
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 
-	case persistence.TaskTypeArchiveHistoryEvent:
-		// guarantee the processing of workflow execution history archival
-		return metrics.TimerStandbyTaskArchiveHistoryEventScope, t.timerQueueProcessorBase.processArchiveHistoryEvent(timerTask)
-
 	default:
 		return metrics.TimerStandbyQueueProcessorScope, errUnknownTimerTask
 	}

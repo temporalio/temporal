@@ -63,3 +63,8 @@ func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.
 func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(domain string, taskList string, taskType int) time.Duration {
 	return func(domain string, taskList string, taskType int) time.Duration { return value }
 }
+
+// GetStringPropertyFn returns value as StringPropertyFn
+func GetStringPropertyFn(value string) func(opts ...FilterOption) string {
+	return func(...FilterOption) string { return value }
+}
