@@ -119,6 +119,9 @@ const (
 	TaskTypeArchiveHistoryEvent
 )
 
+// UnknownNumRowsAffected is returned when the number of rows that an API affected cannot be determined
+const UnknownNumRowsAffected = -1
+
 // Types of workflow backoff timeout
 const (
 	WorkflowBackoffTimeoutTypeRetry = iota
@@ -333,12 +336,14 @@ type (
 
 	// TaskListInfo describes a state of a task list implementation.
 	TaskListInfo struct {
-		DomainID string
-		Name     string
-		TaskType int
-		RangeID  int64
-		AckLevel int64
-		Kind     int
+		DomainID    string
+		Name        string
+		TaskType    int
+		RangeID     int64
+		AckLevel    int64
+		Kind        int
+		Expiry      time.Time
+		LastUpdated time.Time
 	}
 
 	// TaskInfo describes either activity or decision task
@@ -895,6 +900,26 @@ type (
 	UpdateTaskListResponse struct {
 	}
 
+	// ListTaskListRequest contains the request params needed to invoke ListTaskList API
+	ListTaskListRequest struct {
+		PageSize  int
+		PageToken []byte
+	}
+
+	// ListTaskListResponse is the response from ListTaskList API
+	ListTaskListResponse struct {
+		Items         []TaskListInfo
+		NextPageToken []byte
+	}
+
+	// DeleteTaskListRequest contains the request params needed to invoke DeleteTaskList API
+	DeleteTaskListRequest struct {
+		DomainID     string
+		TaskListName string
+		TaskListType int
+		RangeID      int64
+	}
+
 	// CreateTasksRequest is used to create a new task for a workflow exectution
 	CreateTasksRequest struct {
 		TaskListInfo *TaskListInfo
@@ -932,6 +957,15 @@ type (
 	CompleteTaskRequest struct {
 		TaskList *TaskListInfo
 		TaskID   int64
+	}
+
+	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
+	CompleteTasksLessThanRequest struct {
+		DomainID     string
+		TaskListName string
+		TaskType     int
+		TaskID       int64 // Tasks less than or equal to this ID will be completed
+		Limit        int   // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
@@ -1352,9 +1386,21 @@ type (
 		GetName() string
 		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)
 		UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error)
+		ListTaskList(request *ListTaskListRequest) (*ListTaskListResponse, error)
+		DeleteTaskList(request *DeleteTaskListRequest) error
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
+		// CompleteTasksLessThan completes tasks less than or equal to the given task id
+		// This API takes a limit parameter which specifies the count of maxRows that
+		// can be deleted. This parameter may be ignored by the underlying storage, but
+		// its mandatory to specify it. On success this method returns the number of rows
+		// actually deleted. If the underlying storage doesn't support "limit", all rows
+		// less than or equal to taskID will be deleted.
+		// On success, this method returns:
+		//  - number of rows actually deleted, if limit is honored
+		//  - UnknownNumRowsDeleted, when all rows below value are deleted
+		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
 	}
 
 	// HistoryManager is used to manage Workflow Execution HistoryEventBatch

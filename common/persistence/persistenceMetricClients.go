@@ -509,6 +509,17 @@ func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error
 	return err
 }
 
+func (p *taskPersistenceClient) CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error) {
+	p.metricClient.IncCounter(metrics.PersistenceCompleteTasksLessThanScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTasksLessThanScope, metrics.PersistenceLatency)
+	result, err := p.persistence.CompleteTasksLessThan(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceCompleteTasksLessThanScope, err)
+	}
+	return result, err
+}
+
 func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceRequests)
 
@@ -521,6 +532,28 @@ func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*L
 	}
 
 	return response, err
+}
+
+func (p *taskPersistenceClient) ListTaskList(request *ListTaskListRequest) (*ListTaskListResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceListTaskListScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceListTaskListScope, metrics.PersistenceLatency)
+	response, err := p.persistence.ListTaskList(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceListTaskListScope, err)
+	}
+	return response, err
+}
+
+func (p *taskPersistenceClient) DeleteTaskList(request *DeleteTaskListRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteTaskListScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteTaskListScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteTaskList(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceDeleteTaskListScope, err)
+	}
+	return err
 }
 
 func (p *taskPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error) {

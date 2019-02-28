@@ -23,12 +23,14 @@ package mysql
 import (
 	"database/sql"
 
+	"fmt"
+
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
 const (
-	taskListCreatePart = `INTO task_lists(domain_id, range_id, name, task_type, ack_level, kind, expiry_ts) ` +
-		`VALUES (:domain_id, :range_id, :name, :task_type, :ack_level, :kind, :expiry_ts)`
+	taskListCreatePart = `INTO task_lists(shard_id, domain_id, range_id, name, task_type, ack_level, kind, expiry_ts, last_updated) ` +
+		`VALUES (:shard_id, :domain_id, :range_id, :name, :task_type, :ack_level, :kind, :expiry_ts, :last_updated)`
 
 	// (default range ID: initialRangeID == 1)
 	createTaskListQry = `INSERT ` + taskListCreatePart
@@ -36,25 +38,31 @@ const (
 	replaceTaskListQry = `REPLACE ` + taskListCreatePart
 
 	updateTaskListQry = `UPDATE task_lists SET
-domain_id = :domain_id,
 range_id = :range_id,
-name = :name,
 task_type = :task_type,
 ack_level = :ack_level,
 kind = :kind,
-expiry_ts = :expiry_ts
+expiry_ts = :expiry_ts,
+last_updated = :last_updated
 WHERE
+shard_id = :shard_id AND
 domain_id = :domain_id AND
 name = :name AND
 task_type = :task_type
 `
 
-	getTaskListQry = `SELECT domain_id, range_id, name, task_type, ack_level, kind, expiry_ts ` +
+	listTaskListQry = `SELECT domain_id, range_id, name, task_type, ack_level, kind, expiry_ts, last_updated ` +
 		`FROM task_lists ` +
-		`WHERE domain_id = ? AND name = ? AND task_type = ?`
+		`WHERE shard_id = ? AND domain_id > ? AND name > ? AND task_type > ? ORDER BY domain_id,name,task_type LIMIT ?`
+
+	getTaskListQry = `SELECT domain_id, range_id, name, task_type, ack_level, kind, expiry_ts, last_updated ` +
+		`FROM task_lists ` +
+		`WHERE shard_id = ? AND domain_id = ? AND name = ? AND task_type = ?`
+
+	deleteTaskListQry = `DELETE FROM task_lists WHERE shard_id=? AND domain_id=? AND name=? AND task_type=? AND range_id=?`
 
 	lockTaskListQry = `SELECT range_id FROM task_lists ` +
-		`WHERE domain_id = ? AND name = ? AND task_type = ? FOR UPDATE`
+		`WHERE shard_id = ? AND domain_id = ? AND name = ? AND task_type = ? FOR UPDATE`
 
 	getTaskQry = `SELECT workflow_id, run_id, schedule_id, task_id ` +
 		`FROM tasks ` +
@@ -66,6 +74,10 @@ task_type = :task_type
 
 	deleteTaskQry = `DELETE FROM tasks ` +
 		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id = ?`
+
+	rangeDeleteTaskQry = `DELETE FROM tasks ` +
+		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id <= ? ` +
+		`ORDER BY domain_id,task_list_name,task_type,task_id LIMIT ?`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -93,6 +105,13 @@ func (mdb *DB) SelectFromTasks(filter *sqldb.TasksFilter) ([]sqldb.TasksRow, err
 
 // DeleteFromTasks deletes one or more rows from tasks table
 func (mdb *DB) DeleteFromTasks(filter *sqldb.TasksFilter) (sql.Result, error) {
+	if filter.TaskIDLessThanEquals != nil {
+		if filter.Limit == nil || *filter.Limit == 0 {
+			return nil, fmt.Errorf("missing limit parameter")
+		}
+		return mdb.conn.Exec(rangeDeleteTaskQry,
+			filter.DomainID, filter.TaskListName, filter.TaskType, *filter.TaskIDLessThanEquals, *filter.Limit)
+	}
 	return mdb.conn.Exec(deleteTaskQry, filter.DomainID, filter.TaskListName, filter.TaskType, *filter.TaskID)
 }
 
@@ -115,25 +134,51 @@ func (mdb *DB) UpdateTaskLists(row *sqldb.TaskListsRow) (sql.Result, error) {
 }
 
 // SelectFromTaskLists reads one or more rows from task_lists table
-func (mdb *DB) SelectFromTaskLists(filter *sqldb.TaskListsFilter) (*sqldb.TaskListsRow, error) {
+func (mdb *DB) SelectFromTaskLists(filter *sqldb.TaskListsFilter) ([]sqldb.TaskListsRow, error) {
+	switch {
+	case filter.DomainID != nil && filter.Name != nil && filter.TaskType != nil:
+		return mdb.selectFromTaskLists(filter)
+	case filter.DomainIDGreaterThan != nil && filter.NameGreaterThan != nil && filter.TaskTypeGreaterThan != nil && filter.PageSize != nil:
+		return mdb.rangeSelectFromTaskLists(filter)
+	default:
+		return nil, fmt.Errorf("invalid set of query filter params")
+	}
+}
+
+func (mdb *DB) selectFromTaskLists(filter *sqldb.TaskListsFilter) ([]sqldb.TaskListsRow, error) {
 	var err error
 	var row sqldb.TaskListsRow
-	err = mdb.conn.Get(&row, getTaskListQry, filter.DomainID, filter.Name, filter.TaskType)
+	err = mdb.conn.Get(&row, getTaskListQry, filter.ShardID, *filter.DomainID, *filter.Name, *filter.TaskType)
 	if err != nil {
 		return nil, err
 	}
 	row.ExpiryTs = mdb.converter.FromMySQLDateTime(row.ExpiryTs)
-	return &row, err
+	return []sqldb.TaskListsRow{row}, err
+}
+
+func (mdb *DB) rangeSelectFromTaskLists(filter *sqldb.TaskListsFilter) ([]sqldb.TaskListsRow, error) {
+	var err error
+	var rows []sqldb.TaskListsRow
+	err = mdb.conn.Select(&rows, listTaskListQry,
+		filter.ShardID, *filter.DomainIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].ShardID = filter.ShardID
+		rows[i].ExpiryTs = mdb.converter.FromMySQLDateTime(rows[i].ExpiryTs)
+	}
+	return rows, nil
 }
 
 // DeleteFromTaskLists deletes a row from task_lists table
 func (mdb *DB) DeleteFromTaskLists(filter *sqldb.TaskListsFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteTaskQry, filter.DomainID, filter.Name, filter.TaskType)
+	return mdb.conn.Exec(deleteTaskListQry, filter.ShardID, *filter.DomainID, *filter.Name, *filter.TaskType, *filter.RangeID)
 }
 
 // LockTaskLists locks a row in task_lists table
 func (mdb *DB) LockTaskLists(filter *sqldb.TaskListsFilter) (int64, error) {
 	var rangeID int64
-	err := mdb.conn.Get(&rangeID, lockTaskListQry, filter.DomainID, filter.Name, filter.TaskType)
+	err := mdb.conn.Get(&rangeID, lockTaskListQry, filter.ShardID, *filter.DomainID, *filter.Name, *filter.TaskType)
 	return rangeID, err
 }

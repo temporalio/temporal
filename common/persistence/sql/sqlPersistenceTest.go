@@ -69,6 +69,7 @@ func NewTestCluster(port int, dbName string, schemaDir string, driverName string
 		ConnectProtocol: "tcp",
 		DriverName:      driverName,
 		DatabaseName:    dbName,
+		NumShards:       4,
 	}
 	return &result
 }

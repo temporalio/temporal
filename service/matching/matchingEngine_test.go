@@ -1636,6 +1636,33 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 	return nil
 }
 
+func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
+	tlm := m.getTaskListManager(newTaskListID(request.DomainID, request.TaskListName, request.TaskType))
+	tlm.Lock()
+	defer tlm.Unlock()
+	keys := tlm.tasks.Keys()
+	for _, key := range keys {
+		id := key.(int64)
+		if id <= request.TaskID {
+			tlm.tasks.Remove(id)
+		}
+	}
+	return persistence.UnknownNumRowsAffected, nil
+}
+
+func (m *testTaskManager) ListTaskList(
+	request *persistence.ListTaskListRequest) (*persistence.ListTaskListResponse, error) {
+	return nil, fmt.Errorf("unsupported operation")
+}
+
+func (m *testTaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequest) error {
+	m.Lock()
+	defer m.Unlock()
+	key := newTaskListID(request.DomainID, request.TaskListName, request.TaskListType)
+	delete(m.taskLists, *key)
+	return nil
+}
+
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
 	domainID := request.TaskListInfo.DomainID

@@ -1,0 +1,1 @@
+ALTER TYPE task_list ADD last_updated timestamp;

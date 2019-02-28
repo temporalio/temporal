@@ -234,32 +234,42 @@ type (
 	// TasksFilter contains the column names within domain table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
-		DomainID     UUID
-		TaskListName string
-		TaskType     int64
-		TaskID       *int64
-		MinTaskID    *int64
-		MaxTaskID    *int64
-		PageSize     *int
+		DomainID             UUID
+		TaskListName         string
+		TaskType             int64
+		TaskID               *int64
+		MinTaskID            *int64
+		MaxTaskID            *int64
+		TaskIDLessThanEquals *int64
+		Limit                *int
+		PageSize             *int
 	}
 
 	// TaskListsRow represents a row in task_lists table
 	TaskListsRow struct {
-		DomainID UUID
-		Name     string
-		TaskType int64
-		RangeID  int64
-		AckLevel int64
-		Kind     int64
-		ExpiryTs time.Time
+		ShardID     int
+		DomainID    UUID
+		Name        string
+		TaskType    int64
+		RangeID     int64
+		AckLevel    int64
+		Kind        int64
+		LastUpdated time.Time
+		ExpiryTs    time.Time
 	}
 
 	// TaskListsFilter contains the column names within domain table that
 	// can be used to filter results through a WHERE clause
 	TaskListsFilter struct {
-		DomainID UUID
-		Name     string
-		TaskType int64
+		ShardID             int
+		DomainID            *UUID
+		Name                *string
+		TaskType            *int64
+		DomainIDGreaterThan *UUID
+		NameGreaterThan     *string
+		TaskTypeGreaterThan *int64
+		RangeID             *int64
+		PageSize            *int
 	}
 
 	// ReplicationTasksRow represents a row in replication_tasks table
@@ -581,13 +591,22 @@ type (
 		// Required filter params - {domainID, tasklistName, taskType, minTaskID, maxTaskID, pageSize}
 		SelectFromTasks(filter *TasksFilter) ([]TasksRow, error)
 		// DeleteFromTasks deletes a row from tasks table
-		// Required filter params - {domainID, tasklistName, taskType, taskID}
+		// Required filter params:
+		//  to delete single row
+		//     - {domainID, tasklistName, taskType, taskID}
+		//  to delete multiple rows
+		//    - {domainID, tasklistName, taskType, taskIDLessThanEquals, limit }
+		//    - this will delete upto limit number of tasks less than or equal to the given task id
 		DeleteFromTasks(filter *TasksFilter) (sql.Result, error)
 
 		InsertIntoTaskLists(row *TaskListsRow) (sql.Result, error)
 		ReplaceIntoTaskLists(row *TaskListsRow) (sql.Result, error)
 		UpdateTaskLists(row *TaskListsRow) (sql.Result, error)
-		SelectFromTaskLists(filter *TaskListsFilter) (*TaskListsRow, error)
+		// SelectFromTaskLists returns one or more rows from task_lists table
+		// Required Filter params:
+		//  to read a single row: {shardID, domainID, name, taskType}
+		//  to range read multiple rows: {shardID, domainIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
+		SelectFromTaskLists(filter *TaskListsFilter) ([]TaskListsRow, error)
 		DeleteFromTaskLists(filter *TaskListsFilter) (sql.Result, error)
 		LockTaskLists(filter *TaskListsFilter) (int64, error)
 

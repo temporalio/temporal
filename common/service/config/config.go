@@ -22,8 +22,9 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/uber/cadence/common/blobstore/filestore"
 	"time"
+
+	"github.com/uber/cadence/common/blobstore/filestore"
 
 	"github.com/uber-go/tally/m3"
 	"github.com/uber/cadence/common/elasticsearch"
@@ -183,6 +184,9 @@ type (
 		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`
+		// NumShards is the number of storage shards to use for tables
+		// in a sharded sql database. The default value for this param is 1
+		NumShards int `yaml:"nShards"`
 	}
 
 	// Replicator describes the configuration of replicator
