@@ -83,6 +83,7 @@ const (
 	TagESRequest                  = "es-request"
 	TagESKey                      = "es-mapping-key"
 	TagESField                    = "es-field"
+	TagContextTimeout             = "context-timeout"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values
