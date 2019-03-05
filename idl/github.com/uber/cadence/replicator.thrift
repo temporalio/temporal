@@ -59,6 +59,8 @@ struct HistoryTaskAttributes {
   100: optional i32 eventStoreVersion
   110: optional i32 newRunEventStoreVersion
   120: optional bool resetWorkflow
+  130: optional i64 (js.type = "Long") createTaskId
+  140: optional i64 (js.type = "Long") newRunCreateTaskId
 }
 
 struct SyncShardStatusTaskAttributes {

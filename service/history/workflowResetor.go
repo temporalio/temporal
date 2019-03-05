@@ -644,7 +644,14 @@ func (w *workflowResetorImpl) replayHistoryEvents(decisionFinishEventID int64, r
 				}
 			}
 
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, persistence.EventStoreVersionV2, persistence.EventStoreVersionV2)
+			createTaskID := int64(0)
+			newRunCreateTaskID := int64(0) // this will not be used since we do not reply continue as new
+			createTaskID, retError = w.eng.shard.GetNextTransferTaskID()
+			if retError != nil {
+				return
+			}
+			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil,
+				persistence.EventStoreVersionV2, persistence.EventStoreVersionV2, createTaskID, newRunCreateTaskID)
 			if retError != nil {
 				return
 			}
@@ -753,7 +760,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(ctx context.Context, request *h.Re
 	}
 	// before changing mutable state
 	prevRunVersion := currMutableState.GetLastWriteVersion()
-	newMsBuilder, newRunTransferTasks, newRunTimerTasks, retError = w.replicateResetEvent(baseMutableState, &baseExecution, historyAfterReset, resetAttr.GetForkEventVersion())
+	newMsBuilder, newRunTransferTasks, newRunTimerTasks, retError = w.replicateResetEvent(baseMutableState, &baseExecution, historyAfterReset, resetAttr.GetForkEventVersion(), request.GetCreateTaskId())
 	if retError != nil {
 		return
 	}
@@ -789,7 +796,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(ctx context.Context, request *h.Re
 	return nil
 }
 
-func (w *workflowResetorImpl) replicateResetEvent(baseMutableState mutableState, baseExecution *workflow.WorkflowExecution, newRunHistory []*workflow.HistoryEvent, forkEventVersion int64) (newMsBuilder mutableState, transferTasks, timerTasks []persistence.Task, retError error) {
+func (w *workflowResetorImpl) replicateResetEvent(baseMutableState mutableState, baseExecution *workflow.WorkflowExecution, newRunHistory []*workflow.HistoryEvent, forkEventVersion int64, createTaskID int64) (newMsBuilder mutableState, transferTasks, timerTasks []persistence.Task, retError error) {
 	domainID := baseMutableState.GetExecutionInfo().DomainID
 	workflowID := baseMutableState.GetExecutionInfo().WorkflowID
 	firstEvent := newRunHistory[0]
@@ -834,7 +841,8 @@ func (w *workflowResetorImpl) replicateResetEvent(baseMutableState mutableState,
 				newMsBuilder.GetExecutionInfo().EventStoreVersion = persistence.EventStoreVersionV2
 				sBuilder = newStateBuilder(w.eng.shard, newMsBuilder, w.eng.logger)
 			}
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, persistence.EventStoreVersionV2, 0)
+			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil,
+				persistence.EventStoreVersionV2, 0, createTaskID, 0)
 			if retError != nil {
 				return
 			}
@@ -864,7 +872,8 @@ func (w *workflowResetorImpl) replicateResetEvent(baseMutableState mutableState,
 
 	lastEvent = newRunHistory[len(newRunHistory)-1]
 	// replay new history (including decisionTaskScheduled)
-	_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, persistence.EventStoreVersionV2, 0)
+	_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil,
+		persistence.EventStoreVersionV2, 0, createTaskID, 0)
 	if retError != nil {
 		return
 	}

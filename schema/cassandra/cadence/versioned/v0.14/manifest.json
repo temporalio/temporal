@@ -3,6 +3,7 @@
   "MinCompatibleVersion": "0.14",
   "Description": "Added params to tasklist type to enable task_list deletions",
   "SchemaUpdateCqlFiles": [
-    "task_list.cql"
+    "task_list.cql",
+    "workflow_creation_transfer_id.cql"
   ]
 }

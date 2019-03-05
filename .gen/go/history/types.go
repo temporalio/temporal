@@ -933,6 +933,7 @@ type GetMutableStateResponse struct {
 	EventStoreVersion                    *int32                             `json:"eventStoreVersion,omitempty"`
 	BranchToken                          []byte                             `json:"branchToken,omitempty"`
 	ReplicationInfo                      map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
+	CreateTaskId                         *int64                             `json:"createTaskId,omitempty"`
 }
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*shared.ReplicationInfo
@@ -990,7 +991,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [15]wire.Field
+		fields [16]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1114,6 +1115,14 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
+	if v.CreateTaskId != nil {
+		w, err = wire.NewValueI64(*(v.CreateTaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 150, Value: w}
 		i++
 	}
 
@@ -1326,6 +1335,16 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 150:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.CreateTaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1339,7 +1358,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [15]string
+	var fields [16]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -1399,6 +1418,10 @@ func (v *GetMutableStateResponse) String() string {
 	}
 	if v.ReplicationInfo != nil {
 		fields[i] = fmt.Sprintf("ReplicationInfo: %v", v.ReplicationInfo)
+		i++
+	}
+	if v.CreateTaskId != nil {
+		fields[i] = fmt.Sprintf("CreateTaskId: %v", *(v.CreateTaskId))
 		i++
 	}
 
@@ -1497,6 +1520,9 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.CreateTaskId, rhs.CreateTaskId) {
+		return false
+	}
 
 	return true
 }
@@ -1562,6 +1588,9 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	}
 	if v.ReplicationInfo != nil {
 		err = multierr.Append(err, enc.AddObject("replicationInfo", (_Map_String_ReplicationInfo_Zapper)(v.ReplicationInfo)))
+	}
+	if v.CreateTaskId != nil {
+		enc.AddInt64("createTaskId", *v.CreateTaskId)
 	}
 	return err
 }
@@ -1711,6 +1740,16 @@ func (v *GetMutableStateResponse) GetBranchToken() (o []byte) {
 func (v *GetMutableStateResponse) GetReplicationInfo() (o map[string]*shared.ReplicationInfo) {
 	if v.ReplicationInfo != nil {
 		return v.ReplicationInfo
+	}
+
+	return
+}
+
+// GetCreateTaskId returns the value of CreateTaskId if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetCreateTaskId() (o int64) {
+	if v.CreateTaskId != nil {
+		return *v.CreateTaskId
 	}
 
 	return
@@ -4199,6 +4238,8 @@ type ReplicateEventsRequest struct {
 	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
 	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
 	ResetWorkflow           *bool                              `json:"resetWorkflow,omitempty"`
+	CreateTaskId            *int64                             `json:"createTaskId,omitempty"`
+	NewRunCreateTaskId      *int64                             `json:"newRunCreateTaskId,omitempty"`
 }
 
 // ToWire translates a ReplicateEventsRequest struct into a Thrift-level intermediate
@@ -4218,7 +4259,7 @@ type ReplicateEventsRequest struct {
 //   }
 func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [13]wire.Field
+		fields [15]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -4326,6 +4367,22 @@ func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 130, Value: w}
+		i++
+	}
+	if v.CreateTaskId != nil {
+		w, err = wire.NewValueI64(*(v.CreateTaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
+	if v.NewRunCreateTaskId != nil {
+		w, err = wire.NewValueI64(*(v.NewRunCreateTaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 150, Value: w}
 		i++
 	}
 
@@ -4482,6 +4539,26 @@ func (v *ReplicateEventsRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 140:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.CreateTaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 150:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NewRunCreateTaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -4495,7 +4572,7 @@ func (v *ReplicateEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [13]string
+	var fields [15]string
 	i := 0
 	if v.SourceCluster != nil {
 		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
@@ -4547,6 +4624,14 @@ func (v *ReplicateEventsRequest) String() string {
 	}
 	if v.ResetWorkflow != nil {
 		fields[i] = fmt.Sprintf("ResetWorkflow: %v", *(v.ResetWorkflow))
+		i++
+	}
+	if v.CreateTaskId != nil {
+		fields[i] = fmt.Sprintf("CreateTaskId: %v", *(v.CreateTaskId))
+		i++
+	}
+	if v.NewRunCreateTaskId != nil {
+		fields[i] = fmt.Sprintf("NewRunCreateTaskId: %v", *(v.NewRunCreateTaskId))
 		i++
 	}
 
@@ -4602,6 +4687,12 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 	if !_Bool_EqualsPtr(v.ResetWorkflow, rhs.ResetWorkflow) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.CreateTaskId, rhs.CreateTaskId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NewRunCreateTaskId, rhs.NewRunCreateTaskId) {
+		return false
+	}
 
 	return true
 }
@@ -4650,6 +4741,12 @@ func (v *ReplicateEventsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (er
 	}
 	if v.ResetWorkflow != nil {
 		enc.AddBool("resetWorkflow", *v.ResetWorkflow)
+	}
+	if v.CreateTaskId != nil {
+		enc.AddInt64("createTaskId", *v.CreateTaskId)
+	}
+	if v.NewRunCreateTaskId != nil {
+		enc.AddInt64("newRunCreateTaskId", *v.NewRunCreateTaskId)
 	}
 	return err
 }
@@ -4784,6 +4881,26 @@ func (v *ReplicateEventsRequest) GetResetWorkflow() (o bool) {
 	return
 }
 
+// GetCreateTaskId returns the value of CreateTaskId if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetCreateTaskId() (o int64) {
+	if v.CreateTaskId != nil {
+		return *v.CreateTaskId
+	}
+
+	return
+}
+
+// GetNewRunCreateTaskId returns the value of NewRunCreateTaskId if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetNewRunCreateTaskId() (o int64) {
+	if v.NewRunCreateTaskId != nil {
+		return *v.NewRunCreateTaskId
+	}
+
+	return
+}
+
 type ReplicateRawEventsRequest struct {
 	DomainUUID              *string                            `json:"domainUUID,omitempty"`
 	WorkflowExecution       *shared.WorkflowExecution          `json:"workflowExecution,omitempty"`
@@ -4792,6 +4909,8 @@ type ReplicateRawEventsRequest struct {
 	NewRunHistory           *shared.DataBlob                   `json:"newRunHistory,omitempty"`
 	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
 	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
+	CreateTaskId            *int64                             `json:"createTaskId,omitempty"`
+	NewRunCreateTaskId      *int64                             `json:"newRunCreateTaskId,omitempty"`
 }
 
 // ToWire translates a ReplicateRawEventsRequest struct into a Thrift-level intermediate
@@ -4811,7 +4930,7 @@ type ReplicateRawEventsRequest struct {
 //   }
 func (v *ReplicateRawEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [9]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -4871,6 +4990,22 @@ func (v *ReplicateRawEventsRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.CreateTaskId != nil {
+		w, err = wire.NewValueI64(*(v.CreateTaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.NewRunCreateTaskId != nil {
+		w, err = wire.NewValueI64(*(v.NewRunCreateTaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
 		i++
 	}
 
@@ -4967,6 +5102,26 @@ func (v *ReplicateRawEventsRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 80:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.CreateTaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 90:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NewRunCreateTaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -4980,7 +5135,7 @@ func (v *ReplicateRawEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [9]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -5008,6 +5163,14 @@ func (v *ReplicateRawEventsRequest) String() string {
 	}
 	if v.NewRunEventStoreVersion != nil {
 		fields[i] = fmt.Sprintf("NewRunEventStoreVersion: %v", *(v.NewRunEventStoreVersion))
+		i++
+	}
+	if v.CreateTaskId != nil {
+		fields[i] = fmt.Sprintf("CreateTaskId: %v", *(v.CreateTaskId))
+		i++
+	}
+	if v.NewRunCreateTaskId != nil {
+		fields[i] = fmt.Sprintf("NewRunCreateTaskId: %v", *(v.NewRunCreateTaskId))
 		i++
 	}
 
@@ -5045,6 +5208,12 @@ func (v *ReplicateRawEventsRequest) Equals(rhs *ReplicateRawEventsRequest) bool 
 	if !_I32_EqualsPtr(v.NewRunEventStoreVersion, rhs.NewRunEventStoreVersion) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.CreateTaskId, rhs.CreateTaskId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NewRunCreateTaskId, rhs.NewRunCreateTaskId) {
+		return false
+	}
 
 	return true
 }
@@ -5075,6 +5244,12 @@ func (v *ReplicateRawEventsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) 
 	}
 	if v.NewRunEventStoreVersion != nil {
 		enc.AddInt32("newRunEventStoreVersion", *v.NewRunEventStoreVersion)
+	}
+	if v.CreateTaskId != nil {
+		enc.AddInt64("createTaskId", *v.CreateTaskId)
+	}
+	if v.NewRunCreateTaskId != nil {
+		enc.AddInt64("newRunCreateTaskId", *v.NewRunCreateTaskId)
 	}
 	return err
 }
@@ -5144,6 +5319,26 @@ func (v *ReplicateRawEventsRequest) GetEventStoreVersion() (o int32) {
 func (v *ReplicateRawEventsRequest) GetNewRunEventStoreVersion() (o int32) {
 	if v.NewRunEventStoreVersion != nil {
 		return *v.NewRunEventStoreVersion
+	}
+
+	return
+}
+
+// GetCreateTaskId returns the value of CreateTaskId if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetCreateTaskId() (o int64) {
+	if v.CreateTaskId != nil {
+		return *v.CreateTaskId
+	}
+
+	return
+}
+
+// GetNewRunCreateTaskId returns the value of NewRunCreateTaskId if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetNewRunCreateTaskId() (o int64) {
+	if v.NewRunCreateTaskId != nil {
+		return *v.NewRunCreateTaskId
 	}
 
 	return

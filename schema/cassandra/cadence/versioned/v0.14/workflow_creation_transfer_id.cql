@@ -1,0 +1,1 @@
+ALTER TYPE workflow_execution ADD create_task_id bigint;

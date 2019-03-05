@@ -40,6 +40,7 @@ CREATE TYPE workflow_execution (
   start_time                       timestamp,
   last_updated_time                timestamp,
   create_request_id                uuid,
+  create_task_id               bigint, -- transer task id used when creating this workflow, used by replication
   decision_version                 bigint,
   decision_schedule_id             bigint,
   decision_started_id              bigint,

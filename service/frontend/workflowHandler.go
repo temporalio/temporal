@@ -87,6 +87,7 @@ type (
 		PersistenceToken  []byte
 		TransientDecision *gen.TransientDecisionInfo
 		EventStoreVersion int32
+		CreateTaskID      int64
 		BranchToken       []byte
 		ReplicationInfo   map[string]*gen.ReplicationInfo
 	}

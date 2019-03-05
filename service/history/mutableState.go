@@ -58,7 +58,7 @@ type (
 		AddChildWorkflowExecutionTerminatedEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionTerminatedEventAttributes) *workflow.HistoryEvent
 		AddChildWorkflowExecutionTimedOutEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent
 		AddCompletedWorkflowEvent(int64, *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddContinueAsNewEvent(int64, *cache.DomainCacheEntry, string, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) (*workflow.HistoryEvent, mutableState, error)
+		AddContinueAsNewEvent(int64, *cache.DomainCacheEntry, string, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, int32, int64) (*workflow.HistoryEvent, mutableState, error)
 		AddDecisionTaskCompletedEvent(int64, int64, *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent
 		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause workflow.DecisionTaskFailedCause, details []byte, identity, reason, baseRunID, newRunID string, forkEventVersion int64) *workflow.HistoryEvent
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) *workflow.HistoryEvent
@@ -187,7 +187,7 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent)
-		ReplicateWorkflowExecutionContinuedAsNewEvent(string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32, int64) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *workflow.HistoryEvent)
 		ReplicateWorkflowExecutionSignaled(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.WorkflowExecutionStartedEventAttributes)

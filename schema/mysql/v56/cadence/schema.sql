@@ -95,6 +95,7 @@ CREATE TABLE executions(
 	start_time DATETIME(6) NOT NULL,
 	last_updated_time DATETIME(6) NOT NULL,
 	create_request_id VARCHAR(64) NOT NULL,
+	create_task_id BIGINT NOT NULL,
 	decision_version BIGINT NOT NULL, -- 1.
 	decision_schedule_id BIGINT NOT NULL, -- 2.
 	decision_started_id BIGINT NOT NULL, -- 3. cannot be nullable as common.EmptyEventID is checked

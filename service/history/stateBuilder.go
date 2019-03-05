@@ -35,7 +35,8 @@ import (
 type (
 	stateBuilder interface {
 		applyEvents(domainID, requestID string, execution shared.WorkflowExecution, history []*shared.HistoryEvent,
-			newRunHistory []*shared.HistoryEvent, eventStoreVersion, newRunEventStoreVersion int32) (*shared.HistoryEvent,
+			newRunHistory []*shared.HistoryEvent, eventStoreVersion, newRunEventStoreVersion int32,
+			createTaskID, newRunCreateTaskID int64) (*shared.HistoryEvent,
 			*decisionInfo, mutableState, error)
 		getTransferTasks() []persistence.Task
 		getTimerTasks() []persistence.Task
@@ -92,7 +93,8 @@ func (b *stateBuilderImpl) getNewRunTimerTasks() []persistence.Task {
 }
 
 func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution shared.WorkflowExecution,
-	history []*shared.HistoryEvent, newRunHistory []*shared.HistoryEvent, eventStoreVersion, newRunEventStoreVersion int32) (*shared.HistoryEvent,
+	history []*shared.HistoryEvent, newRunHistory []*shared.HistoryEvent,
+	eventStoreVersion, newRunEventStoreVersion int32, createTaskID int64, newRunCreateTaskID int64) (*shared.HistoryEvent,
 	*decisionInfo, mutableState, error) {
 	var lastEvent *shared.HistoryEvent
 	var lastDecision *decisionInfo
@@ -122,6 +124,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				parentDomainID = &parentDomainEntry.GetInfo().ID
 			}
 			b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, attributes)
+			b.msBuilder.GetExecutionInfo().CreateTaskID = createTaskID
 
 			b.timerTasks = append(b.timerTasks, b.scheduleWorkflowTimerTask(event, b.msBuilder))
 			if eventStoreVersion == persistence.EventStoreVersionV2 {
@@ -408,6 +411,8 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				nil,
 				newRunEventStoreVersion,
 				0,
+				newRunCreateTaskID,
+				0,
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -429,7 +434,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.newRunTimerTasks = append(b.newRunTimerTasks, newRunStateBuilder.getTimerTasks()...)
 
 			err = b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName, domainID, event,
-				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion)
+				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion, newRunCreateTaskID)
 			if err != nil {
 				return nil, nil, nil, err
 			}

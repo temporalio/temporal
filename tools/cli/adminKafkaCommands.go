@@ -543,7 +543,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 			taskTemplate.Version = firstEvent.GetVersion()
 			taskTemplate.FirstEventID = firstEvent.GetEventId()
 			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
-			task, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), batch)
+			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), batch)
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
 			}

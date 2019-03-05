@@ -488,6 +488,8 @@ Loop:
 		EventStoreVersion:       attr.EventStoreVersion,
 		NewRunEventStoreVersion: attr.NewRunEventStoreVersion,
 		ResetWorkflow:           attr.ResetWorkflow,
+		CreateTaskId:            attr.CreateTaskId,
+		NewRunCreateTaskId:      attr.NewRunCreateTaskId,
 	}
 
 RetryLoop:

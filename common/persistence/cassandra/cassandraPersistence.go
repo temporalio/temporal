@@ -135,6 +135,7 @@ const (
 		`start_time: ?, ` +
 		`last_updated_time: ?, ` +
 		`create_request_id: ?, ` +
+		`create_task_id: ?, ` +
 		`signal_count: ?, ` +
 		`history_size: ?, ` +
 		`decision_version: ?, ` +
@@ -1367,6 +1368,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			cqlNowTimestamp,
 			cqlNowTimestamp,
 			request.RequestID,
+			request.TaskID,
 			request.SignalCount,
 			request.HistorySize,
 			request.DecisionVersion,
@@ -1433,6 +1435,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			cqlNowTimestamp,
 			cqlNowTimestamp,
 			request.RequestID,
+			request.TaskID,
 			request.SignalCount,
 			request.HistorySize,
 			request.DecisionVersion,
@@ -1620,6 +1623,7 @@ func (d *cassandraPersistence) updateMutableState(batch *gocql.Batch, executionI
 			executionInfo.StartTimestamp,
 			cqlNowTimestamp,
 			executionInfo.CreateRequestID,
+			executionInfo.CreateTaskID,
 			executionInfo.SignalCount,
 			executionInfo.HistorySize,
 			executionInfo.DecisionVersion,
@@ -1686,6 +1690,7 @@ func (d *cassandraPersistence) updateMutableState(batch *gocql.Batch, executionI
 			executionInfo.StartTimestamp,
 			cqlNowTimestamp,
 			executionInfo.CreateRequestID,
+			executionInfo.CreateTaskID,
 			executionInfo.SignalCount,
 			executionInfo.HistorySize,
 			executionInfo.DecisionVersion,
@@ -3723,6 +3728,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 			info.LastUpdatedTimestamp = v.(time.Time)
 		case "create_request_id":
 			info.CreateRequestID = v.(gocql.UUID).String()
+		case "create_task_id":
+			info.CreateTaskID = v.(int64)
 		case "signal_count":
 			info.SignalCount = int32(v.(int))
 		case "history_size":

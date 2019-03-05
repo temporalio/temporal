@@ -283,8 +283,10 @@ func (r *historyReplicator) ApplyRawEvents(ctx context.Context, requestIn *h.Rep
 		ReplicationInfo:         requestIn.ReplicationInfo,
 		History:                 &shared.History{Events: events},
 		EventStoreVersion:       requestIn.EventStoreVersion,
+		CreateTaskId:            requestIn.CreateTaskId,
 		NewRunHistory:           nil,
 		NewRunEventStoreVersion: nil,
+		NewRunCreateTaskId:      nil,
 		ForceBufferEvents:       common.BoolPtr(true),
 	}
 
@@ -295,6 +297,7 @@ func (r *historyReplicator) ApplyRawEvents(ctx context.Context, requestIn *h.Rep
 		}
 		requestOut.NewRunHistory = &shared.History{Events: newRunEvents}
 		requestOut.NewRunEventStoreVersion = requestIn.NewRunEventStoreVersion
+		requestOut.NewRunCreateTaskId = requestIn.NewRunCreateTaskId
 	}
 
 	return r.ApplyEvents(ctx, requestOut)
@@ -409,7 +412,7 @@ func (r *historyReplicator) ApplyStartEvent(ctx context.Context, context workflo
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Context, domainID string, workflowID string,
-	runID string, incomingVersion int64, incomingTimestamp int64, logger bark.Logger, request *h.ReplicateEventsRequest) error {
+	runID string, incomingVersion int64, incomingTimestamp int64, logger bark.Logger, request *h.ReplicateEventsRequest) (retError error) {
 	// we need to check the current workflow execution
 	_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
 	if err != nil {
@@ -418,6 +421,8 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Cont
 		}
 		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
 	}
+	defer func() { currentRelease(retError) }()
+
 	currentRunID := currentMutableState.GetExecutionInfo().RunID
 	currentLastWriteVersion := currentMutableState.GetLastWriteVersion()
 	currentRelease(nil)
@@ -445,12 +450,15 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx context.Cont
 		currentRunID, currentLastWriteVersion, incomingVersion)
 
 	// try flush the current workflow buffer
-	currentRunID, currentNextEventID, currentStillRunning, err := r.flushCurrentWorkflowBuffer(ctx, domainID, workflowID, logger)
+	currentRunID, currentNextEventID, currentCreateTaskID, currentStillRunning, err := r.flushCurrentWorkflowBuffer(ctx, domainID, workflowID, logger)
 	if err != nil {
 		return err
 	}
 
 	if currentStillRunning {
+		if request.GetCreateTaskId() < currentCreateTaskID {
+			return nil
+		}
 		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID)
 	}
 
@@ -664,7 +672,9 @@ func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context wo
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
-	lastEvent, di, newRunStateBuilder, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
+	lastEvent, di, newRunStateBuilder, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory,
+		request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion(),
+		request.GetCreateTaskId(), request.GetNewRunCreateTaskId())
 	if err != nil {
 		return err
 	}
@@ -865,6 +875,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 		createRequest := &persistence.CreateWorkflowExecutionRequest{
 			// NOTE: should not set the replication task, since we are in the standby
 			RequestID:                   executionInfo.CreateRequestID,
+			TaskID:                      executionInfo.CreateTaskID,
 			DomainID:                    domainID,
 			Execution:                   execution,
 			ParentDomainID:              parentDomainID,
@@ -953,9 +964,12 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 		return nil
 	}
 	if currentLastWriteVersion == incomingVersion {
-		currentRunID, currentNextEventID, _, err := r.flushCurrentWorkflowBuffer(ctx, domainID, execution.GetWorkflowId(), logger)
+		currentRunID, currentNextEventID, currentCreateTaskID, _, err := r.flushCurrentWorkflowBuffer(ctx, domainID, execution.GetWorkflowId(), logger)
 		if err != nil {
 			return err
+		}
+		if executionInfo.CreateTaskID < currentCreateTaskID {
+			return nil
 		}
 		return newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, domainID, execution.GetWorkflowId(), currentRunID, currentNextEventID)
 	}
@@ -983,22 +997,27 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 }
 
 func (r *historyReplicator) flushCurrentWorkflowBuffer(ctx context.Context, domainID string, workflowID string,
-	logger bark.Logger) (string, int64, bool, error) {
+	logger bark.Logger) (runID string, nextEventID int64, createTaskID int64, isRunning bool, retError error) {
 	currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID,
 		workflowID)
 	if err != nil {
-		return "", 0, false, err
+		return "", 0, 0, false, err
 	}
+	defer func() { currentRelease(retError) }()
 	// since this new workflow cannot make progress due to existing workflow being open
 	// try flush the existing workflow's buffer see if we can make it move forward
 	// First check if there are events which needs to be flushed before applying the update
 	err = r.flushReplicationBuffer(ctx, currentContext, currentMutableState, logger)
-	currentRelease(err)
 	if err != nil {
 		logError(logger, "Fail to flush buffer for current workflow.", err)
-		return "", 0, false, err
+		return "", 0, 0, false, err
 	}
-	return currentContext.getExecution().GetRunId(), currentMutableState.GetNextEventID(), currentMutableState.IsWorkflowExecutionRunning(), nil
+	runID = currentContext.getExecution().GetRunId()
+	nextEventID = currentMutableState.GetNextEventID()
+	createTaskID = currentMutableState.GetExecutionInfo().CreateTaskID
+	isRunning = currentMutableState.IsWorkflowExecutionRunning()
+
+	return runID, nextEventID, createTaskID, isRunning, nil
 }
 
 func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(ctx context.Context,

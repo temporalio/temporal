@@ -769,7 +769,12 @@ Update_History_Loop:
 		if t.config.EnableEventsV2(domainEntry.GetInfo().Name) {
 			eventStoreVersion = persistence.EventStoreVersionV2
 		}
-		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion)
+		createTaskID, err := t.shard.GetNextTransferTaskID()
+		if err != nil {
+			return err
+		}
+		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry,
+			startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion, createTaskID)
 		if err != nil {
 			return err
 		}

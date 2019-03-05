@@ -819,6 +819,7 @@ type GetWorkflowExecutionRawHistoryResponse struct {
 	HistoryBatches    []*shared.DataBlob                 `json:"historyBatches,omitempty"`
 	ReplicationInfo   map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
 	EventStoreVersion *int32                             `json:"eventStoreVersion,omitempty"`
+	CreateTaskId      *int64                             `json:"createTaskId,omitempty"`
 }
 
 type _List_DataBlob_ValueList []*shared.DataBlob
@@ -905,7 +906,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *GetWorkflowExecutionRawHistoryResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -941,6 +942,14 @@ func (v *GetWorkflowExecutionRawHistoryResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.CreateTaskId != nil {
+		w, err = wire.NewValueI64(*(v.CreateTaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -1061,6 +1070,16 @@ func (v *GetWorkflowExecutionRawHistoryResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.CreateTaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1074,7 +1093,7 @@ func (v *GetWorkflowExecutionRawHistoryResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.NextPageToken != nil {
 		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
@@ -1090,6 +1109,10 @@ func (v *GetWorkflowExecutionRawHistoryResponse) String() string {
 	}
 	if v.EventStoreVersion != nil {
 		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.CreateTaskId != nil {
+		fields[i] = fmt.Sprintf("CreateTaskId: %v", *(v.CreateTaskId))
 		i++
 	}
 
@@ -1150,6 +1173,9 @@ func (v *GetWorkflowExecutionRawHistoryResponse) Equals(rhs *GetWorkflowExecutio
 	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.CreateTaskId, rhs.CreateTaskId) {
+		return false
+	}
 
 	return true
 }
@@ -1194,6 +1220,9 @@ func (v *GetWorkflowExecutionRawHistoryResponse) MarshalLogObject(enc zapcore.Ob
 	if v.EventStoreVersion != nil {
 		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
 	}
+	if v.CreateTaskId != nil {
+		enc.AddInt64("createTaskId", *v.CreateTaskId)
+	}
 	return err
 }
 
@@ -1232,6 +1261,16 @@ func (v *GetWorkflowExecutionRawHistoryResponse) GetReplicationInfo() (o map[str
 func (v *GetWorkflowExecutionRawHistoryResponse) GetEventStoreVersion() (o int32) {
 	if v.EventStoreVersion != nil {
 		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetCreateTaskId returns the value of CreateTaskId if it is set or its
+// zero value if it is unset.
+func (v *GetWorkflowExecutionRawHistoryResponse) GetCreateTaskId() (o int64) {
+	if v.CreateTaskId != nil {
+		return *v.CreateTaskId
 	}
 
 	return

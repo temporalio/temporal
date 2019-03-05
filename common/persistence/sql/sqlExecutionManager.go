@@ -1168,6 +1168,7 @@ func createExecution(
 		StartTime:                    nowTimestamp,
 		LastUpdatedTime:              nowTimestamp,
 		CreateRequestID:              request.RequestID,
+		CreateTaskID:                 request.TaskID,
 		DecisionVersion:              int64(request.DecisionVersion),
 		DecisionScheduleID:           int64(request.DecisionScheduleID),
 		DecisionStartedID:            int64(request.DecisionStartedID),

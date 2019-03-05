@@ -2278,7 +2278,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(event *workflow
 }
 
 func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
-	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32) (*workflow.HistoryEvent, mutableState,
+	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32, createTaskID int64) (*workflow.HistoryEvent, mutableState,
 	error) {
 
 	newRunID := uuid.New()
@@ -2327,7 +2327,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		}
 	}
 
-	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion)
+	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion, createTaskID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2336,7 +2336,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID string,
 	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
-	newStateBuilder mutableState, eventStoreVersion int32) error {
+	newStateBuilder mutableState, eventStoreVersion int32, createTaskID int64) error {
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
 	newRunID := continueAsNewAttributes.GetNewExecutionRunId()
@@ -2373,6 +2373,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		// NOTE: there is no replication task for the start / decision scheduled event,
 		// the above 2 events will be replicated along with previous continue as new event.
 		RequestID:            uuid.New(),
+		TaskID:               createTaskID,
 		DomainID:             domainID,
 		Execution:            newExecution,
 		ParentDomainID:       parentDomainID,
