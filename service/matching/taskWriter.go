@@ -40,8 +40,12 @@ type (
 	writeTaskRequest struct {
 		execution  *s.WorkflowExecution
 		taskInfo   *persistence.TaskInfo
-		rangeID    int64
 		responseCh chan<- *writeTaskResponse
+	}
+
+	taskIDBlock struct {
+		start int64
+		end   int64
 	}
 
 	// taskWriter writes tasks sequentially to persistence
@@ -49,8 +53,8 @@ type (
 		tlMgr        *taskListManagerImpl
 		config       *taskListConfig
 		taskListID   *taskListID
-		taskManager  persistence.TaskManager
 		appendCh     chan *writeTaskRequest
+		taskIDBlock  taskIDBlock
 		maxReadLevel int64
 		stopped      int64 // set to 1 if the writer is stopped or is shutting down
 		logger       bark.Logger
@@ -63,18 +67,18 @@ var errShutdown = errors.New("task list shutting down")
 
 func newTaskWriter(tlMgr *taskListManagerImpl) *taskWriter {
 	return &taskWriter{
-		tlMgr:       tlMgr,
-		config:      tlMgr.config,
-		taskListID:  tlMgr.taskListID,
-		taskManager: tlMgr.engine.taskManager,
-		stopCh:      make(chan struct{}),
-		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
-		logger:      tlMgr.logger,
+		tlMgr:      tlMgr,
+		config:     tlMgr.config,
+		taskListID: tlMgr.taskListID,
+		stopCh:     make(chan struct{}),
+		appendCh:   make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
+		logger:     tlMgr.logger,
 	}
 }
 
-func (w *taskWriter) Start() {
-	w.maxReadLevel = w.tlMgr.getTaskSequenceNumber() - 1
+func (w *taskWriter) Start(block taskIDBlock) {
+	w.taskIDBlock = block
+	w.maxReadLevel = block.start - 1
 	go w.taskWriterLoop()
 }
 
@@ -90,7 +94,7 @@ func (w *taskWriter) isStopped() bool {
 }
 
 func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
-	taskInfo *persistence.TaskInfo, rangeID int64) (*persistence.CreateTasksResponse, error) {
+	taskInfo *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {
 		return nil, errShutdown
@@ -100,7 +104,6 @@ func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
 	req := &writeTaskRequest{
 		execution:  execution,
 		taskInfo:   taskInfo,
-		rangeID:    rangeID,
 		responseCh: ch,
 	}
 
@@ -123,6 +126,23 @@ func (w *taskWriter) GetMaxReadLevel() int64 {
 	return atomic.LoadInt64(&w.maxReadLevel)
 }
 
+func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
+	result := make([]int64, count)
+	for i := 0; i < count; i++ {
+		if w.taskIDBlock.start > w.taskIDBlock.end {
+			// we ran out of current allocation block
+			newBlock, err := w.tlMgr.allocTaskIDBlock(w.taskIDBlock.end)
+			if err != nil {
+				return nil, err
+			}
+			w.taskIDBlock = newBlock
+		}
+		result[i] = w.taskIDBlock.start
+		w.taskIDBlock.start++
+	}
+	return result, nil
+}
+
 func (w *taskWriter) taskWriterLoop() {
 writerLoop:
 	for {
@@ -136,44 +156,23 @@ writerLoop:
 
 				maxReadLevel := int64(0)
 
-				taskIDs, err := w.tlMgr.newTaskIDs(batchSize)
+				taskIDs, err := w.allocTaskIDs(batchSize)
 				if err != nil {
 					w.sendWriteResponse(reqs, err, nil)
 					continue writerLoop
 				}
 
 				tasks := []*persistence.CreateTaskInfo{}
-				rangeID := int64(0)
 				for i, req := range reqs {
 					tasks = append(tasks, &persistence.CreateTaskInfo{
 						TaskID:    taskIDs[i],
 						Execution: *req.execution,
 						Data:      req.taskInfo,
 					})
-					if req.rangeID > rangeID {
-						rangeID = req.rangeID // use the maximum rangeID provided for the write operation
-					}
 					maxReadLevel = taskIDs[i]
 				}
 
-				tlInfo := &persistence.TaskListInfo{
-					DomainID: w.taskListID.domainID,
-					Name:     w.taskListID.taskListName,
-					TaskType: w.taskListID.taskType,
-					// Note that newTaskID could increment range, so rangeID parameter
-					// might be out of sync. This is OK as caller can just retry.
-					RangeID:  rangeID,
-					AckLevel: w.tlMgr.getAckLevel(),
-					Kind:     w.tlMgr.getTaskListKind(),
-				}
-
-				w.tlMgr.persistenceLock.Lock()
-				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
-					TaskListInfo: tlInfo,
-					Tasks:        tasks,
-				})
-				w.tlMgr.persistenceLock.Unlock()
-
+				r, err := w.tlMgr.db.CreateTasks(tasks)
 				if err != nil {
 					logging.LogPersistantStoreErrorEvent(w.logger, logging.TagValueStoreOperationCreateTask, err,
 						fmt.Sprintf("{taskID: [%v, %v], taskType: %v, taskList: %v}",

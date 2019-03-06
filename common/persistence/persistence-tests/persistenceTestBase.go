@@ -1058,16 +1058,21 @@ func (s *TestBase) CreateDecisionTask(domainID string, workflowExecution workflo
 func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workflow.WorkflowExecution,
 	activities map[int64]string) ([]int64, error) {
 
-	var taskIDs []int64
-	var leaseResponse *p.LeaseTaskListResponse
-	var err error
-	for activityScheduleID, taskList := range activities {
-
-		leaseResponse, err = s.TaskMgr.LeaseTaskList(
-			&p.LeaseTaskListRequest{DomainID: domainID, TaskList: taskList, TaskType: p.TaskListTypeActivity})
-		if err != nil {
-			return []int64{}, err
+	taskLists := make(map[string]*p.TaskListInfo)
+	for _, tl := range activities {
+		_, ok := taskLists[tl]
+		if !ok {
+			resp, err := s.TaskMgr.LeaseTaskList(
+				&p.LeaseTaskListRequest{DomainID: domainID, TaskList: tl, TaskType: p.TaskListTypeActivity})
+			if err != nil {
+				return []int64{}, err
+			}
+			taskLists[tl] = resp.TaskListInfo
 		}
+	}
+
+	var taskIDs []int64
+	for activityScheduleID, taskList := range activities {
 		taskID := s.GetNextSequenceNumber()
 		tasks := []*p.CreateTaskInfo{
 			{
@@ -1083,14 +1088,12 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 			},
 		}
 		_, err := s.TaskMgr.CreateTasks(&p.CreateTasksRequest{
-			TaskListInfo: leaseResponse.TaskListInfo,
+			TaskListInfo: taskLists[taskList],
 			Tasks:        tasks,
 		})
-
 		if err != nil {
 			return nil, err
 		}
-
 		taskIDs = append(taskIDs, taskID)
 	}
 
@@ -1099,21 +1102,11 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 
 // GetTasks is a utility method to get tasks from persistence
 func (s *TestBase) GetTasks(domainID, taskList string, taskType int, batchSize int) (*p.GetTasksResponse, error) {
-	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID: domainID,
-		TaskList: taskList,
-		TaskType: taskType,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
 		DomainID:     domainID,
 		TaskList:     taskList,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
-		RangeID:      leaseResponse.TaskListInfo.RangeID,
 		MaxReadLevel: math.MaxInt64,
 	})
 
@@ -1126,22 +1119,12 @@ func (s *TestBase) GetTasks(domainID, taskList string, taskType int, batchSize i
 
 // CompleteTask is a utility method to complete a task
 func (s *TestBase) CompleteTask(domainID, taskList string, taskType int, taskID int64, ackLevel int64) error {
-	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID: domainID,
-		TaskList: taskList,
-		TaskType: taskType,
-	})
-	if err != nil {
-		return err
-	}
-
 	return s.TaskMgr.CompleteTask(&p.CompleteTaskRequest{
 		TaskList: &p.TaskListInfo{
 			DomainID: domainID,
 			AckLevel: ackLevel,
 			TaskType: taskType,
 			Name:     taskList,
-			RangeID:  leaseResponse.TaskListInfo.RangeID,
 		},
 		TaskID: taskID,
 	})

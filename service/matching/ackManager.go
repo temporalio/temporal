@@ -21,22 +21,30 @@
 package matching
 
 import (
+	"sync"
+
 	"github.com/uber-common/bark"
 	"go.uber.org/atomic"
 )
 
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
-	logger bark.Logger
-
+	sync.RWMutex
 	outstandingTasks map[int64]bool // key->TaskID, value->(true for acked, false->for non acked)
 	readLevel        int64          // Maximum TaskID inserted into outstandingTasks
 	ackLevel         int64          // Maximum TaskID below which all tasks are acked
 	backlogCounter   atomic.Int64
+	logger           bark.Logger
+}
+
+func newAckManager(logger bark.Logger) ackManager {
+	return ackManager{logger: logger, outstandingTasks: make(map[int64]bool), readLevel: -1, ackLevel: -1}
 }
 
 // Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.
 func (m *ackManager) addTask(taskID int64) {
+	m.Lock()
+	defer m.Unlock()
 	if m.readLevel >= taskID {
 		m.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", taskID,
 			m.readLevel)
@@ -49,25 +57,29 @@ func (m *ackManager) addTask(taskID int64) {
 	m.backlogCounter.Inc()
 }
 
-func newAckManager(logger bark.Logger) ackManager {
-	return ackManager{logger: logger, outstandingTasks: make(map[int64]bool), readLevel: -1, ackLevel: -1}
-}
-
 func (m *ackManager) getReadLevel() int64 {
+	m.RLock()
+	defer m.RUnlock()
 	return m.readLevel
 }
 
 func (m *ackManager) setReadLevel(readLevel int64) {
+	m.Lock()
+	defer m.Unlock()
 	m.readLevel = readLevel
 }
 
 func (m *ackManager) getAckLevel() int64 {
+	m.RLock()
+	defer m.RUnlock()
 	return m.ackLevel
 }
 
 // Moves ack level to the new level if it is higher than the current one.
 // Also updates the read level it is lower than the ackLevel.
 func (m *ackManager) setAckLevel(ackLevel int64) {
+	m.Lock()
+	defer m.Unlock()
 	if ackLevel > m.ackLevel {
 		m.ackLevel = ackLevel
 	}
@@ -77,6 +89,8 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 }
 
 func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
+	m.Lock()
+	defer m.Unlock()
 	if completed, ok := m.outstandingTasks[taskID]; ok && !completed {
 		m.outstandingTasks[taskID] = true
 		m.backlogCounter.Dec()

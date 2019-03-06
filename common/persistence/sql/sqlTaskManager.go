@@ -99,6 +99,13 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 	}
 
 	row := rows[0]
+	if request.RangeID > 0 && request.RangeID != row.RangeID {
+		return nil, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("leaseTaskList:renew failed:taskList:%v, taskListType:%v, haveRangeID:%v, gotRangeID:%v",
+				request.TaskList, request.TaskType, rangeID, row.RangeID),
+		}
+	}
+
 	var resp *persistence.LeaseTaskListResponse
 	err = m.txExecute("LeaseTaskList", func(tx sqldb.Tx) error {
 		rangeID = row.RangeID

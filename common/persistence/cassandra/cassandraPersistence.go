@@ -2576,6 +2576,15 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 			}
 		}
 	} else {
+		// if request.RangeID is > 0, we are trying to renew an already existing
+		// lease on the task list. If request.RangeID=0, we are trying to steal
+		// the tasklist from its current owner
+		if request.RangeID > 0 && request.RangeID != rangeID {
+			return nil, &p.ConditionFailedError{
+				Msg: fmt.Sprintf("leaseTaskList:renew failed: taskList:%v, taskListType:%v, haveRangeID:%v, gotRangeID:%v",
+					request.TaskList, request.TaskType, request.RangeID, rangeID),
+			}
+		}
 		ackLevel = tlDB["ack_level"].(int64)
 		taskListKind := tlDB["kind"].(int)
 		query = d.session.Query(templateUpdateTaskListQuery,
@@ -2609,7 +2618,8 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 	if !applied {
 		previousRangeID := previous["range_id"]
 		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("LeaseTaskList failed to apply. db rangeID %v", previousRangeID),
+			Msg: fmt.Sprintf("leaseTaskList: taskList:%v, taskListType:%v, haveRangeID:%v, gotRangeID:%v",
+				request.TaskList, request.TaskType, rangeID, previousRangeID),
 		}
 	}
 	tli := &p.TaskListInfo{

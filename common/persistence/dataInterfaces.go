@@ -878,6 +878,7 @@ type (
 		TaskList     string
 		TaskType     int
 		TaskListKind int
+		RangeID      int64
 	}
 
 	// LeaseTaskListResponse is response to LeaseTaskListRequest
@@ -939,7 +940,6 @@ type (
 		ReadLevel    int64
 		MaxReadLevel int64 // inclusive
 		BatchSize    int
-		RangeID      int64
 	}
 
 	// GetTasksResponse is the response to GetTasksRequests

@@ -251,6 +251,16 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	s.EqualValues(0, tli.AckLevel)
 	s.True(tli.LastUpdated.After(leaseTime) || tli.LastUpdated.Equal(leaseTime))
 
+	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
+		DomainID: domainID,
+		TaskList: taskList,
+		TaskType: p.TaskListTypeActivity,
+		RangeID:  1,
+	})
+	s.Error(err)
+	_, ok := err.(*p.ConditionFailedError)
+	s.True(ok)
+
 	taskListInfo := &p.TaskListInfo{
 		DomainID: domainID,
 		Name:     taskList,

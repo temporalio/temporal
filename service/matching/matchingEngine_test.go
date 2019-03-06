@@ -1719,12 +1719,6 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	tlm := m.getTaskListManager(newTaskListID(request.DomainID, request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
-	if tlm.rangeID != request.RangeID {
-		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("testTaskManager.GetTasks failed. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
-				request.TaskList, request.TaskType, request.RangeID, tlm.rangeID),
-		}
-	}
 	var tasks []*persistence.TaskInfo
 
 	it := tlm.tasks.Iterator()
