@@ -686,7 +686,7 @@ func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context wo
 		if err != nil {
 			return err
 		}
-		// contineueAsNew
+		// continueAsNew
 		err = context.appendFirstBatchHistoryForContinueAsNew(newRunStateBuilder, transactionID)
 		if err != nil {
 			return err

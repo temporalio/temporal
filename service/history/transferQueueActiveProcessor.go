@@ -389,12 +389,9 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	replyToParentWorkflow := msBuilder.HasParentExecution() && executionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew
-	var completionEvent *workflow.HistoryEvent
-	if replyToParentWorkflow {
-		completionEvent, ok = msBuilder.GetCompletionEvent()
-		if !ok {
-			return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
-		}
+	completionEvent, ok := msBuilder.GetCompletionEvent()
+	if !ok {
+		return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
 	}
 	parentDomainID := executionInfo.ParentDomainID
 	parentWorkflowID := executionInfo.ParentWorkflowID
@@ -403,7 +400,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
-	workflowCloseTimestamp := msBuilder.GetLastUpdatedTimestamp()
+	workflowCloseTimestamp := completionEvent.GetTimestamp()
 	workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 	workflowHistoryLength := msBuilder.GetNextEventID() - 1
 

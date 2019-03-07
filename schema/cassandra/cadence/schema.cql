@@ -310,7 +310,7 @@ CREATE TABLE executions (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
--- events table is deprecated in favor of v2 talbes: history_node/history_tree
+-- events table is deprecated in favor of v2 tables: history_node/history_tree
 CREATE TABLE events (
   domain_id           uuid,
   workflow_id         text,

@@ -59,6 +59,7 @@ type (
 		mockShard           *shardContextImpl
 		mockMutableState    *mockMutableState
 		mockClientBean      *client.MockClientBean
+		mockEventsCache     *MockEventsCache
 
 		stateBuilder *stateBuilderImpl
 	}
@@ -94,6 +95,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
+	s.mockEventsCache = &MockEventsCache{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -107,6 +109,7 @@ func (s *stateBuilderSuite) SetupTest() {
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
+		eventsCache:               s.mockEventsCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.mockMutableState = &mockMutableState{}
@@ -124,6 +127,7 @@ func (s *stateBuilderSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
+	s.mockEventsCache.AssertExpectations(s.T())
 }
 
 func (s *stateBuilderSuite) mockUpdateVersion(events ...*shared.HistoryEvent) {
@@ -832,6 +836,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
 	s.mockMutableState.On("ClearStickyness").Once()
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
+
 	_, _, newRunStateBuilder, err := stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events,
 		0, persistence.EventStoreVersionV2, createTaskID, newRunCreateTaskID)
 	s.Nil(err)

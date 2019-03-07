@@ -166,6 +166,7 @@ func (s *timerQueueProcessor2Suite) TearDownTest() {
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
+	s.mockEventsCache.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
@@ -286,6 +287,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}

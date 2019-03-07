@@ -109,7 +109,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		firstEvent = history[0]
 	}
 
-	// need to clear the stickness since workflow turned to passive
+	// need to clear the stickiness since workflow turned to passive
 	b.msBuilder.ClearStickyness()
 	for _, event := range history {
 		lastEvent = event
@@ -146,7 +146,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 			b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
 				di.ScheduleID))
-			// since we do not use stickyness on the standby side, there shall be no decision schedule to start timeout
+			// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
 
 			lastDecision = di
 
@@ -173,7 +173,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if di := b.msBuilder.ReplicateTransientDecisionTaskScheduled(); di != nil {
 				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
 					di.ScheduleID))
-				// since we do not use stickyness on the standby side, there shall be no decision schedule to start timeout
+				// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
 				lastDecision = di
 			}
 
@@ -184,7 +184,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if di := b.msBuilder.ReplicateTransientDecisionTaskScheduled(); di != nil {
 				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
 					di.ScheduleID))
-				// since we do not use stickyness on the standby side, there shall be no decision schedule to start timeout
+				// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
 				lastDecision = di
 			}
 

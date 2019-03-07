@@ -123,7 +123,6 @@ type (
 		GetHistorySize() int64
 		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
-		GetLastUpdatedTimestamp() int64
 		GetLastWriteVersion() int64
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64

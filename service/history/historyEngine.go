@@ -819,7 +819,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 		// for closed workflow
 		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		result.WorkflowExecutionInfo.CloseStatus = &closeStatus
-		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(msBuilder.GetLastUpdatedTimestamp())
+		completionEvent, ok := msBuilder.GetCompletionEvent()
+		if !ok {
+			return nil, &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
+		}
+		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(completionEvent.GetTimestamp())
 	}
 
 	if len(msBuilder.GetPendingActivityInfos()) > 0 {
@@ -1283,7 +1287,7 @@ Update_History_Loop:
 					}
 
 					startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
-					continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+					continueAsNewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
 						WorkflowType:                        startAttributes.WorkflowType,
 						TaskList:                            startAttributes.TaskList,
 						RetryPolicy:                         startAttributes.RetryPolicy,
@@ -1301,7 +1305,7 @@ Update_History_Loop:
 						return nil, err
 					}
 					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry,
-						startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion,
+						startAttributes.GetParentWorkflowDomain(), continueAsNewAttributes, eventStoreVersion,
 						createTaskID); err != nil {
 						return nil, err
 					}
@@ -1361,7 +1365,7 @@ Update_History_Loop:
 					}
 
 					startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
-					continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+					continueAsNewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
 						WorkflowType:                        startAttributes.WorkflowType,
 						TaskList:                            startAttributes.TaskList,
 						RetryPolicy:                         startAttributes.RetryPolicy,
@@ -1382,7 +1386,7 @@ Update_History_Loop:
 					}
 					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry,
 						startAttributes.GetParentWorkflowDomain(),
-						continueAsnewAttributes, eventStoreVersion, createTaskID); err != nil {
+						continueAsNewAttributes, eventStoreVersion, createTaskID); err != nil {
 						return nil, err
 					}
 				}
