@@ -891,6 +891,11 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, bool
 		return e.executionInfo.CompletionEvent, true
 	}
 
+	// Needed for backward compatibility reason
+	if e.executionInfo.CompletionEventBatchID == common.EmptyEventID {
+		return nil, false
+	}
+
 	// Completion EventID is always one less than NextEventID after workflow is completed
 	completionEventID := e.executionInfo.NextEventID - 1
 	firstEventID := e.executionInfo.CompletionEventBatchID
@@ -2280,7 +2285,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(event *workflow
 	e.executionInfo.SignalCount++
 }
 
-func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
+func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
 	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32, createTaskID int64) (*workflow.HistoryEvent, mutableState,
 	error) {
 
@@ -2330,18 +2335,16 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		}
 	}
 
-	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion, createTaskID)
+	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID, "", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion, createTaskID)
 	if err != nil {
 		return nil, nil, err
 	}
 	return continueAsNewEvent, newStateBuilder, nil
 }
 
-func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID string,
+func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID int64, sourceClusterName string, domainID string,
 	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
 	newStateBuilder mutableState, eventStoreVersion int32, createTaskID int64) error {
-
-	e.writeCompletionEventToCache(continueAsNewEvent)
 
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
@@ -2360,6 +2363,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
 	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusContinuedAsNew
+	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
+	e.writeCompletionEventToCache(continueAsNewEvent)
 
 	parentDomainID := ""
 	var parentExecution *workflow.WorkflowExecution

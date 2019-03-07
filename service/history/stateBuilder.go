@@ -441,7 +441,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.newRunTransferTasks = append(b.newRunTransferTasks, newRunStateBuilder.getTransferTasks()...)
 			b.newRunTimerTasks = append(b.newRunTimerTasks, newRunStateBuilder.getTimerTasks()...)
 
-			err = b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName, domainID, event,
+			err = b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEvent.GetEventId(), sourceClusterName, domainID, event,
 				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion, newRunCreateTaskID)
 			if err != nil {
 				return nil, nil, nil, err

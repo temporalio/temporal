@@ -773,7 +773,7 @@ Update_History_Loop:
 		if err != nil {
 			return err
 		}
-		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry,
+		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(msBuilder.GetNextEventID(), common.EmptyEventID, domainEntry,
 			startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion, createTaskID)
 		if err != nil {
 			return err
