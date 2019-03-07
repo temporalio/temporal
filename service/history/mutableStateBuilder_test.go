@@ -242,3 +242,50 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[1].ActivityTaskCompletedEventAttributes.GetScheduledEventId())
 
 }
+
+func (s *mutableStateSuite) TestTrimEvents() {
+	var input []*workflow.HistoryEvent
+	output := s.msBuilder.trimEventsAfterWorkflowClose(input)
+	s.Equal(input, output)
+
+	input = []*workflow.HistoryEvent{}
+	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
+	s.Equal(input, output)
+
+	input = []*workflow.HistoryEvent{
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeActivityTaskCanceled.Ptr(),
+		},
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeWorkflowExecutionSignaled.Ptr(),
+		},
+	}
+	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
+	s.Equal(input, output)
+
+	input = []*workflow.HistoryEvent{
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeActivityTaskCanceled.Ptr(),
+		},
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
+		},
+	}
+	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
+	s.Equal(input, output)
+
+	input = []*workflow.HistoryEvent{
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
+		},
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeActivityTaskCanceled.Ptr(),
+		},
+	}
+	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
+	s.Equal([]*workflow.HistoryEvent{
+		&workflow.HistoryEvent{
+			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
+		},
+	}, output)
+}

@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/cadence/.gen/go/shared"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -118,6 +119,9 @@ var (
 	ErrBufferedEventsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for buffered events"}
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for signal events"}
+	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
+	ErrEventsAterWorkflowFinish = &shared.InternalServiceError{Message: "error validating last event being workflow finish event."}
+
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowCloseState = map[int]bool{

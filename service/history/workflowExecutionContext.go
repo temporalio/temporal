@@ -44,7 +44,7 @@ const (
 
 type (
 	workflowExecutionContext interface {
-		appendHistoryEvents(builder *historyBuilder, history []*workflow.HistoryEvent, transactionID int64) (int, error)
+		appendHistoryEvents(history []*workflow.HistoryEvent, transactionID int64, doLastEventValidation bool) (int, error)
 		clear()
 		continueAsNewWorkflowExecution(context []byte, newStateBuilder mutableState, transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
 		getDomainID() string
@@ -224,7 +224,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState m
 	if updateCurr {
 		hBuilder := currMutableState.GetHistoryBuilder()
 		var size int
-		size, retError = c.appendHistoryEvents(hBuilder, hBuilder.GetHistory().GetEvents(), transactionID)
+		size, retError = c.appendHistoryEvents(hBuilder.GetHistory().GetEvents(), transactionID, true)
 		if retError != nil {
 			return
 		}
@@ -460,7 +460,7 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	if hasNewStandbyHistoryEvents {
 		firstEvent := standbyHistoryBuilder.GetFirstEvent()
 		// Note: standby events has no transient decision events
-		newHistorySize, err = c.appendHistoryEvents(standbyHistoryBuilder, standbyHistoryBuilder.history, transactionID)
+		newHistorySize, err = c.appendHistoryEvents(standbyHistoryBuilder.history, transactionID, true)
 		if err != nil {
 			return err
 		}
@@ -473,14 +473,15 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		firstEvent := activeHistoryBuilder.GetFirstEvent()
 		// Transient decision events need to be written as a separate batch
 		if activeHistoryBuilder.HasTransientEvents() {
-			newHistorySize, err = c.appendHistoryEvents(activeHistoryBuilder, activeHistoryBuilder.transientHistory, transactionID)
+			// transient decision events batch should not perform last event check
+			newHistorySize, err = c.appendHistoryEvents(activeHistoryBuilder.transientHistory, transactionID, false)
 			if err != nil {
 				return err
 			}
 		}
 
 		var size int
-		size, err = c.appendHistoryEvents(activeHistoryBuilder, activeHistoryBuilder.history, transactionID)
+		size, err = c.appendHistoryEvents(activeHistoryBuilder.history, transactionID, true)
 		if err != nil {
 			return err
 		}
@@ -543,7 +544,7 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 				if err1 != nil {
 					return err1
 				}
-				newHistorySize, err = c.appendHistoryEvents(activeHistoryBuilder, activeHistoryBuilder.history, terminateTransactionID)
+				newHistorySize, err = c.appendHistoryEvents(activeHistoryBuilder.history, terminateTransactionID, true)
 				if err != nil {
 					return err
 				}
@@ -653,8 +654,14 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) appendHistoryEvents(builder *historyBuilder, history []*workflow.HistoryEvent,
-	transactionID int64) (int, error) {
+func (c *workflowExecutionContextImpl) appendHistoryEvents(history []*workflow.HistoryEvent,
+	transactionID int64, doLastEventValidation bool) (int, error) {
+
+	if doLastEventValidation {
+		if err := c.validateNoEventsAfterWorkflowFinish(history); err != nil {
+			return 0, err
+		}
+	}
 
 	firstEvent := history[0]
 	var historySize int
@@ -926,4 +933,44 @@ func (c *workflowExecutionContextImpl) emitSessionUpdateStats(stats *persistence
 		time.Duration(stats.DeleteSignalInfoCount))
 	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.DeleteRequestCancelInfoCount,
 		time.Duration(stats.DeleteRequestCancelInfoCount))
+}
+
+// validateNoEventsAfterWorkflowFinish perform check on history event batch
+// NOTE: do not apply this check on every batch, since transient
+// decision && workflow finish will be broken (the first batch)
+func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(input []*workflow.HistoryEvent) error {
+	if len(input) == 0 {
+		return nil
+	}
+
+	// if workflow is still running, no check is necessary
+	if c.msBuilder.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	// workflow close
+	// this will perform check on the last event of last batch
+	// NOTE: do not apply this check on every batch, since transient
+	// decision && workflow finish will be broken (the first batch)
+	lastEvent := input[len(input)-1]
+	switch lastEvent.GetEventType() {
+	case workflow.EventTypeWorkflowExecutionCompleted,
+		workflow.EventTypeWorkflowExecutionFailed,
+		workflow.EventTypeWorkflowExecutionTimedOut,
+		workflow.EventTypeWorkflowExecutionTerminated,
+		workflow.EventTypeWorkflowExecutionContinuedAsNew,
+		workflow.EventTypeWorkflowExecutionCanceled:
+
+		return nil
+
+	default:
+		c.logger.WithFields(bark.Fields{
+			logging.TagDomainID:            c.domainID,
+			logging.TagWorkflowExecutionID: c.workflowExecution.GetWorkflowId(),
+			logging.TagWorkflowRunID:       c.workflowExecution.GetRunId(),
+		}).Error("encounter case where events appears after workflow finish.")
+
+		return ErrEventsAterWorkflowFinish
+	}
+
 }

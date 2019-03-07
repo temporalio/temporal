@@ -21,6 +21,7 @@
 package history
 
 import (
+	"github.com/uber/cadence/common/errors"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -57,6 +58,10 @@ type (
 		newRunTransferTasks []persistence.Task
 		newRunTimerTasks    []persistence.Task
 	}
+)
+
+const (
+	ErrMessageNewRunHistorySizeZero = "encounter new run history size being zero"
 )
 
 var _ stateBuilder = (*stateBuilderImpl)(nil)
@@ -387,6 +392,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeWorkflowExecutionContinuedAsNew:
+			if len(newRunHistory) == 0 {
+				return nil, nil, nil, errors.NewInternalFailureError(ErrMessageNewRunHistorySizeZero)
+			}
 			newRunStartedEvent := newRunHistory[0]
 			// Create mutable state updates for the new run
 			newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(

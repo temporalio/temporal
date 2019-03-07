@@ -342,6 +342,7 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 		e.updateBufferedEvents = nil
 	}
 
+	newCommittedEvents = e.trimEventsAfterWorkflowClose(newCommittedEvents)
 	e.hBuilder.history = newCommittedEvents
 	// make sure all new committed events have correct EventID
 	e.assignEventIDToBufferedEvents()
@@ -578,6 +579,32 @@ func convertSignalRequestedIDs(inputs map[string]struct{}) []string {
 		outputs = append(outputs, item)
 	}
 	return outputs
+}
+
+func (e *mutableStateBuilder) trimEventsAfterWorkflowClose(input []*workflow.HistoryEvent) []*workflow.HistoryEvent {
+	if len(input) == 0 {
+		return input
+	}
+
+	nextIndex := 0
+
+loop:
+	for _, event := range input {
+		nextIndex++
+
+		switch event.GetEventType() {
+		case workflow.EventTypeWorkflowExecutionCompleted,
+			workflow.EventTypeWorkflowExecutionFailed,
+			workflow.EventTypeWorkflowExecutionTimedOut,
+			workflow.EventTypeWorkflowExecutionTerminated,
+			workflow.EventTypeWorkflowExecutionContinuedAsNew,
+			workflow.EventTypeWorkflowExecutionCanceled:
+
+			break loop
+		}
+	}
+
+	return input[0:nextIndex]
 }
 
 func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
