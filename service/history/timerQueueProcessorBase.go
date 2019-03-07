@@ -591,18 +591,14 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 		return err
 	}
 	domainArchivalStatus := domainCacheEntry.GetConfig().ArchivalStatus
-
 	switch clusterArchivalStatus {
 	case cluster.ArchivalDisabled:
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
 		return t.deleteWorkflow(task, msBuilder)
 	case cluster.ArchivalPaused:
-		if domainArchivalStatus == workflow.ArchivalStatusDisabled {
-			t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
-			return t.deleteWorkflow(task, msBuilder)
-		}
-		// if cluster archival is paused and domain enables archival do nothing, backfill worklow will handle this
-		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupNopCount)
+		// TODO: @dandrew once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
+		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
+		return t.deleteWorkflow(task, msBuilder)
 	case cluster.ArchivalEnabled:
 		if domainArchivalStatus == workflow.ArchivalStatusDisabled {
 			t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
