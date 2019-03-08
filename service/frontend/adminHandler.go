@@ -245,7 +245,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 			NextEventID:       nextEventID,
 			PersistenceToken:  nil, // this is the initialized value
 			EventStoreVersion: response.GetEventStoreVersion(),
-			CreateTaskID:      response.GetCreateTaskId(),
 			ReplicationInfo:   response.ReplicationInfo,
 		}
 	}
@@ -310,7 +309,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		HistoryBatches:    blobs,
 		ReplicationInfo:   token.ReplicationInfo,
 		EventStoreVersion: common.Int32Ptr(token.EventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(token.CreateTaskID),
 	}
 	if len(token.PersistenceToken) == 0 {
 		result.NextPageToken = nil

@@ -764,6 +764,7 @@ struct HistoryEvent {
   20:  optional i64 (js.type = "Long") timestamp
   30:  optional EventType eventType
   35:  optional i64 (js.type = "Long") version
+  36:  optional i64 (js.type = "Long") taskId
   40:  optional WorkflowExecutionStartedEventAttributes workflowExecutionStartedEventAttributes
   50:  optional WorkflowExecutionCompletedEventAttributes workflowExecutionCompletedEventAttributes
   60:  optional WorkflowExecutionFailedEventAttributes workflowExecutionFailedEventAttributes

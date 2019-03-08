@@ -47,6 +47,7 @@ type (
 		GetHistoryV2Manager() persistence.HistoryV2Manager
 		GetDomainCache() cache.DomainCache
 		GetNextTransferTaskID() (int64, error)
+		GetTransferTaskIDs(number int) ([]int64, error)
 		GetTransferMaxReadLevel() int64
 		GetTransferAckLevel() int64
 		UpdateTransferAckLevel(ackLevel int64) error
@@ -152,6 +153,21 @@ func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
 	defer s.Unlock()
 
 	return s.getNextTransferTaskIDLocked()
+}
+
+func (s *shardContextImpl) GetTransferTaskIDs(number int) ([]int64, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	result := []int64{}
+	for i := 0; i < number; i++ {
+		id, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, nil
 }
 
 func (s *shardContextImpl) GetTransferMaxReadLevel() int64 {

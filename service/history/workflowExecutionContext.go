@@ -158,7 +158,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 		return err
 	}
 
-	msBuilder := newMutableStateBuilder(c.clusterMetadata.GetCurrentClusterName(), c.shard.GetConfig(),
+	msBuilder := newMutableStateBuilder(c.clusterMetadata.GetCurrentClusterName(), c.shard,
 		c.shard.GetEventsCache(), c.logger)
 	if response != nil && response.State != nil {
 		state := response.State
@@ -209,7 +209,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState m
 
 	transactionID, retError := c.shard.GetNextTransferTaskID()
 	if retError != nil {
-		return
+		return retError
 	}
 
 	// Since we always reset to decision task, there shouldn't be any buffered events.
@@ -219,6 +219,17 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState m
 			Message: fmt.Sprintf("reset workflow execution shouldn't have buffered events"),
 		}
 		return
+	}
+
+	// call FlushBufferedEvents to assign task id to event
+	// as well as update last event task id in ms state builder
+	retError = currMutableState.FlushBufferedEvents()
+	if retError != nil {
+		return retError
+	}
+	retError = newMutableState.FlushBufferedEvents()
+	if retError != nil {
+		return retError
 	}
 
 	if updateCurr {

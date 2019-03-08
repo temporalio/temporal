@@ -39,6 +39,7 @@ type (
 	mutableStateSuite struct {
 		suite.Suite
 		msBuilder       *mutableStateBuilder
+		mockShard       *shardContextImpl
 		mockEventsCache *MockEventsCache
 		logger          bark.Logger
 	}
@@ -62,8 +63,16 @@ func (s *mutableStateSuite) TearDownSuite() {
 
 func (s *mutableStateSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.mockShard = &shardContextImpl{
+		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
+		transferSequenceNumber:    1,
+		maxTransferSequenceNumber: 100000,
+		closeCh:                   make(chan int, 100),
+		config:                    NewDynamicConfigForTest(),
+		logger:                    s.logger,
+	}
 	s.mockEventsCache = &MockEventsCache{}
-	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewDynamicConfigForTest(), s.mockEventsCache,
+	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache,
 		s.logger)
 }
 

@@ -794,6 +794,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
+	s.True(resetReq.CurrExecutionInfo.LastEventTaskID > 0)
+	resetReq.CurrExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.UpdateCurr)
 	compareCurrExeInfo.State = p.WorkflowStateCompleted
@@ -2076,6 +2078,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
+	s.True(resetReq.CurrExecutionInfo.LastEventTaskID > 0)
+	resetReq.CurrExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.UpdateCurr)
 	s.Equal(p.WorkflowStateRunning, resetReq.PrevRunState)

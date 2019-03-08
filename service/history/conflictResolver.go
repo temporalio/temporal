@@ -62,7 +62,6 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 	execution := *r.context.getExecution()
 	startTime := info.StartTimestamp
 	eventStoreVersion := info.EventStoreVersion
-	createTaskID := info.CreateTaskID
 	branchToken := info.GetCurrentBranch()
 	replayNextEventID := replayEventID + 1
 
@@ -101,7 +100,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 		if firstEvent.GetEventId() == common.FirstEventID {
 			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(
 				r.clusterMetadata.GetCurrentClusterName(),
-				r.shard.GetConfig(),
+				r.shard,
 				r.shard.GetEventsCache(),
 				r.logger,
 				firstEvent.GetVersion(),
@@ -112,8 +111,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 		}
 
 		// NOTE: passing 0 as newRunEventStoreVersion is safe here, since we don't need the newMutableState of the new run
-		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil,
-			eventStoreVersion, 0, createTaskID, 0)
+		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, resetMutableStateBuilder.GetEventStoreVersion(), 0)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err

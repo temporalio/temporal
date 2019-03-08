@@ -33,6 +33,8 @@ const (
 	EndEventID int64 = 1<<63 - 1
 	// BufferedEventID is the id of the buffered event
 	BufferedEventID int64 = -123
+	// EmptyEventTaskID is uninitialized id of the task id within event
+	EmptyEventTaskID int64 = -1234
 	// TransientEventID is the id of the transient event
 	TransientEventID int64 = -124
 	// FirstBlobPageToken is the page token identifying the first blob for each history archival

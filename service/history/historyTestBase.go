@@ -176,6 +176,19 @@ func (s *TestShardContext) GetNextTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&s.transferSequenceNumber, 1), nil
 }
 
+// GetTransferTaskIDs test implementation
+func (s *TestShardContext) GetTransferTaskIDs(number int) ([]int64, error) {
+	result := []int64{}
+	for i := 0; i < number; i++ {
+		id, err := s.GetNextTransferTaskID()
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, nil
+}
+
 // GetTransferMaxReadLevel test implementation
 func (s *TestShardContext) GetTransferMaxReadLevel() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)

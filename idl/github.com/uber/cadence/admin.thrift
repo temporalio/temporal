@@ -86,5 +86,4 @@ struct GetWorkflowExecutionRawHistoryResponse {
   20: optional list<shared.DataBlob> historyBatches
   30: optional map<string, shared.ReplicationInfo> replicationInfo
   40: optional i32 eventStoreVersion
-  50: optional i64 (js.type = "Long") createTaskId
 }

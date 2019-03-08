@@ -137,7 +137,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 		},
 	}
 	eventStoreVersion := int32(9)
-	createTaskID := int64(144)
 	eventBatch := []*shared.HistoryEvent{
 		&shared.HistoryEvent{
 			EventId:   common.Int64Ptr(2),
@@ -169,7 +168,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -185,7 +183,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 		},
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
 		NewRunEventStoreVersion: nil,
 	}).Return(nil).Once()
 
@@ -203,7 +200,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	beginingRunID := "00001111-2222-3333-4444-555566661111"
 	beginingEventStoreVersion := int32(101)
-	beginingCreateTaskID := int64(999)
 	beginingReplicationInfo := map[string]*shared.ReplicationInfo{
 		"random data center 1": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(111),
@@ -213,7 +209,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	midRunID1 := "00001111-2222-3333-4444-555566662222"
 	midEventStoreVersion1 := int32(102)
-	midCreateTaskID1 := beginingCreateTaskID + 1
 	midReplicationInfo1 := map[string]*shared.ReplicationInfo{
 		"random data center 2": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(111),
@@ -223,7 +218,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	midRunID2 := "00001111-2222-3333-4444-555566663333"
 	midEventStoreVersion2 := int32(103)
-	midCreateTaskID2 := midCreateTaskID1 + 1
 	midReplicationInfo2 := map[string]*shared.ReplicationInfo{
 		"random data center 3": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(111),
@@ -233,7 +227,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 
 	endingRunID := "00001111-2222-3333-4444-555566664444"
 	endingEventStoreVersion := int32(104)
-	endingCreateTaskID := midCreateTaskID2 + 1
 	endingReplicationInfo := map[string]*shared.ReplicationInfo{
 		"random data center 4": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(777),
@@ -335,7 +328,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   beginingReplicationInfo,
 		EventStoreVersion: common.Int32Ptr(beginingEventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(beginingCreateTaskID),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -353,7 +345,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   midReplicationInfo1,
 		EventStoreVersion: common.Int32Ptr(midEventStoreVersion1),
-		CreateTaskId:      common.Int64Ptr(midCreateTaskID1),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -371,7 +362,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   midReplicationInfo1,
 		EventStoreVersion: common.Int32Ptr(midEventStoreVersion1),
-		CreateTaskId:      common.Int64Ptr(midCreateTaskID1),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -389,7 +379,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   endingReplicationInfo,
 		EventStoreVersion: common.Int32Ptr(endingEventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(endingCreateTaskID),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -407,7 +396,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   midReplicationInfo2,
 		EventStoreVersion: common.Int32Ptr(midEventStoreVersion2),
-		CreateTaskId:      common.Int64Ptr(midCreateTaskID2),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -425,7 +413,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   midReplicationInfo2,
 		EventStoreVersion: common.Int32Ptr(midEventStoreVersion2),
-		CreateTaskId:      common.Int64Ptr(midCreateTaskID2),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -443,7 +430,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   endingReplicationInfo,
 		EventStoreVersion: common.Int32Ptr(endingEventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(endingCreateTaskID),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -461,7 +447,6 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		NextPageToken:     nil,
 		ReplicationInfo:   endingReplicationInfo,
 		EventStoreVersion: common.Int32Ptr(endingEventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(endingCreateTaskID),
 	}, nil).Once()
 
 	// ReplicateRawEvents is already tested, just count how many times this is called
@@ -484,7 +469,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 	}
 	eventStoreVersion := int32(9)
-	createTaskID := int64(144)
 
 	eventBatch1 := []*shared.HistoryEvent{
 		&shared.HistoryEvent{
@@ -539,7 +523,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		NextPageToken:     nextToken,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -557,7 +540,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -574,8 +556,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
 		NewRunEventStoreVersion: nil,
-		CreateTaskId:            common.Int64Ptr(createTaskID),
-		NewRunCreateTaskId:      nil,
 	}).Return(nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -592,8 +572,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
 		NewRunEventStoreVersion: nil,
-		CreateTaskId:            common.Int64Ptr(createTaskID),
-		NewRunCreateTaskId:      nil,
 	}).Return(nil).Once()
 
 	nextRunID, err := s.getDummyRereplicationContext().sendSingleWorkflowHistory(s.domainID, workflowID, runID, common.FirstEventID, common.EndEventID)
@@ -614,7 +592,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 	}
 	eventStoreVersion := int32(9)
-	createTaskID := int64(144)
 	replicationInfoNew := map[string]*shared.ReplicationInfo{
 		"random data center": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(222),
@@ -622,7 +599,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 	}
 	eventStoreVersionNew := int32(88)
-	createTaskIDNew := createTaskID + 1
 
 	eventBatch1 := []*shared.HistoryEvent{
 		&shared.HistoryEvent{
@@ -693,7 +669,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		NextPageToken:     nextToken,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -711,7 +686,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
@@ -729,7 +703,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfoNew,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersionNew),
-		CreateTaskId:      common.Int64Ptr(createTaskIDNew),
 	}, nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -746,8 +719,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
 		NewRunEventStoreVersion: nil,
-		CreateTaskId:            common.Int64Ptr(createTaskID),
-		NewRunCreateTaskId:      nil,
 	}).Return(nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -767,8 +738,6 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
 		NewRunEventStoreVersion: common.Int32Ptr(eventStoreVersionNew),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
-		NewRunCreateTaskId:      common.Int64Ptr(createTaskIDNew),
 	}).Return(nil).Once()
 
 	nextRunID, err := s.getDummyRereplicationContext().sendSingleWorkflowHistory(s.domainID, workflowID, runID, common.FirstEventID, common.EndEventID)
@@ -817,7 +786,6 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 		Data:         []byte("some random history blob"),
 	}
 	eventStoreVersion := int32(55)
-	createTaskID := int64(144)
 	replicationInfo := map[string]*shared.ReplicationInfo{
 		"random data center": &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(777),
@@ -834,10 +802,9 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 		ReplicationInfo:         replicationInfo,
 		History:                 blob,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
 		NewRunHistory:           nil,
 		NewRunEventStoreVersion: nil,
-	}, s.getDummyRereplicationContext().createReplicationRawRequest(s.domainID, workflowID, runID, blob, eventStoreVersion, createTaskID, replicationInfo))
+	}, s.getDummyRereplicationContext().createReplicationRawRequest(s.domainID, workflowID, runID, blob, eventStoreVersion, replicationInfo))
 }
 
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
@@ -883,7 +850,6 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		},
 	}
 	eventStoreVersion := int32(0)
-	createTaskID := int64(144)
 	request := &history.ReplicateRawEventsRequest{
 		DomainUUID: common.StringPtr(s.domainID),
 		WorkflowExecution: &shared.WorkflowExecution{
@@ -936,7 +902,6 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
 		DomainUUID: common.StringPtr(s.domainID),
@@ -948,7 +913,6 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		History:                 missingBlob,
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
 		NewRunEventStoreVersion: nil,
 	}).Return(nil).Once()
 
@@ -968,7 +932,6 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 		},
 	}
 	eventStoreVersion := int32(0)
-	createTaskID := int64(144)
 	request := &history.ReplicateRawEventsRequest{
 		DomainUUID: common.StringPtr(s.domainID),
 		WorkflowExecution: &shared.WorkflowExecution{
@@ -985,7 +948,6 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 			Data:         []byte("some random new run history blob"),
 		},
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
 		NewRunEventStoreVersion: common.Int32Ptr(2),
 	}
 
@@ -1015,7 +977,6 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 		},
 	}
 	eventStoreVersion := int32(9)
-	createTaskID := int64(144)
 	eventBatch := []*shared.HistoryEvent{
 		&shared.HistoryEvent{
 			EventId:   common.Int64Ptr(lastEventID + 1),
@@ -1041,7 +1002,6 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -1054,7 +1014,6 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 		History:                 blob,
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
 		NewRunEventStoreVersion: nil,
 	}).Return(nil).Once()
 
@@ -1075,7 +1034,6 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 		},
 	}
 	eventStoreVersion := int32(9)
-	createTaskID := int64(144)
 	eventBatch := []*shared.HistoryEvent{
 		&shared.HistoryEvent{
 			EventId:   common.Int64Ptr(common.FirstEventID),
@@ -1101,7 +1059,6 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 		NextPageToken:     nil,
 		ReplicationInfo:   replicationInfo,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 	}, nil).Once()
 
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, &history.ReplicateRawEventsRequest{
@@ -1114,9 +1071,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 		History:                 blob,
 		NewRunHistory:           nil,
 		EventStoreVersion:       common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:            common.Int64Ptr(createTaskID),
 		NewRunEventStoreVersion: nil,
-		NewRunCreateTaskId:      nil,
 	}).Return(nil).Once()
 
 	rereplicationContext := newHistoryRereplicationContext(s.domainID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
@@ -1147,7 +1102,6 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 			},
 		},
 		EventStoreVersion: common.Int32Ptr(22),
-		CreateTaskId:      common.Int64Ptr(1222),
 	}
 	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
 		Domain: common.StringPtr(s.domainName),

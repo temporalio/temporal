@@ -83,7 +83,6 @@ struct GetMutableStateResponse {
   120: optional i32 eventStoreVersion
   130: optional binary branchToken
   140: optional map<string, shared.ReplicationInfo> replicationInfo
-  150: optional i64 (js.type = "Long") createTaskId
 }
 
 struct ResetStickyTaskListRequest {
@@ -247,8 +246,6 @@ struct ReplicateEventsRequest {
   110: optional i32 eventStoreVersion
   120: optional i32 newRunEventStoreVersion
   130: optional bool resetWorkflow
-  140: optional i64 (js.type = "Long") createTaskId
-  150: optional i64 (js.type = "Long") newRunCreateTaskId
 }
 
 struct ReplicateRawEventsRequest {
@@ -259,8 +256,6 @@ struct ReplicateRawEventsRequest {
   50: optional shared.DataBlob newRunHistory
   60: optional i32 eventStoreVersion
   70: optional i32 newRunEventStoreVersion
-  80: optional i64 (js.type = "Long") createTaskId
-  90: optional i64 (js.type = "Long") newRunCreateTaskId
 }
 
 struct SyncShardStatusRequest {

@@ -16457,6 +16457,7 @@ type HistoryEvent struct {
 	Timestamp                                                      *int64                                                          `json:"timestamp,omitempty"`
 	EventType                                                      *EventType                                                      `json:"eventType,omitempty"`
 	Version                                                        *int64                                                          `json:"version,omitempty"`
+	TaskId                                                         *int64                                                          `json:"taskId,omitempty"`
 	WorkflowExecutionStartedEventAttributes                        *WorkflowExecutionStartedEventAttributes                        `json:"workflowExecutionStartedEventAttributes,omitempty"`
 	WorkflowExecutionCompletedEventAttributes                      *WorkflowExecutionCompletedEventAttributes                      `json:"workflowExecutionCompletedEventAttributes,omitempty"`
 	WorkflowExecutionFailedEventAttributes                         *WorkflowExecutionFailedEventAttributes                         `json:"workflowExecutionFailedEventAttributes,omitempty"`
@@ -16517,7 +16518,7 @@ type HistoryEvent struct {
 //   }
 func (v *HistoryEvent) ToWire() (wire.Value, error) {
 	var (
-		fields [45]wire.Field
+		fields [46]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -16553,6 +16554,14 @@ func (v *HistoryEvent) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 35, Value: w}
+		i++
+	}
+	if v.TaskId != nil {
+		w, err = wire.NewValueI64(*(v.TaskId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 36, Value: w}
 		i++
 	}
 	if v.WorkflowExecutionStartedEventAttributes != nil {
@@ -17201,6 +17210,16 @@ func (v *HistoryEvent) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 36:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.TaskId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 40:
 			if field.Value.Type() == wire.TStruct {
 				v.WorkflowExecutionStartedEventAttributes, err = _WorkflowExecutionStartedEventAttributes_Read(field.Value)
@@ -17542,7 +17561,7 @@ func (v *HistoryEvent) String() string {
 		return "<nil>"
 	}
 
-	var fields [45]string
+	var fields [46]string
 	i := 0
 	if v.EventId != nil {
 		fields[i] = fmt.Sprintf("EventId: %v", *(v.EventId))
@@ -17558,6 +17577,10 @@ func (v *HistoryEvent) String() string {
 	}
 	if v.Version != nil {
 		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
+		i++
+	}
+	if v.TaskId != nil {
+		fields[i] = fmt.Sprintf("TaskId: %v", *(v.TaskId))
 		i++
 	}
 	if v.WorkflowExecutionStartedEventAttributes != nil {
@@ -17760,6 +17783,9 @@ func (v *HistoryEvent) Equals(rhs *HistoryEvent) bool {
 	if !_I64_EqualsPtr(v.Version, rhs.Version) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.TaskId, rhs.TaskId) {
+		return false
+	}
 	if !((v.WorkflowExecutionStartedEventAttributes == nil && rhs.WorkflowExecutionStartedEventAttributes == nil) || (v.WorkflowExecutionStartedEventAttributes != nil && rhs.WorkflowExecutionStartedEventAttributes != nil && v.WorkflowExecutionStartedEventAttributes.Equals(rhs.WorkflowExecutionStartedEventAttributes))) {
 		return false
 	}
@@ -17904,6 +17930,9 @@ func (v *HistoryEvent) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	}
 	if v.Version != nil {
 		enc.AddInt64("version", *v.Version)
+	}
+	if v.TaskId != nil {
+		enc.AddInt64("taskId", *v.TaskId)
 	}
 	if v.WorkflowExecutionStartedEventAttributes != nil {
 		err = multierr.Append(err, enc.AddObject("workflowExecutionStartedEventAttributes", v.WorkflowExecutionStartedEventAttributes))
@@ -18066,6 +18095,16 @@ func (v *HistoryEvent) GetEventType() (o EventType) {
 func (v *HistoryEvent) GetVersion() (o int64) {
 	if v.Version != nil {
 		return *v.Version
+	}
+
+	return
+}
+
+// GetTaskId returns the value of TaskId if it is set or its
+// zero value if it is unset.
+func (v *HistoryEvent) GetTaskId() (o int64) {
+	if v.TaskId != nil {
+		return *v.TaskId
 	}
 
 	return

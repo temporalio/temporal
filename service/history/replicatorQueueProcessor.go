@@ -212,25 +212,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 	return p.replicator.Publish(replicationTask)
 }
 
-func (p *replicatorQueueProcessorImpl) getCreateTaskID(domainID string, workflowID string, runID string) (createTaskID int64, retError error) {
-	execution := shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
-	}
-	context, release, err := p.historyCache.getOrCreateWorkflowExecution(domainID, execution)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { release(retError) }()
-
-	msBuilder, err := context.loadWorkflowExecution()
-	if err != nil {
-		return 0, err
-	}
-	return msBuilder.GetExecutionInfo().CreateTaskID, nil
-}
-
-func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) (retError error) {
+func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) error {
 
 	domainEntry, err := p.shard.GetDomainCache().GetDomainByID(task.DomainID)
 	if err != nil {
@@ -241,22 +223,9 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 		targetClusters = append(targetClusters, cluster.ClusterName)
 	}
 
-	replicationTask, newRunID, err := GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, p.logger, nil)
+	replicationTask, err := GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, p.logger, nil)
 	if err != nil || replicationTask == nil {
 		return err
-	}
-
-	createTaskID, err := p.getCreateTaskID(task.DomainID, task.WorkflowID, task.RunID)
-	if err != nil {
-		return err
-	}
-	replicationTask.HistoryTaskAttributes.CreateTaskId = common.Int64Ptr(createTaskID)
-	if newRunID != "" {
-		newRunCreateTaskID, err := p.getCreateTaskID(task.DomainID, task.WorkflowID, newRunID)
-		if err != nil {
-			return err
-		}
-		replicationTask.HistoryTaskAttributes.NewRunCreateTaskId = common.Int64Ptr(newRunCreateTaskID)
 	}
 
 	return p.replicator.Publish(replicationTask)
@@ -266,33 +235,32 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 func GenerateReplicationTask(targetClusters []string, task *persistence.ReplicationTaskInfo,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	metricsClient metrics.Client, logger bark.Logger, history *shared.History,
-) (*replicator.ReplicationTask, string, error) {
+) (*replicator.ReplicationTask, error) {
 	var err error
 	if history == nil {
 		history, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
 			task.DomainID, task.WorkflowID, task.RunID, task.FirstEventID, task.NextEventID, task.EventStoreVersion, task.BranchToken)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		for _, event := range history.Events {
 			if task.Version != event.GetVersion() {
-				return nil, "", nil
+				return nil, nil
 			}
 		}
 	}
 
 	var newRunHistory *shared.History
-	newRunID := ""
 	events := history.Events
 	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
 		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
-			newRunID = lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
 			newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
 				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken)
 			if err != nil {
-				return nil, "", err
+				return nil, err
 			}
 		}
 	}
@@ -315,7 +283,7 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 			ResetWorkflow:           common.BoolPtr(task.ResetWorkflow),
 		},
 	}
-	return ret, newRunID, nil
+	return ret, nil
 }
 func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
 	response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{

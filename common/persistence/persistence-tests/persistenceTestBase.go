@@ -1226,6 +1226,19 @@ func (g *TestTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&g.seqNum, 1), nil
 }
 
+// GetTransferTaskIDs helper
+func (g *TestTransferTaskIDGenerator) GetTransferTaskIDs(number int) ([]int64, error) {
+	result := []int64{}
+	for i := 0; i < number; i++ {
+		id, err := g.GetNextTransferTaskID()
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, nil
+}
+
 // GenerateRandomDBName helper
 func GenerateRandomDBName(n int) string {
 	rand.Seed(time.Now().UnixNano())

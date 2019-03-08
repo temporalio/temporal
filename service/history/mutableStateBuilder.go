@@ -82,6 +82,7 @@ type (
 		currentCluster   string
 		historySize      int
 		eventsCache      eventsCache
+		shard            ShardContext
 		config           *Config
 		logger           bark.Logger
 	}
@@ -89,7 +90,7 @@ type (
 
 var _ mutableState = (*mutableStateBuilder)(nil)
 
-func newMutableStateBuilder(currentCluster string, config *Config, eventsCache eventsCache,
+func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCache eventsCache,
 	logger bark.Logger) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:             make(map[*persistence.ActivityInfo]struct{}),
@@ -120,7 +121,8 @@ func newMutableStateBuilder(currentCluster string, config *Config, eventsCache e
 
 		currentCluster: currentCluster,
 		eventsCache:    eventsCache,
-		config:         config,
+		shard:          shard,
+		config:         shard.GetConfig(),
 		logger:         logger,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
@@ -134,9 +136,9 @@ func newMutableStateBuilder(currentCluster string, config *Config, eventsCache e
 	return s
 }
 
-func newMutableStateBuilderWithReplicationState(currentCluster string, config *Config, eventsCache eventsCache,
+func newMutableStateBuilderWithReplicationState(currentCluster string, shard ShardContext, eventsCache eventsCache,
 	logger bark.Logger, version int64) *mutableStateBuilder {
-	s := newMutableStateBuilder(currentCluster, config, eventsCache, logger)
+	s := newMutableStateBuilder(currentCluster, shard, eventsCache, logger)
 	s.replicationState = &persistence.ReplicationState{
 		StartVersion:        version,
 		CurrentVersion:      version,
@@ -346,6 +348,10 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	e.hBuilder.history = newCommittedEvents
 	// make sure all new committed events have correct EventID
 	e.assignEventIDToBufferedEvents()
+	err := e.assignTaskIDToEvents()
+	if err != nil {
+		return err
+	}
 
 	// if decision is not closed yet, and there are new buffered events, then put those to the pending buffer
 	if e.HasInFlightDecisionTask() && len(newBufferedEvents) > 0 {
@@ -686,6 +692,46 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 	}
 }
 
+func (e *mutableStateBuilder) assignTaskIDToEvents() error {
+
+	// assign task IDs to all history events
+	// first transient events
+	numTaskIDs := len(e.hBuilder.transientHistory)
+	if numTaskIDs > 0 {
+		taskIDs, err := e.shard.GetTransferTaskIDs(numTaskIDs)
+		if err != nil {
+			return err
+		}
+
+		for index, event := range e.hBuilder.transientHistory {
+			if event.GetTaskId() == common.EmptyEventTaskID {
+				taskID := taskIDs[index]
+				event.TaskId = common.Int64Ptr(taskID)
+				e.executionInfo.LastEventTaskID = taskID
+			}
+		}
+	}
+
+	// then normal events
+	numTaskIDs = len(e.hBuilder.history)
+	if numTaskIDs > 0 {
+		taskIDs, err := e.shard.GetTransferTaskIDs(numTaskIDs)
+		if err != nil {
+			return err
+		}
+
+		for index, event := range e.hBuilder.history {
+			if event.GetTaskId() == common.EmptyEventTaskID {
+				taskID := taskIDs[index]
+				event.TaskId = common.Int64Ptr(taskID)
+				e.executionInfo.LastEventTaskID = taskID
+			}
+		}
+	}
+
+	return nil
+}
+
 func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
 	return len(e.executionInfo.StickyTaskList) > 0
 }
@@ -710,6 +756,7 @@ func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(eventType workf
 	historyEvent.Timestamp = ts
 	historyEvent.EventType = common.EventTypePtr(eventType)
 	historyEvent.Version = common.Int64Ptr(e.GetCurrentVersion())
+	historyEvent.TaskId = common.Int64Ptr(common.EmptyEventTaskID)
 
 	return historyEvent
 }
@@ -2286,7 +2333,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(event *workflow
 }
 
 func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
-	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32, createTaskID int64) (*workflow.HistoryEvent, mutableState,
+	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32) (*workflow.HistoryEvent, mutableState,
 	error) {
 
 	newRunID := uuid.New()
@@ -2315,10 +2362,10 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 	if domainEntry.IsGlobalDomain() {
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
-		newStateBuilder = newMutableStateBuilderWithReplicationState(e.currentCluster, e.config, e.eventsCache, e.logger,
+		newStateBuilder = newMutableStateBuilderWithReplicationState(e.currentCluster, e.shard, e.eventsCache, e.logger,
 			domainEntry.GetFailoverVersion())
 	} else {
-		newStateBuilder = newMutableStateBuilder(e.currentCluster, e.config, e.eventsCache, e.logger)
+		newStateBuilder = newMutableStateBuilder(e.currentCluster, e.shard, e.eventsCache, e.logger)
 	}
 	domainID := domainEntry.GetInfo().ID
 	startedEvent := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes)
@@ -2335,7 +2382,13 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 		}
 	}
 
-	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID, "", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion, createTaskID)
+	// call FlushBufferedEvents to assign task id to event
+	// as well as update last event task id in new state builder
+	err := newStateBuilder.FlushBufferedEvents()
+	if err != nil {
+		return nil, nil, err
+	}
+	err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID, "", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2344,7 +2397,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID int64, sourceClusterName string, domainID string,
 	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
-	newStateBuilder mutableState, eventStoreVersion int32, createTaskID int64) error {
+	newStateBuilder mutableState, eventStoreVersion int32) error {
 
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
@@ -2384,7 +2437,6 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 		// NOTE: there is no replication task for the start / decision scheduled event,
 		// the above 2 events will be replicated along with previous continue as new event.
 		RequestID:            uuid.New(),
-		TaskID:               createTaskID,
 		DomainID:             domainID,
 		Execution:            newExecution,
 		ParentDomainID:       parentDomainID,
@@ -2395,6 +2447,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 		WorkflowTimeout:      newExecutionInfo.WorkflowTimeout,
 		DecisionTimeoutValue: newExecutionInfo.DecisionTimeoutValue,
 		ExecutionContext:     nil,
+		LastEventTaskID:      newExecutionInfo.LastEventTaskID,
 		NextEventID:          newStateBuilder.GetNextEventID(),
 		LastProcessedEvent:   common.EmptyEventID,
 		CreateWorkflowMode:   persistence.CreateWorkflowModeContinueAsNew,

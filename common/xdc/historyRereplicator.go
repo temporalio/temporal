@@ -188,7 +188,6 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 	// event store version, replication
 	// for each pendingRequest to history
 	var eventStoreVersion int32
-	var createTaskID int64
 	var replicationInfo map[string]*shared.ReplicationInfo
 
 	var token []byte
@@ -199,7 +198,6 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 		}
 
 		eventStoreVersion = response.GetEventStoreVersion()
-		createTaskID = response.GetCreateTaskId()
 		replicationInfo = response.ReplicationInfo
 		token = response.NextPageToken
 
@@ -218,7 +216,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 			if err != nil {
 				return "", err
 			}
-			pendingRequest = c.createReplicationRawRequest(domainID, workflowID, runID, batch, eventStoreVersion, createTaskID, replicationInfo)
+			pendingRequest = c.createReplicationRawRequest(domainID, workflowID, runID, batch, eventStoreVersion, replicationInfo)
 		}
 	}
 	// after this for loop, there shall be one request not sent yet
@@ -242,7 +240,6 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 		pendingRequest.NewRunHistory = batch
 		pendingRequest.NewRunEventStoreVersion = response.EventStoreVersion
-		pendingRequest.NewRunCreateTaskId = response.CreateTaskId
 	}
 
 	return nextRunID, c.sendReplicationRawRequest(pendingRequest)
@@ -276,7 +273,6 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 	domainID string, workflowID string, runID string,
 	historyBlob *shared.DataBlob,
 	eventStoreVersion int32,
-	createTaskID int64,
 	replicationInfo map[string]*shared.ReplicationInfo,
 ) *history.ReplicateRawEventsRequest {
 
@@ -289,10 +285,8 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 		ReplicationInfo:   replicationInfo,
 		History:           historyBlob,
 		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
-		CreateTaskId:      common.Int64Ptr(createTaskID),
 		// NewRunHistory this will be handled separately
 		// NewRunEventStoreVersion  this will be handled separately
-		// NewRunCreateTaskId  this will be handled separately
 	}
 
 	return request

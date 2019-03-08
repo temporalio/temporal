@@ -637,8 +637,6 @@ type HistoryTaskAttributes struct {
 	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
 	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
 	ResetWorkflow           *bool                              `json:"resetWorkflow,omitempty"`
-	CreateTaskId            *int64                             `json:"createTaskId,omitempty"`
-	NewRunCreateTaskId      *int64                             `json:"newRunCreateTaskId,omitempty"`
 }
 
 type _List_String_ValueList []string
@@ -722,7 +720,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [15]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -830,22 +828,6 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 120, Value: w}
-		i++
-	}
-	if v.CreateTaskId != nil {
-		w, err = wire.NewValueI64(*(v.CreateTaskId)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 130, Value: w}
-		i++
-	}
-	if v.NewRunCreateTaskId != nil {
-		w, err = wire.NewValueI64(*(v.NewRunCreateTaskId)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 140, Value: w}
 		i++
 	}
 
@@ -1054,26 +1036,6 @@ func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
-		case 130:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.CreateTaskId = &x
-				if err != nil {
-					return err
-				}
-
-			}
-		case 140:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.NewRunCreateTaskId = &x
-				if err != nil {
-					return err
-				}
-
-			}
 		}
 	}
 
@@ -1087,7 +1049,7 @@ func (v *HistoryTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [15]string
+	var fields [13]string
 	i := 0
 	if v.TargetClusters != nil {
 		fields[i] = fmt.Sprintf("TargetClusters: %v", v.TargetClusters)
@@ -1139,14 +1101,6 @@ func (v *HistoryTaskAttributes) String() string {
 	}
 	if v.ResetWorkflow != nil {
 		fields[i] = fmt.Sprintf("ResetWorkflow: %v", *(v.ResetWorkflow))
-		i++
-	}
-	if v.CreateTaskId != nil {
-		fields[i] = fmt.Sprintf("CreateTaskId: %v", *(v.CreateTaskId))
-		i++
-	}
-	if v.NewRunCreateTaskId != nil {
-		fields[i] = fmt.Sprintf("NewRunCreateTaskId: %v", *(v.NewRunCreateTaskId))
 		i++
 	}
 
@@ -1254,12 +1208,6 @@ func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
 	if !_Bool_EqualsPtr(v.ResetWorkflow, rhs.ResetWorkflow) {
 		return false
 	}
-	if !_I64_EqualsPtr(v.CreateTaskId, rhs.CreateTaskId) {
-		return false
-	}
-	if !_I64_EqualsPtr(v.NewRunCreateTaskId, rhs.NewRunCreateTaskId) {
-		return false
-	}
 
 	return true
 }
@@ -1330,12 +1278,6 @@ func (v *HistoryTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.ResetWorkflow != nil {
 		enc.AddBool("resetWorkflow", *v.ResetWorkflow)
-	}
-	if v.CreateTaskId != nil {
-		enc.AddInt64("createTaskId", *v.CreateTaskId)
-	}
-	if v.NewRunCreateTaskId != nil {
-		enc.AddInt64("newRunCreateTaskId", *v.NewRunCreateTaskId)
 	}
 	return err
 }
@@ -1465,26 +1407,6 @@ func (v *HistoryTaskAttributes) GetNewRunEventStoreVersion() (o int32) {
 func (v *HistoryTaskAttributes) GetResetWorkflow() (o bool) {
 	if v.ResetWorkflow != nil {
 		return *v.ResetWorkflow
-	}
-
-	return
-}
-
-// GetCreateTaskId returns the value of CreateTaskId if it is set or its
-// zero value if it is unset.
-func (v *HistoryTaskAttributes) GetCreateTaskId() (o int64) {
-	if v.CreateTaskId != nil {
-		return *v.CreateTaskId
-	}
-
-	return
-}
-
-// GetNewRunCreateTaskId returns the value of NewRunCreateTaskId if it is set or its
-// zero value if it is unset.
-func (v *HistoryTaskAttributes) GetNewRunCreateTaskId() (o int64) {
-	if v.NewRunCreateTaskId != nil {
-		return *v.NewRunCreateTaskId
 	}
 
 	return

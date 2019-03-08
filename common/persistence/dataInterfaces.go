@@ -235,12 +235,12 @@ type (
 		State                        int
 		CloseStatus                  int
 		LastFirstEventID             int64
+		LastEventTaskID              int64
 		NextEventID                  int64
 		LastProcessedEvent           int64
 		StartTimestamp               time.Time
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
-		CreateTaskID                 int64
 		SignalCount                  int32
 		HistorySize                  int64
 		DecisionVersion              int64
@@ -644,6 +644,7 @@ type (
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
 	CreateWorkflowExecutionRequest struct {
+		RequestID                   string
 		DomainID                    string
 		Execution                   workflow.WorkflowExecution
 		ParentDomainID              string
@@ -654,10 +655,9 @@ type (
 		WorkflowTimeout             int32
 		DecisionTimeoutValue        int32
 		ExecutionContext            []byte
+		LastEventTaskID             int64
 		NextEventID                 int64
 		LastProcessedEvent          int64
-		RequestID                   string
-		TaskID                      int64
 		SignalCount                 int32
 		HistorySize                 int64
 		TransferTasks               []Task

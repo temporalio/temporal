@@ -89,13 +89,13 @@ CREATE TABLE executions(
   last_write_event_id BIGINT,
   last_replication_info BLOB,
   -- replication_state members end
+  last_event_task_id BIGINT NOT NULL,
 	last_first_event_id BIGINT NOT NULL,
 	next_event_id BIGINT NOT NULL, -- very important! for conditional updates of all the dependent tables.
 	last_processed_event BIGINT NOT NULL,
 	start_time DATETIME(6) NOT NULL,
 	last_updated_time DATETIME(6) NOT NULL,
 	create_request_id VARCHAR(64) NOT NULL,
-	create_task_id BIGINT NOT NULL,
 	decision_version BIGINT NOT NULL, -- 1.
 	decision_schedule_id BIGINT NOT NULL, -- 2.
 	decision_started_id BIGINT NOT NULL, -- 3. cannot be nullable as common.EmptyEventID is checked
