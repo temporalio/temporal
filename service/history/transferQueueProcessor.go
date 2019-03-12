@@ -187,8 +187,10 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{
 		standbyTaskProcessor.retryTasks()
 	}
 
-	failoverTaskProcessor.Start()
+	// NOTE: READ REF BEFORE MODIFICATION
+	// ref: historyEngine.go registerDomainFailoverCallback function
 	updateShardAckLevel(minLevel)
+	failoverTaskProcessor.Start()
 }
 
 func (t *transferQueueProcessorImpl) LockTaskPrrocessing() {

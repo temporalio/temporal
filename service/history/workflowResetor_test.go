@@ -4024,7 +4024,6 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", appendV2Req).Return(appendV2Resp, nil).Once()
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", mock.Anything).Return("standby")
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	err := s.resetor.ApplyResetEvent(context.Background(), request, domainID, wid, currRunID)
 	s.Nil(err)

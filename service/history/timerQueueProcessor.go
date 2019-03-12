@@ -174,8 +174,10 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) 
 		standbyTimerProcessor.retryTasks()
 	}
 
-	failoverTimerProcessor.Start()
+	// NOTE: READ REF BEFORE MODIFICATION
+	// ref: historyEngine.go registerDomainFailoverCallback function
 	updateShardAckLevel(TimerSequenceID{VisibilityTimestamp: minLevel})
+	failoverTimerProcessor.Start()
 }
 
 func (t *timerQueueProcessorImpl) LockTaskPrrocessing() {

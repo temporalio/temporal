@@ -354,13 +354,15 @@ UpdateLoop:
 			return err
 		}
 		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, nextEntry.info.ID)
-		if prevEntry != nil {
 
+		if prevEntry != nil {
 			prevEntries = append(prevEntries, prevEntry)
 			nextEntries = append(nextEntries, nextEntry)
 		}
 	}
 
+	// NOTE: READ REF BEFORE MODIFICATION
+	// ref: historyEngine.go registerDomainFailoverCallback function
 	c.callbackLock.Lock()
 	defer c.callbackLock.Unlock()
 	c.triggerDomainChangePrepareCallbackLocked()

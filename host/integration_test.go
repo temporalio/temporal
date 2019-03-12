@@ -4901,7 +4901,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// this function poll events from history side
 	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*workflow.HistoryEvent, []byte) {
-		responseInner, _ := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
 			Domain: common.StringPtr(domain),
 			Execution: &workflow.WorkflowExecution{
 				WorkflowId: common.StringPtr(workflowID),
@@ -4912,6 +4912,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			WaitForNewEvent: common.BoolPtr(isLongPoll),
 			NextPageToken:   token,
 		})
+		s.Nil(err)
+
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 

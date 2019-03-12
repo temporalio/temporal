@@ -259,7 +259,6 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 }
 
 func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistence.TimerTaskInfo) (retError error) {
-
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
 		return err0
