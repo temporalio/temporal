@@ -117,6 +117,62 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	s.Equal(1, len(resp.Executions))
 }
 
+// TestBasicVisibility test
+func (s *VisibilityPersistenceSuite) TestBasicVisibility_TimeSkew() {
+	testDomainUUID := uuid.New()
+
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-workflow-test-time-skew"),
+		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
+	}
+
+	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&p.RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+	})
+	s.Nil(err0)
+
+	resp, err1 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
+	})
+	s.Nil(err1)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution.WorkflowId, resp.Executions[0].Execution.WorkflowId)
+
+	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&p.RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+		CloseTimestamp:   startTime - (10 * time.Second).Nanoseconds(),
+	})
+	s.Nil(err2)
+
+	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
+	})
+	s.Nil(err3)
+	s.Equal(0, len(resp.Executions))
+
+	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
+	})
+	s.Nil(err4)
+	s.Equal(1, len(resp.Executions))
+}
+
 // TestVisibilityPagination test
 func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	testDomainUUID := uuid.New()

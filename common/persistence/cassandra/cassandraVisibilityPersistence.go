@@ -280,7 +280,17 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 	}
 
-	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(request.CloseTimestamp))
+	// RecordWorkflowExecutionStarted is using StartTimestamp as
+	// the timestamp to issue query to Cassandra
+	// due to the fact that cross DC using mutable state creation time as workflow start time
+	// and visibility using event time instead of last update time (#1501)
+	// CloseTimestamp can be before StartTimestamp, meaning using CloseTimestamp
+	// can cause the deletion of open visibility record to be ignored.
+	queryTimeStamp := request.CloseTimestamp
+	if queryTimeStamp < request.StartTimestamp {
+		queryTimeStamp = request.StartTimestamp + time.Second.Nanoseconds()
+	}
+	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(queryTimeStamp))
 	err := v.session.ExecuteBatch(batch)
 	if err != nil {
 		if isThrottlingError(err) {
