@@ -1,0 +1,100 @@
+log:
+  stdout: true
+  level: "${LOG_LEVEL}"
+
+persistence:
+  defaultStore: mysql-default
+  visibilityStore: mysql-visibility
+  numHistoryShards: ${NUM_HISTORY_SHARDS}
+  datastores:
+    mysql-default:
+      sql:
+        driverName: "mysql"
+        databaseName: "${DBNAME}"
+        connectAddr: "${MYSQL_SEEDS}:3306"
+        connectProtocol: "tcp"
+        user: "${MYSQL_USER}"
+        password: "${MYSQL_PWD}"
+    mysql-visibility:
+      sql:
+        driverName: "mysql"
+        databaseName: "${VISIBILITY_DBNAME}"
+        connectAddr: "${MYSQL_SEEDS}:3306"
+        connectProtocol: "tcp"
+        user: "${MYSQL_USER}"
+        password: "${MYSQL_PWD}"
+
+ringpop:
+  name: cadence
+  bootstrapMode: hosts
+  bootstrapHosts: ${RINGPOP_SEEDS_JSON_ARRAY}
+  maxJoinDuration: 30s
+
+services:
+  frontend:
+    rpc:
+      port: 7933
+      bindOnIP: ${BIND_ON_IP}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence-frontend"
+
+  matching:
+    rpc:
+      port: 7935
+      bindOnIP: ${BIND_ON_IP}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence-matching"
+
+  history:
+    rpc:
+      port: 7934
+      bindOnIP: ${BIND_ON_IP}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence-history"
+
+  worker:
+    rpc:
+      port: 7939
+      bindOnIP: ${BIND_ON_IP}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence-worker"
+
+clustersInfo:
+  enableGlobalDomain: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInitialFailoverVersion:
+    active: 0
+  clusterAddress:
+    active:
+      rpcName: "cadence-frontend"
+      rpcAddress: "127.0.0.1:7933"
+
+dcRedirectionPolicy:
+  policy: "noop"
+  toDC: ""
+
+archival:
+  status: enabled
+  blobstore:
+    storeDirectory: "/tmp/blobstore/"
+    defaultBucket:
+      name: "cadence-development"
+      owner: "cadence"
+      retentionDays: 10
+    customBuckets:
+      - name: "custom-bucket-1"
+        owner: "custom-owner-1"
+        retentionDays: 10
+      - name: "custom-bucket-2"
+        owner: "custom-owner-2"
+        retentionDays: 5

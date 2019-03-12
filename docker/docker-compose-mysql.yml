@@ -1,0 +1,39 @@
+version: '3'
+services:
+  mysql:
+    image: mysql:5.7
+    ports:
+      - "3306:3306"
+    environment:
+      - "MYSQL_ROOT_PASSWORD=root"
+  statsd:
+    image: hopsoft/graphite-statsd
+    ports:
+      - "8080:80"
+      - "2003:2003"
+      - "8125:8125"
+      - "8126:8126"
+  cadence:
+    image: ubercadence/server:0.5.4
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "DB=mysql"
+      - "MYSQL_USER=root"
+      - "MYSQL_PWD=root"
+      - "MYSQL_SEEDS=mysql"
+      - "STATSD_ENDPOINT=statsd:8125"
+    depends_on:
+      - mysql
+      - statsd
+  cadence-web:
+    image: ubercadence/web:3.1.2
+    environment:
+      - "CADENCE_TCHANNEL_PEERS=cadence:7933"
+    ports:
+      - "8088:8088"
+    depends_on:
+      - cadence
