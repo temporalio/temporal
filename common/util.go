@@ -354,6 +354,14 @@ func MinInt32(a, b int32) int32 {
 	return b
 }
 
+// MinInt returns the smaller of two given integers
+func MinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // ValidateRetryPolicy validates a retry policy
 func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 	if policy == nil {

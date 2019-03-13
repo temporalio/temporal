@@ -108,6 +108,10 @@ type (
 	}
 )
 
+const (
+	defaultScheduleToStartTimeout = 111
+)
+
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
@@ -1079,11 +1083,12 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 				TaskID:    taskID,
 				Execution: workflowExecution,
 				Data: &p.TaskInfo{
-					DomainID:   domainID,
-					WorkflowID: *workflowExecution.WorkflowId,
-					RunID:      *workflowExecution.RunId,
-					TaskID:     taskID,
-					ScheduleID: activityScheduleID,
+					DomainID:               domainID,
+					WorkflowID:             *workflowExecution.WorkflowId,
+					RunID:                  *workflowExecution.RunId,
+					TaskID:                 taskID,
+					ScheduleID:             activityScheduleID,
+					ScheduleToStartTimeout: defaultScheduleToStartTimeout,
 				},
 			},
 		}

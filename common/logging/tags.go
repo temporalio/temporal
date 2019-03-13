@@ -148,6 +148,7 @@ const (
 	// TagStoreOperation values
 	TagValueStoreOperationGetTasks                = "get-tasks"
 	TagValueStoreOperationCompleteTask            = "complete-task"
+	TagValueStoreOperationCompleteTasksLessThan   = "complete-tasks-less-than"
 	TagValueStoreOperationCreateWorkflowExecution = "create-wf-execution"
 	TagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"
 	TagValueStoreOperationUpdateWorkflowExecution = "update-wf-execution"

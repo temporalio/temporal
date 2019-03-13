@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,7 +39,6 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/cache"
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -55,31 +53,119 @@ const (
 
 var errAddTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
 
-type taskListManager interface {
-	Start() error
-	Stop()
-	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error)
-	GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
-	SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
-	CancelPoller(pollerID string)
-	GetAllPollerInfo() []*pollerInfo
-	String() string
-}
+type (
+	taskListManager interface {
+		Start() error
+		Stop()
+		AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error)
+		GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
+		SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
+		CancelPoller(pollerID string)
+		GetAllPollerInfo() []*pollerInfo
+		String() string
+	}
 
-type taskListConfig struct {
-	EnableSyncMatch func() bool
-	// Time to hold a poll request before returning an empty response if there are no tasks
-	LongPollExpirationInterval func() time.Duration
-	RangeSize                  int64
-	GetTasksBatchSize          func() int
-	UpdateAckInterval          func() time.Duration
-	IdleTasklistCheckInterval  func() time.Duration
-	MaxTasklistIdleTime        func() time.Duration
-	MinTaskThrottlingBurstSize func() int
-	// taskWriter configuration
-	OutstandingTaskAppendsThreshold func() int
-	MaxTaskBatchSize                func() int
-}
+	taskListConfig struct {
+		EnableSyncMatch func() bool
+		// Time to hold a poll request before returning an empty response if there are no tasks
+		LongPollExpirationInterval func() time.Duration
+		RangeSize                  int64
+		GetTasksBatchSize          func() int
+		UpdateAckInterval          func() time.Duration
+		IdleTasklistCheckInterval  func() time.Duration
+		MaxTasklistIdleTime        func() time.Duration
+		MinTaskThrottlingBurstSize func() int
+		MaxTaskDeleteBatchSize     func() int
+		// taskWriter configuration
+		OutstandingTaskAppendsThreshold func() int
+		MaxTaskBatchSize                func() int
+	}
+
+	// Contains information needed for current task transition from queue to Workflow execution history.
+	taskContext struct {
+		tlMgr             *taskListManagerImpl
+		info              *persistence.TaskInfo
+		syncResponseCh    chan<- *syncMatchResponse
+		workflowExecution s.WorkflowExecution
+		queryTaskInfo     *queryTaskInfo
+		backlogCountHint  int64
+	}
+
+	queryTaskInfo struct {
+		taskID       string
+		queryRequest *m.QueryWorkflowRequest
+	}
+
+	// Single task list in memory state
+	taskListManagerImpl struct {
+		domainCache   cache.DomainCache
+		taskListID    *taskListID
+		logger        bark.Logger
+		metricsClient metrics.Client
+		engine        *matchingEngineImpl
+		config        *taskListConfig
+
+		// pollerHistory stores poller which poll from this tasklist in last few minutes
+		pollerHistory *pollerHistory
+
+		taskWriter *taskWriter
+		taskBuffer chan *persistence.TaskInfo // tasks loaded from persistence
+		// tasksForPoll is used to deliver tasks to pollers.
+		// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
+		// only if there is waiting poll that consumes from it. Tasks in taskBuffer will blocking-add to
+		// this channel
+		tasksForPoll chan *getTaskResult
+		// queryTasksForPoll is used for delivering query tasks to pollers.
+		// It must be unbuffered as query tasks are always Sync Matched.  We use a separate channel for query tasks because
+		// unlike activity/decision tasks, query tasks are enabled for dispatch on both active and standby clusters
+		queryTasksForPoll chan *getTaskResult
+		notifyCh          chan struct{} // Used as signal to notify pump of new tasks
+		// Note: We need two shutdown channels so we can stop task pump independently of the deliverBuffer
+		// loop in getTasksPump in unit tests
+		shutdownCh              chan struct{}  // Delivers stop to the pump that populates taskBuffer
+		deliverBufferShutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
+		startWG                 sync.WaitGroup // ensures that background processes do not start until setup is ready
+		stopped                 int32
+		// The cancel objects are to cancel the ratelimiter Wait in deliverBufferTasksLoop. The ideal
+		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
+		// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
+		// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
+		// so the cancel can be called directly on shutdown.
+		cancelCtx  context.Context
+		cancelFunc context.CancelFunc
+
+		db             *taskListDB
+		taskAckManager ackManager // tracks ackLevel for delivered messages
+		taskGC         *taskGC
+
+		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
+		// particular tasklist.  PollerID generated by frontend is used as the key and
+		// CancelFunc is the value.  This is used to cancel the context to unblock any
+		// outstanding poller when the frontend detects client connection is closed to
+		// prevent tasks being dispatched to zombie pollers.
+		outstandingPollsLock sync.Mutex
+		outstandingPollsMap  map[string]context.CancelFunc
+		// Rate limiter for task dispatch
+		rateLimiter *rateLimiter
+
+		taskListKind int // sticky taskList has different process in persistence
+	}
+
+	// getTaskResult contains task info and optional channel to notify createTask caller
+	// that task is successfully started and returned to a poller
+	getTaskResult struct {
+		task      *persistence.TaskInfo
+		C         chan *syncMatchResponse
+		queryTask *queryTaskInfo
+		syncMatch bool
+	}
+
+	// syncMatchResponse result of sync match delivered to a createTask caller
+	syncMatchResponse struct {
+		response *persistence.CreateTasksResponse
+		err      error
+	}
+)
 
 func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainCache) (*taskListConfig, error) {
 	domainEntry, err := domainCache.GetDomainByID(id.domainID)
@@ -113,6 +199,9 @@ func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainC
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(domain, taskListName, taskType)
 		},
+		MaxTaskDeleteBatchSize: func() int {
+			return config.MaxTaskDeleteBatchSize(domain, taskListName, taskType)
+		},
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(domain, taskListName, taskType)
 		},
@@ -120,75 +209,6 @@ func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainC
 			return config.MaxTaskBatchSize(domain, taskListName, taskType)
 		},
 	}, nil
-}
-
-type rateLimiter struct {
-	sync.RWMutex
-	maxDispatchPerSecond *float64
-	globalLimiter        atomic.Value
-	// TTL is used to determine whether to update the limit. Until TTL, pick
-	// lower(existing TTL, input TTL). After TTL, pick input TTL if different from existing TTL
-	ttlTimer *time.Timer
-	ttl      time.Duration
-	minBurst int
-}
-
-func newRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration, minBurst int) *rateLimiter {
-	rl := &rateLimiter{
-		maxDispatchPerSecond: maxDispatchPerSecond,
-		ttl:                  ttl,
-		ttlTimer:             time.NewTimer(ttl),
-		// Note: Potentially expose burst config to users in future
-		minBurst: minBurst,
-	}
-	rl.storeLimiter(maxDispatchPerSecond)
-	return rl
-}
-
-func (rl *rateLimiter) UpdateMaxDispatch(maxDispatchPerSecond *float64) {
-	if rl.shouldUpdate(maxDispatchPerSecond) {
-		rl.Lock()
-		rl.maxDispatchPerSecond = maxDispatchPerSecond
-		rl.storeLimiter(maxDispatchPerSecond)
-		rl.Unlock()
-	}
-}
-
-func (rl *rateLimiter) storeLimiter(maxDispatchPerSecond *float64) {
-	burst := int(*maxDispatchPerSecond)
-	// If throttling is zero, burst also has to be 0
-	if *maxDispatchPerSecond != 0 && burst <= rl.minBurst {
-		burst = rl.minBurst
-	}
-	limiter := rate.NewLimiter(rate.Limit(*maxDispatchPerSecond), burst)
-	rl.globalLimiter.Store(limiter)
-}
-
-func (rl *rateLimiter) shouldUpdate(maxDispatchPerSecond *float64) bool {
-	if maxDispatchPerSecond == nil {
-		return false
-	}
-	select {
-	case <-rl.ttlTimer.C:
-		rl.ttlTimer.Reset(rl.ttl)
-		rl.RLock()
-		defer rl.RUnlock()
-		return *maxDispatchPerSecond != *rl.maxDispatchPerSecond
-	default:
-		rl.RLock()
-		defer rl.RUnlock()
-		return *maxDispatchPerSecond < *rl.maxDispatchPerSecond
-	}
-}
-
-func (rl *rateLimiter) Wait(ctx context.Context) error {
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
-	return limiter.Wait(ctx)
-}
-
-func (rl *rateLimiter) Reserve() *rate.Reservation {
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
-	return limiter.Reserve()
 }
 
 func newTaskListManager(
@@ -217,7 +237,7 @@ func newTaskListManagerWithRateLimiter(
 	if taskListKind == nil {
 		taskListKind = common.TaskListKindPtr(s.TaskListKindNormal)
 	}
-	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.taskListName, taskList.taskType, int(*taskListKind))
+	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.taskListName, taskList.taskType, int(*taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
 		domainCache:             domainCache,
 		engine:                  e,
@@ -235,6 +255,7 @@ func newTaskListManagerWithRateLimiter(
 		metricsClient:       e.metricsClient,
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
+		taskGC:              newTaskGC(db, config),
 		tasksForPoll:        make(chan *getTaskResult),
 		queryTasksForPoll:   make(chan *getTaskResult),
 		config:              config,
@@ -246,90 +267,6 @@ func newTaskListManagerWithRateLimiter(
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.startWG.Add(1)
 	return tlMgr
-}
-
-// Contains information needed for current task transition from queue to Workflow execution history.
-type taskContext struct {
-	tlMgr             *taskListManagerImpl
-	info              *persistence.TaskInfo
-	syncResponseCh    chan<- *syncMatchResponse
-	workflowExecution s.WorkflowExecution
-	queryTaskInfo     *queryTaskInfo
-	backlogCountHint  int64
-}
-
-type queryTaskInfo struct {
-	taskID       string
-	queryRequest *m.QueryWorkflowRequest
-}
-
-// Single task list in memory state
-type taskListManagerImpl struct {
-	domainCache   cache.DomainCache
-	taskListID    *taskListID
-	logger        bark.Logger
-	metricsClient metrics.Client
-	engine        *matchingEngineImpl
-	config        *taskListConfig
-
-	// pollerHistory stores poller which poll from this tasklist in last few minutes
-	pollerHistory *pollerHistory
-
-	taskWriter *taskWriter
-	taskBuffer chan *persistence.TaskInfo // tasks loaded from persistence
-	// tasksForPoll is used to deliver tasks to pollers.
-	// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
-	// only if there is waiting poll that consumes from it. Tasks in taskBuffer will blocking-add to
-	// this channel
-	tasksForPoll chan *getTaskResult
-	// queryTasksForPoll is used for delivering query tasks to pollers.
-	// It must be unbuffered as query tasks are always Sync Matched.  We use a separate channel for query tasks because
-	// unlike activity/decision tasks, query tasks are enabled for dispatch on both active and standby clusters
-	queryTasksForPoll chan *getTaskResult
-	notifyCh          chan struct{} // Used as signal to notify pump of new tasks
-	// Note: We need two shutdown channels so we can stop task pump independently of the deliverBuffer
-	// loop in getTasksPump in unit tests
-	shutdownCh              chan struct{}  // Delivers stop to the pump that populates taskBuffer
-	deliverBufferShutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
-	startWG                 sync.WaitGroup // ensures that background processes do not start until setup is ready
-	stopped                 int32
-	// The cancel objects are to cancel the ratelimiter Wait in deliverBufferTasksLoop. The ideal
-	// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
-	// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
-	// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
-	// so the cancel can be called directly on shutdown.
-	cancelCtx  context.Context
-	cancelFunc context.CancelFunc
-
-	db             *taskListDB
-	taskAckManager ackManager // tracks ackLevel for delivered messages
-
-	// outstandingPollsMap is needed to keep track of all outstanding pollers for a
-	// particular tasklist.  PollerID generated by frontend is used as the key and
-	// CancelFunc is the value.  This is used to cancel the context to unblock any
-	// outstanding poller when the frontend detects client connection is closed to
-	// prevent tasks being dispatched to zombie pollers.
-	outstandingPollsLock sync.Mutex
-	outstandingPollsMap  map[string]context.CancelFunc
-	// Rate limiter for task dispatch
-	rateLimiter *rateLimiter
-
-	taskListKind int // sticky taskList has different process in persistence
-}
-
-// getTaskResult contains task info and optional channel to notify createTask caller
-// that task is successfully started and returned to a poller
-type getTaskResult struct {
-	task      *persistence.TaskInfo
-	C         chan *syncMatchResponse
-	queryTask *queryTaskInfo
-	syncMatch bool
-}
-
-// syncMatchResponse result of sync match delivered to a createTask caller
-type syncMatchResponse struct {
-	response *persistence.CreateTasksResponse
-	err      error
 }
 
 // Starts reading pump for the given task list.
@@ -361,6 +298,7 @@ func (c *taskListManagerImpl) Stop() {
 	c.cancelFunc()
 	close(c.shutdownCh)
 	c.taskWriter.Stop()
+	c.engine.removeTaskListManager(c.taskListID)
 	c.engine.removeTaskListManager(c.taskListID)
 	logging.LogTaskListUnloadedEvent(c.logger)
 }
@@ -459,7 +397,9 @@ func (c *taskListManagerImpl) getTaskListKind() int {
 // completeTaskPoll should be called after task poll is done even if append has failed.
 // There is no correspondent initiateTaskPoll as append is initiated in getTasksPump
 func (c *taskListManagerImpl) completeTaskPoll(taskID int64) int64 {
-	return c.taskAckManager.completeTask(taskID)
+	ackLevel := c.taskAckManager.completeTask(taskID)
+	c.taskGC.Run(ackLevel)
+	return ackLevel
 }
 
 // Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
@@ -537,43 +477,6 @@ func (c *taskListManagerImpl) CancelPoller(pollerID string) {
 	if ok && cancel != nil {
 		cancel()
 	}
-}
-
-// Returns a batch of tasks from persistence starting form current read level.
-// Also return a number that can be used to update readLevel
-// Also return a bool to indicate whether read is finished
-func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, int64, bool, error) {
-	var tasks []*persistence.TaskInfo
-	readLevel := c.taskAckManager.getReadLevel()
-	maxReadLevel := c.taskWriter.GetMaxReadLevel()
-
-	// counter i is used to break and let caller check whether tasklist is still alive and need resume read.
-	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
-		upper := readLevel + c.config.RangeSize
-		if upper > maxReadLevel {
-			upper = maxReadLevel
-		}
-		tasks, err := c.getTaskBatchWithRange(readLevel, upper)
-		if err != nil {
-			return nil, readLevel, true, err
-		}
-		// return as long as it grabs any tasks
-		if len(tasks) > 0 {
-			return tasks, upper, true, nil
-		}
-		readLevel = upper
-	}
-	return tasks, readLevel, readLevel == maxReadLevel, nil // caller will update readLevel when no task grabbed
-}
-
-func (c *taskListManagerImpl) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistence.TaskInfo, error) {
-	response, err := c.executeWithRetry(func() (interface{}, error) {
-		return c.db.GetTasks(readLevel, maxReadLevel, c.config.GetTasksBatchSize())
-	})
-	if err != nil {
-		return nil, err
-	}
-	return response.(*persistence.GetTasksResponse).Tasks, err
 }
 
 func (c *taskListManagerImpl) renewLeaseWithRetry() (taskListState, error) {
@@ -666,115 +569,6 @@ func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persist
 		rsv.Cancel()
 		return nil, nil
 	}
-}
-
-func (c *taskListManagerImpl) deliverBufferTasksForPoll() {
-deliverBufferTasksLoop:
-	for {
-		err := c.rateLimiter.Wait(c.cancelCtx)
-		if err != nil {
-			if err == context.Canceled {
-				c.logger.Info("Tasklist manager context is cancelled, shutting down")
-				break deliverBufferTasksLoop
-			}
-			c.logger.Debugf(
-				"Unable to add buffer task, rate limit failed, domainId: %s, tasklist: %s, error: %s",
-				c.taskListID.domainID, c.taskListID.taskListName, err.Error(),
-			)
-			c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.BufferThrottleCounter)
-			// This is to prevent busy looping when throttling is set to 0
-			runtime.Gosched()
-			continue
-		}
-		select {
-		case task, ok := <-c.taskBuffer:
-			if !ok { // Task list getTasks pump is shutdown
-				break deliverBufferTasksLoop
-			}
-			select {
-			case c.tasksForPoll <- &getTaskResult{task: task}:
-			case <-c.deliverBufferShutdownCh:
-				break deliverBufferTasksLoop
-			}
-		case <-c.deliverBufferShutdownCh:
-			break deliverBufferTasksLoop
-		}
-	}
-}
-
-func (c *taskListManagerImpl) getTasksPump() {
-	defer close(c.taskBuffer)
-	c.startWG.Wait()
-
-	go c.deliverBufferTasksForPoll()
-	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval())
-	checkIdleTaskListTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
-	lastTimeWriteTask := time.Time{}
-getTasksPumpLoop:
-	for {
-		select {
-		case <-c.shutdownCh:
-			break getTasksPumpLoop
-		case <-c.notifyCh:
-			{
-				lastTimeWriteTask = time.Now()
-
-				tasks, readLevel, isReadBatchDone, err := c.getTaskBatch()
-				if err != nil {
-					c.signalNewTask() // re-enqueue the event
-					// TODO: Should we ever stop retrying on db errors?
-					continue getTasksPumpLoop
-				}
-				if len(tasks) == 0 {
-					c.taskAckManager.setReadLevel(readLevel)
-				} else {
-					for _, t := range tasks {
-						c.taskAckManager.addTask(t.TaskID)
-					}
-				}
-				for _, t := range tasks {
-					select {
-					case c.taskBuffer <- t:
-					case <-c.shutdownCh:
-						break getTasksPumpLoop
-					}
-				}
-
-				if len(tasks) > 0 || !isReadBatchDone {
-					// There maybe more tasks.
-					// We yield now, but signal pump to check again later.
-					c.signalNewTask()
-				}
-			}
-		case <-updateAckTimer.C:
-			{
-				err := c.persistAckLevel()
-				//var err error
-				if err != nil {
-					if _, ok := err.(*persistence.ConditionFailedError); ok {
-						// This indicates the task list may have moved to another host.
-						c.Stop()
-					} else {
-						logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err,
-							"Persist AckLevel failed")
-					}
-					// keep going as saving ack is not critical
-				}
-				c.signalNewTask() // periodically signal pump to check persistence for tasks
-				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval())
-			}
-		case <-checkIdleTaskListTimer.C:
-			{
-				if !c.isTaskAddedRecently(lastTimeWriteTask) && len(c.GetAllPollerInfo()) == 0 {
-					c.Stop()
-				}
-				checkIdleTaskListTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
-			}
-		}
-	}
-
-	updateAckTimer.Stop()
-	checkIdleTaskListTimer.Stop()
 }
 
 // Retry operation on transient error. On rangeID update by another process calls c.Stop().
@@ -884,15 +678,6 @@ func (c *taskContext) completeTask(err error) {
 	}
 
 	tlMgr.completeTaskPoll(c.info.TaskID)
-
-	// TODO: use range deletes to complete all tasks below ack level instead of completing
-	// tasks one by one.
-	err2 := tlMgr.db.CompleteTask(c.info.TaskID)
-	if err2 != nil {
-		logging.LogPersistantStoreErrorEvent(tlMgr.logger, logging.TagValueStoreOperationCompleteTask, err2,
-			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
-				c.info.TaskID, tlMgr.taskListID.taskType, tlMgr.taskListID.taskListName))
-	}
 }
 
 func createServiceBusyError(msg string) *s.ServiceBusyError {

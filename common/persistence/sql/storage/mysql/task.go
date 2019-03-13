@@ -64,7 +64,7 @@ task_type = :task_type
 	lockTaskListQry = `SELECT range_id FROM task_lists ` +
 		`WHERE shard_id = ? AND domain_id = ? AND name = ? AND task_type = ? FOR UPDATE`
 
-	getTaskQry = `SELECT workflow_id, run_id, schedule_id, task_id ` +
+	getTaskQry = `SELECT workflow_id, run_id, schedule_id, task_id, expiry_ts ` +
 		`FROM tasks ` +
 		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? AND task_id <= ? LIMIT ?`
 

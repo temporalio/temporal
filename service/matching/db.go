@@ -21,10 +21,13 @@
 package matching
 
 import (
+	"fmt"
 	"sync"
 
 	"sync/atomic"
 
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -38,6 +41,7 @@ type (
 		rangeID      int64
 		ackLevel     int64
 		store        persistence.TaskManager
+		logger       bark.Logger
 	}
 	taskListState struct {
 		rangeID  int64
@@ -55,13 +59,14 @@ type (
 // - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, domainID string, name string, taskType int, kind int) *taskListDB {
+func newTaskListDB(store persistence.TaskManager, domainID string, name string, taskType int, kind int, logger bark.Logger) *taskListDB {
 	return &taskListDB{
 		domainID:     domainID,
 		taskListName: name,
 		taskListKind: kind,
 		taskType:     taskType,
 		store:        store,
+		logger:       logger,
 	}
 }
 
@@ -143,7 +148,7 @@ func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) 
 
 // CompleteTask deletes a single task from this task list
 func (db *taskListDB) CompleteTask(taskID int64) error {
-	return db.store.CompleteTask(&persistence.CompleteTaskRequest{
+	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
 		TaskList: &persistence.TaskListInfo{
 			DomainID: db.domainID,
 			Name:     db.taskListName,
@@ -151,17 +156,29 @@ func (db *taskListDB) CompleteTask(taskID int64) error {
 		},
 		TaskID: taskID,
 	})
+	if err != nil {
+		logging.LogPersistantStoreErrorEvent(db.logger, logging.TagValueStoreOperationCompleteTask, err,
+			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
+				taskID, db.taskType, db.taskListName))
+	}
+	return err
 }
 
 // CompleteTasksLessThan deletes of tasks less than the given taskID. Limit is
 // the upper bound of number of tasks that can be deleted by this method. It may
 // or may not be honored
 func (db *taskListDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
-	return db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
+	n, err := db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
 		DomainID:     db.domainID,
 		TaskListName: db.taskListName,
 		TaskType:     db.taskType,
 		TaskID:       taskID,
 		Limit:        limit,
 	})
+	if err != nil {
+		logging.LogPersistantStoreErrorEvent(db.logger, logging.TagValueStoreOperationCompleteTasksLessThan, err,
+			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
+				taskID, db.taskType, db.taskListName))
+	}
+	return n, err
 }

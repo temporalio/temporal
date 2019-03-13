@@ -361,6 +361,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 			RunID:      v.RunID.String(),
 			TaskID:     v.TaskID,
 			ScheduleID: v.ScheduleID,
+			Expiry:     v.ExpiryTs,
 		}
 	}
 

@@ -88,6 +88,7 @@ var keys = map[Key]string{
 	MaxTasklistIdleTime:                     "matching.maxTasklistIdleTime",
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
+	MatchingMaxTaskDeleteBatchSize:          "matching.maxTaskDeleteBatchSize",
 
 	// history settings
 	HistoryRPS:                                            "history.rps",
@@ -265,6 +266,8 @@ const (
 	MatchingOutstandingTaskAppendsThreshold
 	// MatchingMaxTaskBatchSize is max batch size for task writer
 	MatchingMaxTaskBatchSize
+	// MatchingMaxTaskDeleteBatchSize is the max batch size for range deletion of tasks
+	MatchingMaxTaskDeleteBatchSize
 
 	// key for history
 

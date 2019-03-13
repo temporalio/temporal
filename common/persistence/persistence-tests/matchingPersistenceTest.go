@@ -84,17 +84,30 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasks2, err2 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
-		20: "a5b38106793a",
-		30: "a5b38106793b",
-		40: "a5b38106793c",
-		50: "a5b38106793d",
-		60: "a5b38106793e",
-	})
+	tasks := map[int64]string{
+		20: uuid.New(),
+		30: uuid.New(),
+		40: uuid.New(),
+		50: uuid.New(),
+		60: uuid.New(),
+	}
+	tasks2, err2 := s.CreateActivityTasks(domainID, workflowExecution, tasks)
 	s.NoError(err2)
 	s.Equal(5, len(tasks2), "expected single valid task identifier.")
-	for _, t := range tasks2 {
-		s.NotEmpty(t, "Expected non empty task identifier.")
+
+	for sid, tlName := range tasks {
+		resp, err := s.GetTasks(domainID, tlName, p.TaskListTypeActivity, 100)
+		s.NoError(err)
+		s.Equal(1, len(resp.Tasks))
+		s.Equal(domainID, resp.Tasks[0].DomainID)
+		s.Equal(*workflowExecution.WorkflowId, resp.Tasks[0].WorkflowID)
+		s.Equal(*workflowExecution.RunId, resp.Tasks[0].RunID)
+		s.Equal(sid, resp.Tasks[0].ScheduleID)
+		if s.TaskMgr.GetName() != "cassandra" {
+			// cassandra uses TTL and expiry isn't stored as part of task state
+			s.True(time.Now().Before(resp.Tasks[0].Expiry))
+			s.True(resp.Tasks[0].Expiry.Before(time.Now().Add((defaultScheduleToStartTimeout + 1) * time.Second)))
+		}
 	}
 }
 
