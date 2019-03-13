@@ -24,10 +24,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/uber/cadence/service/worker/sysworkflow"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/uber/cadence/service/worker/sysworkflow"
 
 	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -65,6 +66,7 @@ type (
 		mockVisibilityMgr   *mocks.VisibilityManager
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryMgr      *mocks.HistoryManager
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockShardManager    *mocks.ShardManager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
@@ -113,6 +115,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
+	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
@@ -138,6 +141,7 @@ func (s *engineSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		historyMgr:                s.mockHistoryMgr,
+		historyV2Mgr:              s.mockHistoryV2Mgr,
 		domainCache:               domainCache,
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
@@ -165,6 +169,7 @@ func (s *engineSuite) SetupTest() {
 		shard:                shardContextWrapper,
 		executionManager:     s.mockExecutionMgr,
 		historyMgr:           s.mockHistoryMgr,
+		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
@@ -185,6 +190,7 @@ func (s *engineSuite) TearDownTest() {
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
+	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
@@ -202,8 +208,8 @@ func (s *engineSuite) TestGetMutableStateSync() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), execution.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
@@ -262,8 +268,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), execution.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
@@ -293,7 +299,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 			RunID:      *execution.RunId,
 			ScheduleID: 2,
 		})
-		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 		timer := time.NewTimer(delay)
@@ -355,8 +361,8 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), execution.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
@@ -508,8 +514,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -532,7 +538,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 		nil,
 	)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, errors.New("FAILED")).Once()
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 
@@ -561,8 +567,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -612,8 +618,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
@@ -667,8 +673,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	activity3Type := "activity_type3"
 	activity3Input := []byte("input3")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
@@ -729,12 +735,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		nil,
 	)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}},
 		&persistence.ConditionFailedError{}).Once()
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
@@ -784,8 +790,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	executionContext := []byte("context")
 	input := []byte("input")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -809,7 +815,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}},
 			&persistence.ConditionFailedError{}).Once()
 	}
@@ -860,8 +866,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	activity2Result := []byte("activity2_result")
 	workflowResult := []byte("workflow result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
@@ -899,7 +905,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	}
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -958,8 +964,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	reason := "workflow fail reason"
 	details := []byte("workflow fail details")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
@@ -998,7 +1004,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	}
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -1051,8 +1057,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	activity1Input := []byte("input1")
 	activity1Result := []byte("activity1_result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
@@ -1180,8 +1186,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		executionContext := []byte("context")
 		input := []byte("input")
 
-		msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-			bark.NewLoggerFromLogrus(log.New()))
+		msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+			bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 		addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), workflowTimeout, 200, identity)
 		di := addDecisionTaskScheduledEvent(msBuilder)
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1206,7 +1212,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 		if !iVar.expectError {
-			s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+			s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 			s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 		}
 
@@ -1265,8 +1271,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	executionContext := []byte("context")
 	input := []byte("input")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1289,7 +1295,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -1351,8 +1357,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	executionContext := []byte("context")
 	workflowResult := []byte("success")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1368,7 +1374,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
@@ -1424,8 +1430,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	details := []byte("fail workflow details")
 	reason := "fail workflow reason"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1442,7 +1448,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
@@ -1495,8 +1501,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 	identity := "testIdentity"
 	executionContext := []byte("context")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1518,7 +1524,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
@@ -1565,8 +1571,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	identity := "testIdentity"
 	executionContext := []byte("context")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1627,8 +1633,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	executionContext := []byte("context")
 	foreignDomain := "unknown domain"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1826,8 +1832,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -1868,8 +1874,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -1919,8 +1925,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1948,7 +1954,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 		nil,
 	)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, errors.New("FAILED")).Once()
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 
@@ -1981,8 +1987,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2044,8 +2050,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2106,8 +2112,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2Type := "activity_type2"
 	activity2Input := []byte("input2")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2127,11 +2133,11 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, &persistence.ConditionFailedError{}).Once()
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -2188,8 +2194,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2204,7 +2210,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, &persistence.ConditionFailedError{}).Once()
 	}
 
@@ -2251,8 +2257,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2266,7 +2272,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -2324,8 +2330,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 		ActivityID: activityID,
 	})
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
@@ -2341,7 +2347,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -2528,8 +2534,8 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -2570,8 +2576,8 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -2620,8 +2626,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2635,7 +2641,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, errors.New("FAILED")).Once()
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 
@@ -2682,8 +2688,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	failReason := "fail reason"
 	details := []byte("fail details")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2745,8 +2751,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2808,8 +2814,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity2Input := []byte("input2")
 	activity2Result := []byte("activity2_result")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 25, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
@@ -2833,11 +2839,11 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, &persistence.ConditionFailedError{}).Once()
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -2894,8 +2900,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2910,7 +2916,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, &persistence.ConditionFailedError{}).Once()
 	}
 
@@ -2957,8 +2963,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	failReason := "failed"
 	failDetails := []byte("fail details.")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -2972,7 +2978,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3032,8 +3038,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 		ActivityID: activityID,
 	})
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
@@ -3049,7 +3055,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3106,8 +3112,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3167,8 +3173,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3235,8 +3241,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 		ActivityID: activityID,
 	})
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3296,8 +3302,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3354,8 +3360,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3370,7 +3376,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3426,8 +3432,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 		ActivityID: activityID,
 	})
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
@@ -3444,7 +3450,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3526,8 +3532,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -3568,8 +3574,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -3616,8 +3622,8 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	identity := "testIdentity"
 	activityID := "activity1_id"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3633,7 +3639,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3684,8 +3690,8 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3707,7 +3713,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3759,8 +3765,8 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3783,7 +3789,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3839,7 +3845,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	s.True(*hbResponse.CancelRequested)
 
 	// Try cancelling the request.
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3890,8 +3896,8 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -3914,7 +3920,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -3970,7 +3976,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.True(*hbResponse.CancelRequested)
 
 	// Try cancelling the request.
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -4019,8 +4025,8 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	identity := "testIdentity"
 	timerID := "t1"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -4038,7 +4044,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -4083,8 +4089,8 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
 	decisionFailedEvent := false
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Run(func(arguments mock.Arguments) {
-		req := arguments.Get(0).(*persistence.AppendHistoryEventsRequest)
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Run(func(arguments mock.Arguments) {
+		req := arguments.Get(0).(*persistence.AppendHistoryNodesRequest)
 		decTaskIndex := len(req.Events) - 1
 		if decTaskIndex >= 0 && *req.Events[decTaskIndex].EventType == workflow.EventTypeDecisionTaskFailed {
 			decisionFailedEvent = true
@@ -4129,8 +4135,8 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	identity := "testIdentity"
 	timerID := "t1"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -4152,7 +4158,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -4202,8 +4208,8 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	identity := "testIdentity"
 	timerID := "t1"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -4220,7 +4226,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	}}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -4279,14 +4285,14 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.DomainID = validDomainID
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -4334,8 +4340,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	ms := createMutableState(msBuilder)
 	// assume duplicate request id
 	ms.SignalRequestedIDs = make(map[string]struct{})
@@ -4388,8 +4394,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = persistence.WorkflowStateCompleted
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4430,8 +4436,8 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 		RequestId: common.StringPtr(requestID),
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), validRunID)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.DomainID = validDomainID
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4707,6 +4713,24 @@ func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int
 	})
 
 	return e
+}
+
+func newMutableStateBuilderWithEventV2(currentCluster string, shard ShardContext, eventsCache eventsCache,
+	logger bark.Logger, runID string) *mutableStateBuilder {
+
+	msBuilder := newMutableStateBuilder(currentCluster, shard, eventsCache, logger)
+	_ = msBuilder.SetHistoryTree(runID)
+
+	return msBuilder
+}
+
+func newMutableStateBuilderWithReplicationStateWithEventV2(currentCluster string, shard ShardContext, eventsCache eventsCache,
+	logger bark.Logger, version int64, runID string) *mutableStateBuilder {
+
+	msBuilder := newMutableStateBuilderWithReplicationState(currentCluster, shard, eventsCache, logger, version)
+	_ = msBuilder.SetHistoryTree(runID)
+
+	return msBuilder
 }
 
 func createMutableState(ms mutableState) *persistence.WorkflowMutableState {

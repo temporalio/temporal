@@ -22,9 +22,10 @@ package history
 
 import (
 	"context"
-	"github.com/uber/cadence/service/worker/sysworkflow"
 	"os"
 	"testing"
+
+	"github.com/uber/cadence/service/worker/sysworkflow"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
@@ -183,9 +184,8 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder("test", s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
-	msBuilder.SetHistoryTree(msBuilder.GetExecutionInfo().RunID)
+	msBuilder := newMutableStateBuilderWithEventV2("test", s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
 
@@ -322,9 +322,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
-	msBuilder.SetHistoryTree(msBuilder.GetExecutionInfo().RunID)
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), runID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}

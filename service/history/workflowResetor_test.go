@@ -4002,7 +4002,7 @@ func (s *resetorSuite) TestApplyReset() {
 		BranchToken:   newBranchToken,
 		Events:        historyAfterReset.Events,
 		TransactionID: 1,
-		Encoding:      common.EncodingTypeJSON,
+		Encoding:      common.EncodingType(s.config.EventEncodingType(domainID)),
 	}
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,

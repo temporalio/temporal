@@ -287,7 +287,7 @@ func (s *conflictResolverSuite) TestReset() {
 		InsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
 		InsertSignalInfos:         []*persistence.SignalInfo{},
 		InsertSignalRequestedIDs:  []string{},
-		Encoding:                  common.EncodingType("json"),
+		Encoding:                  common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
 	}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,

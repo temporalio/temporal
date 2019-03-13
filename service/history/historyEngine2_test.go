@@ -24,9 +24,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/uber/cadence/service/worker/sysworkflow"
 	"os"
 	"testing"
+
+	"github.com/uber/cadence/service/worker/sysworkflow"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
@@ -62,6 +63,7 @@ type (
 		mockVisibilityMgr   *mocks.VisibilityManager
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryMgr      *mocks.HistoryManager
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockShardManager    *mocks.ShardManager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
@@ -108,6 +110,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
+	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
@@ -131,6 +134,7 @@ func (s *engine2Suite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		historyMgr:                s.mockHistoryMgr,
+		historyV2Mgr:              s.mockHistoryV2Mgr,
 		domainCache:               s.mockDomainCache,
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
@@ -147,6 +151,7 @@ func (s *engine2Suite) SetupTest() {
 		shard:              mockShard,
 		executionManager:   s.mockExecutionMgr,
 		historyMgr:         s.mockHistoryMgr,
+		historyV2Mgr:       s.mockHistoryV2Mgr,
 		historyCache:       historyCache,
 		logger:             s.logger,
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
@@ -163,6 +168,7 @@ func (s *engine2Suite) TearDownTest() {
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
+	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
@@ -180,8 +186,8 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder("test", s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2("test", s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
 
@@ -193,7 +199,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -239,7 +245,8 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		Name: &executionInfo.TaskList,
 		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
 	})
-	expectedResponse.EventStoreVersion = common.Int32Ptr(0)
+	expectedResponse.EventStoreVersion = common.Int32Ptr(p.EventStoreVersionV2)
+	expectedResponse.BranchToken = msBuilder.GetCurrentBranch()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
 	s.Nil(err)
@@ -450,14 +457,14 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, &p.ConditionFailedError{}).Once()
 
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &p.GetWorkflowExecutionResponse{State: ms2}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -510,7 +517,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, &p.ConditionFailedError{}).Once()
 
 	startedEventID := addDecisionTaskStartedEventWithRequestID(msBuilder, int64(2), requestID, tl, identity)
@@ -568,7 +575,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, &p.ConditionFailedError{}).Once()
 
 	// Add event.
@@ -629,7 +636,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	}
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Times(
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(
 		conditionalRetryCount)
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil,
 		&p.ConditionFailedError{}).Times(conditionalRetryCount)
@@ -681,7 +688,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -789,7 +796,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -841,7 +848,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -921,13 +928,14 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 
 func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution, tl, identity string,
 	startDecision bool) mutableState {
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		s.logger)
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
+	_ = msBuilder.SetHistoryTree(we.GetRunId())
 
 	return msBuilder
 }
@@ -952,8 +960,8 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	markerDetails := []byte("marker details")
 	markerName := "marker name"
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -970,7 +978,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -1011,7 +1019,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	taskList := "testTaskList"
 	identity := "testIdentity"
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -1054,7 +1062,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	requestID := "requestID"
 	lastWriteVersion := common.EmptyVersion
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
 		StartRequestID:   requestID,
@@ -1063,7 +1071,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		CloseStatus:      p.WorkflowCloseStatusNone,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
-	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
 			Info:   &p.DomainInfo{ID: domainID},
@@ -1105,7 +1113,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
 		StartRequestID:   "oldRequestID",
@@ -1114,7 +1122,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		CloseStatus:      p.WorkflowCloseStatusNone,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
-	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
 			Info:   &p.DomainInfo{ID: domainID},
@@ -1166,7 +1174,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 
 	expecedErrs := []bool{true, false, true}
 
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Times(len(expecedErrs))
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(len(expecedErrs))
 	s.mockExecutionMgr.On(
 		"CreateWorkflowExecution",
 		mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
@@ -1206,7 +1214,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 				}),
 			).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 		} else {
-			s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+			s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 		}
 
 		resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
@@ -1262,7 +1270,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 
 	for i, closeState := range closeStates {
 
-		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Times(len(expecedErrs))
+		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(len(expecedErrs))
 		s.mockExecutionMgr.On(
 			"CreateWorkflowExecution",
 			mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
@@ -1303,7 +1311,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 					}),
 				).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 			} else {
-				s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+				s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 			}
 
 			resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
@@ -1356,15 +1364,15 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), runID)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -1416,7 +1424,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	notExistErr := &workflow.EntityNotExistsError{Message: "Workflow not exist"}
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -1466,8 +1474,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), runID)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1475,7 +1483,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -1524,8 +1532,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), runID)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1541,9 +1549,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, workflowAlreadyStartedErr).Once()
-	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
 			Info:   &p.DomainInfo{ID: domainID},
@@ -1591,8 +1599,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		},
 	}
 
-	msBuilder := newMutableStateBuilder(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
-		bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.historyEngine.shard, s.mockEventsCache,
+		bark.NewLoggerFromLogrus(log.New()), runID)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1608,9 +1616,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, workflowAlreadyStartedErr).Once()
-	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
 			Info:   &p.DomainInfo{ID: domainID},
