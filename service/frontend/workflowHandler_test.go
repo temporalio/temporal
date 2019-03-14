@@ -946,7 +946,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidPageToken()
 	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest([]byte{3, 4, 5, 1}), "test-domain-id", 0)
 	s.Nil(resp)
 	s.Error(err)
-	s.Equal(errInvalidNextPageToken, err)
+	s.Equal(errInvalidNextArchivalPageToken, err)
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidBlobKey() {

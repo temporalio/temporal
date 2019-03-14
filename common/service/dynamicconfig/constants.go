@@ -55,6 +55,7 @@ var keys = map[Key]string{
 	EnableVisibilityToKafka:         "system.enableVisibilityToKafka",
 	EnableReadVisibilityFromES:      "system.enableReadVisibilityFromES",
 	ArchivalStatus:                  "system.archivalStatus",
+	EnableReadHistoryFromArchival:   "system.enableReadHistoryFromArchival",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -205,6 +206,8 @@ const (
 	DisableListVisibilityByFilter
 	// ArchivalStatus is key for the status of archival
 	ArchivalStatus
+	// EnableReadHistoryFromArchival is key for enabling reading history from archival store
+	EnableReadHistoryFromArchival
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError

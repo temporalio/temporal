@@ -118,7 +118,10 @@ var (
 	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
-	errDomainArchivalBucketNotSet                 = &gen.BadRequestError{Message: "Domain config does not have archival bucket set."}
+
+	// err for archival
+	errDomainHasNeverBeenEnabledForArchival = &gen.BadRequestError{Message: "Attempted to fetch history from archival, but domain has never been enabled for archival."}
+	errInvalidNextArchivalPageToken         = &gen.BadRequestError{Message: "Invalid NextPageToken for archival."}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -1877,7 +1880,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
-	if wh.historyArchived(ctx, getRequest, domainID) {
+	if wh.config.EnableReadHistoryFromArchival(getRequest.GetDomain()) && wh.historyArchived(ctx, getRequest, domainID) {
 		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
 	}
 
@@ -3154,13 +3157,13 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	}
 	archivalBucket := entry.GetConfig().ArchivalBucket
 	if archivalBucket == "" {
-		return nil, wh.error(errDomainArchivalBucketNotSet, scope)
+		return nil, wh.error(errDomainHasNeverBeenEnabledForArchival, scope)
 	}
 	var token *getHistoryContinuationTokenArchival
 	if request.NextPageToken != nil {
 		token, err = deserializeHistoryTokenArchival(request.NextPageToken)
 		if err != nil {
-			return nil, wh.error(errInvalidNextPageToken, scope)
+			return nil, wh.error(errInvalidNextArchivalPageToken, scope)
 		}
 	} else {
 		token = &getHistoryContinuationTokenArchival{

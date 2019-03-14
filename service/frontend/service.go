@@ -47,6 +47,7 @@ type Config struct {
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                             dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
+	EnableReadHistoryFromArchival   dynamicconfig.BoolPropertyFnWithDomainFilter
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -77,6 +78,7 @@ func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool) *Conf
 		HistoryMaxPageSize:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                             dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		MaxIDLengthLimit:                dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		EnableReadHistoryFromArchival:   dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadHistoryFromArchival, false),
 		HistoryMgrNumConns:              dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxDecisionStartToCloseTimeout:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
 		EnableAdminProtection:           dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
