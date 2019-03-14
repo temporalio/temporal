@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sysworkflow
+package archiver
 
 import (
 	"github.com/uber-go/tally"
@@ -94,5 +94,5 @@ type nopStopwatchRecorder struct{}
 func (n *nopStopwatchRecorder) RecordStopwatch(stopwatchStart time.Time) {}
 
 func (r *replayMetricsClient) nopStopwatch() tally.Stopwatch {
-	return tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{})
+	return tally.NewStopwatch(workflow.Now(r.ctx), &nopStopwatchRecorder{})
 }

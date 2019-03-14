@@ -22,13 +22,10 @@ package history
 
 import (
 	"context"
-	"github.com/uber/cadence/service/worker/sysworkflow"
-	"os"
-	"testing"
-
 	"fmt"
 	"math"
-
+	"os"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +46,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/service/worker/archiver"
 )
 
 type (
@@ -71,7 +69,7 @@ type (
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockDomainCache     *cache.DomainCacheMock
-		mockArchivalClient  *sysworkflow.ArchivalClientMock
+		mockArchivalClient  *archiver.ClientMock
 		mockClientBean      *client.MockClientBean
 		mockEventsCache     *MockEventsCache
 		resetor             workflowResetor
@@ -125,7 +123,7 @@ func (s *resetorSuite) SetupTest() {
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockArchivalClient = &sysworkflow.ArchivalClientMock{}
+	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockEventsCache = &MockEventsCache{}
 
 	mockShard := &shardContextImpl{

@@ -117,8 +117,8 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	s.Equal(1, len(resp.Executions))
 }
 
-// TestBasicVisibility test
-func (s *VisibilityPersistenceSuite) TestBasicVisibility_TimeSkew() {
+// TestBasicVisibilityTimeSkew test
+func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	testDomainUUID := uuid.New()
 
 	workflowExecution := gen.WorkflowExecution{

@@ -52,7 +52,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/service/worker/sysworkflow"
+	"github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -3170,7 +3170,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 			BlobstorePageToken: common.FirstBlobPageToken,
 		}
 	}
-	key, err := sysworkflow.NewHistoryBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), token.BlobstorePageToken)
+	key, err := archiver.NewHistoryBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), token.BlobstorePageToken)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3182,7 +3182,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	historyBlob := &sysworkflow.HistoryBlob{}
+	historyBlob := &archiver.HistoryBlob{}
 	switch *wrappingLayers.EncodingFormat {
 	case blob.JSONEncoding:
 		if err := json.Unmarshal(unwrappedBlob.Body, historyBlob); err != nil {

@@ -762,14 +762,18 @@ const (
 	ESProcessorScope
 	// IndexProcessorScope is scope used by all metric emitted by index processor
 	IndexProcessorScope
-	// ArchiveSystemWorkflowScope is scope used by all metrics emitted by ArchiveSystemWorkflow
-	ArchiveSystemWorkflowScope
-	// ArchivalUploadActivity is scope used by all metrics emitted by ArchivalUploadActivity
-	ArchivalUploadActivityScope
-	// ArchivalDeleteHistoryActivity is scope used by all metrics emitted by ArchivalDeleteHistoryActivity
-	ArchivalDeleteHistoryActivityScope
-	// HistoryBlobIteratorScope is scope used by all metrics emitted by HistoryBlobIterator
-	HistoryBlobIteratorScope
+	// ArchiverUploadHistoryActivityScope is scope used by all metrics emitted by archiver.UploadHistoryActivity
+	ArchiverUploadHistoryActivityScope
+	// ArchiverDeleteHistoryActivityScope is scope used by all metrics emitted by archiver.DeleteHistoryActivity
+	ArchiverDeleteHistoryActivityScope
+	// ArchiverScope is scope used by all metrics emitted by archiver.Archiver
+	ArchiverScope
+	// ArchiverPumpScope is scope used by all metrics emitted by archiver.Pump
+	ArchiverPumpScope
+	// ArchiverArchivalWorkflowScope is scope used by all metrics emitted by archiver.ArchivalWorkflow
+	ArchiverArchivalWorkflowScope
+	// ArchiverClientScope is scope used by all metrics emitted by archiver.Client
+	ArchiverClientScope
 
 	NumWorkerScopes
 )
@@ -1097,10 +1101,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SyncActivityTaskScope:              {operation: "SyncActivityTask"},
 		ESProcessorScope:                   {operation: "ESProcessor"},
 		IndexProcessorScope:                {operation: "IndexProcessor"},
-		ArchiveSystemWorkflowScope:         {operation: "ArchiveSystemWorkflow"},
-		ArchivalUploadActivityScope:        {operation: "ArchivalUploadActivity"},
-		ArchivalDeleteHistoryActivityScope: {operation: "ArchivalDeleteHistoryActivity"},
-		HistoryBlobIteratorScope:           {operation: "HistoryBlobIterator"},
+		ArchiverUploadHistoryActivityScope: {operation: "ArchiverUploadHistoryActivity"},
+		ArchiverDeleteHistoryActivityScope: {operation: "ArchiverDeleteHistoryActivity"},
+		ArchiverScope:                      {operation: "Archiver"},
+		ArchiverPumpScope:                  {operation: "ArchiverPump"},
+		ArchiverArchivalWorkflowScope:      {operation: "ArchiverArchivalWorkflow"},
+		ArchiverClientScope:                {operation: "ArchiverClient"},
 	},
 }
 
@@ -1296,28 +1302,35 @@ const (
 	ESProcessorFailures
 	ESProcessorCorruptedData
 	IndexProcessorCorruptedData
-	SysWorkerWorkflowStarted
-	SysWorkerReceivedSignal
-	SysWorkerContinueAsNew
-	SysWorkerContinueAsNewLatency
-	SysWorkerArchivalUploadActivityNonRetryableFailures
-	SysWorkerArchivalUploadSuccessful
-	SysWorkerArchivalDeleteHistoryActivityNonRetryableFailures
-	SysWorkerArchivalDeleteHistorySuccessful
-	SysWorkerGetDomainFailures
-	SysWorkerArchivalNotEnabledForCluster
-	SysWorkerArchivalNotEnabledForDomain
-	SysWorkerNextOnDepletedIterator
-	SysWorkerHistoryReadEventsFailures
-	SysWorkerNextBlobNonRetryableFailures
-	SysWorkerKeyConstructionFailures
-	SysWorkerBlobExistsNonRetryableFailures
-	SysWorkerMarshalBlobFailures
-	SysWorkerConvertHeaderToTagsFailures
-	SysWorkerWrapBlobFailures
-	SysWorkerBlobUploadNonRetryableFailures
-	SysWorkerDeleteHistoryV2NonRetryableFailures
-	SysWorkerDeleteHistoryV1NonRetryableFailures
+	ArchiverNonRetryableErrorCount
+	ArchiverSkipUploadCount
+	ArchiverBlobAlreadyExistsCount
+	ArchiverStartedCount
+	ArchiverStoppedCount
+	ArchiverCoroutineStartedCount
+	ArchiverCoroutineStoppedCount
+	ArchiverHandleRequestLatency
+	ArchiverUploadWithRetriesLatency
+	ArchiverDeleteWithRetriesLatency
+	ArchiverUploadFailedAllRetriesCount
+	ArchiverUploadSuccessCount
+	ArchiverDeleteLocalFailedAllRetriesCount
+	ArchiverDeleteLocalSuccessCount
+	ArchiverDeleteFailedAllRetriesCount
+	ArchiverDeleteSuccessCount
+	ArchiverBacklogSizeGauge
+	ArchiverPumpTimeoutCount
+	ArchiverPumpSignalThresholdCount
+	ArchiverPumpTimeoutWithoutSignalsCount
+	ArchiverPumpSignalChannelClosedCount
+	ArchiverWorkflowStartedCount
+	ArchiverNumPumpedRequestsCount
+	ArchiverNumHandledRequestsCount
+	ArchiverPumpedNotEqualHandledCount
+	ArchiverReadDynamicConfigErrorCount
+	ArchiverHandleAllRequestsLatency
+	ArchiverWorkflowStoppingCount
+	ArchiverClientSendSignalFailureCount
 
 	NumWorkerMetrics
 )
@@ -1492,34 +1505,41 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SyncMatchLatency:              {metricName: "syncmatch.latency", metricType: Timer},
 	},
 	Worker: {
-		ReplicatorMessages:                                         {metricName: "replicator.messages"},
-		ReplicatorFailures:                                         {metricName: "replicator.errors"},
-		ReplicatorLatency:                                          {metricName: "replicator.latency"},
-		ESProcessorFailures:                                        {metricName: "es-processor.errors"},
-		ESProcessorCorruptedData:                                   {metricName: "es-processor.corrupted-data"},
-		IndexProcessorCorruptedData:                                {metricName: "index-processor.corrupted-data"},
-		SysWorkerWorkflowStarted:                                   {metricName: "sysworker.workflow-started"},
-		SysWorkerReceivedSignal:                                    {metricName: "sysworker.received-signal"},
-		SysWorkerContinueAsNew:                                     {metricName: "sysworker.continue-as-new"},
-		SysWorkerContinueAsNewLatency:                              {metricName: "sysworker.continue-as-new-latency"},
-		SysWorkerArchivalUploadActivityNonRetryableFailures:        {metricName: "sysworker.archival-upload-activity-non-retryable-errors"},
-		SysWorkerArchivalUploadSuccessful:                          {metricName: "sysworker.archival-upload-successful"},
-		SysWorkerArchivalDeleteHistoryActivityNonRetryableFailures: {metricName: "sysworker.archival-delete-history-activity-non-retryable-errors"},
-		SysWorkerArchivalDeleteHistorySuccessful:                   {metricName: "sysworker.archival-delete-history-successful"},
-		SysWorkerGetDomainFailures:                                 {metricName: "sysworker.get-domain-errors"},
-		SysWorkerArchivalNotEnabledForCluster:                      {metricName: "sysworker.archival-not-enabled-for-cluster"},
-		SysWorkerArchivalNotEnabledForDomain:                       {metricName: "sysworker.archival-not-enabled-for-domain"},
-		SysWorkerNextOnDepletedIterator:                            {metricName: "sysworker.next-on-depleted-iterator"},
-		SysWorkerHistoryReadEventsFailures:                         {metricName: "sysworker.history-read-events-errors"},
-		SysWorkerNextBlobNonRetryableFailures:                      {metricName: "sysworker.next-blob-non-retryable-errors"},
-		SysWorkerKeyConstructionFailures:                           {metricName: "sysworker.key-construction-errors"},
-		SysWorkerBlobExistsNonRetryableFailures:                    {metricName: "sysworker.blob-exists-non-retryable-errors"},
-		SysWorkerMarshalBlobFailures:                               {metricName: "sysworker.marshal-blob-errors"},
-		SysWorkerConvertHeaderToTagsFailures:                       {metricName: "sysworker.convert-header-to-tags-errors"},
-		SysWorkerWrapBlobFailures:                                  {metricName: "sysworker.wrap-blob-errors"},
-		SysWorkerBlobUploadNonRetryableFailures:                    {metricName: "sysworker.blob-upload-non-retryable-errors"},
-		SysWorkerDeleteHistoryV2NonRetryableFailures:               {metricName: "sysworker.delete-history-v2-non-retryable-errors"},
-		SysWorkerDeleteHistoryV1NonRetryableFailures:               {metricName: "sysworker.delete-history-v1-non-retryable-errors"},
+		ReplicatorMessages:                       {metricName: "replicator.messages"},
+		ReplicatorFailures:                       {metricName: "replicator.errors"},
+		ReplicatorLatency:                        {metricName: "replicator.latency"},
+		ESProcessorFailures:                      {metricName: "es-processor.errors"},
+		ESProcessorCorruptedData:                 {metricName: "es-processor.corrupted-data"},
+		IndexProcessorCorruptedData:              {metricName: "index-processor.corrupted-data"},
+		ArchiverNonRetryableErrorCount:           {metricName: "archiver.non-retryable-error"},
+		ArchiverSkipUploadCount:                  {metricName: "archiver.skip-upload"},
+		ArchiverBlobAlreadyExistsCount:           {metricName: "archiver.blob-already-exists"},
+		ArchiverStartedCount:                     {metricName: "archiver.started"},
+		ArchiverStoppedCount:                     {metricName: "archiver.stopped"},
+		ArchiverCoroutineStartedCount:            {metricName: "archiver.coroutine-started"},
+		ArchiverCoroutineStoppedCount:            {metricName: "archiver.coroutine-stopped"},
+		ArchiverHandleRequestLatency:             {metricName: "archiver.handle-request-latency"},
+		ArchiverUploadWithRetriesLatency:         {metricName: "archiver.upload-with-retries-latency"},
+		ArchiverDeleteWithRetriesLatency:         {metricName: "archiver.delete-with-retries-latency"},
+		ArchiverUploadFailedAllRetriesCount:      {metricName: "archiver.upload-failed-all-retries"},
+		ArchiverUploadSuccessCount:               {metricName: "archiver.upload-success"},
+		ArchiverDeleteLocalFailedAllRetriesCount: {metricName: "archiver.delete-local-failed-all-retries"},
+		ArchiverDeleteLocalSuccessCount:          {metricName: "archiver.delete-local-success"},
+		ArchiverDeleteFailedAllRetriesCount:      {metricName: "archiver.delete-failed-all-retries"},
+		ArchiverDeleteSuccessCount:               {metricName: "archiver.delete-success"},
+		ArchiverBacklogSizeGauge:                 {metricName: "archiver.backlog-size"},
+		ArchiverPumpTimeoutCount:                 {metricName: "archiver.pump-timeout"},
+		ArchiverPumpSignalThresholdCount:         {metricName: "archiver.pump-signal-threshold"},
+		ArchiverPumpTimeoutWithoutSignalsCount:   {metricName: "archiver.pump-timeout-without-signals"},
+		ArchiverPumpSignalChannelClosedCount:     {metricName: "archiver.pump-signal-channel-closed"},
+		ArchiverWorkflowStartedCount:             {metricName: "archiver.workflow-started"},
+		ArchiverNumPumpedRequestsCount:           {metricName: "archiver.num-pumped-requests"},
+		ArchiverNumHandledRequestsCount:          {metricName: "archiver.num-handled-requests"},
+		ArchiverPumpedNotEqualHandledCount:       {metricName: "archiver.pumped-not-equal-handled"},
+		ArchiverReadDynamicConfigErrorCount:      {metricName: "archiver.read-dynamic-config-error"},
+		ArchiverHandleAllRequestsLatency:         {metricName: "archiver.handle-all-requests-latency"},
+		ArchiverWorkflowStoppingCount:            {metricName: "archiver.workflow-stopping"},
+		ArchiverClientSendSignalFailureCount:     {metricName: "archiver.client-send-signal-error"},
 	},
 }
 

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sysworkflow
+package archiver
 
 import (
 	"github.com/stretchr/testify/require"
@@ -130,5 +130,53 @@ func (s *UtilSuite) TestConvertHeaderToTags() {
 		tags, err := ConvertHeaderToTags(tc.header)
 		s.NoError(err)
 		s.Equal(tc.expectTags, tags)
+	}
+}
+
+func (s *UtilSuite) TestHashesEqual() {
+	testCases := []struct {
+		a     []uint64
+		b     []uint64
+		equal bool
+	}{
+		{
+			a:     nil,
+			b:     nil,
+			equal: true,
+		},
+		{
+			a:     []uint64{1, 2, 3},
+			b:     []uint64{1, 2, 3},
+			equal: true,
+		},
+		{
+			a:     []uint64{1, 2},
+			b:     []uint64{1, 2, 3},
+			equal: false,
+		},
+		{
+			a:     []uint64{1, 2, 3},
+			b:     []uint64{1, 2},
+			equal: false,
+		},
+		{
+			a:     []uint64{1, 2, 5, 5, 5},
+			b:     []uint64{1, 2, 5, 5, 5},
+			equal: true,
+		},
+		{
+			a:     []uint64{1, 2, 5, 5},
+			b:     []uint64{1, 2, 5, 5, 5},
+			equal: false,
+		},
+		{
+			a:     []uint64{1, 2, 5, 5, 5, 5},
+			b:     []uint64{1, 2, 5, 5, 5},
+			equal: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Equal(tc.equal, hashesEqual(tc.a, tc.b))
 	}
 }

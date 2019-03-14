@@ -23,7 +23,7 @@ package history
 import (
 	"errors"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/service/worker/sysworkflow"
+	"github.com/uber/cadence/service/worker/archiver"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -625,7 +625,7 @@ func (t *timerQueueProcessorBase) deleteWorkflow(task *persistence.TimerTaskInfo
 }
 
 func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInfo, msBuilder mutableState, context workflowExecutionContext) error {
-	req := &sysworkflow.ArchiveRequest{
+	req := &archiver.ArchiveRequest{
 		DomainID:             task.DomainID,
 		WorkflowID:           task.WorkflowID,
 		RunID:                task.RunID,

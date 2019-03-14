@@ -53,10 +53,9 @@ Replication task message:
 {taskType: 0}
 ```
 
-SysWorkflow
------------
+Archiver
+--------
 
-SysWorker is a background worker responsible for running arbitrary system workflows.
-Initiator is used to send signals of various types to hosted system workflow code. These
-signals are then handled by an activity. The first supported system activity will be archival
-but, these system workflows can be used for any type of system task.
+Archiver is used to handle archival of workflow execution histories. It does this by hosting a cadence client worker
+and running an archival system workflow. The archival client gets used to initiate archival through signal sending. The archiver
+shards work across several workflows. 

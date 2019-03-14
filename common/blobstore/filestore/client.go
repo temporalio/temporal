@@ -257,9 +257,8 @@ func (c *client) ListByPrefix(_ context.Context, bucket string, prefix string) (
 	files, err := listFiles(bd)
 	if err != nil {
 		c.logger.WithFields(bark.Fields{
-			logging.TagErr:           err,
-			logging.TagBucket:        bucket,
-			logging.TagBlobKeyPrefix: prefix,
+			logging.TagErr:    err,
+			logging.TagBucket: bucket,
 		}).Error("ListByPrefix failed, could not list files")
 		return nil, ErrListFiles
 	}
@@ -271,7 +270,6 @@ func (c *client) ListByPrefix(_ context.Context, bucket string, prefix string) (
 				c.logger.WithFields(bark.Fields{
 					logging.TagErr:                   err,
 					logging.TagBucket:                bucket,
-					logging.TagBlobKeyPrefix:         prefix,
 					logging.TagFileBlobstoreBlobPath: f,
 				}).Error("ListByPrefix failed, failed to convert from file name to blob key")
 				return nil, ErrConstructKey

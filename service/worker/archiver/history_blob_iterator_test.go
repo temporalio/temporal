@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sysworkflow
+package archiver
 
 import (
 	"errors"
@@ -549,19 +549,12 @@ func (s *HistoryBlobIteratorSuite) constructTestHistoryBlobIterator(
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	container := &SysWorkerContainer{
+	container := &BootstrapContainer{
 		HistoryManager:   mockHistoryManager,
 		HistoryV2Manager: mockHistoryV2Manager,
 		Config:           config,
 	}
-	return NewHistoryBlobIterator(
-		s.logger,
-		s.metricsClient,
-		request,
-		container,
-		testDomain,
-		testClusterName,
-	).(*historyBlobIterator)
+	return NewHistoryBlobIterator(request, container, testDomain, testClusterName).(*historyBlobIterator)
 }
 
 func constructConfig(historyPageSize, targetArchivalBlobSize int) *Config {

@@ -1,0 +1,104 @@
+// Copyright (c) 2017 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package archiver
+
+import (
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
+	"go.uber.org/cadence/workflow"
+)
+
+type dynamicConfigResult struct {
+	ArchiverConcurrency   int
+	ArchivalsPerIteration int
+}
+
+func archivalWorkflow(ctx workflow.Context, carryover []ArchiveRequest) error {
+	return archivalWorkflowHelper(ctx, globalLogger, globalMetricsClient, globalConfig, nil, nil, carryover)
+}
+
+func archivalWorkflowHelper(
+	ctx workflow.Context,
+	logger bark.Logger,
+	metricsClient metrics.Client,
+	config *Config,
+	archiver Archiver, // enables tests to inject mocks
+	pump Pump, // enables tests to inject mocks
+	carryover []ArchiveRequest,
+) error {
+	metricsClient = NewReplayMetricsClient(metricsClient, ctx)
+	metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
+	sw := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.CadenceLatency)
+	defer sw.Stop()
+	workflowInfo := workflow.GetInfo(ctx)
+	logger = NewReplayBarkLogger(logger.WithFields(bark.Fields{
+		logging.TagWorkflowExecutionID: workflowInfo.WorkflowExecution.ID,
+		logging.TagWorkflowRunID:       workflowInfo.WorkflowExecution.RunID,
+		logging.TagTaskListName:        workflowInfo.TaskListName,
+		logging.TagWorkflowType:        workflowInfo.WorkflowType.Name,
+	}), ctx, false)
+	logger.Info("archival system workflow started")
+	var dcResult dynamicConfigResult
+	_ = workflow.SideEffect(
+		ctx,
+		func(ctx workflow.Context) interface{} {
+			return dynamicConfigResult{
+				ArchiverConcurrency:   config.ArchiverConcurrency(),
+				ArchivalsPerIteration: config.ArchivalsPerIteration(),
+			}
+		}).Get(&dcResult)
+	requestCh := workflow.NewBufferedChannel(ctx, dcResult.ArchivalsPerIteration)
+	if archiver == nil {
+		archiver = NewArchiver(ctx, logger, metricsClient, dcResult.ArchiverConcurrency, requestCh)
+	}
+	archiverSW := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
+	archiver.Start()
+	signalCh := workflow.GetSignalChannel(ctx, signalName)
+	if pump == nil {
+		pump = NewPump(ctx, logger, metricsClient, carryover, workflowStartToCloseTimeout/2, dcResult.ArchivalsPerIteration, requestCh, signalCh)
+	}
+	pumpResult := pump.Run()
+	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
+	handledHashes := archiver.Finished()
+	archiverSW.Stop()
+	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
+	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
+		logger.Error("handled archival requests do not match pumped archival requests")
+		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount)
+	}
+	if pumpResult.TimeoutWithoutSignals {
+		logger.Info("workflow stopping because pump did not get any signals within timeout threshold")
+		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount)
+		return nil
+	}
+	for {
+		var request ArchiveRequest
+		if ok := signalCh.ReceiveAsync(&request); !ok {
+			break
+		}
+		pumpResult.UnhandledCarryover = append(pumpResult.UnhandledCarryover, request)
+	}
+	signalCh.Close()
+	ctx = workflow.WithExecutionStartToCloseTimeout(ctx, workflowStartToCloseTimeout)
+	ctx = workflow.WithWorkflowTaskStartToCloseTimeout(ctx, workflowTaskStartToCloseTimeout)
+	return workflow.NewContinueAsNewError(ctx, archivalWorkflowFnName, pumpResult.UnhandledCarryover)
+}

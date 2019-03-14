@@ -84,3 +84,8 @@ const (
 	// VisibilityAppName is used to find kafka topics and ES indexName for visibility
 	VisibilityAppName = "visibility"
 )
+
+const (
+	// SystemDomainName is domain name for all cadence system workflows
+	SystemDomainName = "cadence-system"
+)

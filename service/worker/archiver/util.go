@@ -18,19 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sysworkflow
+package archiver
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/dgryski/go-farm"
-
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/blob"
+	"github.com/uber/cadence/common/logging"
 )
 
 type (
@@ -60,7 +64,7 @@ type (
 )
 
 var (
-	errInvalidKeyInput = &shared.BadRequestError{Message: "invalid input to construct history blob key"}
+	errInvalidKeyInput = errors.New("invalid input to construct history blob key")
 )
 
 // NewHistoryBlobKey returns a key for history blob
@@ -75,7 +79,7 @@ func NewHistoryBlobKey(domainID, workflowID, runID string, pageToken int) (blob.
 	workflowIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(workflowID)))
 	runIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(runID)))
 	combinedHash := strings.Join([]string{domainIDHash, workflowIDHash, runIDHash}, "")
-	return blob.NewKey(historyBlobKeyExt, combinedHash, StringPageToken(pageToken))
+	return blob.NewKey("history", combinedHash, StringPageToken(pageToken))
 }
 
 // StringPageToken converts input blob page token to string form
@@ -98,4 +102,40 @@ func ConvertHeaderToTags(header *HistoryBlobHeader) (map[string]string, error) {
 		result[k] = fmt.Sprintf("%v", v)
 	}
 	return result, nil
+}
+
+func hashArchiveRequest(archiveRequest ArchiveRequest) uint64 {
+	var b bytes.Buffer
+	gob.NewEncoder(&b).Encode(archiveRequest)
+	return farm.Fingerprint64(b.Bytes())
+}
+
+func hashesEqual(a []uint64, b []uint64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aMap := make(map[uint64]int)
+	for _, elem := range a {
+		aMap[elem] = aMap[elem] + 1
+	}
+	for _, elem := range b {
+		count := aMap[elem]
+		if count == 0 {
+			return false
+		}
+		aMap[elem] = aMap[elem] - 1
+	}
+	return true
+}
+
+func tagLoggerWithRequest(logger bark.Logger, request ArchiveRequest) bark.Logger {
+	return logger.WithFields(bark.Fields{
+		logging.TagArchiveRequestDomainID:             request.DomainID,
+		logging.TagArchiveRequestWorkflowID:           request.WorkflowID,
+		logging.TagArchiveRequestRunID:                request.RunID,
+		logging.TagArchiveRequestEventStoreVersion:    request.EventStoreVersion,
+		logging.TagArchiveRequestBranchToken:          string(request.BranchToken),
+		logging.TagArchiveRequestNextEventID:          request.NextEventID,
+		logging.TagArchiveRequestCloseFailoverVersion: request.CloseFailoverVersion,
+	})
 }

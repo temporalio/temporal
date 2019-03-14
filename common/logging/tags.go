@@ -36,8 +36,10 @@ const (
 	TagHistoryBuilderAction       = "history-builder-action"
 	TagStoreOperation             = "store-operation"
 	TagDomainID                   = "domain-id"
+	TagDomain                     = "domain"
 	TagDomainIDs                  = "domain-ids"
 	TagWorkflowExecutionID        = "execution-id"
+	TagWorkflowType               = "workflow-type"
 	TagWorkflowRunID              = "run-id"
 	TagHistoryShardID             = "shard-id"
 	TagHistoryShardTime           = "shard-time"
@@ -103,7 +105,7 @@ const (
 	TagValueIndexerProcessorComponent         = "indexer-processor"
 	TagValueIndexerESProcessorComponent       = "indexer-es-processor"
 	TagValueESVisibilityManager               = "es-visibility-manager"
-	TagValueArchiveSystemWorkflowComponent    = "archive-system-workflow"
+	TagValueArchiverComponent                 = "archiver"
 
 	// TagHistoryBuilderAction values
 	TagValueActionWorkflowStarted                 = "add-workflowexecution-started-event"
@@ -166,17 +168,25 @@ const (
 	TagTreeID   = "tree-id"
 	TagBranchID = "branch-id"
 
-	// archival tags
-	TagArchiveRequestDomainID            = "archive-request-domain-id"
-	TagArchiveRequestWorkflowID          = "archive-request-workflow-id"
-	TagArchiveRequestRunID               = "archive-request-run-id"
-	TagArchiveRequestEventStoreVersion   = "archive-request-event-store-version"
-	TagArchiveRequestNextEventID         = "archive-request-next-event-id"
-	TagNumberOfSignalsUntilContinueAsNew = "number-of-signals-until-continue-as-new"
-	TagBucket                            = "bucket"
-	TagFileBlobstoreBlobPath             = "file-blobstore-blob-path"
-	TagBlobKey                           = "blob-key"
-	TagBlobKeyPrefix                     = "blob-key-prefix"
-	TagFileBlobstoreMetadataPath         = "file-blobstore-metadata-path"
-	TagClusterArchivalStatus             = "cluster-archival-status"
+	// archival tags (archival request tags)
+	TagArchiveRequestDomainID             = "archive-request-domain-id"
+	TagArchiveRequestWorkflowID           = "archive-request-workflow-id"
+	TagArchiveRequestRunID                = "archive-request-run-id"
+	TagArchiveRequestEventStoreVersion    = "archive-request-event-store-version"
+	TagArchiveRequestBranchToken          = "archive-request-branch-token"
+	TagArchiveRequestNextEventID          = "archive-request-next-event-id"
+	TagArchiveRequestCloseFailoverVersion = "archive-request-close-failover-version"
+
+	// archival tags (blob tags)
+	TagBucket  = "bucket"
+	TagBlobKey = "blob-key"
+
+	// archival tags (file blobstore tags)
+	TagFileBlobstoreBlobPath     = "file-blobstore-blob-path"
+	TagFileBlobstoreMetadataPath = "file-blobstore-metadata-path"
+
+	// archival tags (other tags)
+	TagClusterArchivalStatus    = "cluster-archival-status"
+	TagArchivalUploadSkipReason = "archival-upload-skip-reason"
+	TagArchivalUploadFailReason = "archival-upload-fail-reason"
 )

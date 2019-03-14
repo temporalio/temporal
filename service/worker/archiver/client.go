@@ -18,15 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sysworkflow
+package archiver
 
 import (
 	"context"
 	"fmt"
-	"github.com/uber/cadence/client/public"
-	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/cadence/client"
 	"math/rand"
+
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/client/public"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/service/dynamicconfig"
+	cclient "go.uber.org/cadence/client"
 )
 
 type (
@@ -41,47 +46,52 @@ type (
 		CloseFailoverVersion int64
 	}
 
-	// ArchivalClient is used to archive workflow histories
-	ArchivalClient interface {
+	// Client is used to archive workflow histories
+	Client interface {
 		Archive(*ArchiveRequest) error
 	}
 
-	archivalClient struct {
-		cadenceClient client.Client
-		numSWFn       dynamicconfig.IntPropertyFn
+	client struct {
+		metricsClient metrics.Client
+		logger        bark.Logger
+		cadenceClient cclient.Client
+		numWorkflows  dynamicconfig.IntPropertyFn
 	}
 )
 
-// NewArchivalClient creates a new ArchivalClient
-func NewArchivalClient(
+// NewClient creates a new Client
+func NewClient(
+	metricsClient metrics.Client,
+	logger bark.Logger,
 	publicClient public.Client,
-	numSWFn dynamicconfig.IntPropertyFn,
-) ArchivalClient {
-	return &archivalClient{
-		cadenceClient: client.NewClient(publicClient, SystemDomainName, &client.Options{}),
-		numSWFn:       numSWFn,
+	numWorkflows dynamicconfig.IntPropertyFn,
+) Client {
+	return &client{
+		metricsClient: metricsClient,
+		logger:        logger,
+		cadenceClient: cclient.NewClient(publicClient, common.SystemDomainName, &cclient.Options{}),
+		numWorkflows:  numWorkflows,
 	}
 }
 
 // Archive starts an archival task
-func (c *archivalClient) Archive(request *ArchiveRequest) error {
-	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numSWFn()))
-	workflowOptions := client.StartWorkflowOptions{
+func (c *client) Archive(request *ArchiveRequest) error {
+	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numWorkflows()))
+	workflowOptions := cclient.StartWorkflowOptions{
 		ID:                              workflowID,
 		TaskList:                        decisionTaskList,
 		ExecutionStartToCloseTimeout:    workflowStartToCloseTimeout,
-		DecisionTaskStartToCloseTimeout: decisionTaskStartToCloseTimeout,
-		WorkflowIDReusePolicy:           client.WorkflowIDReusePolicyAllowDuplicate,
+		DecisionTaskStartToCloseTimeout: workflowTaskStartToCloseTimeout,
+		WorkflowIDReusePolicy:           cclient.WorkflowIDReusePolicyAllowDuplicate,
 	}
-	var carryoverRequests []ArchiveRequest
-	_, err := c.cadenceClient.SignalWithStartWorkflow(
-		context.Background(),
-		workflowID,
-		signalName,
-		*request,
-		workflowOptions,
-		archiveSystemWorkflowFnName,
-		carryoverRequests,
-	)
+	exec, err := c.cadenceClient.SignalWithStartWorkflow(context.Background(), workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
+	if err != nil {
+		tagLoggerWithRequest(c.logger, *request).WithFields(bark.Fields{
+			logging.TagErr:                 err,
+			logging.TagWorkflowExecutionID: exec.ID,
+			logging.TagWorkflowRunID:       exec.RunID,
+		}).Error("failed to SignalWithStartWorkflow to archival system workflow")
+		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.ArchiverClientSendSignalFailureCount)
+	}
 	return err
 }
