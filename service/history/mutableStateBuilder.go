@@ -2384,7 +2384,13 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 
 	// call FlushBufferedEvents to assign task id to event
 	// as well as update last event task id in new state builder
-	err := newStateBuilder.FlushBufferedEvents()
+	// NOTE: must flush current mutable state first
+	// so the task IDs assigned can be used for comparison for cross DC
+	err := e.FlushBufferedEvents()
+	if err != nil {
+		return nil, nil, err
+	}
+	err = newStateBuilder.FlushBufferedEvents()
 	if err != nil {
 		return nil, nil, err
 	}

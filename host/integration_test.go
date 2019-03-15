@@ -974,6 +974,96 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.True(activityExecutedCount == 2)
 }
 
+func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
+	id := "integration-wf-continue-as-new-task-id-test"
+	wt := "integration-wf-continue-as-new-task-id-type"
+	tl := "integration-wf-continue-as-new-task-id-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	var executions []*workflow.WorkflowExecution
+
+	continueAsNewed := false
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		executions = append(executions, execution)
+
+		if !continueAsNewed {
+			continueAsNewed = true
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
+				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+					WorkflowType:                        workflowType,
+					TaskList:                            taskList,
+					Input:                               nil,
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+				},
+			}}, nil
+		}
+
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("succeed"),
+			},
+		}}, nil
+
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	minTaskID := int64(0)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.Nil(err)
+	events := s.getHistory(s.domainName, executions[0])
+	s.True(len(events) != 0)
+	for _, event := range events {
+		s.True(event.GetTaskId() > minTaskID)
+		minTaskID = event.GetTaskId()
+	}
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.Nil(err)
+	events = s.getHistory(s.domainName, executions[1])
+	s.True(len(events) != 0)
+	for _, event := range events {
+		s.True(event.GetTaskId() > minTaskID)
+		minTaskID = event.GetTaskId()
+	}
+}
+
 func (s *integrationSuite) TestWorkflowRetry() {
 	id := "integration-wf-retry-test"
 	wt := "integration-wf-retry-type"
