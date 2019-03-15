@@ -320,6 +320,7 @@ type (
 		UpdateCurr           bool
 		CurrExecutionInfo    *InternalWorkflowExecutionInfo
 		CurrReplicationState *ReplicationState
+		CurrReplicationTasks []Task
 		CurrTransferTasks    []Task
 		CurrTimerTasks       []Task
 

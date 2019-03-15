@@ -2117,9 +2117,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(2, len(resetReq.InsertActivityInfos))
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.InsertActivityInfos)
 
-	s.Equal(2, len(resetReq.InsertReplicationTasks))
+	s.Equal(1, len(resetReq.InsertReplicationTasks))
 	s.Equal(p.ReplicationTaskTypeHistory, resetReq.InsertReplicationTasks[0].GetType())
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.InsertReplicationTasks[1].GetType())
+	s.Equal(1, len(resetReq.CurrReplicationTasks))
+	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.LastWriteEventID = 34

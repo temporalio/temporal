@@ -588,6 +588,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExec
 		UpdateCurr:           request.UpdateCurr,
 		CurrExecutionInfo:    currExecution,
 		CurrReplicationState: request.CurrReplicationState,
+		CurrReplicationTasks: request.CurrReplicationTasks,
 		CurrTimerTasks:       request.CurrTimerTasks,
 		CurrTransferTasks:    request.CurrTransferTasks,
 

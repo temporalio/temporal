@@ -173,10 +173,10 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(ctx context.Context, resetR
 	}
 
 	// update replication and generate replication task
-	replicationTasks := w.generateReplicationTasksForReset(terminateCurr, currMutableState, newMutableState, domainEntry)
+	currReplicationTasks, insertReplicationTasks := w.generateReplicationTasksForReset(terminateCurr, currMutableState, newMutableState, domainEntry)
 
 	// finally, write to persistence
-	retError = currContext.resetWorkflowExecution(currMutableState, terminateCurr, closeTask, cleanupTask, newMutableState, transferTasks, timerTasks, replicationTasks, baseExecution.GetRunId(), baseMutableState.GetNextEventID(), prevRunVersion)
+	retError = currContext.resetWorkflowExecution(currMutableState, terminateCurr, closeTask, cleanupTask, newMutableState, transferTasks, timerTasks, currReplicationTasks, insertReplicationTasks, baseExecution.GetRunId(), baseMutableState.GetNextEventID(), prevRunVersion)
 
 	if retError == nil {
 		w.eng.txProcessor.NotifyNewTask(w.eng.currentClusterName, transferTasks)
@@ -423,8 +423,8 @@ func (w *workflowResetorImpl) setEventIDsWithHistory(msBuilder mutableState) int
 	return firstEvent.GetEventId()
 }
 
-func (w *workflowResetorImpl) generateReplicationTasksForReset(terminateCurr bool, currMutableState, newMutableState mutableState, domainEntry *cache.DomainCacheEntry) []persistence.Task {
-	var repTasks []persistence.Task
+func (w *workflowResetorImpl) generateReplicationTasksForReset(terminateCurr bool, currMutableState, newMutableState mutableState, domainEntry *cache.DomainCacheEntry) ([]persistence.Task, []persistence.Task) {
+	var currRepTasks, insertRepTasks []persistence.Task
 	if newMutableState.GetReplicationState() != nil {
 		if terminateCurr {
 			// we will generate 2 replication tasks for this case
@@ -438,7 +438,7 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(terminateCurr boo
 					EventStoreVersion:   currMutableState.GetEventStoreVersion(),
 					BranchToken:         currMutableState.GetCurrentBranch(),
 				}
-				repTasks = append(repTasks, replicationTask)
+				currRepTasks = append(currRepTasks, replicationTask)
 			}
 		}
 		firstEventIDForNew := w.setEventIDsWithHistory(newMutableState)
@@ -452,10 +452,10 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(terminateCurr boo
 				EventStoreVersion:   newMutableState.GetEventStoreVersion(),
 				BranchToken:         newMutableState.GetCurrentBranch(),
 			}
-			repTasks = append(repTasks, replicationTask)
+			insertRepTasks = append(insertRepTasks, replicationTask)
 		}
 	}
-	return repTasks
+	return currRepTasks, insertRepTasks
 }
 
 // replay signals in the base run, and also signals in all the runs along the chain of contineAsNew
@@ -786,7 +786,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(ctx context.Context, request *h.Re
 	hBuilder.history = historyAfterReset
 	newMsBuilder.SetHistoryBuilder(hBuilder)
 
-	retError = currContext.resetWorkflowExecution(currMutableState, false, nil, nil, newMsBuilder, newRunTransferTasks, newRunTimerTasks, nil, baseExecution.GetRunId(), baseMutableState.GetNextEventID(), prevRunVersion)
+	retError = currContext.resetWorkflowExecution(currMutableState, false, nil, nil, newMsBuilder, newRunTransferTasks, newRunTimerTasks, nil, nil, baseExecution.GetRunId(), baseMutableState.GetNextEventID(), prevRunVersion)
 	if retError != nil {
 		return
 	}
