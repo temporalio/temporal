@@ -43,13 +43,13 @@ import (
 )
 
 var (
-	errTimerTaskNotFound          = errors.New("Timer task not found")
 	errFailedToAddTimeoutEvent    = errors.New("Failed to add timeout event")
 	errFailedToAddTimerFiredEvent = errors.New("Failed to add timer fired event")
 	emptyTime                     = time.Time{}
 	maxTimestamp                  = time.Unix(0, math.MaxInt64)
 
-	loadTimerTaskThrottleRetryDelay = 5 * time.Second
+	loadDomainEntryForTimerTaskRetryDelay = 100 * time.Millisecond
+	loadTimerTaskThrottleRetryDelay       = 5 * time.Second
 )
 
 type (
@@ -428,7 +428,7 @@ FilterLoop:
 				break FilterLoop
 			}
 			incAttempt()
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(loadDomainEntryForTimerTaskRetryDelay)
 		}
 	}
 
@@ -444,7 +444,6 @@ FilterLoop:
 			return true
 		}
 	}
-	defer func() { t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime)) }()
 
 	for {
 		select {
@@ -454,8 +453,7 @@ FilterLoop:
 		default:
 			err = backoff.Retry(op, t.retryPolicy, retryCondition)
 			if err == nil {
-				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-				t.ackTaskOnce(task, scope)
+				t.ackTaskOnce(task, scope, shouldProcessTask, startTime, attempt)
 				return
 			}
 			incAttempt()
@@ -471,8 +469,10 @@ func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct
 
 	startTime := time.Now()
 	scope, err := t.timerProcessor.process(task, shouldProcessTask)
-	t.metricsClient.IncCounter(scope, metrics.TaskRequests)
-	t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
+	if shouldProcessTask {
+		t.metricsClient.IncCounter(scope, metrics.TaskRequests)
+		t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
+	}
 
 	return scope, err
 }
@@ -527,13 +527,17 @@ func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time
 	return err
 }
 
-func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, scope int) {
+func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, scope int, reportMetrics bool, startTime time.Time, attempt int) {
 	t.timerQueueAckMgr.completeTimerTask(task)
-	t.metricsClient.RecordTimer(
-		scope,
-		metrics.TaskQueueLatency,
-		time.Since(task.GetVisibilityTimestamp()),
-	)
+	if reportMetrics {
+		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime))
+		t.metricsClient.RecordTimer(
+			scope,
+			metrics.TaskQueueLatency,
+			time.Since(task.GetVisibilityTimestamp()),
+		)
+	}
 	atomic.AddUint64(&t.timerFiredCount, 1)
 }
 
