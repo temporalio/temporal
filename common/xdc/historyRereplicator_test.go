@@ -874,7 +874,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		DomainId:    common.StringPtr(s.domainID),
 		WorkflowId:  common.StringPtr(workflowID),
 		RunId:       common.StringPtr(runID),
-		NextEventId: common.Int64Ptr(rereplicationContext.beginingFirstEventID - 10),
+		NextEventId: common.Int64Ptr(rereplicationContext.beginningFirstEventID - 10),
 	}
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, request).Return(retryErr).Once()
 
@@ -894,7 +894,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 			RunId:      common.StringPtr(runID),
 		},
 		FirstEventId:    common.Int64Ptr(retryErr.GetNextEventId()),
-		NextEventId:     common.Int64Ptr(rereplicationContext.beginingFirstEventID),
+		NextEventId:     common.Int64Ptr(rereplicationContext.beginningFirstEventID),
 		MaximumPageSize: common.Int32Ptr(defaultPageSize),
 		NextPageToken:   nil,
 	}).Return(&admin.GetWorkflowExecutionRawHistoryResponse{
@@ -957,12 +957,30 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 		DomainId:    common.StringPtr(s.domainID),
 		WorkflowId:  common.StringPtr(workflowID),
 		RunId:       common.StringPtr(runID),
-		NextEventId: common.Int64Ptr(rereplicationContext.beginingFirstEventID - 10),
+		NextEventId: common.Int64Ptr(rereplicationContext.beginningFirstEventID - 10),
 	}
 	s.mockHistoryClient.On("ReplicateRawEvents", mock.Anything, request).Return(retryErr).Once()
 
 	err := rereplicationContext.sendReplicationRawRequest(request)
 	s.Equal(retryErr, err)
+}
+
+func (s *historyRereplicatorSuite) TestHandleEmptyHistory_SeenMoreThanOnce() {
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	lastVersion := int64(777)
+	lastEventID := int64(999)
+	replicationInfo := map[string]*shared.ReplicationInfo{
+		s.targetClusterName: &shared.ReplicationInfo{
+			Version:     common.Int64Ptr(lastVersion),
+			LastEventId: common.Int64Ptr(lastEventID),
+		},
+	}
+
+	rereplicationContext := newHistoryRereplicationContext(s.domainID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
+	rereplicationContext.seenEmptyEvents = true
+	err := rereplicationContext.handleEmptyHistory(s.domainID, workflowID, runID, replicationInfo)
+	s.Equal(ErrNoHistoryRawEventBatches, err)
 }
 
 func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEntry() {
@@ -1177,6 +1195,29 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 	s.Equal("", runID)
 }
 
+func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
+	workflowID := "some random workflow ID"
+	currentRunID := uuid.New()
+
+	s.mockAdminClient.On("GetWorkflowExecutionRawHistory", mock.Anything, &admin.GetWorkflowExecutionRawHistoryRequest{
+		Domain: common.StringPtr(s.domainName),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(currentRunID),
+		},
+		FirstEventId:    common.Int64Ptr(common.FirstEventID),
+		NextEventId:     common.Int64Ptr(common.EndEventID),
+		MaximumPageSize: common.Int32Ptr(1),
+		NextPageToken:   nil,
+	}).Return(&admin.GetWorkflowExecutionRawHistoryResponse{
+		HistoryBatches: []*shared.DataBlob{},
+	}, nil).Once()
+
+	runID, err := s.getDummyRereplicationContext().getPrevRunID(s.domainID, workflowID, currentRunID)
+	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.Equal("", runID)
+}
+
 func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	nextRunID := uuid.New()
 	eventBatchIn := []*shared.HistoryEvent{
@@ -1273,5 +1314,6 @@ func (s *historyRereplicatorSuite) serializeEvents(events []*shared.HistoryEvent
 func (s *historyRereplicatorSuite) getDummyRereplicationContext() *historyRereplicationContext {
 	return &historyRereplicationContext{
 		rereplicator: s.rereplicator,
+		logger:       s.rereplicator.logger,
 	}
 }
