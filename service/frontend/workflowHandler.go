@@ -2713,7 +2713,8 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 }
 
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
-// pollers which polled this tasklist in last few minutes.
+// pollers which polled this tasklist in last few minutes. If includeTaskListStatus field is true,
+// it will also return status of tasklist's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.DescribeTaskListRequest) (*gen.DescribeTaskListResponse, error) {
 
 	scope := metrics.FrontendDescribeTaskListScope

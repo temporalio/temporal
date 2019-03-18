@@ -101,6 +101,12 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on ElasticSearch",
 					Subcommands: newAdminElasticSearchCommands(),
 				},
+				{
+					Name:        "tasklist",
+					Aliases:     []string{"tl"},
+					Usage:       "Run admin operation on taskList",
+					Subcommands: newAdminTaskListCommands(),
+				},
 			},
 		},
 	}

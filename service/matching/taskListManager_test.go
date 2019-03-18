@@ -116,6 +116,53 @@ func TestIsTaskAddedRecently(t *testing.T) {
 	require.False(t, tlm.isTaskAddedRecently(time.Time{}))
 }
 
+func TestDescribeTaskList(t *testing.T) {
+	startTaskID := int64(1)
+	taskCount := int64(3)
+	PollerIdentity := "test-poll"
+
+	// Create taskList Manager and set taskList state
+	tlm := createTestTaskListManager()
+	tlm.db.rangeID = int64(1)
+	tlm.db.ackLevel = int64(0)
+	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
+
+	for i := int64(0); i < taskCount; i++ {
+		tlm.taskAckManager.addTask(startTaskID + i)
+	}
+
+	includeTaskStatus := false
+	descResp := tlm.DescribeTaskList(includeTaskStatus)
+	require.Equal(t, 0, len(descResp.GetPollers()))
+	require.Nil(t, descResp.GetTaskListStatus())
+
+	includeTaskStatus = true
+	taskListStatus := tlm.DescribeTaskList(includeTaskStatus).GetTaskListStatus()
+	require.NotNil(t, taskListStatus)
+	require.Zero(t, taskListStatus.GetAckLevel())
+	require.Equal(t, taskCount, taskListStatus.GetReadLevel())
+	require.Equal(t, taskCount, taskListStatus.GetBacklogCountHint())
+	taskIDBlock := taskListStatus.GetTaskIDBlock()
+	require.Equal(t, int64(1), taskIDBlock.GetStartID())
+	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndID())
+
+	// Add a poller and complete all tasks
+	tlm.updatePollerInfo(pollerIdentity{identity: PollerIdentity})
+	for i := int64(0); i < taskCount; i++ {
+		tlm.taskAckManager.completeTask(startTaskID + i)
+	}
+
+	descResp = tlm.DescribeTaskList(includeTaskStatus)
+	require.Equal(t, 1, len(descResp.GetPollers()))
+	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
+	require.NotEmpty(t, descResp.Pollers[0].GetLastAccessTime())
+
+	taskListStatus = descResp.GetTaskListStatus()
+	require.NotNil(t, taskListStatus)
+	require.Equal(t, taskCount, taskListStatus.GetAckLevel())
+	require.Zero(t, taskListStatus.GetBacklogCountHint())
+}
+
 func tlMgrStartWithoutNotifyEvent(tlm *taskListManagerImpl) {
 	// mimic tlm.Start() but avoid calling notifyEvent
 	tlm.startWG.Done()

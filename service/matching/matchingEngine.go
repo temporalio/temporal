@@ -570,14 +570,7 @@ func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *m.De
 		return nil, err
 	}
 
-	pollers := []*workflow.PollerInfo{}
-	for _, poller := range tlMgr.GetAllPollerInfo() {
-		pollers = append(pollers, &workflow.PollerInfo{
-			Identity:       common.StringPtr(poller.identity),
-			LastAccessTime: common.Int64Ptr(poller.lastAccessTime.UnixNano()),
-		})
-	}
-	return &workflow.DescribeTaskListResponse{Pollers: pollers}, nil
+	return tlMgr.DescribeTaskList(request.DescRequest.GetIncludeTaskListStatus()), nil
 }
 
 // Loads a task from persistence and wraps it in a task context

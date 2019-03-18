@@ -223,7 +223,8 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 }
 
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
-// pollers which polled this tasklist in last few minutes.
+// pollers which polled this tasklist in last few minutes. If includeTaskListStatus field is true,
+// it will also return status of tasklist's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (*gen.DescribeTaskListResponse, error) {
 	scope := metrics.MatchingDescribeTaskListScope
 	sw := h.startRequestProfile("DescribeTaskList", scope)

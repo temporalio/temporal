@@ -62,6 +62,7 @@ type (
 		SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*pollerInfo
+		DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse
 		String() string
 	}
 
@@ -540,6 +541,37 @@ func (c *taskListManagerImpl) updatePollerInfo(id pollerIdentity) {
 // getAllPollerInfo return poller which poll from this tasklist in last few minutes
 func (c *taskListManagerImpl) GetAllPollerInfo() []*pollerInfo {
 	return c.pollerHistory.getAllPollerInfo()
+}
+
+// DescribeTaskList returns information about the target tasklist, right now this API returns the
+// pollers which polled this tasklist in last few minutes and status of tasklist's ackManager
+// (readLevel, ackLevel, backlogCountHint and taskIDBlock).
+func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse {
+	pollers := []*s.PollerInfo{}
+	for _, poller := range c.GetAllPollerInfo() {
+		pollers = append(pollers, &s.PollerInfo{
+			Identity:       common.StringPtr(poller.identity),
+			LastAccessTime: common.Int64Ptr(poller.lastAccessTime.UnixNano()),
+		})
+	}
+
+	response := &s.DescribeTaskListResponse{Pollers: pollers}
+	if !includeTaskListStatus {
+		return response
+	}
+
+	taskIDBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
+	response.TaskListStatus = &s.TaskListStatus{
+		ReadLevel:        common.Int64Ptr(c.taskAckManager.getReadLevel()),
+		AckLevel:         common.Int64Ptr(c.taskAckManager.getAckLevel()),
+		BacklogCountHint: common.Int64Ptr(c.taskAckManager.getBacklogCountHint()),
+		TaskIDBlock: &s.TaskIDBlock{
+			StartID: common.Int64Ptr(taskIDBlock.start),
+			EndID:   common.Int64Ptr(taskIDBlock.end),
+		},
+	}
+
+	return response
 }
 
 // Tries to match task to a poller that is already waiting on getTask.

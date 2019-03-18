@@ -328,14 +328,16 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 		descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matching.DescribeTaskListRequest{
 			DomainUUID: common.StringPtr(domainID),
 			DescRequest: &workflow.DescribeTaskListRequest{
-				TaskList:     taskList,
-				TaskListType: &taskListType,
+				TaskList:              taskList,
+				TaskListType:          &taskListType,
+				IncludeTaskListStatus: common.BoolPtr(false),
 			},
 		})
 		s.NoError(err)
 		s.Equal(1, len(descResp.Pollers))
 		s.Equal(identity, descResp.Pollers[0].GetIdentity())
 		s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
+		s.Nil(descResp.GetTaskListStatus())
 	}
 	s.EqualValues(1, s.taskManager.taskLists[*tlID].rangeID)
 }

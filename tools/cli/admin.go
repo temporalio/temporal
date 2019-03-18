@@ -615,3 +615,27 @@ func newAdminElasticSearchCommands() []cli.Command {
 		},
 	}
 }
+
+func newAdminTaskListCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "describe",
+			Aliases: []string{"desc"},
+			Usage:   "Describe pollers and status information of tasklist",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagTaskListWithAlias,
+					Usage: "TaskList description",
+				},
+				cli.StringFlag{
+					Name:  FlagTaskListTypeWithAlias,
+					Value: "decision",
+					Usage: "Optional TaskList type [decision|activity]",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDescribeTaskList(c)
+			},
+		},
+	}
+}

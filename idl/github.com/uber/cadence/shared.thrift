@@ -1230,10 +1230,24 @@ struct DescribeTaskListRequest {
   10: optional string domain
   20: optional TaskList taskList
   30: optional TaskListType taskListType
+  40: optional bool includeTaskListStatus
 }
 
 struct DescribeTaskListResponse {
   10: optional list<PollerInfo> pollers
+  20: optional TaskListStatus taskListStatus
+}
+
+struct TaskListStatus {
+  10: optional i64 (js.type = "Long") backlogCountHint
+  20: optional i64 (js.type = "Long") readLevel
+  30: optional i64 (js.type = "Long") ackLevel
+  40: optional TaskIDBlock taskIDBlock
+}
+
+struct TaskIDBlock {
+  10: optional i64 (js.type = "Long")  startID
+  20: optional i64 (js.type = "Long")  endID
 }
 
 //At least one of the parameters needs to be provided

@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
