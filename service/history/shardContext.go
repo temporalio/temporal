@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -73,13 +74,14 @@ type (
 		ResetMutableState(request *persistence.ResetMutableStateRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
-		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error)
+		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error)
 		NotifyNewHistoryEvent(event *historyEventNotification) error
 		GetConfig() *Config
 		GetEventsCache() eventsCache
 		GetLogger() bark.Logger
+		GetThrottledLogger() bark.Logger
 		GetMetricsClient() metrics.Client
-		GetTimeSource() common.TimeSource
+		GetTimeSource() clock.TimeSource
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
 		GetTimerMaxReadLevel(cluster string) time.Time
@@ -102,6 +104,7 @@ type (
 		isClosed         bool
 		config           *Config
 		logger           bark.Logger
+		throttledLogger  bark.Logger
 		metricsClient    metrics.Client
 
 		sync.RWMutex
@@ -122,6 +125,7 @@ var _ ShardContext = (*shardContextImpl)(nil)
 const (
 	logWarnTransferLevelDiff = 3000000 // 3 million
 	logWarnTimerLevelDiff    = time.Duration(30 * time.Minute)
+	historySizeLogThreshold  = 10 * 1024 * 1024
 )
 
 func (s *shardContextImpl) GetShardID() int {
@@ -726,7 +730,8 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error) {
+func (s *shardContextImpl) AppendHistoryV2Events(
+	request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error) {
 
 	domainEntry, err := s.domainCache.GetDomainByID(domainID)
 	if err != nil {
@@ -737,6 +742,14 @@ func (s *shardContextImpl) AppendHistoryV2Events(request *persistence.AppendHist
 	size := 0
 	defer func() {
 		s.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))
+		if size >= historySizeLogThreshold {
+			s.throttledLogger.WithFields(bark.Fields{
+				logging.TagDomainID:            domainID,
+				logging.TagWorkflowExecutionID: execution.WorkflowId,
+				logging.TagWorkflowRunID:       execution.RunId,
+				logging.TagHistorySizeBytes:    size,
+			}).Warn("history size threshold breached")
+		}
 	}()
 	resp, err0 := s.historyV2Mgr.AppendHistoryNodes(request)
 	if resp != nil {
@@ -756,6 +769,14 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	size := 0
 	defer func() {
 		s.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))
+		if size >= historySizeLogThreshold {
+			s.throttledLogger.WithFields(bark.Fields{
+				logging.TagDomainID:            request.DomainID,
+				logging.TagWorkflowExecutionID: request.Execution.WorkflowId,
+				logging.TagWorkflowRunID:       request.Execution.RunId,
+				logging.TagHistorySizeBytes:    size,
+			}).Warn("history size threshold breached")
+		}
 	}()
 
 	// No need to lock context here, as we can write concurrently to append history events
@@ -798,6 +819,10 @@ func (s *shardContextImpl) GetEventsCache() eventsCache {
 
 func (s *shardContextImpl) GetLogger() bark.Logger {
 	return s.logger
+}
+
+func (s *shardContextImpl) GetThrottledLogger() bark.Logger {
+	return s.throttledLogger
 }
 
 func (s *shardContextImpl) GetMetricsClient() metrics.Client {
@@ -891,7 +916,7 @@ func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 
 func (s *shardContextImpl) updateShardInfoLocked() error {
 	var err error
-	now := common.NewRealTimeSource().Now()
+	now := clock.NewRealTimeSource().Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
@@ -1014,8 +1039,8 @@ func (s *shardContextImpl) allocateTimerIDsLocked(domainEntry *cache.DomainCache
 	return nil
 }
 
-func (s *shardContextImpl) GetTimeSource() common.TimeSource {
-	return common.NewRealTimeSource()
+func (s *shardContextImpl) GetTimeSource() clock.TimeSource {
+	return clock.NewRealTimeSource()
 }
 
 func (s *shardContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
@@ -1126,9 +1151,8 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
 		timerMaxReadLevelMap:      timerMaxReadLevelMap, // use ack to init read level
 	}
-	context.logger = shardItem.logger.WithFields(bark.Fields{
-		logging.TagHistoryShardID: shardItem.shardID,
-	})
+	context.logger = shardItem.logger
+	context.throttledLogger = shardItem.throttledLogger
 	context.eventsCache = newEventsCache(context)
 
 	err1 := context.renewRangeLocked(true)

@@ -30,6 +30,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/locks"
@@ -250,7 +251,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState m
 		BranchToken:   newMutableState.GetCurrentBranch(),
 		Events:        hBuilder.GetHistory().GetEvents(),
 		TransactionID: transactionID,
-	}, c.domainID)
+	}, c.domainID, c.workflowExecution)
 	if retError != nil {
 		return
 	}
@@ -686,7 +687,7 @@ func (c *workflowExecutionContextImpl) appendHistoryEvents(history []*workflow.H
 			BranchToken:   c.msBuilder.GetCurrentBranch(),
 			Events:        history,
 			TransactionID: transactionID,
-		}, c.domainID)
+		}, c.domainID, c.workflowExecution)
 	} else {
 		historySize, err = c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 			DomainID:          c.domainID,
@@ -748,7 +749,7 @@ func (c *workflowExecutionContextImpl) appendFirstBatchHistoryForContinueAsNew(n
 			BranchToken:   newStateBuilder.GetCurrentBranch(),
 			Events:        history.Events,
 			TransactionID: transactionID,
-		}, newStateBuilder.GetExecutionInfo().DomainID)
+		}, newStateBuilder.GetExecutionInfo().DomainID, newExecution)
 	} else {
 		historySize, err = c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 			DomainID:          domainID,
@@ -829,7 +830,7 @@ func (c *workflowExecutionContextImpl) scheduleNewDecision(transferTasks []persi
 			ScheduleID: di.ScheduleID,
 		})
 		if msBuilder.IsStickyTaskListEnabled() {
-			tBuilder := newTimerBuilder(c.shard.GetConfig(), c.logger, common.NewRealTimeSource())
+			tBuilder := newTimerBuilder(c.shard.GetConfig(), c.logger, clock.NewRealTimeSource())
 			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
 				executionInfo.StickyScheduleToStartTimeout)
 			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)

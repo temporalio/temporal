@@ -29,6 +29,8 @@ import (
 
 	"github.com/uber-common/bark"
 
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/yarpc"
 )
 
@@ -86,6 +88,10 @@ func (s *serviceTestBase) Stop() {
 // GetLogger returns the logger for service
 func (s *serviceTestBase) GetLogger() bark.Logger {
 	return s.logger
+}
+
+func (s *serviceTestBase) GetThrottledLogger() bark.Logger {
+	return logging.NewThrottledLogger(s.logger, func(opts ...dynamicconfig.FilterOption) int { return 10 })
 }
 
 // GetMetricsClient returns the metric client for service

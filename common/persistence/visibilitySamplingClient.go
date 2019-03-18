@@ -25,10 +25,11 @@ import (
 
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/tokenbucket"
 )
 
 const (
@@ -65,16 +66,16 @@ func NewVisibilitySamplingClient(persistence VisibilityManager, config *config.V
 
 type domainToBucketMap struct {
 	sync.RWMutex
-	mappings map[string]common.PriorityTokenBucket
+	mappings map[string]tokenbucket.PriorityTokenBucket
 }
 
 func newDomainToBucketMap() *domainToBucketMap {
 	return &domainToBucketMap{
-		mappings: make(map[string]common.PriorityTokenBucket),
+		mappings: make(map[string]tokenbucket.PriorityTokenBucket),
 	}
 }
 
-func (m *domainToBucketMap) getRateLimiter(domain string, numOfPriority, qps int) common.PriorityTokenBucket {
+func (m *domainToBucketMap) getRateLimiter(domain string, numOfPriority, qps int) tokenbucket.PriorityTokenBucket {
 	m.RLock()
 	rateLimiter, exist := m.mappings[domain]
 	m.RUnlock()
@@ -88,7 +89,7 @@ func (m *domainToBucketMap) getRateLimiter(domain string, numOfPriority, qps int
 		m.Unlock()
 		return rateLimiter
 	}
-	rateLimiter = common.NewFullPriorityTokenBucket(numOfPriority, qps, common.NewRealTimeSource())
+	rateLimiter = tokenbucket.NewFullPriorityTokenBucket(numOfPriority, qps, clock.NewRealTimeSource())
 	m.mappings[domain] = rateLimiter
 	m.Unlock()
 	return rateLimiter

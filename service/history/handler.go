@@ -37,12 +37,14 @@ import (
 	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/tokenbucket"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -69,7 +71,7 @@ type (
 		historyEventNotifier  historyEventNotifier
 		publisher             messaging.Producer
 		visibilityProducer    messaging.Producer
-		rateLimiter           common.TokenBucket
+		rateLimiter           tokenbucket.TokenBucket
 		service.Service
 	}
 )
@@ -104,7 +106,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		visibilityMgr:       visibilityMgr,
 		executionMgrFactory: executionMgrFactory,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
-		rateLimiter:         common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
+		rateLimiter:         tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready

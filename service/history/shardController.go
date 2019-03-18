@@ -60,6 +60,7 @@ type (
 		shutdownWG          sync.WaitGroup
 		shutdownCh          chan struct{}
 		logger              bark.Logger
+		throttledLoggger    bark.Logger
 		config              *Config
 		metricsClient       metrics.Client
 
@@ -72,20 +73,21 @@ type (
 
 	historyShardsItem struct {
 		sync.RWMutex
-		shardID       int
-		status        historyShardsItemStatus
-		service       service.Service
-		shardMgr      persistence.ShardManager
-		historyMgr    persistence.HistoryManager
-		historyV2Mgr  persistence.HistoryV2Manager
-		executionMgr  persistence.ExecutionManager
-		domainCache   cache.DomainCache
-		engineFactory EngineFactory
-		host          *membership.HostInfo
-		engine        Engine
-		config        *Config
-		logger        bark.Logger
-		metricsClient metrics.Client
+		shardID         int
+		status          historyShardsItemStatus
+		service         service.Service
+		shardMgr        persistence.ShardManager
+		historyMgr      persistence.HistoryManager
+		historyV2Mgr    persistence.HistoryV2Manager
+		executionMgr    persistence.ExecutionManager
+		domainCache     cache.DomainCache
+		engineFactory   EngineFactory
+		host            *membership.HostInfo
+		engine          Engine
+		config          *Config
+		logger          bark.Logger
+		throttledLogger bark.Logger
+		metricsClient   metrics.Client
 	}
 )
 
@@ -117,6 +119,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 		shardClosedCh:       make(chan int, config.NumberOfShards),
 		shutdownCh:          make(chan struct{}),
 		logger:              logger,
+		throttledLoggger:    svc.GetThrottledLogger(),
 		config:              config,
 		metricsClient:       metricsClient,
 	}
@@ -125,7 +128,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence.ShardManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
-	config *Config, logger bark.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
+	config *Config, logger bark.Logger, throttledLog bark.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
 
 	executionMgr, err := executionMgrFactory.NewExecutionManager(shardID)
 	if err != nil {
@@ -145,6 +148,9 @@ func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence
 		host:          host,
 		config:        config,
 		logger: logger.WithFields(bark.Fields{
+			logging.TagHistoryShardID: shardID,
+		}),
+		throttledLogger: throttledLog.WithFields(bark.Fields{
 			logging.TagHistoryShardID: shardID,
 		}),
 		metricsClient: metricsClient,
@@ -243,7 +249,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 
 	if info.Identity() == c.host.Identity() {
 		shardItem, err := newHistoryShardsItem(shardID, c.service, c.shardMgr, c.historyMgr, c.historyV2Mgr, c.domainCache,
-			c.executionMgrFactory, c.engineFactory, c.host, c.config, c.logger, c.metricsClient)
+			c.executionMgrFactory, c.engineFactory, c.host, c.config, c.logger, c.throttledLoggger, c.metricsClient)
 		if err != nil {
 			return nil, err
 		}

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package tokenbucket
 
 import (
 	"testing"
@@ -57,7 +57,7 @@ func (ts *mockTimeSource) advance(d time.Duration) {
 
 func (s *TokenBucketSuite) TestRpsEnforced() {
 	ts := &mockTimeSource{currTime: time.Now()}
-	tb := NewTokenBucket(99, ts)
+	tb := New(99, ts)
 	for i := 0; i < 2; i++ {
 		total := 0
 		attempts := 1
@@ -86,7 +86,7 @@ func (s *TokenBucketSuite) TestRpsEnforced() {
 
 func (s *TokenBucketSuite) TestLowRpsEnforced() {
 	ts := &mockTimeSource{currTime: time.Now()}
-	tb := NewTokenBucket(3, ts)
+	tb := New(3, ts)
 
 	total := 0
 	attempts := 1

@@ -32,6 +32,7 @@ import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/metrics"
@@ -87,7 +88,7 @@ type (
 		cacheByID       *atomic.Value
 		metadataMgr     persistence.MetadataManager
 		clusterMetadata cluster.Metadata
-		timeSource      common.TimeSource
+		timeSource      clock.TimeSource
 		metricsClient   metrics.Client
 		logger          bark.Logger
 
@@ -124,7 +125,7 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 		cacheByID:        &atomic.Value{},
 		metadataMgr:      metadataMgr,
 		clusterMetadata:  clusterMetadata,
-		timeSource:       common.NewRealTimeSource(),
+		timeSource:       clock.NewRealTimeSource(),
 		metricsClient:    metricsClient,
 		logger:           logger,
 		prepareCallbacks: make(map[int]PrepareCallbackFn),

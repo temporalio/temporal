@@ -29,6 +29,7 @@ import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
@@ -458,7 +459,7 @@ func (t *timerQueueStandbyProcessorImpl) getStandbyClusterTime() time.Time {
 }
 
 func (t *timerQueueStandbyProcessorImpl) getTimerBuilder() *timerBuilder {
-	timeSource := common.NewEventTimeSource()
+	timeSource := clock.NewEventTimeSource()
 	now := t.getStandbyClusterTime()
 	timeSource.Update(now)
 	return newTimerBuilder(t.shard.GetConfig(), t.logger, timeSource)

@@ -31,6 +31,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
@@ -248,7 +249,7 @@ func (r *historyReplicator) SyncActivity(ctx context.Context, request *h.SyncAct
 	}
 	now := time.Unix(0, eventTime)
 	timerTasks := []persistence.Task{}
-	timeSource := common.NewEventTimeSource()
+	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
 	timerBuilder := newTimerBuilder(r.shard.GetConfig(), r.logger, timeSource)
 	if tt := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
@@ -830,7 +831,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 			BranchToken:   msBuilder.GetCurrentBranch(),
 			Events:        history.Events,
 			TransactionID: transactionID,
-		}, msBuilder.GetExecutionInfo().DomainID)
+		}, msBuilder.GetExecutionInfo().DomainID, execution)
 	} else {
 		historySize, err = r.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 			DomainID:          domainID,

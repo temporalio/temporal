@@ -25,6 +25,8 @@ import (
 
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -33,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/common/tokenbucket"
 )
 
 // Config represents configuration for cadence-frontend service
@@ -63,6 +66,8 @@ type Config struct {
 	// size limit system protection
 	BlobSizeLimitError dynamicconfig.IntPropertyFnWithDomainFilter
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
+
+	ThrottledLogRPS dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -87,6 +92,7 @@ func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool) *Conf
 		DisableListVisibilityByFilter:   dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 		BlobSizeLimitError:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:               dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1204),
+		ThrottledLogRPS:                 dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
 	}
 }
 
@@ -100,9 +106,11 @@ type Service struct {
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.ESConfig.Enable)
+	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
-		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.ESConfig.Enable),
+		config: config,
 		stopC:  make(chan struct{}),
 	}
 }
@@ -141,7 +149,7 @@ func (s *Service) Start() {
 		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
 		visibilityFromES = elasticsearch.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, log)
 		// wrap with rate limiter
-		esRateLimiter := common.NewTokenBucket(s.config.PersistenceMaxQPS(), common.NewRealTimeSource())
+		esRateLimiter := tokenbucket.New(s.config.PersistenceMaxQPS(), clock.NewRealTimeSource())
 		visibilityFromES = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
 		// wrap with advanced rate limit for list
 		visibilityConfigForES := &config.VisibilityConfig{

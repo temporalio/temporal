@@ -466,7 +466,7 @@ Loop:
 		}
 	}
 	if !processTask {
-		logger.Warn("Dropping non-targeted history task.")
+		p.metricsClient.IncCounter(metrics.HistoryReplicationTaskScope, metrics.ReplicatorMessagesDropped)
 		return nil
 	}
 

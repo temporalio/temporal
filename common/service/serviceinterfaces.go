@@ -44,6 +44,8 @@ type (
 
 		GetLogger() bark.Logger
 
+		GetThrottledLogger() bark.Logger
+
 		GetMetricsClient() metrics.Client
 
 		GetClientBean() client.Bean

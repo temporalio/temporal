@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
@@ -61,18 +62,21 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ReplicationCfg *replicator.Config
-		ArchiverConfig *archiver.Config
-		IndexerCfg     *indexer.Config
+		ReplicationCfg  *replicator.Config
+		ArchiverConfig  *archiver.Config
+		IndexerCfg      *indexer.Config
+		ThrottledLogRPS dynamicconfig.IntPropertyFn
 	}
 )
 
 // NewService builds a new cadence-worker service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.WorkerServiceName)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
+	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
-		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),
+		config: config,
 		stopC:  make(chan struct{}),
 	}
 }
@@ -101,6 +105,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
 			ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 10*time.Second),
 		},
+		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 	}
 }
 

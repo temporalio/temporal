@@ -76,6 +76,7 @@ var keys = map[Key]string{
 	FrontendHistoryMgrNumConns:     "frontend.historyMgrNumConns",
 	MaxDecisionStartToCloseTimeout: "frontend.maxDecisionStartToCloseTimeout",
 	DisableListVisibilityByFilter:  "frontend.disableListVisibilityByFilter",
+	FrontendThrottledLogRPS:        "frontend.throttledLogRPS",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -90,6 +91,7 @@ var keys = map[Key]string{
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
 	MatchingMaxTaskDeleteBatchSize:          "matching.maxTaskDeleteBatchSize",
+	MatchingThrottledLogRPS:                 "matching.throttledLogRPS",
 
 	// history settings
 	HistoryRPS:                                            "history.rps",
@@ -157,6 +159,7 @@ var keys = map[Key]string{
 	EnableEventsV2:                                        "history.enableEventsV2",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
+	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 
 	WorkerPersistenceMaxQPS:                  "worker.persistenceMaxQPS",
 	WorkerReplicatorConcurrency:              "worker.replicatorConcurrency",
@@ -173,6 +176,7 @@ var keys = map[Key]string{
 	WorkerTargetArchivalBlobSize:             "worker.WorkerTargetArchivalBlobSize",
 	WorkerArchiverConcurrency:                "worker.ArchiverConcurrency",
 	WorkerArchivalsPerIteration:              "worker.ArchivalsPerIteration",
+	WorkerThrottledLogRPS:                    "worker.throttledLogRPS",
 }
 
 const (
@@ -244,6 +248,8 @@ const (
 	FrontendRPS
 	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
 	FrontendHistoryMgrNumConns
+	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
+	FrontendThrottledLogRPS
 	// MaxDecisionStartToCloseTimeout is max decision timeout in seconds
 	MaxDecisionStartToCloseTimeout
 
@@ -273,6 +279,8 @@ const (
 	MatchingMaxTaskBatchSize
 	// MatchingMaxTaskDeleteBatchSize is the max batch size for range deletion of tasks
 	MatchingMaxTaskDeleteBatchSize
+	// MatchingThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
+	MatchingThrottledLogRPS
 
 	// key for history
 
@@ -406,6 +414,8 @@ const (
 
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2
+	// HistoryThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
+	HistoryThrottledLogRPS
 
 	// key for worker
 
@@ -439,6 +449,8 @@ const (
 	WorkerArchiverConcurrency
 	// WorkerArchivalsPerIteration controls the number of archivals handled in each iteration of archival workflow
 	WorkerArchivalsPerIteration
+	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
+	WorkerThrottledLogRPS
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

@@ -47,11 +47,13 @@ import (
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/tokenbucket"
 	"github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/yarpc/yarpcerrors"
 )
@@ -72,7 +74,7 @@ type (
 		tokenSerializer   common.TaskTokenSerializer
 		metricsClient     metrics.Client
 		startWG           sync.WaitGroup
-		rateLimiter       common.TokenBucket
+		rateLimiter       tokenbucket.TokenBucket
 		config            *Config
 		domainReplicator  DomainReplicator
 		blobstoreClient   blobstore.Client
@@ -156,7 +158,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		visibilityMgr:    visibilityMgr,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		domainCache:      cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
-		rateLimiter:      common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
+		rateLimiter:      tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
 		domainReplicator: NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 		blobstoreClient:  blobstoreClient,
 	}
@@ -965,7 +967,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 
 	if err := common.CheckEventBlobSizeLimit(len(heartbeatRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: heartbeatRequest.TaskToken,
@@ -1051,7 +1053,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 
 	if err := common.CheckEventBlobSizeLimit(len(heartbeatRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: token,
@@ -1126,7 +1128,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 
 	if err := common.CheckEventBlobSizeLimit(len(completeRequest.Result), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: completeRequest.TaskToken,
@@ -1214,7 +1216,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 
 	if err := common.CheckEventBlobSizeLimit(len(completeRequest.Result), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: token,
@@ -1288,7 +1290,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 
 	if err := common.CheckEventBlobSizeLimit(len(failedRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// details exceeds blob size limit, we would truncate the details and put a specific error reason
 		failedRequest.Reason = common.StringPtr(common.FailureReasonFailureDetailsExceedsLimit)
 		failedRequest.Details = failedRequest.Details[0:sizeLimitError]
@@ -1363,7 +1365,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 
 	if err := common.CheckEventBlobSizeLimit(len(failedRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// details exceeds blob size limit, we would truncate the details and put a specific error reason
 		failedRequest.Reason = common.StringPtr(common.FailureReasonFailureDetailsExceedsLimit)
 		failedRequest.Details = failedRequest.Details[0:sizeLimitError]
@@ -1427,7 +1429,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 
 	if err := common.CheckEventBlobSizeLimit(len(cancelRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: cancelRequest.TaskToken,
@@ -1514,7 +1516,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 
 	if err := common.CheckEventBlobSizeLimit(len(cancelRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: token,
@@ -1655,7 +1657,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 
 	if err := common.CheckEventBlobSizeLimit(len(failedRequest.Details), sizeLimitWarn, sizeLimitError,
 		taskToken.DomainID, taskToken.WorkflowID, taskToken.RunID,
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
 		failedRequest.Details = failedRequest.Details[0:sizeLimitError]
 	}
@@ -1787,7 +1789,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(startRequest.GetDomain()))
 	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
 	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() {
-		logging.LogDecisionTimeoutLargerThanWorkflowTimeout(wh.Service.GetLogger(),
+		logging.LogDecisionTimeoutLargerThanWorkflowTimeout(wh.Service.GetThrottledLogger(),
 			startRequest.GetTaskStartToCloseTimeoutSeconds(),
 			startRequest.GetDomain(),
 			startRequest.GetWorkflowId(),
@@ -1820,7 +1822,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	sizeLimitError := wh.config.BlobSizeLimitError(startRequest.GetDomain())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(startRequest.GetDomain())
 	if err := common.CheckEventBlobSizeLimit(len(startRequest.Input), sizeLimitWarn, sizeLimitError, domainID,
-		startRequest.GetWorkflowId(), "", wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		startRequest.GetWorkflowId(), "", wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2058,7 +2060,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(signalRequest.GetDomain())
 	if err := common.CheckEventBlobSizeLimit(len(signalRequest.Input), sizeLimitWarn, sizeLimitError, domainID,
 		signalRequest.GetWorkflowExecution().GetWorkflowId(), signalRequest.GetWorkflowExecution().GetWorkflowId(),
-		wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -2185,11 +2187,11 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	sizeLimitError := wh.config.BlobSizeLimitError(signalWithStartRequest.GetDomain())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(signalWithStartRequest.GetDomain())
 	if err := common.CheckEventBlobSizeLimit(len(signalWithStartRequest.SignalInput), sizeLimitWarn, sizeLimitError, domainID,
-		signalWithStartRequest.GetWorkflowId(), "", wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		signalWithStartRequest.GetWorkflowId(), "", wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 	if err := common.CheckEventBlobSizeLimit(len(signalWithStartRequest.Input), sizeLimitWarn, sizeLimitError, domainID,
-		signalWithStartRequest.GetWorkflowId(), "", wh.metricsClient, scope, wh.GetLogger()); err != nil {
+		signalWithStartRequest.GetWorkflowId(), "", wh.metricsClient, scope, wh.GetThrottledLogger()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2402,7 +2404,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 					WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
 				})
 		}
-		logging.LogListOpenWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByID)
+		logging.LogListOpenWorkflowByFilter(wh.GetThrottledLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByID)
 	} else if listRequest.TypeFilter != nil {
 		if wh.config.DisableListVisibilityByFilter(domain) {
 			err = errNoPermission
@@ -2412,7 +2414,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 				WorkflowTypeName:              listRequest.TypeFilter.GetName(),
 			})
 		}
-		logging.LogListOpenWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByType)
+		logging.LogListOpenWorkflowByFilter(wh.GetThrottledLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByType)
 	} else {
 		persistenceResp, err = wh.visibilityMgr.ListOpenWorkflowExecutions(&baseReq)
 	}
@@ -2803,7 +2805,7 @@ func (wh *WorkflowHandler) getHistory(scope int, domainID string, execution gen.
 		wh.metricsClient.RecordTimer(scope, metrics.HistorySize, time.Duration(size))
 
 		if size > common.GetHistoryWarnSizeLimit {
-			wh.GetLogger().WithFields(bark.Fields{
+			wh.GetThrottledLogger().WithFields(bark.Fields{
 				logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
 				logging.TagWorkflowRunID:       execution.GetRunId(),
 				logging.TagDomainID:            domainID,

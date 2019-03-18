@@ -31,10 +31,12 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/common/tokenbucket"
 )
 
 type (
@@ -59,7 +61,7 @@ type (
 		processor     processor
 		logger        bark.Logger
 		metricsClient metrics.Client
-		rateLimiter   common.TokenBucket // Read rate limiter
+		rateLimiter   tokenbucket.TokenBucket // Read rate limiter
 		ackMgr        queueAckMgr
 		retryPolicy   backoff.RetryPolicy
 
@@ -93,7 +95,7 @@ func newQueueProcessorBase(clusterName string, shard ShardContext, options *Queu
 		shard:                   shard,
 		options:                 options,
 		processor:               processor,
-		rateLimiter:             common.NewTokenBucket(options.MaxPollRPS(), common.NewRealTimeSource()),
+		rateLimiter:             tokenbucket.New(options.MaxPollRPS(), clock.NewRealTimeSource()),
 		workerNotificationChans: workerNotificationChans,
 		status:                  common.DaemonStatusInitialized,
 		notifyCh:                make(chan struct{}, 1),

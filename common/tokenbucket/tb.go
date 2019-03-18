@@ -18,17 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package tokenbucket
 
 import (
 	"sync"
 	"time"
+
+	"github.com/uber/cadence/common/clock"
 )
 
 type (
-	// TokenBucketFactory is an interface mainly used for injecting mock implementation of TokenBucket for unit testing
-	TokenBucketFactory interface {
-		CreateTokenBucket(rps int, timeSource TimeSource) TokenBucket
+	// Factory is an interface mainly used for injecting mock implementation of TokenBucket for unit testing
+	Factory interface {
+		CreateTokenBucket(rps int, timeSource clock.TimeSource) TokenBucket
 	}
 
 	// TokenBucket is the interface for any implementation of a token bucket rate limiter
@@ -42,6 +44,8 @@ type (
 		// tokens were acquired before timeout, false
 		// otherwise
 		Consume(count int, timeout time.Duration) bool
+		// Reset resets the token bucket rps limit to the given value
+		Reset(rps int)
 	}
 
 	// PriorityTokenBucket is the interface for rate limiter with priority
@@ -69,7 +73,7 @@ type (
 		overflowTokens         int
 		nextRefillTime         int64
 		nextOverflowRefillTime int64
-		timeSource             TimeSource
+		timeSource             clock.TimeSource
 	}
 
 	priorityTokenBucketImpl struct {
@@ -86,7 +90,7 @@ type (
 		overflowRps            int
 		overflowTokens         int
 		nextOverflowRefillTime int64
-		timeSource             TimeSource
+		timeSource             clock.TimeSource
 	}
 )
 
@@ -95,7 +99,7 @@ const (
 	backoffInterval = int64(10 * time.Millisecond)
 )
 
-// NewTokenBucket creates and returns a
+// New creates and returns a
 // new token bucket rate limiter that
 // replenishes the bucket every 100
 // milliseconds. Thread safe.
@@ -119,18 +123,15 @@ const (
 // BenchmarkTokenBucketParallel-8	10000000	       129 ns/op
 // BenchmarkGolangRateParallel-8 	10000000	       208 ns/op
 //
-func NewTokenBucket(rps int, timeSource TimeSource) TokenBucket {
+func New(rps int, timeSource clock.TimeSource) TokenBucket {
 	tb := new(tokenBucketImpl)
 	tb.timeSource = timeSource
-	tb.fillInterval = int64(time.Millisecond * 100)
-	tb.fillRate = (rps * 100) / millisPerSecond
-	tb.overflowRps = rps - (10 * tb.fillRate)
-	tb.refill(time.Now().UnixNano())
+	tb.Reset(rps)
 	return tb
 }
 
-// NewTokenBucketFactory creates an instance of factory used for creating TokenBucket instances
-func NewTokenBucketFactory() TokenBucketFactory {
+// NewFactory creates an instance of factory used for creating TokenBucket instances
+func NewFactory() Factory {
 	return &tokenBucketFactoryImpl{}
 }
 
@@ -138,8 +139,8 @@ func NewTokenBucketFactory() TokenBucketFactory {
 // new token bucket rate limiter that
 // repelenishes the bucket every 100
 // milliseconds. Thread safe.
-func (f *tokenBucketFactoryImpl) CreateTokenBucket(rps int, timeSource TimeSource) TokenBucket {
-	return NewTokenBucket(rps, timeSource)
+func (f *tokenBucketFactoryImpl) CreateTokenBucket(rps int, timeSource clock.TimeSource) TokenBucket {
+	return New(rps, timeSource)
 }
 
 func (tb *tokenBucketImpl) TryConsume(count int) (bool, time.Duration) {
@@ -180,6 +181,15 @@ func (tb *tokenBucketImpl) Consume(count int, timeout time.Duration) bool {
 
 		remTime = expiryTime - now
 	}
+}
+
+func (tb *tokenBucketImpl) Reset(rps int) {
+	tb.Lock()
+	defer tb.Unlock()
+	tb.fillInterval = int64(time.Millisecond * 100)
+	tb.fillRate = (rps * 100) / millisPerSecond
+	tb.overflowRps = rps - (10 * tb.fillRate)
+	tb.nextOverflowRefillTime = 0
 }
 
 func (tb *tokenBucketImpl) refill(now int64) {
@@ -225,7 +235,7 @@ func (tb *tokenBucketImpl) isOverflowRefillDue(now int64) bool {
 // @param rps
 //    Desired rate per second
 //
-func NewPriorityTokenBucket(numOfPriority, rps int, timeSource TimeSource) PriorityTokenBucket {
+func NewPriorityTokenBucket(numOfPriority, rps int, timeSource clock.TimeSource) PriorityTokenBucket {
 	tb := new(priorityTokenBucketImpl)
 	tb.tokens = make([]int, numOfPriority)
 	tb.timeSource = timeSource
@@ -238,7 +248,7 @@ func NewPriorityTokenBucket(numOfPriority, rps int, timeSource TimeSource) Prior
 
 // NewFullPriorityTokenBucket creates and returns a new priority token bucket with all bucket init with full tokens.
 // With all buckets full, get tokens from low priority buckets won't be missed initially, but may caused bursts.
-func NewFullPriorityTokenBucket(numOfPriority, rps int, timeSource TimeSource) PriorityTokenBucket {
+func NewFullPriorityTokenBucket(numOfPriority, rps int, timeSource clock.TimeSource) PriorityTokenBucket {
 	tb := new(priorityTokenBucketImpl)
 	tb.tokens = make([]int, numOfPriority)
 	tb.timeSource = timeSource

@@ -22,8 +22,6 @@ package history
 
 import (
 	"errors"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/service/worker/archiver"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -35,11 +33,15 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/common/tokenbucket"
+	"github.com/uber/cadence/service/worker/archiver"
 )
 
 var (
@@ -70,7 +72,7 @@ type (
 		timerProcessor     timerProcessor
 		timerQueueAckMgr   timerQueueAckMgr
 		timerGate          TimerGate
-		rateLimiter        common.TokenBucket
+		rateLimiter        tokenbucket.TokenBucket
 		startDelay         dynamicconfig.DurationPropertyFn
 		retryPolicy        backoff.RetryPolicy
 		visibilityProducer messaging.Producer
@@ -122,7 +124,7 @@ func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *h
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
 		lastPollTime:            time.Time{},
-		rateLimiter:             common.NewTokenBucket(maxPollRPS(), common.NewRealTimeSource()),
+		rateLimiter:             tokenbucket.New(maxPollRPS(), clock.NewRealTimeSource()),
 		startDelay:              startDelay,
 		retryPolicy:             common.CreatePersistanceRetryPolicy(),
 		visibilityProducer:      visibilityProducer,

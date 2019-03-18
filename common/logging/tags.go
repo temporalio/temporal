@@ -85,6 +85,7 @@ const (
 	TagScheduleAttempt            = "schedule-attempt"
 	TagCursorTimestamp            = "cursor-timestamp"
 	TagHistorySize                = "history-size"
+	TagHistorySizeBytes           = "history-size-bytes"
 	TagEventCount                 = "event-count"
 	TagESRequest                  = "es-request"
 	TagESKey                      = "es-mapping-key"

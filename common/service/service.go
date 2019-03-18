@@ -58,6 +58,7 @@ type (
 	BootstrapParams struct {
 		Name                string
 		Logger              bark.Logger
+		ThrottledLogger     bark.Logger
 		MetricScope         tally.Scope
 		RingpopFactory      RingpopFactory
 		RPCFactory          common.RPCFactory
@@ -96,6 +97,7 @@ type (
 		clientBean             client.Bean
 		numberOfHistoryShards  int
 		logger                 bark.Logger
+		throttledLogger        bark.Logger
 		metricsScope           tally.Scope
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		metricsClient          metrics.Client
@@ -113,6 +115,7 @@ func New(params *BootstrapParams) Service {
 		status:                common.DaemonStatusInitialized,
 		sName:                 params.Name,
 		logger:                params.Logger,
+		throttledLogger:       params.ThrottledLogger,
 		rpcFactory:            params.RPCFactory,
 		rpFactory:             params.RingpopFactory,
 		pprofInitializer:      params.PProfInitializer,
@@ -124,6 +127,7 @@ func New(params *BootstrapParams) Service {
 		dispatcherProvider:    params.DispatcherProvider,
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 	}
+
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
 	sVice.dispatcher = sVice.rpcFactory.CreateDispatcher()
 	if sVice.dispatcher == nil {
@@ -235,6 +239,10 @@ func (h *serviceImpl) Stop() {
 // GetLogger returns the service logger
 func (h *serviceImpl) GetLogger() bark.Logger {
 	return h.logger
+}
+
+func (h *serviceImpl) GetThrottledLogger() bark.Logger {
+	return h.throttledLogger
 }
 
 func (h *serviceImpl) GetMetricsClient() metrics.Client {

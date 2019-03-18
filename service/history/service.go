@@ -23,8 +23,8 @@ package history
 import (
 	"time"
 
-	"fmt"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
@@ -138,6 +138,8 @@ type Config struct {
 	HistorySizeLimitWarn   dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryCountLimitError dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryCountLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
+
+	ThrottledLogRPS dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -219,6 +221,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		HistorySizeLimitWarn:   dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistorySizeLimitWarn, 50*1024*1024),
 		HistoryCountLimitError: dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitError, 200*1024),
 		HistoryCountLimitWarn:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitWarn, 50*1024),
+
+		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 20),
 	}
 }
 
@@ -238,15 +242,14 @@ type Service struct {
 // NewService builds a new cadence-history service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
-	fmt.Println(params.ESConfig)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+		params.PersistenceConfig.NumHistoryShards,
+		params.ESConfig.Enable)
+	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),
-		config: NewConfig(
-			dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
-			params.PersistenceConfig.NumHistoryShards,
-			params.ESConfig.Enable,
-		),
+		config: config,
 	}
 }
 
@@ -256,6 +259,7 @@ func (s *Service) Start() {
 	var params = s.params
 	var log = params.Logger
 
+	log.Infof("elastic search config: %v", params.ESConfig)
 	log.Infof("%v starting", common.HistoryServiceName)
 
 	base := service.New(params)

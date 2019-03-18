@@ -24,12 +24,13 @@ import (
 	"sync"
 
 	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/persistence/sql"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/tokenbucket"
 )
 
 type (
@@ -82,7 +83,7 @@ type (
 	// Datastore represents a datastore
 	Datastore struct {
 		factory   DataStoreFactory
-		ratelimit common.TokenBucket
+		ratelimit tokenbucket.TokenBucket
 	}
 	factoryImpl struct {
 		sync.RWMutex
@@ -301,7 +302,7 @@ func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
 	return cfg.DataStores[cfg.VisibilityStore].Cassandra
 }
 
-func newStore(cfg config.DataStore, tb common.TokenBucket, clusterName string, maxConnsOverride int, logger bark.Logger) Datastore {
+func newStore(cfg config.DataStore, tb tokenbucket.TokenBucket, clusterName string, maxConnsOverride int, logger bark.Logger) Datastore {
 	var ds Datastore
 	ds.ratelimit = tb
 	if cfg.SQL != nil {
@@ -326,8 +327,8 @@ func newCassandraStore(cfg config.Cassandra, clusterName string, maxConnsOverrid
 	return cassandra.NewFactory(cfg, clusterName, logger)
 }
 
-func buildRatelimiters(cfg *config.Persistence) map[string]common.TokenBucket {
-	result := make(map[string]common.TokenBucket, len(cfg.DataStores))
+func buildRatelimiters(cfg *config.Persistence) map[string]tokenbucket.TokenBucket {
+	result := make(map[string]tokenbucket.TokenBucket, len(cfg.DataStores))
 	for dsName, ds := range cfg.DataStores {
 		qps := 0
 		if ds.Cassandra != nil {
@@ -337,7 +338,7 @@ func buildRatelimiters(cfg *config.Persistence) map[string]common.TokenBucket {
 			qps = ds.SQL.MaxQPS
 		}
 		if qps > 0 {
-			result[dsName] = common.NewTokenBucket(qps, common.NewRealTimeSource())
+			result[dsName] = tokenbucket.New(qps, clock.NewRealTimeSource())
 		}
 	}
 	return result

@@ -1298,6 +1298,7 @@ const (
 const (
 	ReplicatorMessages = iota + NumCommonMetrics
 	ReplicatorFailures
+	ReplicatorMessagesDropped
 	ReplicatorLatency
 	ESProcessorFailures
 	ESProcessorCorruptedData
@@ -1507,6 +1508,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Worker: {
 		ReplicatorMessages:                       {metricName: "replicator.messages"},
 		ReplicatorFailures:                       {metricName: "replicator.errors"},
+		ReplicatorMessagesDropped:                {metricName: "replicator.messages.dropped"},
 		ReplicatorLatency:                        {metricName: "replicator.latency"},
 		ESProcessorFailures:                      {metricName: "es-processor.errors"},
 		ESProcessorCorruptedData:                 {metricName: "es-processor.corrupted-data"},
