@@ -393,6 +393,12 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, 
 func (w *workflowResetorImpl) terminateIfCurrIsRunning(currMutableState mutableState, reason string, currExecution workflow.WorkflowExecution) (terminateCurr bool, closeTask, cleanupTask persistence.Task, retError error) {
 	if currMutableState.IsWorkflowExecutionRunning() {
 		terminateCurr = true
+
+		retError = failInFlightDecisionToClearBufferedEvents(currMutableState)
+		if retError != nil {
+			return
+		}
+
 		currMutableState.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
 			Reason:   common.StringPtr(reason),
 			Details:  nil,
