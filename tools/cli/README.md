@@ -43,7 +43,7 @@ Then commands can omit the **--domain** flag:
 ### Workflow operation examples
 (The following examples assume the CADENCE_CLI_DOMAIN environment variable is set using the tip above)
 
-- Run workflow: Start a workflow and see it's progress. This command doesn't finish until workflow completes.
+#### Run workflow: Start a workflow and see it's progress. This command doesn't finish until workflow completes.
 ```
 ./cadence workflow run --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"'
 
@@ -62,12 +62,12 @@ and takes a string as input with the `-i '"cadence"'` parameter. Single quotes (
 **Note:** you need to start the worker so that workflow can make progress.  
 (Run `make && ./bin/helloworld -m worker` in cadence-samples to start the worker)
 
-- Show running workers of a tasklist
+#### Show running workers of a tasklist
 ```
 ./cadence tasklist desc --tl helloWorldGroup
 ```
 
-- Start workflow
+#### Start workflow
 ```
 ./cadence workflow start --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"'
 
@@ -94,7 +94,7 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-
 ./cadence workflow run --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"' --wid "<duplicated workflow id>" --wrp 1
 ```
 
-- Show workflow history
+#### Show workflow history
 ```
 ./cadence workflow show -w 3ea6b242-b23c-4279-bb13-f215661b4717 -r 866ae14c-88cf-4f1e-980f-571e031d71b0
 # a shortcut of this is (without -w -r flag)
@@ -106,7 +106,7 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-
 ./cadence workflow showid 3ea6b242-b23c-4279-bb13-f215661b4717
 ```
 
-- Show workflow execution info
+#### Show workflow execution info
 ```
 ./cadence workflow describe -w 3ea6b242-b23c-4279-bb13-f215661b4717 -r 866ae14c-88cf-4f1e-980f-571e031d71b0
 # a shortcut of this is (without -w -r flag)
@@ -118,7 +118,7 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-
 ./cadence workflow describeid 3ea6b242-b23c-4279-bb13-f215661b4717
 ```
 
-- List closed or open workflow executions
+#### List closed or open workflow executions
 ```
 ./cadence workflow list
 
@@ -126,7 +126,7 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-
 ./cadence workflow list -m
 ```
 
-- Query workflow execution
+#### Query workflow execution
 ```
 # use custom query type
 ./cadence workflow query -w <wid> -r <rid> --qt <query-type>
@@ -137,7 +137,7 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-
 ./cadence workflow stack -w <wid> -r <rid> 
 ```
 
-- Signal, cancel, terminate workflow
+#### Signal, cancel, terminate workflow
 ```
 # signal
 ./cadence workflow signal -w <wid> -r <rid> -n <signal-name> -i '"signal-value"'
@@ -150,3 +150,18 @@ Use option `--workflowidreusepolicy` or `--wrp` to configure the workflow id re-
 ```
 Terminating a running workflow execution will record a WorkflowExecutionTerminated event as the closing event in the history. No more decision tasks will be scheduled for a terminated workflow execution.  
 Canceling a running workflow execution will record a WorkflowExecutionCancelRequested event in the history, and a new decision task will be scheduled. The workflow has a chance to do some clean up work after cancellation.
+
+#### Restart, reset workflow
+The Reset command allows resetting a workflow to a particular point and continue running from there.
+There are a lot of use cases:
+- Rerun a failed workflow from the beginning with the same start parameters.
+- Rerun a failed workflow from the failing point without losing the achieved progress(history).
+- After deploying new code, reset an open workflow to let the workflow run to different flows.
+
+```
+./cadence workflow reset -w <wid> -r <rid> --event_id <decision_finish_event_id> --reason "some_reason"
+```
+Some things to note:
+- When reset, a new run will be kicked off with the same workflowID. But if there is a running execution for the workflow(workflowID), the current run will be terminated.
+- decision_finish_event_id is the ID of events of the type: DecisionTaskComplete/DecisionTaskFailed/DecisionTaskTimeout.
+- To restart a workflow from the beginning, reset to the first decision task finish event.
