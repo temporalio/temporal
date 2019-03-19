@@ -1094,6 +1094,7 @@ struct GetWorkflowExecutionHistoryRequest {
 struct GetWorkflowExecutionHistoryResponse {
   10: optional History history
   20: optional binary nextPageToken
+  30: optional bool archived
 }
 
 struct SignalWorkflowExecutionRequest {

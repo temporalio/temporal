@@ -1010,6 +1010,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
+	s.True(resp.GetArchived())
 	expectedNextPageToken := &getHistoryContinuationTokenArchival{
 		BlobstorePageToken: 2,
 	}
@@ -1045,11 +1046,12 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetLastPage() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
+	s.True(resp.GetArchived())
 	s.Nil(resp.NextPageToken)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), false)
+	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), false, true)
 }
 
 func bucketMetadataResponse(owner string, retentionDays int) *blobstore.BucketMetadataResponse {

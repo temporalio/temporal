@@ -28,8 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common/metrics"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -37,11 +35,14 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -51,6 +52,7 @@ import (
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"github.com/uber/cadence/service/worker"
+	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/replicator"
 	ringpop "github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/statichosts"
@@ -86,32 +88,59 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		adminHandler            *frontend.AdminHandler
-		frontendHandler         *frontend.WorkflowHandler
-		matchingHandler         *matching.Handler
-		historyHandlers         []*history.Handler
-		numberOfHistoryShards   int
-		numberOfHistoryHosts    int
-		logger                  bark.Logger
-		clusterMetadata         cluster.Metadata
-		dispatcherProvider      client.DispatcherProvider
-		messagingClient         messaging.Client
-		metadataMgr             persistence.MetadataManager
-		metadataMgrV2           persistence.MetadataManager
-		shardMgr                persistence.ShardManager
-		historyMgr              persistence.HistoryManager
-		historyV2Mgr            persistence.HistoryV2Manager
-		taskMgr                 persistence.TaskManager
-		visibilityMgr           persistence.VisibilityManager
-		executionMgrFactory     persistence.ExecutionManagerFactory
-		shutdownCh              chan struct{}
-		shutdownWG              sync.WaitGroup
-		frontEndService         service.Service
-		clusterNo               int // cluster number
-		replicator              *replicator.Replicator
-		enableWorkerService     bool // tmp flag used to tell if onebox should create worker service
-		enableEventsV2          bool
-		enableVisibilityToKafka bool
+		adminHandler                  *frontend.AdminHandler
+		frontendHandler               *frontend.WorkflowHandler
+		matchingHandler               *matching.Handler
+		historyHandlers               []*history.Handler
+		numberOfHistoryShards         int
+		numberOfHistoryHosts          int
+		logger                        bark.Logger
+		clusterMetadata               cluster.Metadata
+		dispatcherProvider            client.DispatcherProvider
+		messagingClient               messaging.Client
+		metadataMgr                   persistence.MetadataManager
+		metadataMgrV2                 persistence.MetadataManager
+		shardMgr                      persistence.ShardManager
+		historyMgr                    persistence.HistoryManager
+		historyV2Mgr                  persistence.HistoryV2Manager
+		taskMgr                       persistence.TaskManager
+		visibilityMgr                 persistence.VisibilityManager
+		executionMgrFactory           persistence.ExecutionManagerFactory
+		shutdownCh                    chan struct{}
+		shutdownWG                    sync.WaitGroup
+		frontEndService               service.Service
+		clusterNo                     int // cluster number
+		replicator                    *replicator.Replicator
+		clientWorker                  archiver.ClientWorker
+		enableWorkerService           bool // tmp flag used to tell if onebox should create worker service
+		enableEventsV2                bool
+		enableVisibilityToKafka       bool
+		blobstoreClient               blobstore.Client
+		enableReadHistoryFromArchival bool
+	}
+
+	// CadenceParams contains everything needed to boostrap Cadence
+	CadenceParams struct {
+		ClusterMetadata               cluster.Metadata
+		DispatcherProvider            client.DispatcherProvider
+		MessagingClient               messaging.Client
+		MetadataMgr                   persistence.MetadataManager
+		MetadataMgrV2                 persistence.MetadataManager
+		ShardMgr                      persistence.ShardManager
+		HistoryMgr                    persistence.HistoryManager
+		HistoryV2Mgr                  persistence.HistoryV2Manager
+		ExecutionMgrFactory           persistence.ExecutionManagerFactory
+		TaskMgr                       persistence.TaskManager
+		VisibilityMgr                 persistence.VisibilityManager
+		NumberOfHistoryShards         int
+		NumberOfHistoryHosts          int
+		Logger                        bark.Logger
+		ClusterNo                     int
+		EnableWorker                  bool
+		EnableEventsV2                bool
+		EnableVisibilityToKafka       bool
+		Blobstore                     blobstore.Client
+		EnableReadHistoryFromArchival bool
 	}
 
 	ringpopFactoryImpl struct {
@@ -120,32 +149,29 @@ type (
 )
 
 // NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(clusterMetadata cluster.Metadata, dispatcherProvider client.DispatcherProvider, messagingClient messaging.Client, metadataMgr persistence.MetadataManager,
-	metadataMgrV2 persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
-	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
-	logger bark.Logger, clusterNo int, enableWorker, enableEventsV2, enableVisibilityToKafka bool) Cadence {
-
+func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		numberOfHistoryShards:   numberOfHistoryShards,
-		numberOfHistoryHosts:    numberOfHistoryHosts,
-		logger:                  logger,
-		clusterMetadata:         clusterMetadata,
-		dispatcherProvider:      dispatcherProvider,
-		messagingClient:         messagingClient,
-		metadataMgr:             metadataMgr,
-		metadataMgrV2:           metadataMgrV2,
-		visibilityMgr:           visibilityMgr,
-		shardMgr:                shardMgr,
-		historyMgr:              historyMgr,
-		historyV2Mgr:            historyV2Mgr,
-		taskMgr:                 taskMgr,
-		executionMgrFactory:     executionMgrFactory,
-		shutdownCh:              make(chan struct{}),
-		clusterNo:               clusterNo,
-		enableWorkerService:     enableWorker,
-		enableEventsV2:          enableEventsV2,
-		enableVisibilityToKafka: enableVisibilityToKafka,
+		numberOfHistoryShards:         params.NumberOfHistoryShards,
+		numberOfHistoryHosts:          params.NumberOfHistoryHosts,
+		logger:                        params.Logger,
+		clusterMetadata:               params.ClusterMetadata,
+		dispatcherProvider:            params.DispatcherProvider,
+		messagingClient:               params.MessagingClient,
+		metadataMgr:                   params.MetadataMgr,
+		metadataMgrV2:                 params.MetadataMgrV2,
+		visibilityMgr:                 params.VisibilityMgr,
+		shardMgr:                      params.ShardMgr,
+		historyMgr:                    params.HistoryMgr,
+		historyV2Mgr:                  params.HistoryV2Mgr,
+		taskMgr:                       params.TaskMgr,
+		executionMgrFactory:           params.ExecutionMgrFactory,
+		shutdownCh:                    make(chan struct{}),
+		clusterNo:                     params.ClusterNo,
+		enableWorkerService:           params.EnableWorker,
+		enableEventsV2:                params.EnableEventsV2,
+		enableVisibilityToKafka:       params.EnableVisibilityToKafka,
+		blobstoreClient:               params.Blobstore,
+		enableReadHistoryFromArchival: params.EnableReadHistoryFromArchival,
 	}
 }
 
@@ -168,15 +194,16 @@ func (c *cadenceImpl) Start() error {
 	go c.startMatching(rpHosts, &startWG)
 	startWG.Wait()
 
+	startWG.Add(1)
+	go c.startFrontend(rpHosts, &startWG)
+	startWG.Wait()
+
 	if c.enableWorker() {
 		startWG.Add(1)
 		go c.startWorker(rpHosts, &startWG)
 		startWG.Wait()
 	}
 
-	startWG.Add(1)
-	go c.startFrontend(rpHosts, &startWG)
-	startWG.Wait()
 	return nil
 }
 
@@ -194,6 +221,7 @@ func (c *cadenceImpl) Stop() {
 	c.matchingHandler.Stop()
 	if c.enableWorker() {
 		c.replicator.Stop()
+		c.clientWorker.Stop()
 	}
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
@@ -297,6 +325,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
 	params.MessagingClient = c.messagingClient
+	params.BlobstoreClient = c.blobstoreClient
 	cassandraConfig := config.Cassandra{Hosts: "127.0.0.1"}
 	params.PersistenceConfig = config.Persistence{
 		NumHistoryShards: c.numberOfHistoryShards,
@@ -324,7 +353,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.numberOfHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
 	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection(), false),
+		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection(), false, c.enableReadHistoryFromArchival),
 		c.metadataMgr, c.historyMgr, c.historyV2Mgr, c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
 	err = c.frontendHandler.Start()
 	if err != nil {
@@ -433,21 +462,69 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	service.Start()
 
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
-	domainCache := cache.NewDomainCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
-	domainCache.Start()
+	replicatorDomainCache := cache.NewDomainCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+	replicatorDomainCache.Start()
+	c.startWorkerReplicator(params, service, replicatorDomainCache)
 
+	metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
+	clientWorkerDomainCache := cache.NewDomainCache(metadataProxyManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+	clientWorkerDomainCache.Start()
+	c.startWorkerClientWorker(params, service, clientWorkerDomainCache)
+
+	startWG.Done()
+	<-c.shutdownCh
+	replicatorDomainCache.Stop()
+	clientWorkerDomainCache.Stop()
+	c.shutdownWG.Done()
+}
+
+func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
+	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
 	workerConfig.ReplicationCfg.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	c.replicator = replicator.NewReplicator(c.clusterMetadata, metadataManager, domainCache, service.GetClientBean(),
-		workerConfig.ReplicationCfg, c.messagingClient, c.logger, service.GetMetricsClient())
+	c.replicator = replicator.NewReplicator(
+		c.clusterMetadata,
+		metadataManager,
+		domainCache,
+		service.GetClientBean(),
+		workerConfig.ReplicationCfg,
+		c.messagingClient,
+		c.logger,
+		service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
 		c.logger.WithField("error", err).Fatal("Fail to start replicator when start worker")
 	}
-	startWG.Done()
-	<-c.shutdownCh
-	domainCache.Stop()
-	c.shutdownWG.Done()
+}
+
+func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
+	publicClient := public.NewRetryableClient(
+		service.GetClientBean().GetPublicClient(),
+		common.CreatePublicClientRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
+	blobstoreClient := blobstore.NewRetryableClient(
+		blobstore.NewMetricClient(c.blobstoreClient, service.GetMetricsClient()),
+		common.CreateBlobstoreClientRetryPolicy(),
+		common.IsBlobstoreTransientError)
+	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
+	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
+	bc := &archiver.BootstrapContainer{
+		PublicClient:     publicClient,
+		MetricsClient:    service.GetMetricsClient(),
+		Logger:           c.logger,
+		ClusterMetadata:  service.GetClusterMetadata(),
+		HistoryManager:   c.historyMgr,
+		HistoryV2Manager: c.historyV2Mgr,
+		Blobstore:        blobstoreClient,
+		DomainCache:      domainCache,
+		Config:           workerConfig.ArchiverConfig,
+	}
+	c.clientWorker = archiver.NewClientWorker(bc)
+	if err := c.clientWorker.Start(); err != nil {
+		c.clientWorker.Stop()
+		c.logger.WithField("error", err).Fatal("Fail to start archiver when start worker")
+	}
 }
 
 func newRingpopFactory(rpHosts []string) service.RingpopFactory {

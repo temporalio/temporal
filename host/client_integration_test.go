@@ -186,9 +186,27 @@ func (s *clientIntegrationSuite) setupSuite(enableGlobalDomain bool, isMasterClu
 	// TODO: Use mock messaging client until we support kafka setup onebox to write end-to-end integration test
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-
-	s.host = NewCadence(s.ClusterMetadata, server.NewIPYarpcDispatcherProvider(), s.mockMessagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false, s.enableEventsV2, false)
+	cadenceParams := &CadenceParams{
+		ClusterMetadata:         s.ClusterMetadata,
+		DispatcherProvider:      server.NewIPYarpcDispatcherProvider(),
+		MessagingClient:         s.mockMessagingClient,
+		MetadataMgr:             s.MetadataProxy,
+		MetadataMgrV2:           s.MetadataManagerV2,
+		ShardMgr:                s.ShardMgr,
+		HistoryMgr:              s.HistoryMgr,
+		HistoryV2Mgr:            s.HistoryV2Mgr,
+		ExecutionMgrFactory:     s.ExecutionMgrFactory,
+		TaskMgr:                 s.TaskMgr,
+		VisibilityMgr:           s.VisibilityMgr,
+		NumberOfHistoryShards:   testNumberOfHistoryShards,
+		NumberOfHistoryHosts:    testNumberOfHistoryHosts,
+		Logger:                  s.logger,
+		ClusterNo:               0,
+		EnableWorker:            false,
+		EnableEventsV2:          s.enableEventsV2,
+		EnableVisibilityToKafka: false,
+	}
+	s.host = NewCadence(cadenceParams)
 	s.host.Start()
 
 	s.engine = s.host.GetFrontendClient()

@@ -69,7 +69,7 @@ func (r *replayMetricsClient) RecordTimer(scope int, timer int, d time.Duration)
 	if workflow.IsReplaying(r.ctx) {
 		return
 	}
-	r.RecordTimer(scope, timer, d)
+	r.client.RecordTimer(scope, timer, d)
 }
 
 // UpdateGauge reports Gauge type absolute value metric
@@ -77,7 +77,7 @@ func (r *replayMetricsClient) UpdateGauge(scope int, gauge int, value float64) {
 	if workflow.IsReplaying(r.ctx) {
 		return
 	}
-	r.UpdateGauge(scope, gauge, value)
+	r.client.UpdateGauge(scope, gauge, value)
 }
 
 // Tagged returns a client that adds the given tags to all metrics

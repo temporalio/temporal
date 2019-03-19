@@ -72,12 +72,18 @@ var (
 )
 
 // GetTestClusterMetadata return an cluster metadata instance, which is initialized
-func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metadata {
+func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enableArchival bool) Metadata {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
 	}
 
+	archivalStatus := "disabled"
+	clusterDefaultBucket := ""
+	if enableArchival {
+		archivalStatus = "enabled"
+		clusterDefaultBucket = "default_bucket"
+	}
 	if enableGlobalDomain {
 		return NewMetadata(
 			bark.NewNopLogger(),
@@ -88,8 +94,8 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 			TestCurrentClusterName,
 			TestAllClusterFailoverVersions,
 			TestAllClusterAddress,
-			dynamicconfig.GetStringPropertyFn("disabled"),
-			"",
+			dynamicconfig.GetStringPropertyFn(archivalStatus),
+			clusterDefaultBucket,
 		)
 	}
 
@@ -102,7 +108,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 		TestCurrentClusterName,
 		TestSingleDCAllClusterFailoverVersions,
 		TestSingleDCAllClusterAddress,
-		dynamicconfig.GetStringPropertyFn("disabled"),
-		"",
+		dynamicconfig.GetStringPropertyFn(archivalStatus),
+		clusterDefaultBucket,
 	)
 }

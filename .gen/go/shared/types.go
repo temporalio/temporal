@@ -15429,6 +15429,7 @@ func (v *GetWorkflowExecutionHistoryRequest) GetHistoryEventFilterType() (o Hist
 type GetWorkflowExecutionHistoryResponse struct {
 	History       *History `json:"history,omitempty"`
 	NextPageToken []byte   `json:"nextPageToken,omitempty"`
+	Archived      *bool    `json:"archived,omitempty"`
 }
 
 // ToWire translates a GetWorkflowExecutionHistoryResponse struct into a Thrift-level intermediate
@@ -15448,7 +15449,7 @@ type GetWorkflowExecutionHistoryResponse struct {
 //   }
 func (v *GetWorkflowExecutionHistoryResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -15468,6 +15469,14 @@ func (v *GetWorkflowExecutionHistoryResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Archived != nil {
+		w, err = wire.NewValueBool(*(v.Archived)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
 
@@ -15518,6 +15527,16 @@ func (v *GetWorkflowExecutionHistoryResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.Archived = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -15531,7 +15550,7 @@ func (v *GetWorkflowExecutionHistoryResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.History != nil {
 		fields[i] = fmt.Sprintf("History: %v", v.History)
@@ -15539,6 +15558,10 @@ func (v *GetWorkflowExecutionHistoryResponse) String() string {
 	}
 	if v.NextPageToken != nil {
 		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+	if v.Archived != nil {
+		fields[i] = fmt.Sprintf("Archived: %v", *(v.Archived))
 		i++
 	}
 
@@ -15561,6 +15584,9 @@ func (v *GetWorkflowExecutionHistoryResponse) Equals(rhs *GetWorkflowExecutionHi
 	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.Archived, rhs.Archived) {
+		return false
+	}
 
 	return true
 }
@@ -15576,6 +15602,9 @@ func (v *GetWorkflowExecutionHistoryResponse) MarshalLogObject(enc zapcore.Objec
 	}
 	if v.NextPageToken != nil {
 		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	if v.Archived != nil {
+		enc.AddBool("archived", *v.Archived)
 	}
 	return err
 }
@@ -15595,6 +15624,16 @@ func (v *GetWorkflowExecutionHistoryResponse) GetHistory() (o *History) {
 func (v *GetWorkflowExecutionHistoryResponse) GetNextPageToken() (o []byte) {
 	if v.NextPageToken != nil {
 		return v.NextPageToken
+	}
+
+	return
+}
+
+// GetArchived returns the value of Archived if it is set or its
+// zero value if it is unset.
+func (v *GetWorkflowExecutionHistoryResponse) GetArchived() (o bool) {
+	if v.Archived != nil {
+		return *v.Archived
 	}
 
 	return

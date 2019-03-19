@@ -151,8 +151,27 @@ func (s *testCluster) setupCluster(no int, enableEventsV2 bool) {
 	s.setupShards()
 	messagingClient := s.createMessagingClient()
 	testNumberOfHistoryShards := 1 // use 1 shard so we can be sure when failover completed in standby cluster
-	s.host = host.NewCadence(s.ClusterMetadata, client.NewIPYarpcDispatcherProvider(), messagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, no, true, enableEventsV2, false)
+	cadenceParams := &host.CadenceParams{
+		ClusterMetadata:         s.ClusterMetadata,
+		DispatcherProvider:      client.NewIPYarpcDispatcherProvider(),
+		MessagingClient:         messagingClient,
+		MetadataMgr:             s.MetadataProxy,
+		MetadataMgrV2:           s.MetadataManagerV2,
+		ShardMgr:                s.ShardMgr,
+		HistoryMgr:              s.HistoryMgr,
+		HistoryV2Mgr:            s.HistoryV2Mgr,
+		ExecutionMgrFactory:     s.ExecutionMgrFactory,
+		TaskMgr:                 s.TaskMgr,
+		VisibilityMgr:           s.VisibilityMgr,
+		NumberOfHistoryShards:   testNumberOfHistoryShards,
+		NumberOfHistoryHosts:    testNumberOfHistoryHosts,
+		Logger:                  s.logger,
+		ClusterNo:               no,
+		EnableWorker:            true,
+		EnableEventsV2:          enableEventsV2,
+		EnableVisibilityToKafka: false,
+	}
+	s.host = host.NewCadence(cadenceParams)
 	s.host.Start()
 }
 

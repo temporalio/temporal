@@ -1445,7 +1445,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					ClusterName: "standby",
 				},
 			},
-		}, cluster.GetTestClusterMetadata(true, true))
+		}, cluster.GetTestClusterMetadata(true, true, false))
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
@@ -2148,7 +2148,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					ClusterName: "standby",
 				},
 			},
-		}, cluster.GetTestClusterMetadata(true, true))
+		}, cluster.GetTestClusterMetadata(true, true, false))
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
@@ -2744,7 +2744,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					ClusterName: "standby",
 				},
 			},
-		}, cluster.GetTestClusterMetadata(true, true))
+		}, cluster.GetTestClusterMetadata(true, true, false))
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
@@ -3430,7 +3430,7 @@ func (s *resetorSuite) TestApplyReset() {
 					ClusterName: "standby",
 				},
 			},
-		}, cluster.GetTestClusterMetadata(true, true))
+		}, cluster.GetTestClusterMetadata(true, true, false))
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)

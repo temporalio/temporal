@@ -66,6 +66,7 @@ type (
 		EnableGlobalDomain bool // is global domain enabled
 		IsMasterCluster    bool // is master cluster
 		ClusterMetadata    cluster.Metadata
+		EnableArchival     bool // is archival enabled
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -134,7 +135,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) TestBase {
 	metadata := options.ClusterMetadata
 	if metadata == nil {
-		metadata = cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
+		metadata = cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster, options.EnableArchival)
 	}
 	options.ClusterMetadata = metadata
 	return TestBase{
