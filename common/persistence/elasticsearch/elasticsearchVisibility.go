@@ -105,7 +105,7 @@ func (v *esVisibilityManager) ListOpenWorkflowExecutions(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutions(
@@ -124,7 +124,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutions(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) ListOpenWorkflowExecutionsByType(
@@ -144,7 +144,7 @@ func (v *esVisibilityManager) ListOpenWorkflowExecutionsByType(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutionsByType(
@@ -164,7 +164,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutionsByType(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) ListOpenWorkflowExecutionsByWorkflowID(
@@ -184,7 +184,7 @@ func (v *esVisibilityManager) ListOpenWorkflowExecutionsByWorkflowID(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutionsByWorkflowID(
@@ -204,7 +204,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutionsByWorkflowID(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) ListClosedWorkflowExecutionsByStatus(
@@ -224,7 +224,7 @@ func (v *esVisibilityManager) ListClosedWorkflowExecutionsByStatus(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
 func (v *esVisibilityManager) GetClosedWorkflowExecution(
@@ -318,18 +318,20 @@ func (v *esVisibilityManager) getSearchResult(request *p.ListWorkflowExecutionsR
 }
 
 func (v *esVisibilityManager) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
-	token *esVisibilityPageToken, isOpen bool) (*p.ListWorkflowExecutionsResponse, error) {
+	token *esVisibilityPageToken, isOpen bool, pageSize int) (*p.ListWorkflowExecutionsResponse, error) {
 
 	response := &p.ListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 
-	nextPageToken, err := v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
-	if err != nil {
-		return nil, err
+	if numOfActualHits == pageSize {
+		nextPageToken, err := v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
+		if err != nil {
+			return nil, err
+		}
+		response.NextPageToken = make([]byte, len(nextPageToken))
+		copy(response.NextPageToken, nextPageToken)
 	}
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
 
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
