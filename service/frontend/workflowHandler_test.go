@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/uber/cadence/common/cluster"
 	"log"
 	"os"
 	"testing"
@@ -43,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -252,6 +252,33 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	assert.Error(s.T(), err)
 	assert.Equal(s.T(), errNoPermission, err)
+}
+
+func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	bgCtx := context.Background()
+	_, err := wh.PollForDecisionTask(bgCtx, &shared.PollForDecisionTaskRequest{})
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), common.ErrContextTimeoutNotSet, err)
+
+	_, err = wh.PollForActivityTask(bgCtx, &shared.PollForActivityTaskRequest{})
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), common.ErrContextTimeoutNotSet, err)
+
+	shortCtx, cancel := context.WithTimeout(bgCtx, common.MinLongPollTimeout-time.Millisecond)
+	defer cancel()
+
+	_, err = wh.PollForDecisionTask(shortCtx, &shared.PollForDecisionTaskRequest{})
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), common.ErrContextTimeoutTooShort, err)
+
+	_, err = wh.PollForActivityTask(shortCtx, &shared.PollForActivityTaskRequest{})
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), common.ErrContextTimeoutTooShort, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {

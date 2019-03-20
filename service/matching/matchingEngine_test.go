@@ -194,11 +194,25 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(persistence.TaskListTypeActivity)
+	s.PollForTasksEmptyResultTest(s.callContext, persistence.TaskListTypeActivity)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(persistence.TaskListTypeDecision)
+	s.PollForTasksEmptyResultTest(s.callContext, persistence.TaskListTypeDecision)
+}
+
+func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResultWithShortContext() {
+	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
+	callContext, cancel := context.WithTimeout(s.callContext, shortContextTimeout)
+	defer cancel()
+	s.PollForTasksEmptyResultTest(callContext, persistence.TaskListTypeActivity)
+}
+
+func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResultWithShortContext() {
+	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
+	callContext, cancel := context.WithTimeout(s.callContext, shortContextTimeout)
+	defer cancel()
+	s.PollForTasksEmptyResultTest(callContext, persistence.TaskListTypeDecision)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasks() {
@@ -285,9 +299,11 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	s.Equal(expectedResp, resp)
 }
 
-func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
+func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType int) {
 	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
+	if _, ok := callContext.Deadline(); !ok {
+		s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
+	}
 
 	domainID := "domainId"
 	tl := "makeToast"
@@ -301,7 +317,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == persistence.TaskListTypeActivity {
-			pollResp, err := s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+			pollResp, err := s.matchingEngine.PollForActivityTask(callContext, &matching.PollForActivityTaskRequest{
 				DomainUUID: common.StringPtr(domainID),
 				PollRequest: &workflow.PollForActivityTaskRequest{
 					TaskList: taskList,
@@ -313,7 +329,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 
 			taskListType = workflow.TaskListTypeActivity
 		} else {
-			resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matching.PollForDecisionTaskRequest{
+			resp, err := s.matchingEngine.PollForDecisionTask(callContext, &matching.PollForDecisionTaskRequest{
 				DomainUUID: common.StringPtr(domainID),
 				PollRequest: &workflow.PollForDecisionTaskRequest{
 					TaskList: taskList,
@@ -323,6 +339,11 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 			s.Equal(emptyPollForDecisionTaskResponse, resp)
 
 			taskListType = workflow.TaskListTypeDecision
+		}
+		select {
+		case <-callContext.Done():
+			s.FailNow("Call context has expired.")
+		default:
 		}
 		// check the poller information
 		descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matching.DescribeTaskListRequest{

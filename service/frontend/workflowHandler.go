@@ -766,6 +766,10 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	}
 
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", wh.Service.GetLogger()); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -839,6 +843,10 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	}
 
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", wh.Service.GetLogger()); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}

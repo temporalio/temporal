@@ -162,6 +162,10 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", h.Service.GetLogger()); err != nil {
+		return nil, h.handleErr(err, scope)
+	}
+
 	response, err := h.engine.PollForActivityTask(ctx, pollRequest)
 	return response, h.handleErr(err, scope)
 }
@@ -176,6 +180,10 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 
 	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
+	}
+
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", h.Service.GetLogger()); err != nil {
+		return nil, h.handleErr(err, scope)
 	}
 
 	response, err := h.engine.PollForDecisionTask(ctx, pollRequest)

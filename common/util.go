@@ -92,6 +92,10 @@ const (
 var (
 	// ErrBlobSizeExceedsLimit is error for event blob size exceeds limit
 	ErrBlobSizeExceedsLimit = &workflow.BadRequestError{Message: "Blob data size exceeds limit."}
+	// ErrContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
+	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
+	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
+	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -441,6 +445,39 @@ func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, wo
 		if actualSize > errorLimit {
 			return ErrBlobSizeExceedsLimit
 		}
+	}
+	return nil
+}
+
+// ValidateLongPollContextTimeout check if the context timeout for a long poll handler is too short or below a normal value.
+// If the timeout is not set or too short, it logs an error, and return ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
+// accordingly. If the timeout is only below a normal value, it just logs an info and return nil.
+func ValidateLongPollContextTimeout(ctx context.Context, handlerName string, logger bark.Logger) error {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		err := ErrContextTimeoutNotSet
+		logger.WithFields(bark.Fields{
+			logging.TagHandlerName: handlerName,
+			logging.TagErr:         err,
+		}).Error("Context timeout not set for long poll API.")
+		return err
+	}
+
+	timeout := deadline.Sub(time.Now())
+	if timeout < MinLongPollTimeout {
+		err := ErrContextTimeoutTooShort
+		logger.WithFields(bark.Fields{
+			logging.TagHandlerName:    handlerName,
+			logging.TagContextTimeout: timeout,
+			logging.TagErr:            err,
+		}).Error("Context timeout is too short for long poll API.")
+		return err
+	}
+	if timeout < CriticalLongPollTimeout {
+		logger.WithFields(bark.Fields{
+			logging.TagHandlerName:    handlerName,
+			logging.TagContextTimeout: timeout,
+		}).Warn("Context timeout is lower than critical value for long poll API.")
 	}
 	return nil
 }
