@@ -46,6 +46,12 @@ func NewCliApp() *cli.App {
 			Usage:  "cadence workflow domain",
 			EnvVar: "CADENCE_CLI_DOMAIN",
 		},
+		cli.IntFlag{
+			Name:   FlagContextTimeoutWithAlias,
+			Value:  defaultContextTimeoutInSeconds,
+			Usage:  "Optional timeout for context of RPC call in seconds",
+			EnvVar: "CADENCE_CONTEXT_TIMEOUT",
+		},
 	}
 	app.Commands = []cli.Command{
 		{

@@ -106,7 +106,7 @@ func AdminRegisterDomain(c *cli.Context) {
 		ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	err = frontendClient.RegisterDomain(ctx, request)
 	if err != nil {
@@ -126,7 +126,7 @@ func AdminUpdateDomain(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
 
 	var updateRequest *shared.UpdateDomainRequest
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 
 	if c.IsSet(FlagActiveClusterName) {
@@ -235,7 +235,7 @@ func AdminDescribeDomain(c *cli.Context) {
 	frontendClient := cFactory.ServerFrontendClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	req := &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domain),

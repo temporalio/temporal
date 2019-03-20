@@ -303,11 +303,6 @@ func getFlagsForListAll() []cli.Flag {
 			Name:  FlagPrintDateTimeWithAlias,
 			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
 		},
-		cli.IntFlag{
-			Name:  FlagContextTimeoutWithAlias,
-			Value: 30,
-			Usage: "Optional timeout for list command context in seconds",
-		},
 		cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,
 			Usage: "Closed workflow status [completed, failed, canceled, terminated, continueasnew, timedout]",
@@ -371,10 +366,6 @@ func getFlagsForObserve() []cli.Flag {
 
 func getFlagsForObserveID() []cli.Flag {
 	return []cli.Flag{
-		cli.IntFlag{
-			Name:  FlagContextTimeoutWithAlias,
-			Usage: "Optional timeout for start command context in seconds, default value is 120",
-		},
 		cli.BoolFlag{
 			Name:  FlagShowDetailWithAlias,
 			Usage: "Optional show event details",

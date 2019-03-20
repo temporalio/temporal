@@ -42,7 +42,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 		taskListType = s.TaskListTypeActivity
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &s.DescribeTaskListRequest{
 		Domain:                common.StringPtr(domain),

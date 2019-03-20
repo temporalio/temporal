@@ -56,10 +56,13 @@ const (
 	defaultTimeFormat                = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
 	defaultDateTimeFormat            = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
 	defaultDomainRetentionDays       = 3
+	defaultContextTimeoutInSeconds   = 5
+	defaultContextTimeout            = defaultContextTimeoutInSeconds * time.Second
 	defaultContextTimeoutForLongPoll = 2 * time.Minute
-	defaultDecisionTimeoutInSeconds  = 10
-	defaultPageSizeForList           = 500
-	defaultWorkflowIDReusePolicy     = s.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+
+	defaultDecisionTimeoutInSeconds = 10
+	defaultPageSizeForList          = 500
+	defaultWorkflowIDReusePolicy    = s.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
@@ -183,7 +186,7 @@ func RegisterDomain(c *cli.Context) {
 		SecurityToken:                          common.StringPtr(securityToken),
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	err = domainClient.Register(ctx, request)
 	if err != nil {
@@ -203,7 +206,7 @@ func UpdateDomain(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
 
 	var updateRequest *s.UpdateDomainRequest
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 
 	if c.IsSet(FlagActiveClusterName) {
@@ -307,7 +310,7 @@ func DescribeDomain(c *cli.Context) {
 	domainClient := getDomainClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	resp, err := domainClient.Describe(ctx, domain)
 	if err != nil {
@@ -364,7 +367,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		maxFieldLength = c.Int(FlagMaxFieldLength)
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	history, err := GetHistory(ctx, wfClient, wid, rid)
 	if err != nil {
@@ -469,7 +472,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 
 	startFn := func() {
-		tcCtx, cancel := newContext()
+		tcCtx, cancel := newContext(c)
 		defer cancel()
 		resp, err := serviceClient.StartWorkflowExecution(tcCtx, startRequest)
 
@@ -481,11 +484,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 
 	runFn := func() {
-		contextTimeout := defaultContextTimeoutForLongPoll
-		if c.IsSet(FlagContextTimeout) {
-			contextTimeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
-		}
-		tcCtx, cancel := newContextForLongPoll(contextTimeout)
+		tcCtx, cancel := newContextForLongPoll(c)
 		defer cancel()
 		resp, err := serviceClient.StartWorkflowExecution(tcCtx, startRequest)
 
@@ -530,11 +529,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	var lastEvent *s.HistoryEvent // used for print result of this run
 	ticker := time.NewTicker(time.Second).C
 
-	contextTimeout := defaultContextTimeoutForLongPoll
-	if c.IsSet(FlagContextTimeout) {
-		contextTimeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
-	}
-	tcCtx, cancel := newContextForLongPoll(contextTimeout)
+	tcCtx, cancel := newContextForLongPoll(c)
 	defer cancel()
 
 	showDetails := c.Bool(FlagShowDetail)
@@ -590,7 +585,7 @@ func TerminateWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 	reason := c.String(FlagReason)
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	err := wfClient.TerminateWorkflow(ctx, wid, rid, reason, nil)
 
@@ -608,7 +603,7 @@ func CancelWorkflow(c *cli.Context) {
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := c.String(FlagRunID)
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	err := wfClient.CancelWorkflow(ctx, wid, rid)
 
@@ -629,7 +624,7 @@ func SignalWorkflow(c *cli.Context) {
 	name := getRequiredOption(c, FlagName)
 	input := processJSONInput(c)
 
-	tcCtx, cancel := newContext()
+	tcCtx, cancel := newContext(c)
 	defer cancel()
 	err := serviceClient.SignalWorkflowExecution(tcCtx, &s.SignalWorkflowExecutionRequest{
 		Domain: common.StringPtr(domain),
@@ -671,7 +666,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	rid := c.String(FlagRunID)
 	input := processJSONInput(c)
 
-	tcCtx, cancel := newContext()
+	tcCtx, cancel := newContext(c)
 	defer cancel()
 	queryRequest := &s.QueryWorkflowRequest{
 		Domain: common.StringPtr(domain),
@@ -774,7 +769,7 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 
 	printRawTime := c.Bool(FlagPrintRawTime) // default show datetime instead of raw time
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 
 	resp, err := wfClient.DescribeWorkflowExecution(ctx, wid, rid)
@@ -882,7 +877,6 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 	if pageSize <= 0 {
 		pageSize = defaultPageSizeForList
 	}
-	timeout := time.Duration(c.Int(FlagContextTimeout)) * time.Second
 
 	var workflowStatus s.WorkflowExecutionCloseStatus
 	if c.IsSet(FlagWorkflowStatus) {
@@ -902,9 +896,9 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 		var result []*s.WorkflowExecutionInfo
 		var nextPageToken []byte
 		if queryOpen {
-			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, timeout)
+			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, c)
 		} else {
-			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, next, timeout)
+			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, next, c)
 		}
 
 		for _, e := range result {
@@ -925,7 +919,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 }
 
 func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
-	nextPageToken []byte, timeout time.Duration) ([]*s.WorkflowExecutionInfo, []byte) {
+	nextPageToken []byte, c *cli.Context) ([]*s.WorkflowExecutionInfo, []byte) {
 
 	request := &s.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: common.Int32Ptr(int32(pageSize)),
@@ -942,7 +936,7 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 		request.TypeFilter = &s.WorkflowTypeFilter{Name: common.StringPtr(workflowType)}
 	}
 
-	ctx, cancel := newContextForLongPoll(timeout)
+	ctx, cancel := newContextForLongPoll(c)
 	defer cancel()
 	response, err := client.ListOpenWorkflow(ctx, request)
 	if err != nil {
@@ -952,7 +946,7 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 }
 
 func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
-	workflowStatus s.WorkflowExecutionCloseStatus, nextPageToken []byte, timeout time.Duration) ([]*s.WorkflowExecutionInfo, []byte) {
+	workflowStatus s.WorkflowExecutionCloseStatus, nextPageToken []byte, c *cli.Context) ([]*s.WorkflowExecutionInfo, []byte) {
 
 	request := &s.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: common.Int32Ptr(int32(pageSize)),
@@ -972,7 +966,7 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 		request.StatusFilter = &workflowStatus
 	}
 
-	ctx, cancel := newContextForLongPoll(timeout)
+	ctx, cancel := newContextForLongPoll(c)
 	defer cancel()
 	response, err := client.ListClosedWorkflow(ctx, request)
 	if err != nil {
@@ -987,7 +981,7 @@ func DescribeTaskList(c *cli.Context) {
 	taskList := getRequiredOption(c, FlagTaskList)
 	taskListType := strToTaskListType(c.String(FlagTaskListType)) // default type is decision
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := wfClient.DescribeTaskList(ctx, taskList, taskListType)
 	if err != nil {
@@ -1036,7 +1030,7 @@ func ResetWorkflow(c *cli.Context) {
 	if eventID <= 0 {
 		ErrorAndExit("wrong eventID", fmt.Errorf("eventID must be greater than 0"))
 	}
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 
 	frontendClient := cFactory.ServerFrontendClient(c)
@@ -1148,12 +1142,20 @@ func getCliIdentity() string {
 	return fmt.Sprintf("cadence-cli@%s", hostName)
 }
 
-func newContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), time.Second*5)
+func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
+	contextTimeout := defaultContextTimeout
+	if c.GlobalInt(FlagContextTimeout) > 0 {
+		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	}
+	return context.WithTimeout(context.Background(), contextTimeout)
 }
 
-func newContextForLongPoll(timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), timeout)
+func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc) {
+	contextTimeout := defaultContextTimeoutForLongPoll
+	if c.GlobalIsSet(FlagContextTimeout) {
+		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	}
+	return context.WithTimeout(context.Background(), contextTimeout)
 }
 
 // process and validate input provided through cmd or file

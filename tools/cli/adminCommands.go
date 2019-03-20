@@ -132,7 +132,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := c.String(FlagRunID)
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 
 	resp, err := adminClient.DescribeWorkflowExecution(ctx, &admin.DescribeWorkflowExecutionRequest{
@@ -314,7 +314,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 		return
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContext(c)
 	defer cancel()
 
 	req := &shared.DescribeHistoryHostRequest{}
