@@ -24,12 +24,12 @@
 package historyservicetest
 
 import (
-	"context"
-	"github.com/golang/mock/gomock"
-	"github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
-	"go.uber.org/yarpc"
+	context "context"
+	gomock "github.com/golang/mock/gomock"
+	history "github.com/uber/cadence/.gen/go/history"
+	historyserviceclient "github.com/uber/cadence/.gen/go/history/historyserviceclient"
+	shared "github.com/uber/cadence/.gen/go/shared"
+	yarpc "go.uber.org/yarpc"
 )
 
 // MockClient implements a gomock-compatible mock client for service

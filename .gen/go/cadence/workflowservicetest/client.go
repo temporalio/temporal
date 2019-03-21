@@ -24,11 +24,11 @@
 package workflowservicetest
 
 import (
-	"context"
-	"github.com/golang/mock/gomock"
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
-	"go.uber.org/yarpc"
+	context "context"
+	gomock "github.com/golang/mock/gomock"
+	workflowserviceclient "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	shared "github.com/uber/cadence/.gen/go/shared"
+	yarpc "go.uber.org/yarpc"
 )
 
 // MockClient implements a gomock-compatible mock client for service

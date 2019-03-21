@@ -24,12 +24,12 @@
 package adminservicetest
 
 import (
-	"context"
-	"github.com/golang/mock/gomock"
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
-	"go.uber.org/yarpc"
+	context "context"
+	gomock "github.com/golang/mock/gomock"
+	admin "github.com/uber/cadence/.gen/go/admin"
+	adminserviceclient "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+	shared "github.com/uber/cadence/.gen/go/shared"
+	yarpc "go.uber.org/yarpc"
 )
 
 // MockClient implements a gomock-compatible mock client for service

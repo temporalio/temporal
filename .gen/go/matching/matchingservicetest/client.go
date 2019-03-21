@@ -24,12 +24,12 @@
 package matchingservicetest
 
 import (
-	"context"
-	"github.com/golang/mock/gomock"
-	"github.com/uber/cadence/.gen/go/matching"
-	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
-	"go.uber.org/yarpc"
+	context "context"
+	gomock "github.com/golang/mock/gomock"
+	matching "github.com/uber/cadence/.gen/go/matching"
+	matchingserviceclient "github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
+	shared "github.com/uber/cadence/.gen/go/shared"
+	yarpc "go.uber.org/yarpc"
 )
 
 // MockClient implements a gomock-compatible mock client for service

@@ -24,12 +24,12 @@
 package adminserviceserver
 
 import (
-	"context"
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/shared"
-	"go.uber.org/thriftrw/wire"
-	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/encoding/thrift"
+	context "context"
+	admin "github.com/uber/cadence/.gen/go/admin"
+	shared "github.com/uber/cadence/.gen/go/shared"
+	wire "go.uber.org/thriftrw/wire"
+	transport "go.uber.org/yarpc/api/transport"
+	thrift "go.uber.org/yarpc/encoding/thrift"
 )
 
 // Interface is the server-side interface for the AdminService service.

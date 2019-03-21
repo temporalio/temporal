@@ -290,6 +290,22 @@ func (c *retryableClient) ResetStickyTaskList(
 	return resp, err
 }
 
+func (c *retryableClient) ResetWorkflowExecution(
+	ctx context.Context,
+	request *shared.ResetWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ResetWorkflowExecutionResponse, error) {
+
+	var resp *shared.ResetWorkflowExecutionResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ResetWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RespondActivityTaskCanceled(
 	ctx context.Context,
 	request *shared.RespondActivityTaskCanceledRequest,

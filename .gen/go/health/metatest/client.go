@@ -24,11 +24,11 @@
 package metatest
 
 import (
-	"context"
-	"github.com/golang/mock/gomock"
-	"github.com/uber/cadence/.gen/go/health"
-	"github.com/uber/cadence/.gen/go/health/metaclient"
-	"go.uber.org/yarpc"
+	context "context"
+	gomock "github.com/golang/mock/gomock"
+	health "github.com/uber/cadence/.gen/go/health"
+	metaclient "github.com/uber/cadence/.gen/go/health/metaclient"
+	yarpc "go.uber.org/yarpc"
 )
 
 // MockClient implements a gomock-compatible mock client for service

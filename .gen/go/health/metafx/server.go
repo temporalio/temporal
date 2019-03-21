@@ -24,10 +24,10 @@
 package metafx
 
 import (
-	"github.com/uber/cadence/.gen/go/health/metaserver"
-	"go.uber.org/fx"
-	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/encoding/thrift"
+	metaserver "github.com/uber/cadence/.gen/go/health/metaserver"
+	fx "go.uber.org/fx"
+	transport "go.uber.org/yarpc/api/transport"
+	thrift "go.uber.org/yarpc/encoding/thrift"
 )
 
 // ServerParams defines the dependencies for the Meta server.

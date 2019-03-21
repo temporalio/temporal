@@ -316,6 +316,22 @@ func (c *clientImpl) ResetStickyTaskList(
 	return client.ResetStickyTaskList(ctx, request, opts...)
 }
 
+func (c *clientImpl) ResetWorkflowExecution(
+	ctx context.Context,
+	request *shared.ResetWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ResetWorkflowExecutionResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ResetWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	request *shared.RespondActivityTaskCanceledRequest,

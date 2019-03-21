@@ -377,6 +377,29 @@ func (_m *FrontendClient) ResetStickyTaskList(ctx context.Context, request *shar
 	return r0, r1
 }
 
+// ResetWorkflowExecution provides a mock function with given fields: ctx, request
+func (_m *FrontendClient) ResetWorkflowExecution(ctx context.Context, request *shared.ResetWorkflowExecutionRequest, opts ...yarpc.CallOption) (*shared.ResetWorkflowExecutionResponse, error) {
+	ret := _m.Called(ctx, request)
+
+	var r0 *shared.ResetWorkflowExecutionResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *shared.ResetWorkflowExecutionRequest) *shared.ResetWorkflowExecutionResponse); ok {
+		r0 = rf(ctx, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.ResetWorkflowExecutionResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *shared.ResetWorkflowExecutionRequest) error); ok {
+		r1 = rf(ctx, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RespondActivityTaskCanceled provides a mock function with given fields: ctx, request
 func (_m *FrontendClient) RespondActivityTaskCanceled(ctx context.Context, request *shared.RespondActivityTaskCanceledRequest, opts ...yarpc.CallOption) error {
 	ret := _m.Called(ctx, request)
