@@ -22,8 +22,6 @@ package metrics
 
 import (
 	"time"
-
-	"github.com/uber-go/tally"
 )
 
 type (
@@ -35,7 +33,7 @@ type (
 		AddCounter(scope int, counter int, delta int64)
 		// StartTimer starts a timer for the given
 		// metric name. Time will be recorded when stopwatch is stopped.
-		StartTimer(scope int, timer int) tally.Stopwatch
+		StartTimer(scope int, timer int) Stopwatch
 		// RecordTimer starts a timer for the given
 		// metric name
 		RecordTimer(scope int, timer int, d time.Duration)
