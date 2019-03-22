@@ -143,8 +143,8 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilityToKafka bool) *Config {
-	return &Config{
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilityToKafka bool, storeType string) *Config {
+	cfg := &Config{
 		NumberOfShards:                                        numberOfShards,
 		RPS:                                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -224,6 +224,13 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 
 		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 20),
 	}
+
+	if storeType == config.StoreTypeSQL {
+		// SQL based stores don't have support for historyv2 yet, so set default to false
+		cfg.EnableEventsV2 = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, false)
+	}
+
+	return cfg
 }
 
 // GetShardID return the corresponding shard ID for a given workflow ID
@@ -244,7 +251,8 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
 	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
-		params.ESConfig.Enable)
+		params.ESConfig.Enable,
+		params.PersistenceConfig.DefaultStoreType())
 	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,

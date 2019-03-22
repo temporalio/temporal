@@ -39,6 +39,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service"
+	cconfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -511,14 +512,14 @@ func (s *TestShardContext) GetCurrentTime(cluster string) time.Time {
 // NewDynamicConfigForTest return dc for test
 func NewDynamicConfigForTest() *Config {
 	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, false)
+	config := NewConfig(dc, 1, false, cconfig.StoreTypeCassandra)
 	return config
 }
 
 // NewDynamicConfigForEventsV2Test with enableEventsV2 = true
 func NewDynamicConfigForEventsV2Test() *Config {
 	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, false)
+	config := NewConfig(dc, 1, false, cconfig.StoreTypeCassandra)
 	config.EnableEventsV2 = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, true)
 	return config
 }

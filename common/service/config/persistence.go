@@ -22,6 +22,13 @@ package config
 
 import "fmt"
 
+const (
+	// StoreTypeSQL refers to sql based storage as persistence store
+	StoreTypeSQL = "sql"
+	// StoreTypeCassandra refers to cassandra as persistence store
+	StoreTypeCassandra = "cassandra"
+)
+
 // SetMaxQPS sets the MaxQPS value for the given datastore
 func (c *Persistence) SetMaxQPS(key string, qps int) {
 	ds, ok := c.DataStores[key]
@@ -33,6 +40,14 @@ func (c *Persistence) SetMaxQPS(key string, qps int) {
 		return
 	}
 	ds.SQL.MaxQPS = qps
+}
+
+// DefaultStoreType returns the storeType for the default persistence store
+func (c *Persistence) DefaultStoreType() string {
+	if c.DataStores[c.DefaultStore].SQL != nil {
+		return StoreTypeSQL
+	}
+	return StoreTypeCassandra
 }
 
 // Validate validates the persistence config
