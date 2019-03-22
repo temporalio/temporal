@@ -22,6 +22,8 @@ package metrics
 
 import (
 	"time"
+
+	"github.com/uber-go/tally"
 )
 
 type (
@@ -39,7 +41,27 @@ type (
 		RecordTimer(scope int, timer int, d time.Duration)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(scope int, gauge int, value float64)
-		// Tagged returns a client that adds the given tags to all metrics
-		Tagged(tags map[string]string) Client
+		// Scope return an internal scope that can be used to add additional
+		// information to metrics
+		Scope(scope int, tags ...Tag) Scope
+	}
+
+	// Scope is an interface for metrics
+	Scope interface {
+		// IncCounter increments a counter metric
+		IncCounter(counter int)
+		// AddCounter adds delta to the counter metric
+		AddCounter(counter int, delta int64)
+		// StartTimer starts a timer for the given
+		// metric name. Time will be recorded when stopwatch is stopped.
+		StartTimer(timer int) tally.Stopwatch
+		// RecordTimer starts a timer for the given
+		// metric name
+		RecordTimer(timer int, d time.Duration)
+		// UpdateGauge reports Gauge type absolute value metric
+		UpdateGauge(gauge int, value float64)
+		// Tagged return an internal scope that can be used to add additional
+		// information to metrics
+		Tagged(tags ...Tag) Scope
 	}
 )

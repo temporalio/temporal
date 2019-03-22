@@ -80,12 +80,9 @@ func (r *replayMetricsClient) UpdateGauge(scope int, gauge int, value float64) {
 	r.client.UpdateGauge(scope, gauge, value)
 }
 
-// Tagged returns a client that adds the given tags to all metrics
-func (r *replayMetricsClient) Tagged(tags map[string]string) metrics.Client {
-	return &replayMetricsClient{
-		client: r.client.Tagged(tags),
-		ctx:    r.ctx,
-	}
+// Scope returns a client that adds the given tags to all metrics
+func (r *replayMetricsClient) Scope(scope int, tags ...metrics.Tag) metrics.Scope {
+	return r.client.Scope(scope, tags...)
 }
 
 type nopStopwatchRecorder struct{}

@@ -141,10 +141,10 @@ func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 	m.childScopes[scopeIdx].Gauge(oldName).Update(value)
 }
 
-// Tagged returns a client that adds the given tags to all metrics
-func (m *ClientImpl) Tagged(tags map[string]string) Client {
-	scope := m.parentScope.Tagged(tags)
-	return NewClient(scope, m.serviceIdx)
+// Scope return a new internal metrics scope that can be used to add additional
+// information to the metrics emitted
+func (m *ClientImpl) Scope(scopeIdx int, tags ...Tag) Scope {
+	return newMetricsScope(m.childScopes[scopeIdx], m.metricDefs).Tagged(tags...)
 }
 
 func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
