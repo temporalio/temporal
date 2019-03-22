@@ -79,7 +79,7 @@ clean_thrift:
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 copyright: cmd/tools/copyright/licensegen.go
-	go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 cadence-cassandra-tool: dep-ensured $(TOOLS_SRC)
 	go build -i -o cadence-cassandra-tool cmd/tools/cassandra/main.go
