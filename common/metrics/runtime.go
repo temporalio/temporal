@@ -44,7 +44,7 @@ func NewRuntimeMetricsReporter(scope tally.Scope, reportInterval time.Duration, 
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 	rReporter := &RuntimeMetricsReporter{
-		scope:          newScope(scope, GoRuntimeMetrics),
+		scope:          scope,
 		reportInterval: reportInterval,
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,

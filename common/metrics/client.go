@@ -40,9 +40,7 @@ type ClientImpl struct {
 // reporter holds the common tags for the service
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
 func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
-	commonScopes := ScopeDefs[Common]
-	serviceScopes := ScopeDefs[serviceIdx]
-	totalScopes := len(commonScopes) + len(serviceScopes)
+	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &ClientImpl{
 		parentScope: scope,
 		childScopes: make(map[int]tally.Scope, totalScopes),
@@ -50,17 +48,12 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		serviceIdx:  serviceIdx,
 	}
 
-	metricsMap := make(map[MetricName]MetricType)
-	for _, def := range metricsClient.metricDefs {
-		metricsMap[def.metricName] = def.metricType
-	}
-
 	for idx, def := range ScopeDefs[Common] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
+		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
 	}
 
 	for idx, def := range ScopeDefs[serviceIdx] {
@@ -69,7 +62,6 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
-		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
 	}
 
 	return metricsClient

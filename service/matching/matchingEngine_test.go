@@ -877,7 +877,14 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	syncCtr := scope.Snapshot().Counters()["test.sync.throttle.count+operation=TaskListMgr"]
 	bufCtr := scope.Snapshot().Counters()["test.buffer.throttle.count+operation=TaskListMgr"]
-	return syncCtr.Value() + bufCtr.Value()
+	total := int64(0)
+	if syncCtr != nil {
+		total += syncCtr.Value()
+	}
+	if bufCtr != nil {
+		total += bufCtr.Value()
+	}
+	return total
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
