@@ -403,12 +403,16 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if describeRequest.GetName() == "" {
+	if describeRequest.GetName() == "" && describeRequest.GetUUID() == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
 	// TODO, we should migrate the non global domain to new table, see #773
-	resp, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: describeRequest.GetName()})
+	req := &persistence.GetDomainRequest{
+		Name: describeRequest.GetName(),
+		ID:   describeRequest.GetUUID(),
+	}
+	resp, err := wh.metadataMgr.GetDomain(req)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2996,6 +3000,7 @@ func (wh *WorkflowHandler) createDomainResponse(info *persistence.DomainInfo, co
 		Description: common.StringPtr(info.Description),
 		OwnerEmail:  common.StringPtr(info.OwnerEmail),
 		Data:        info.Data,
+		UUID:        common.StringPtr(info.ID),
 	}
 
 	configResult := &gen.DomainConfiguration{

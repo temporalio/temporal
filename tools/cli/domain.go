@@ -152,6 +152,12 @@ func newDomainCommands() []cli.Command {
 			Name:    "describe",
 			Aliases: []string{"desc"},
 			Usage:   "Describe existing workflow domain",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDomainID,
+					Usage: "Domain UUID (required if not specify domainName)",
+				},
+			},
 			Action: func(c *cli.Context) {
 				DescribeDomain(c)
 			},

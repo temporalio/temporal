@@ -47,6 +47,7 @@ type cliAppSuite struct {
 	app                  *cli.App
 	mockCtrl             *gomock.Controller
 	clientFrontendClient *clientFrontendTest.MockClient
+	serverFrontendClient *serverFrontendTest.MockClient
 	serverAdminClient    *serverAdminTest.MockClient
 }
 
@@ -92,10 +93,11 @@ func (s *cliAppSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 
 	s.clientFrontendClient = clientFrontendTest.NewMockClient(s.mockCtrl)
+	s.serverFrontendClient = serverFrontendTest.NewMockClient(s.mockCtrl)
 	s.serverAdminClient = serverAdminTest.NewMockClient(s.mockCtrl)
 	SetFactory(&clientFactoryMock{
 		clientFrontendClient: s.clientFrontendClient,
-		serverFrontendClient: serverFrontendTest.NewMockClient(s.mockCtrl),
+		serverFrontendClient: s.serverFrontendClient,
 		serverAdminClient:    s.serverAdminClient,
 	})
 }
@@ -163,6 +165,29 @@ var describeDomainResponse = &shared.DescribeDomainResponse{
 	},
 }
 
+var describeDomainResponseServer = &serverShared.DescribeDomainResponse{
+	DomainInfo: &serverShared.DomainInfo{
+		Name:        common.StringPtr("test-domain"),
+		Description: common.StringPtr("a test domain"),
+		OwnerEmail:  common.StringPtr("test@uber.com"),
+	},
+	Configuration: &serverShared.DomainConfiguration{
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(3),
+		EmitMetric:                             common.BoolPtr(true),
+	},
+	ReplicationConfiguration: &serverShared.DomainReplicationConfiguration{
+		ActiveClusterName: common.StringPtr("active"),
+		Clusters: []*serverShared.ClusterReplicationConfiguration{
+			{
+				ClusterName: common.StringPtr("active"),
+			},
+			{
+				ClusterName: common.StringPtr("standby"),
+			},
+		},
+	},
+}
+
 func (s *cliAppSuite) TestDomainUpdate() {
 	resp := describeDomainResponse
 	s.clientFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil).Times(2)
@@ -196,22 +221,22 @@ func (s *cliAppSuite) TestDomainUpdate_Failed() {
 }
 
 func (s *cliAppSuite) TestDomainDescribe() {
-	resp := describeDomainResponse
-	s.clientFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
+	resp := describeDomainResponseServer
+	s.serverFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--do", domainName, "domain", "describe"})
 	s.Nil(err)
 }
 
 func (s *cliAppSuite) TestDomainDescribe_DomainNotExist() {
-	resp := describeDomainResponse
-	s.clientFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, &shared.EntityNotExistsError{})
+	resp := describeDomainResponseServer
+	s.serverFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, &shared.EntityNotExistsError{})
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainDescribe_Failed() {
-	resp := describeDomainResponse
-	s.clientFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, &shared.BadRequestError{"faked error"})
+	resp := describeDomainResponseServer
+	s.serverFrontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, &shared.BadRequestError{"faked error"})
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
 	s.Equal(1, errorCode)
 }

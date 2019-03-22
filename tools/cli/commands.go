@@ -307,22 +307,30 @@ func UpdateDomain(c *cli.Context) {
 
 // DescribeDomain updates a domain
 func DescribeDomain(c *cli.Context) {
-	domainClient := getDomainClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	domainName := c.GlobalString(FlagDomain)
+	domainID := c.String(FlagDomainID)
 
+	if domainID == "" && domainName == "" {
+		ErrorAndExit("At least domainID or domainName must be provided.", nil)
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	resp, err := domainClient.Describe(ctx, domain)
+	frontendClient := cFactory.ServerFrontendClient(c)
+	resp, err := frontendClient.DescribeDomain(ctx, &shared.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+		UUID: common.StringPtr(domainID),
+	})
 	if err != nil {
 		if _, ok := err.(*s.EntityNotExistsError); !ok {
 			ErrorAndExit("Operation DescribeDomain failed.", err)
 		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 		}
 	} else {
-		fmt.Printf("Name: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n"+
+		fmt.Printf("Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n"+
 			"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\n",
 			resp.DomainInfo.GetName(),
+			resp.DomainInfo.GetUUID(),
 			resp.DomainInfo.GetDescription(),
 			resp.DomainInfo.GetOwnerEmail(),
 			resp.DomainInfo.Data,
@@ -1243,7 +1251,7 @@ func trimWorkflowType(str string) string {
 	return res
 }
 
-func clustersToString(clusters []*s.ClusterReplicationConfiguration) string {
+func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string {
 	var res string
 	for i, cluster := range clusters {
 		if i == 0 {
