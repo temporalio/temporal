@@ -104,3 +104,11 @@ func (c *retryableClient) BucketMetadata(ctx context.Context, bucket string) (*B
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) IsRetryableError(err error) bool {
+	return c.client.IsRetryableError(err)
+}
+
+func (c *retryableClient) GetRetryPolicy() backoff.RetryPolicy {
+	return c.client.GetRetryPolicy()
+}

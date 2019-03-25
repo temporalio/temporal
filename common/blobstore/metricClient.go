@@ -22,6 +22,7 @@ package blobstore
 
 import (
 	"context"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/metrics"
 )
@@ -117,4 +118,12 @@ func (c *metricClient) BucketMetadata(ctx context.Context, bucket string) (*Buck
 		c.metricsClient.IncCounter(metrics.BlobstoreClientBucketMetadataScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
+}
+
+func (c *metricClient) IsRetryableError(err error) bool {
+	return c.client.IsRetryableError(err)
+}
+
+func (c *metricClient) GetRetryPolicy() backoff.RetryPolicy {
+	return c.client.GetRetryPolicy()
 }

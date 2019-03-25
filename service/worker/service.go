@@ -207,8 +207,8 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 
 	blobstoreClient := blobstore.NewRetryableClient(
 		blobstore.NewMetricClient(s.params.BlobstoreClient, s.metricsClient),
-		common.CreateBlobstoreClientRetryPolicy(),
-		common.IsBlobstoreTransientError)
+		s.params.BlobstoreClient.GetRetryPolicy(),
+		s.params.BlobstoreClient.IsRetryableError)
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     publicClient,

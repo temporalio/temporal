@@ -23,15 +23,17 @@ package filestore
 import (
 	"context"
 	"fmt"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/blobstore/blob"
-	"github.com/uber/cadence/common/logging"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
+	"github.com/uber/cadence/common/logging"
 )
 
 const (
@@ -323,6 +325,16 @@ func (c *client) BucketMetadata(_ context.Context, bucket string) (*blobstore.Bu
 		Owner:         bucketCfg.Owner,
 		RetentionDays: bucketCfg.RetentionDays,
 	}, nil
+}
+
+func (c *client) IsRetryableError(err error) bool {
+	return false
+}
+
+func (c *client) GetRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(0)
+	policy.SetMaximumAttempts(1)
+	return policy
 }
 
 func setupDirectories(cfg *Config) error {

@@ -22,7 +22,9 @@ package blobstore
 
 import (
 	"context"
+
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore/blob"
 )
 
@@ -51,4 +53,7 @@ type Client interface {
 	Delete(ctx context.Context, bucket string, key blob.Key) (bool, error)
 	ListByPrefix(ctx context.Context, bucket string, prefix string) ([]blob.Key, error)
 	BucketMetadata(ctx context.Context, bucket string) (*BucketMetadataResponse, error)
+
+	IsRetryableError(err error) bool
+	GetRetryPolicy() backoff.RetryPolicy
 }

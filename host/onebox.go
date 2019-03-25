@@ -507,8 +507,8 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 	)
 	blobstoreClient := blobstore.NewRetryableClient(
 		blobstore.NewMetricClient(c.blobstoreClient, service.GetMetricsClient()),
-		common.CreateBlobstoreClientRetryPolicy(),
-		common.IsBlobstoreTransientError)
+		c.blobstoreClient.GetRetryPolicy(),
+		c.blobstoreClient.IsRetryableError)
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	bc := &archiver.BootstrapContainer{

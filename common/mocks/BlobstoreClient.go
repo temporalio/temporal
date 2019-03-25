@@ -22,6 +22,7 @@
 
 package mocks
 
+import backoff "github.com/uber/cadence/common/backoff"
 import blob "github.com/uber/cadence/common/blobstore/blob"
 import blobstore "github.com/uber/cadence/common/blobstore"
 import context "context"
@@ -118,6 +119,36 @@ func (_m *BlobstoreClient) Exists(ctx context.Context, bucket string, key blob.K
 	}
 
 	return r0, r1
+}
+
+// GetRetryPolicy provides a mock function with given fields:
+func (_m *BlobstoreClient) GetRetryPolicy() backoff.RetryPolicy {
+	ret := _m.Called()
+
+	var r0 backoff.RetryPolicy
+	if rf, ok := ret.Get(0).(func() backoff.RetryPolicy); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(backoff.RetryPolicy)
+		}
+	}
+
+	return r0
+}
+
+// IsRetryableError provides a mock function with given fields: err
+func (_m *BlobstoreClient) IsRetryableError(err error) bool {
+	ret := _m.Called(err)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(error) bool); ok {
+		r0 = rf(err)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
 }
 
 // ListByPrefix provides a mock function with given fields: ctx, bucket, prefix

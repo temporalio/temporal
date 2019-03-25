@@ -48,8 +48,6 @@ const (
 var (
 	errPersistenceNonRetryable = errors.New("persistence non-retryable error")
 	errPersistenceRetryable    = &shared.InternalServiceError{}
-	errBlobstoreNonRetryable   = &shared.BadRequestError{}
-	errBlobstoreRetryable      = errors.New("blobstore retryable error")
 )
 
 type activitiesSuite struct {
@@ -303,7 +301,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_BlobExistsNonRetryableE
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
 	mockBlobstore := &mocks.BlobstoreClient{}
-	mockBlobstore.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(false, errBlobstoreNonRetryable)
+	mockBlobstore.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(false, errors.New("some error"))
+	mockBlobstore.On("IsRetryableError", mock.Anything).Return(false)
 	container := &BootstrapContainer{
 		Logger:              s.logger,
 		MetricsClient:       s.metricsClient,
@@ -340,7 +339,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_TimeoutOnBlobExists() {
 	}
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
 	mockBlobstore := &mocks.BlobstoreClient{}
-	mockBlobstore.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(false, errBlobstoreRetryable)
+	mockBlobstore.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(false, errors.New("some error"))
+	mockBlobstore.On("IsRetryableError", mock.Anything).Return(true)
 	container := &BootstrapContainer{
 		Logger:              s.logger,
 		MetricsClient:       s.metricsClient,
@@ -418,7 +418,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobNonRetryableE
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
-	mockBlobstore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errBlobstoreNonRetryable)
+	mockBlobstore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("some error"))
+	mockBlobstore.On("IsRetryableError", mock.Anything).Return(false)
 	container := &BootstrapContainer{
 		Logger:              s.logger,
 		MetricsClient:       s.metricsClient,
@@ -458,7 +459,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_TimeoutOnUploadBlob() {
 	mockHistoryBlobIterator.On("Next").Return(historyBlob, nil)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
-	mockBlobstore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errBlobstoreRetryable)
+	mockBlobstore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("some error"))
+	mockBlobstore.On("IsRetryableError", mock.Anything).Return(true)
 	container := &BootstrapContainer{
 		Logger:              s.logger,
 		MetricsClient:       s.metricsClient,
