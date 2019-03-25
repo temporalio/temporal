@@ -23,22 +23,16 @@ package host
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
 )
 
 type (
@@ -46,96 +40,35 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		suite.Suite
 		IntegrationBase
-		enableEventsV2 bool
 	}
 )
 
 func TestIntegrationCrossDCSuite(t *testing.T) {
 	flag.Parse()
-	if *integration && !*testEventsV2 {
-		s := new(integrationCrossDCSuite)
-		suite.Run(t, s)
-	} else {
-		t.Skip()
-	}
-}
-
-func TestIntegrationCrossDCSuiteEventsV2(t *testing.T) {
-	flag.Parse()
-	if *integration && *testEventsV2 {
-		s := new(integrationCrossDCSuite)
-		s.enableEventsV2 = true
-		suite.Run(t, s)
-	} else {
-		t.Skip()
-	}
+	suite.Run(t, new(integrationCrossDCSuite))
 }
 
 func (s *integrationCrossDCSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
-
-	logger := log.New()
-	formatter := &log.TextFormatter{}
-	formatter.FullTimestamp = true
-	logger.Formatter = formatter
-	//logger.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(logger)
+	s.setupLogger()
 }
 
 func (s *integrationCrossDCSuite) TearDownSuite() {
 }
 
+func (s *integrationCrossDCSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+}
+
 func (s *integrationCrossDCSuite) TearDownTest() {
-	if s.host != nil {
-		s.host.Stop()
-		s.host = nil
-		s.TearDownWorkflowStore()
+	if s.Host != nil {
+		s.tearDownSuite()
 	}
 }
 
 func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterCluster bool) {
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	options := persistencetests.TestBaseOptions{}
-	options.EnableGlobalDomain = enableGlobalDomain
-	options.IsMasterCluster = isMasterCluster
-	s.TestBase = persistencetests.NewTestBaseWithCassandra(&options)
-	s.TestBase.Setup()
-	s.setupShards()
-
-	// TODO: Use mock messaging client until we support kafka setup onebox to write end-to-end integration test
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-
-	cadenceParams := &CadenceParams{
-		ClusterMetadata:         s.ClusterMetadata,
-		DispatcherProvider:      client.NewIPYarpcDispatcherProvider(),
-		MessagingClient:         s.mockMessagingClient,
-		MetadataMgr:             s.MetadataProxy,
-		MetadataMgrV2:           s.MetadataManagerV2,
-		ShardMgr:                s.ShardMgr,
-		HistoryMgr:              s.HistoryMgr,
-		HistoryV2Mgr:            s.HistoryV2Mgr,
-		ExecutionMgrFactory:     s.ExecutionMgrFactory,
-		TaskMgr:                 s.TaskMgr,
-		VisibilityMgr:           s.VisibilityMgr,
-		NumberOfHistoryShards:   testNumberOfHistoryShards,
-		NumberOfHistoryHosts:    testNumberOfHistoryHosts,
-		Logger:                  s.logger,
-		ClusterNo:               0,
-		EnableWorker:            false,
-		EnableEventsV2:          s.enableEventsV2,
-		EnableVisibilityToKafka: false,
-	}
-	s.host = NewCadence(cadenceParams)
-
-	s.host.Start()
-
-	s.engine = s.host.GetFrontendClient()
+	s.setupCadenceHost(enableGlobalDomain, isMasterCluster, false, false)
 }
 
 // Note: if the global domain is not enabled, active clusters and clusters
@@ -147,7 +80,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainD
 		s.setupTest(false, isMasterCluster)
 
 		domainName := "some random domain name"
-		clusters := []*workflow.ClusterReplicationConfiguration{}
+		var clusters []*workflow.ClusterReplicationConfiguration
 		for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(replicationConfig.ClusterName),
@@ -195,7 +128,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 	s.setupTest(true, true)
 
 	domainName := "some random domain name"
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(replicationConfig.ClusterName),
@@ -243,13 +176,13 @@ func (s *integrationCrossDCSuite) TestIntegrationRegister_GlobalDomainEnabled_Lo
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
+				{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
 			},
 		},
 	})
 	s.Nil(err)
 
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(replicationConfig.ClusterName),
@@ -283,14 +216,14 @@ func (s *integrationCrossDCSuite) TestIntegrationRegister_GlobalDomainEnabled_Gl
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
+				{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
 			},
 		},
 		FailoverVersion: 0,
 	})
 	s.Nil(err)
 
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(replicationConfig.ClusterName),
@@ -318,7 +251,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainD
 		emitMetric := true
 		activeClusterName := ""
 		currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
-		clusters := []*workflow.ClusterReplicationConfiguration{}
+		var clusters []*workflow.ClusterReplicationConfiguration
 		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
@@ -369,7 +302,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := ""
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
@@ -401,7 +334,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := ""
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
@@ -471,7 +404,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := ""
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
@@ -525,7 +458,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainDis
 		retention := int32(7)
 		emitMetric := true
 		currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
-		clusters := []*workflow.ClusterReplicationConfiguration{}
+		var clusters []*workflow.ClusterReplicationConfiguration
 		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
@@ -600,7 +533,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: currentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: currentClusterName},
+				{ClusterName: currentClusterName},
 			},
 		},
 		FailoverVersion: 0,
@@ -668,7 +601,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
+				{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
 			},
 		},
 		FailoverVersion: 0,
@@ -679,7 +612,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
@@ -709,7 +642,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	s.setupTest(true, true)
 
 	domainName := "some random domain name"
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
@@ -769,7 +702,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		Name: common.StringPtr(domainName),
 		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
 			Clusters: []*workflow.ClusterReplicationConfiguration{
-				&workflow.ClusterReplicationConfiguration{
+				{
 					ClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
 				},
 			},
@@ -858,7 +791,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
+				{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
 			},
 		},
 		FailoverVersion: 0,
@@ -881,7 +814,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	clusters := []*workflow.ClusterReplicationConfiguration{}
+	var clusters []*workflow.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
@@ -936,11 +869,11 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		email := "some random email"
 		retention := int32(7)
 		emitMetric := true
-		clusters := []*workflow.ClusterReplicationConfiguration{}
+		var clusters []*workflow.ClusterReplicationConfiguration
 
 		activeClusterName := ""
 		failoverVersion := int64(59)
-		persistenceClusters := []*persistence.ClusterReplicationConfig{}
+		var persistenceClusters []*persistence.ClusterReplicationConfig
 		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),

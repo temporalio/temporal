@@ -27,12 +27,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/uber-common/bark"
-	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/messaging"
-	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"go.uber.org/yarpc"
@@ -45,17 +42,6 @@ type (
 		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
 	queryHandler func(task *workflow.PollForDecisionTaskResponse) ([]byte, error)
-
-	// IntegrationBase is a base struct for integration tests
-	IntegrationBase struct {
-		persistencetests.TestBase
-		BlobstoreBase
-		mockMessagingClient messaging.Client
-		mockProducer        messaging.Producer
-		host                Cadence
-		engine              wsc.Interface
-		logger              bark.Logger
-	}
 
 	// BlobstoreBase is a base struct for blobstore being used in integration tests
 	BlobstoreBase struct {

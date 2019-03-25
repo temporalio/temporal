@@ -54,7 +54,7 @@ import (
 	"github.com/uber/cadence/service/worker"
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/replicator"
-	ringpop "github.com/uber/ringpop-go"
+	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"github.com/uber/ringpop-go/swim"
 	tcg "github.com/uber/tchannel-go"
@@ -66,9 +66,11 @@ const rpAppNamePrefix string = "cadence"
 const maxRpJoinTimeout = 30 * time.Second
 
 var (
-	integration  = flag.Bool("integration", true, "run integration tests")
-	testEventsV2 = flag.Bool("eventsV2", false, "run integration tests with eventsV2")
-	topicName    = []string{"active", "standby"}
+	// EnableEventsV2 indicates whether events v2 is enabled for integration tests
+	EnableEventsV2     = flag.Bool("eventsV2", false, "run integration tests with eventsV2")
+	enableGlobalDomain = flag.Bool("enableGlobalDomain", false, "run integration tests with global domain")
+	enableArchival     = flag.Bool("enableArchival", false, "run integration tests with archival")
+	topicName          = []string{"active", "standby"}
 )
 
 const (

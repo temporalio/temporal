@@ -42,13 +42,12 @@ import (
 	"github.com/uber-go/tally"
 	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics/mocks"
-	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/host"
@@ -61,32 +60,18 @@ type (
 		// not merely log an error
 		*require.Assertions
 		suite.Suite
-		cluster1       *testCluster
-		cluster2       *testCluster
+		cluster1       *host.TestCluster
+		cluster2       *host.TestCluster
 		logger         bark.Logger
 		enableEventsV2 bool
-	}
-
-	testCluster struct {
-		persistencetests.TestBase
-		host   host.Cadence
-		engine wsc.Interface
-		logger bark.Logger
 	}
 )
 
 const (
-	testNumberOfHistoryShards = 4
-	testNumberOfHistoryHosts  = 1
-
 	cacheRefreshInterval = cache.DomainCacheRefreshInterval + time.Second
 )
 
 var (
-	integration     = flag.Bool("integration2", true, "run integration tests")
-	testEventsV2Xdc = flag.Bool("eventsV2xdc", false, "run integration tests with eventsV2 for XDC suite")
-
-	domainName     = "integration-cross-dc-test-domain"
 	clusterName    = []string{"active", "standby"}
 	topicName      = []string{"active", "standby"}
 	clusterAddress = []string{cluster.TestCurrentClusterFrontendAddress, cluster.TestAlternativeClusterFrontendAddress}
@@ -98,8 +83,8 @@ var (
 			CurrentClusterName:             clusterName[0],
 			ClusterInitialFailoverVersions: map[string]int64{clusterName[0]: 0, clusterName[1]: 1},
 			ClusterAddress: map[string]config.Address{
-				clusterName[0]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[0]},
-				clusterName[1]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[1]},
+				clusterName[0]: {RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[0]},
+				clusterName[1]: {RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[1]},
 			},
 		},
 		{
@@ -109,8 +94,8 @@ var (
 			CurrentClusterName:             clusterName[1],
 			ClusterInitialFailoverVersions: map[string]int64{clusterName[0]: 0, clusterName[1]: 1},
 			ClusterAddress: map[string]config.Address{
-				clusterName[0]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[0]},
-				clusterName[1]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[1]},
+				clusterName[0]: {RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[0]},
+				clusterName[1]: {RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[1]},
 			},
 		},
 	}
@@ -124,17 +109,11 @@ var (
 	}
 )
 
-func (s *integrationClustersTestSuite) newTestCluster(no int) *testCluster {
-	c := &testCluster{logger: s.logger.WithField("Cluster", clusterName[no])}
-	c.setupCluster(no, s.enableEventsV2)
-	return c
-}
-
-func (s *testCluster) setupCluster(no int, enableEventsV2 bool) {
-	options := persistencetests.TestBaseOptions{}
-	options.DBName = "integration_" + clusterName[no]
+func (s *integrationClustersTestSuite) newTestCluster(no int) *host.TestCluster {
+	persistOptions := &persistencetests.TestBaseOptions{}
+	persistOptions.DBName = "integration_" + clusterName[no]
 	clusterInfo := clustersInfo[no]
-	options.ClusterMetadata = cluster.NewMetadata(
+	persistOptions.ClusterMetadata = cluster.NewMetadata(
 		bark.NewNopLogger(),
 		&mocks.Client{},
 		dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
@@ -146,42 +125,22 @@ func (s *testCluster) setupCluster(no int, enableEventsV2 bool) {
 		dynamicconfig.GetStringPropertyFn("disabled"),
 		"",
 	)
-	s.TestBase = persistencetests.NewTestBaseWithCassandra(&options)
-	s.TestBase.Setup()
-	s.setupShards()
-	messagingClient := s.createMessagingClient()
-	testNumberOfHistoryShards := 1 // use 1 shard so we can be sure when failover completed in standby cluster
-	cadenceParams := &host.CadenceParams{
-		ClusterMetadata:         s.ClusterMetadata,
-		DispatcherProvider:      client.NewIPYarpcDispatcherProvider(),
-		MessagingClient:         messagingClient,
-		MetadataMgr:             s.MetadataProxy,
-		MetadataMgrV2:           s.MetadataManagerV2,
-		ShardMgr:                s.ShardMgr,
-		HistoryMgr:              s.HistoryMgr,
-		HistoryV2Mgr:            s.HistoryV2Mgr,
-		ExecutionMgrFactory:     s.ExecutionMgrFactory,
-		TaskMgr:                 s.TaskMgr,
-		VisibilityMgr:           s.VisibilityMgr,
-		NumberOfHistoryShards:   testNumberOfHistoryShards,
-		NumberOfHistoryHosts:    testNumberOfHistoryHosts,
-		Logger:                  s.logger,
-		ClusterNo:               no,
-		EnableWorker:            true,
-		EnableEventsV2:          enableEventsV2,
-		EnableVisibilityToKafka: false,
+
+	options := &host.TestClusterOptions{
+		PersistOptions:   persistOptions,
+		MessagingClient:  s.createMessagingClient(),
+		NumHistoryShards: 1,
+		EnableWorker:     true,
+		EnableEventsV2:   *host.EnableEventsV2,
+		ClusterNo:        no,
 	}
-	s.host = host.NewCadence(cadenceParams)
-	s.host.Start()
+	c := &host.TestCluster{Logger: s.logger.WithField("Cluster", clusterName[no])}
+	c.SetupCluster(options)
+
+	return c
 }
 
-func (s *testCluster) tearDownCluster() {
-	s.host.Stop()
-	s.host = nil
-	s.TearDownWorkflowStore()
-}
-
-func (s *testCluster) createMessagingClient() messaging.Client {
+func (s *integrationClustersTestSuite) createMessagingClient() messaging.Client {
 	clusters := make(map[string]messaging.ClusterConfig)
 	clusters["test"] = messaging.ClusterConfig{
 		Brokers: []string{"127.0.0.1:9092"},
@@ -224,39 +183,14 @@ func getTopicList(topicName string) messaging.TopicList {
 	}
 }
 
-func (s *testCluster) setupShards() {
-	// shard 0 is always created, we create additional shards if needed
-	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
-		err := s.CreateShard(shardID, "", 0)
-		if err != nil {
-			s.logger.WithField("error", err).Fatal("Failed to create shard")
-		}
-	}
-}
-
 func createContext() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
 	return ctx
 }
 
 func TestIntegrationClustersTestSuite(t *testing.T) {
-	if *integration && !*testEventsV2Xdc {
-		s := new(integrationClustersTestSuite)
-		suite.Run(t, s)
-	} else {
-		t.Skip()
-	}
-}
-
-func TestIntegrationClustersTestSuiteEventsV2(t *testing.T) {
 	flag.Parse()
-	if *integration && *testEventsV2Xdc {
-		s := new(integrationClustersTestSuite)
-		s.enableEventsV2 = true
-		suite.Run(t, s)
-	} else {
-		t.Skip()
-	}
+	suite.Run(t, new(integrationClustersTestSuite))
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
@@ -268,7 +202,6 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	formatter := &log.TextFormatter{}
 	formatter.FullTimestamp = true
 	logger.Formatter = formatter
-	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
 
 	s.cluster1 = s.newTestCluster(0)
@@ -281,13 +214,13 @@ func (s *integrationClustersTestSuite) SetupTest() {
 }
 
 func (s *integrationClustersTestSuite) TearDownSuite() {
-	s.cluster1.tearDownCluster()
-	s.cluster2.tearDownCluster()
+	s.cluster1.TearDownCluster()
+	s.cluster2.TearDownCluster()
 }
 
 func (s *integrationClustersTestSuite) TestDomainFailover() {
 	domainName := "test-domain-for-fail-over-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:              common.StringPtr(domainName),
 		Clusters:          clusterReplicationConfig,
@@ -305,7 +238,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -371,7 +304,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 
 func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	domainName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -390,7 +323,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cache.DomainCacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -665,7 +598,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	domainName := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -684,7 +617,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-sticky-decision-workflow-failover-test"
@@ -839,7 +772,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
 	domainName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -858,7 +791,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cache.DomainCacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -975,7 +908,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	domainName := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -994,7 +927,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// start a workflow
 	id := "integration-terminate-workflow-failover-test"
@@ -1159,7 +1092,7 @@ GetHistoryLoop2:
 
 func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	domainName := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -1178,7 +1111,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// start a workflow
 	id := "integration-continueAsNew-workflow-failover-test"
@@ -1296,7 +1229,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 func (s *integrationClustersTestSuite) TestSignalFailover() {
 	domainName := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -1315,7 +1248,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-signal-workflow-failover-test"
@@ -1476,7 +1409,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	domainName := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -1495,7 +1428,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-user-timer-workflow-failover-test"
@@ -1639,7 +1572,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	domainName := "test-activity-hearbeat-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -1658,7 +1591,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-activity-hearbeat-workflow-failover-test"
@@ -1821,7 +1754,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	domainName := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.host.GetFrontendClient() // active
+	client1 := s.cluster1.Host.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Clusters:                               clusterReplicationConfig,
@@ -1840,7 +1773,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.host.GetFrontendClient() // standby
+	client2 := s.cluster2.Host.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-transient-decision-workflow-failover-test"
