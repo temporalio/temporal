@@ -21,9 +21,15 @@
 package metrics
 
 import (
-	"github.com/stretchr/testify/require"
+	"fmt"
+	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+var IsMetric = regexp.MustCompile(`^[a-z][a-z_]*$`).MatchString
 
 func TestScopeDefsMapped(t *testing.T) {
 	for i := PersistenceCreateShardScope; i < NumCommonScopes; i++ {
@@ -73,5 +79,14 @@ func TestMetricDefsMapped(t *testing.T) {
 		key, ok := MetricDefs[Worker][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+	}
+}
+
+func TestMetricDefs(t *testing.T) {
+	for service, metrics := range MetricDefs {
+		for _, metricDef := range metrics {
+			matched := IsMetric(string(metricDef.metricName))
+			assert.True(t, matched, fmt.Sprintf("Service: %v, metric_name: %v", service, metricDef.metricName))
+		}
 	}
 }
