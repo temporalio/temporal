@@ -45386,12 +45386,14 @@ func (v *WorkflowExecutionFilter) IsSetWorkflowId() bool {
 }
 
 type WorkflowExecutionInfo struct {
-	Execution     *WorkflowExecution            `json:"execution,omitempty"`
-	Type          *WorkflowType                 `json:"type,omitempty"`
-	StartTime     *int64                        `json:"startTime,omitempty"`
-	CloseTime     *int64                        `json:"closeTime,omitempty"`
-	CloseStatus   *WorkflowExecutionCloseStatus `json:"closeStatus,omitempty"`
-	HistoryLength *int64                        `json:"historyLength,omitempty"`
+	Execution       *WorkflowExecution            `json:"execution,omitempty"`
+	Type            *WorkflowType                 `json:"type,omitempty"`
+	StartTime       *int64                        `json:"startTime,omitempty"`
+	CloseTime       *int64                        `json:"closeTime,omitempty"`
+	CloseStatus     *WorkflowExecutionCloseStatus `json:"closeStatus,omitempty"`
+	HistoryLength   *int64                        `json:"historyLength,omitempty"`
+	ParentDomainId  *string                       `json:"parentDomainId,omitempty"`
+	ParentExecution *WorkflowExecution            `json:"parentExecution,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionInfo struct into a Thrift-level intermediate
@@ -45411,7 +45413,7 @@ type WorkflowExecutionInfo struct {
 //   }
 func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -45463,6 +45465,22 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.ParentDomainId != nil {
+		w, err = wire.NewValueString(*(v.ParentDomainId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.ParentExecution != nil {
+		w, err = v.ParentExecution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
 		i++
 	}
 
@@ -45547,6 +45565,24 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 70:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ParentDomainId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
+			if field.Value.Type() == wire.TStruct {
+				v.ParentExecution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -45560,7 +45596,7 @@ func (v *WorkflowExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [8]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -45584,6 +45620,14 @@ func (v *WorkflowExecutionInfo) String() string {
 	}
 	if v.HistoryLength != nil {
 		fields[i] = fmt.Sprintf("HistoryLength: %v", *(v.HistoryLength))
+		i++
+	}
+	if v.ParentDomainId != nil {
+		fields[i] = fmt.Sprintf("ParentDomainId: %v", *(v.ParentDomainId))
+		i++
+	}
+	if v.ParentExecution != nil {
+		fields[i] = fmt.Sprintf("ParentExecution: %v", v.ParentExecution)
 		i++
 	}
 
@@ -45618,6 +45662,12 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !_I64_EqualsPtr(v.HistoryLength, rhs.HistoryLength) {
 		return false
 	}
+	if !_String_EqualsPtr(v.ParentDomainId, rhs.ParentDomainId) {
+		return false
+	}
+	if !((v.ParentExecution == nil && rhs.ParentExecution == nil) || (v.ParentExecution != nil && rhs.ParentExecution != nil && v.ParentExecution.Equals(rhs.ParentExecution))) {
+		return false
+	}
 
 	return true
 }
@@ -45645,6 +45695,12 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.HistoryLength != nil {
 		enc.AddInt64("historyLength", *v.HistoryLength)
+	}
+	if v.ParentDomainId != nil {
+		enc.AddString("parentDomainId", *v.ParentDomainId)
+	}
+	if v.ParentExecution != nil {
+		err = multierr.Append(err, enc.AddObject("parentExecution", v.ParentExecution))
 	}
 	return err
 }
@@ -45737,6 +45793,36 @@ func (v *WorkflowExecutionInfo) GetHistoryLength() (o int64) {
 // IsSetHistoryLength returns true if HistoryLength is not nil.
 func (v *WorkflowExecutionInfo) IsSetHistoryLength() bool {
 	return v != nil && v.HistoryLength != nil
+}
+
+// GetParentDomainId returns the value of ParentDomainId if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetParentDomainId() (o string) {
+	if v != nil && v.ParentDomainId != nil {
+		return *v.ParentDomainId
+	}
+
+	return
+}
+
+// IsSetParentDomainId returns true if ParentDomainId is not nil.
+func (v *WorkflowExecutionInfo) IsSetParentDomainId() bool {
+	return v != nil && v.ParentDomainId != nil
+}
+
+// GetParentExecution returns the value of ParentExecution if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetParentExecution() (o *WorkflowExecution) {
+	if v != nil && v.ParentExecution != nil {
+		return v.ParentExecution
+	}
+
+	return
+}
+
+// IsSetParentExecution returns true if ParentExecution is not nil.
+func (v *WorkflowExecutionInfo) IsSetParentExecution() bool {
+	return v != nil && v.ParentExecution != nil
 }
 
 type WorkflowExecutionSignaledEventAttributes struct {

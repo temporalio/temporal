@@ -773,14 +773,21 @@ func DescribeWorkflowWithID(c *cli.Context) {
 }
 
 func describeWorkflowHelper(c *cli.Context, wid, rid string) {
-	wfClient := getWorkflowClient(c)
-
+	frontendClient := cFactory.ServerFrontendClient(c)
+	domain := getRequiredGlobalOption(c, FlagDomain)
 	printRawTime := c.Bool(FlagPrintRawTime) // default show datetime instead of raw time
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resp, err := wfClient.DescribeWorkflowExecution(ctx, wid, rid)
+	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
+		Domain: common.StringPtr(domain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(rid),
+		},
+	})
+
 	if err != nil {
 		ErrorAndExit("Describe workflow execution failed", err)
 	}
@@ -805,39 +812,43 @@ func prettyPrintJSONObject(o interface{}) {
 
 // describeWorkflowExecutionResponse is used to print datetime instead of print raw time
 type describeWorkflowExecutionResponse struct {
-	ExecutionConfiguration *s.WorkflowExecutionConfiguration
+	ExecutionConfiguration *shared.WorkflowExecutionConfiguration
 	WorkflowExecutionInfo  workflowExecutionInfo
 	PendingActivities      []*pendingActivityInfo
 }
 
 // workflowExecutionInfo has same fields as shared.WorkflowExecutionInfo, but has datetime instead of raw time
 type workflowExecutionInfo struct {
-	Execution     *s.WorkflowExecution
-	Type          *s.WorkflowType
-	StartTime     *string // change from *int64
-	CloseTime     *string // change from *int64
-	CloseStatus   *s.WorkflowExecutionCloseStatus
-	HistoryLength *int64
+	Execution       *shared.WorkflowExecution
+	Type            *shared.WorkflowType
+	StartTime       *string // change from *int64
+	CloseTime       *string // change from *int64
+	CloseStatus     *shared.WorkflowExecutionCloseStatus
+	HistoryLength   *int64
+	ParentDomainID  *string
+	ParentExecution *shared.WorkflowExecution
 }
 
 // pendingActivityInfo has same fields as shared.PendingActivityInfo, but different field type for better display
 type pendingActivityInfo struct {
 	ActivityID             *string
-	ActivityType           *s.ActivityType
-	State                  *s.PendingActivityState
+	ActivityType           *shared.ActivityType
+	State                  *shared.PendingActivityState
 	HeartbeatDetails       *string // change from byte[]
 	LastHeartbeatTimestamp *string // change from *int64
 }
 
-func convertDescribeWorkflowExecutionResponse(resp *s.DescribeWorkflowExecutionResponse) *describeWorkflowExecutionResponse {
+func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse) *describeWorkflowExecutionResponse {
 	info := resp.WorkflowExecutionInfo
 	executionInfo := workflowExecutionInfo{
-		Execution:     info.Execution,
-		Type:          info.Type,
-		StartTime:     common.StringPtr(convertTime(info.GetStartTime(), false)),
-		CloseTime:     common.StringPtr(convertTime(info.GetCloseTime(), false)),
-		CloseStatus:   info.CloseStatus,
-		HistoryLength: info.HistoryLength,
+		Execution:       info.Execution,
+		Type:            info.Type,
+		StartTime:       common.StringPtr(convertTime(info.GetStartTime(), false)),
+		CloseTime:       common.StringPtr(convertTime(info.GetCloseTime(), false)),
+		CloseStatus:     info.CloseStatus,
+		HistoryLength:   info.HistoryLength,
+		ParentDomainID:  info.ParentDomainId,
+		ParentExecution: info.ParentExecution,
 	}
 	var pendingActs []*pendingActivityInfo
 	var tmpAct *pendingActivityInfo

@@ -841,6 +841,13 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 			HistoryLength: common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
 		},
 	}
+	if executionInfo.ParentRunID != "" {
+		result.WorkflowExecutionInfo.ParentExecution = &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(executionInfo.ParentWorkflowID),
+			RunId:      common.StringPtr(executionInfo.ParentRunID),
+		}
+		result.WorkflowExecutionInfo.ParentDomainId = common.StringPtr(executionInfo.ParentDomainID)
+	}
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
 		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
