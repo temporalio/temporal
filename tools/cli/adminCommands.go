@@ -26,6 +26,8 @@ import (
 
 	"io/ioutil"
 
+	"strconv"
+
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/admin"
@@ -126,6 +128,31 @@ func AdminShowWorkflow(c *cli.Context) {
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
 func AdminDescribeWorkflow(c *cli.Context) {
+
+	resp := describeMutableState(c)
+
+	prettyPrintJSONObject(resp)
+
+	if resp != nil {
+		msStr := resp.GetMutableStateInDatabase()
+		ms := persistence.WorkflowMutableState{}
+		err := json.Unmarshal([]byte(msStr), &ms)
+		if err != nil {
+			ErrorAndExit("json.Unmarshal err", err)
+		}
+		if ms.ExecutionInfo != nil && ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
+			branchInfo := shared.HistoryBranch{}
+			thriftrwEncoder := codec.NewThriftRWEncoder()
+			err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
+			if err != nil {
+				ErrorAndExit("thriftrwEncoder.Decode err", err)
+			}
+			prettyPrintJSONObject(branchInfo)
+		}
+	}
+}
+
+func describeMutableState(c *cli.Context) *admin.DescribeWorkflowExecutionResponse {
 	adminClient := cFactory.ServerAdminClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
@@ -143,74 +170,95 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		},
 	})
 	if err != nil {
-		ErrorAndExit("Describe workflow execution failed", err)
+		ErrorAndExit("Get workflow mutableState failed", err)
 	}
-
-	prettyPrintJSONObject(resp)
-
-	if resp != nil {
-		msStr := resp.GetMutableStateInDatabase()
-		ms := persistence.WorkflowMutableState{}
-		err = json.Unmarshal([]byte(msStr), &ms)
-		if err != nil {
-			ErrorAndExit("json.Unmarshal err", err)
-		}
-		if ms.ExecutionInfo != nil && ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
-			branchInfo := shared.HistoryBranch{}
-			thriftrwEncoder := codec.NewThriftRWEncoder()
-			err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
-			if err != nil {
-				ErrorAndExit("thriftrwEncoder.Decode err", err)
-			}
-			prettyPrintJSONObject(branchInfo)
-		}
-	}
+	return resp
 }
 
 // AdminDeleteWorkflow describe a new workflow execution for admin
 func AdminDeleteWorkflow(c *cli.Context) {
-	domainID := getRequiredOption(c, FlagDomainID)
 	wid := getRequiredOption(c, FlagWorkflowID)
-	rid := getRequiredOption(c, FlagRunID)
-	if !c.IsSet(FlagShardID) {
-		ErrorAndExit("shardID is required", nil)
-	}
-	shardID := c.Int(FlagShardID)
+	rid := c.String(FlagRunID)
 
+	resp := describeMutableState(c)
+	shardID := resp.GetShardId()
+	msStr := resp.GetMutableStateInDatabase()
+	ms := persistence.WorkflowMutableState{}
+	err := json.Unmarshal([]byte(msStr), &ms)
+	if err != nil {
+		ErrorAndExit("json.Unmarshal err", err)
+	}
+	domainID := ms.ExecutionInfo.DomainID
+	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
-
-	var err error
-	permanentRunID := "30000000-0000-f000-f000-000000000001"
-	selectTmpl := "select execution from executions where shard_id = ? and type = 1 and domain_id = ? and workflow_id = ? and run_id = ? "
-	deleteTmpl := "delete from executions where shard_id = ? and type = 1 and domain_id = ? and workflow_id = ? and run_id = ? "
-
-	query := session.Query(selectTmpl, shardID, domainID, wid, permanentRunID)
-	_, err = readOneRow(query)
-	if err != nil {
-		fmt.Printf("readOneRow for permanentRunID, %v, skip \n", err)
-	} else {
-
-		query := session.Query(deleteTmpl, shardID, domainID, wid, permanentRunID)
-		err := query.Exec()
+	if ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
+		branchInfo := shared.HistoryBranch{}
+		thriftrwEncoder := codec.NewThriftRWEncoder()
+		err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
 		if err != nil {
-			ErrorAndExit("delete row failed", err)
+			ErrorAndExit("thriftrwEncoder.Decode err", err)
 		}
-		fmt.Println("delete row successfully")
+		fmt.Println("deleting history events for ...")
+		prettyPrintJSONObject(branchInfo)
+		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, bark.NewNopLogger())
+		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
+			BranchInfo: branchInfo,
+		})
+		if err != nil {
+			if skipError {
+				fmt.Println("failed to delete history, ", err)
+			} else {
+				ErrorAndExit("DeleteHistoryBranch err", err)
+			}
+		}
+	} else {
+		histV1 := cassp.NewHistoryPersistenceFromSession(session, bark.NewNopLogger())
+		err = histV1.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
+			DomainID: domainID,
+			Execution: shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(wid),
+				RunId:      common.StringPtr(rid),
+			},
+		})
+		if err != nil {
+			if skipError {
+				fmt.Println("failed to delete history, ", err)
+			} else {
+				ErrorAndExit("DeleteWorkflowExecutionHistory err", err)
+			}
+		}
 	}
 
-	query = session.Query(selectTmpl, shardID, domainID, wid, rid)
-	_, err = readOneRow(query)
+	shardIDInt, err := strconv.Atoi(shardID)
 	if err != nil {
-		fmt.Printf("readOneRow for rid %v, %v, skip \n", rid, err)
-	} else {
-
-		query := session.Query(deleteTmpl, shardID, domainID, wid, rid)
-		err := query.Exec()
-		if err != nil {
-			ErrorAndExit("delete row failed", err)
-		}
-		fmt.Println("delete row successfully")
+		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
+	exeStore := cassp.NewWorkflowExecutionPersistenceFromSession(session, shardIDInt, bark.NewNopLogger())
+	req := &persistence.DeleteWorkflowExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: wid,
+		RunID:      rid,
+	}
+
+	err = exeStore.DeleteWorkflowExecution(req)
+	if err != nil {
+		if skipError {
+			fmt.Println("delete mutableState row failed, ", err)
+		} else {
+			ErrorAndExit("delete mutableState row failed", err)
+		}
+	}
+	fmt.Println("delete mutableState row successfully")
+
+	err = exeStore.DeleteWorkflowCurrentRow(req)
+	if err != nil {
+		if skipError {
+			fmt.Println("delete current row failed, ", err)
+		} else {
+			ErrorAndExit("delete current row failed", err)
+		}
+	}
+	fmt.Println("delete current row successfully")
 }
 
 func readOneRow(query *gocql.Query) (map[string]interface{}, error) {

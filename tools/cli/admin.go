@@ -113,13 +113,9 @@ func newAdminWorkflowCommands() []cli.Command {
 					Name:  FlagRunIDWithAlias,
 					Usage: "RunID",
 				},
-				cli.StringFlag{
-					Name:  FlagDomainID,
-					Usage: "DomainID",
-				},
-				cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardID",
+				cli.BoolFlag{
+					Name:  FlagSkipErrorModeWithAlias,
+					Usage: "skip errors when deleting history",
 				},
 
 				// for cassandra connection
@@ -129,7 +125,8 @@ func newAdminWorkflowCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagPort,
-					Usage: "cassandra port for the host (default is 9042)",
+					Value: 9042,
+					Usage: "cassandra port for the host",
 				},
 				cli.StringFlag{
 					Name:  FlagUsername,
