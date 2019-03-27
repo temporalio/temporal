@@ -133,7 +133,7 @@ func (s *server) startService() common.Daemon {
 		s.cfg.ClustersInfo.ClusterInitialFailoverVersions,
 		s.cfg.ClustersInfo.ClusterAddress,
 		archivalStatus,
-		s.cfg.Archival.Filestore.DefaultBucket.Name,
+		s.cfg.Archival.DefaultBucket,
 	)
 	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
 	params.ESConfig = &s.cfg.ElasticSearch

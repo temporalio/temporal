@@ -264,6 +264,8 @@ type (
 	Archival struct {
 		// Status is the status of archival either: enabled, disabled, or paused
 		Status string `yaml:"status"`
+		// DefaultBucket is the default bucket used for archival in case domain does not specify override
+		DefaultBucket string `yaml:"defaultBucket"`
 		// Filestore the configuration for file based blobstore
 		Filestore filestore.Config `yaml:"filestore"`
 	}
