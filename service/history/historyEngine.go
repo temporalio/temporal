@@ -1140,7 +1140,10 @@ func failInFlightDecisionToClearBufferedEvents(msBuilder mutableState) error {
 }
 
 // RespondDecisionTaskCompleted completes a decision task
-func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) (response *h.RespondDecisionTaskCompletedResponse, retError error) {
+func (e *historyEngineImpl) RespondDecisionTaskCompleted(
+	ctx context.Context,
+	req *h.RespondDecisionTaskCompletedRequest,
+) (response *h.RespondDecisionTaskCompletedResponse, retError error) {
 
 	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
@@ -1231,6 +1234,7 @@ Update_History_Loop:
 		completedID := *completedEvent.EventId
 		hasUnhandledEvents := msBuilder.HasBufferedEvents()
 		isComplete := false
+		activityNotStartedCancelled := false
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}
 		var continueAsNewBuilder mutableState
@@ -1502,9 +1506,11 @@ Update_History_Loop:
 				}
 
 				if ai.StartedID == common.EmptyEventID {
-					// We haven't started the activity yet, we can cancel the activity right away.
+					// We haven't started the activity yet, we can cancel the activity right away and
+					// schedule a decision task to ensure the workflow makes progress.
 					msBuilder.AddActivityTaskCanceledEvent(ai.ScheduleID, ai.StartedID, *actCancelReqEvent.EventId,
 						[]byte(activityCancelationMsgActivityNotStarted), common.StringDefault(request.Identity))
+					activityNotStartedCancelled = true
 				}
 
 			case workflow.DecisionTypeCancelTimer:
@@ -1751,8 +1757,7 @@ Update_History_Loop:
 
 		// Schedule another decision task if new events came in during this decision or if request forced to
 		createNewDecisionTask := !isComplete && (hasUnhandledEvents ||
-			request.GetForceCreateNewDecisionTask())
-
+			request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
 		var newDecisionTaskScheduledID int64
 		if createNewDecisionTask {
 			di := msBuilder.AddDecisionTaskScheduledEvent()
