@@ -142,14 +142,14 @@ func (s *stateBuilderSuite) toHistory(events ...*shared.HistoryEvent) []*shared.
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_NoCronSchedule() {
-	s.applyEvents_EventTypeWorkflowExecutionStartedTest("")
+	s.applyWorkflowExecutionStartedEventTest("")
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_WithCronSchedule() {
-	s.applyEvents_EventTypeWorkflowExecutionStartedTest("* * * * *")
+	s.applyWorkflowExecutionStartedEventTest("* * * * *")
 }
 
-func (s *stateBuilderSuite) applyEvents_EventTypeWorkflowExecutionStartedTest(cronSchedule string) {
+func (s *stateBuilderSuite) applyWorkflowExecutionStartedEventTest(cronSchedule string) {
 	version := int64(1)
 	requestID := uuid.New()
 	domainID := validDomainID
