@@ -47,7 +47,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics/mocks"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/host"
@@ -1662,9 +1662,13 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	// activity handler
 	activity1Called := false
+	heartbeatDetails := []byte("details")
 	atHandler1 := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		activity1Called = true
+		_, err = client1.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
+			TaskToken: taskToken, Details: heartbeatDetails})
+		s.Nil(err)
 		time.Sleep(5 * time.Second)
 		return []byte("Activity Result."), false, nil
 	}
@@ -1699,6 +1703,16 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		T:               s.T(),
 	}
 
+	describeWorkflowExecution := func(client wsc.Interface) (*workflow.DescribeWorkflowExecutionResponse, error) {
+		return client.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
+			Domain: common.StringPtr(domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      we.RunId,
+			},
+		})
+	}
+
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
 	err = poller1.PollAndProcessActivityTask(false)
@@ -1716,6 +1730,16 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
+	// has heartbeat timeout. Also make sure the information is recorded when the activity state
+	// is "Scheduled"
+	dweResponse, err := describeWorkflowExecution(client2)
+	s.Nil(err)
+	pendingActivities := dweResponse.GetPendingActivities()
+	s.Equal(1, len(pendingActivities))
+	s.Equal(workflow.PendingActivityStateScheduled, pendingActivities[0].GetState())
+	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
 
 	// Wait for domain cache to pick the chenge
 	time.Sleep(cacheRefreshInterval)

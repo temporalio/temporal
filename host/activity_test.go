@@ -144,6 +144,155 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.True(activityExecutedCount == 1)
 }
 
+func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
+	id := "integration-heartbeat-details-retry-test"
+	wt := "integration-heartbeat-details-retry-type"
+	tl := "integration-heartbeat-details-retry-tasklist"
+	identity := "worker1"
+	activityName := "activity_heartbeat_retry"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	workflowComplete := false
+	activitiesScheduled := false
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if !activitiesScheduled {
+			activitiesScheduled = true
+			return nil, []*workflow.Decision{
+				{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+					ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:                    common.StringPtr("0"),
+						ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+						TaskList:                      &workflow.TaskList{Name: &tl},
+						Input:                         nil,
+						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(4),
+						ScheduleToStartTimeoutSeconds: common.Int32Ptr(4),
+						StartToCloseTimeoutSeconds:    common.Int32Ptr(4),
+						HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
+						RetryPolicy: &workflow.RetryPolicy{
+							InitialIntervalInSeconds:    common.Int32Ptr(1),
+							MaximumAttempts:             common.Int32Ptr(3),
+							MaximumIntervalInSeconds:    common.Int32Ptr(1),
+							BackoffCoefficient:          common.Float64Ptr(1),
+							ExpirationIntervalInSeconds: common.Int32Ptr(100),
+						},
+					},
+				},
+			}, nil
+		}
+
+		workflowComplete = true
+		s.Logger.Info("Completing Workflow.")
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	activityExecutedCount := 0
+	heartbeatDetails := []byte("details")
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		s.Equal(id, *execution.WorkflowId)
+		s.Equal(activityName, *activityType.Name)
+
+		var err error
+		if activityExecutedCount == 0 {
+			s.Logger.Infof("Heartbeating for activity: %s", activityID)
+			_, err = s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
+				TaskToken: taskToken, Details: heartbeatDetails})
+			s.Nil(err)
+			// Trigger heartbeat timeout and retry
+			time.Sleep(time.Second * 2)
+		} else if activityExecutedCount == 1 {
+			// return an error and retry
+			err = errors.New("retry")
+		}
+
+		activityExecutedCount++
+		return nil, false, err
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	describeWorkflowExecution := func() (*workflow.DescribeWorkflowExecutionResponse, error) {
+		return s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      we.RunId,
+			},
+		})
+	}
+
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	for i := 0; i != 3; i++ {
+		err = poller.PollAndProcessActivityTask(false)
+		if i == 0 {
+			// first time, hearbeat timeout, respond activity complete will fail
+			s.Error(err)
+		} else {
+			// second time, retryable error
+			s.Nil(err)
+		}
+
+		dweResponse, err := describeWorkflowExecution()
+		s.Nil(err)
+
+		pendingActivities := dweResponse.GetPendingActivities()
+		if i == 2 {
+			// third time, complete activity, no pending info
+			s.Equal(0, len(pendingActivities))
+		} else {
+			s.Equal(1, len(pendingActivities))
+			s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
+		}
+	}
+
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.True(err == nil, err)
+
+	s.True(workflowComplete)
+	s.Equal(3, activityExecutedCount)
+}
+
 func (s *integrationSuite) TestActivityRetry() {
 	id := "integration-activity-retry-test"
 	wt := "integration-activity-retry-type"

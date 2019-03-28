@@ -335,7 +335,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 			ScheduledTime:     common.Int64Ptr(activityScheduledTime.UnixNano()),
 			StartedId:         common.Int64Ptr(activityStartedID),
 			StartedTime:       nil,
-			LastHeartbeatTime: nil,
+			LastHeartbeatTime: common.Int64Ptr(activityHeartbeatTime.UnixNano()),
 			Details:           activityDetails,
 			Attempt:           common.Int32Ptr(activityAttempt),
 		},
