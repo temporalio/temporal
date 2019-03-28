@@ -834,8 +834,13 @@ type pendingActivityInfo struct {
 	ActivityID             *string
 	ActivityType           *shared.ActivityType
 	State                  *shared.PendingActivityState
-	HeartbeatDetails       *string // change from byte[]
-	LastHeartbeatTimestamp *string // change from *int64
+	ScheduledTimestamp     *string `json:",omitempty"` // change from *int64
+	LastStartedTimestamp   *string `json:",omitempty"` // change from *int64
+	HeartbeatDetails       *string `json:",omitempty"` // change from byte[]
+	LastHeartbeatTimestamp *string `json:",omitempty"` // change from *int64
+	Attempt                *int32  `json:",omitempty"`
+	MaximumAttempts        *int32  `json:",omitempty"`
+	ExpirationTimestamp    *string `json:",omitempty"` // change from *int64
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse) *describeWorkflowExecutionResponse {
@@ -857,8 +862,15 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 			ActivityID:             pa.ActivityID,
 			ActivityType:           pa.ActivityType,
 			State:                  pa.State,
-			HeartbeatDetails:       common.StringPtr(string(pa.HeartbeatDetails)),
-			LastHeartbeatTimestamp: common.StringPtr(convertTime(pa.GetLastHeartbeatTimestamp(), false)),
+			ScheduledTimestamp:     timestampPtrToStringPtr(pa.ScheduledTimestamp, false),
+			LastStartedTimestamp:   timestampPtrToStringPtr(pa.LastStartedTimestamp, false),
+			LastHeartbeatTimestamp: timestampPtrToStringPtr(pa.LastHeartbeatTimestamp, false),
+			Attempt:                pa.Attempt,
+			MaximumAttempts:        pa.MaximumAttempts,
+			ExpirationTimestamp:    timestampPtrToStringPtr(pa.ExpirationTimestamp, false),
+		}
+		if pa.HeartbeatDetails != nil {
+			tmpAct.HeartbeatDetails = common.StringPtr(string(pa.HeartbeatDetails))
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}
@@ -1106,6 +1118,13 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) string {
 		ErrorAndExit(fmt.Sprintf("Global option %s is required", optionName), nil)
 	}
 	return value
+}
+
+func timestampPtrToStringPtr(unixNanoPtr *int64, onlyTime bool) *string {
+	if unixNanoPtr == nil {
+		return nil
+	}
+	return common.StringPtr(convertTime(*unixNanoPtr, onlyTime))
 }
 
 func convertTime(unixNano int64, onlyTime bool) string {

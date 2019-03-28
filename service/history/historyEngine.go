@@ -894,8 +894,18 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 				return nil, &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
 			}
 			p.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
-			p.LastStartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
-			p.Attempt = common.Int32Ptr(ai.Attempt)
+			if state == workflow.PendingActivityStateScheduled {
+				p.ScheduledTimestamp = common.Int64Ptr(ai.ScheduledTime.UnixNano())
+			} else {
+				p.LastStartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
+			}
+			if ai.HasRetryPolicy {
+				p.Attempt = common.Int32Ptr(ai.Attempt)
+				p.ExpirationTimestamp = common.Int64Ptr(ai.ExpirationTime.UnixNano())
+				if ai.MaximumAttempts != 0 {
+					p.MaximumAttempts = common.Int32Ptr(ai.MaximumAttempts)
+				}
+			}
 			result.PendingActivities = append(result.PendingActivities, p)
 		}
 	}

@@ -282,7 +282,23 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(0, len(pendingActivities))
 		} else {
 			s.Equal(1, len(pendingActivities))
-			s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
+			pendingActivity := pendingActivities[0]
+
+			s.Equal(int32(3), pendingActivity.GetMaximumAttempts())
+			s.Equal(int32(i+1), pendingActivity.GetAttempt())
+			s.Equal(workflow.PendingActivityStateScheduled, pendingActivity.GetState())
+
+			scheduledTS := pendingActivity.ScheduledTimestamp
+			lastHeartbeatTS := pendingActivity.LastHeartbeatTimestamp
+			expirationTS := pendingActivity.ExpirationTimestamp
+			s.NotNil(scheduledTS)
+			s.NotNil(lastHeartbeatTS)
+			s.NotNil(expirationTS)
+			s.Nil(pendingActivity.LastStartedTimestamp)
+			s.True(*scheduledTS > *lastHeartbeatTS)
+			s.True(*expirationTS > *scheduledTS)
+
+			s.Equal(heartbeatDetails, pendingActivity.GetHeartbeatDetails())
 		}
 	}
 

@@ -22347,6 +22347,9 @@ type PendingActivityInfo struct {
 	LastHeartbeatTimestamp *int64                `json:"lastHeartbeatTimestamp,omitempty"`
 	LastStartedTimestamp   *int64                `json:"lastStartedTimestamp,omitempty"`
 	Attempt                *int32                `json:"attempt,omitempty"`
+	MaximumAttempts        *int32                `json:"maximumAttempts,omitempty"`
+	ScheduledTimestamp     *int64                `json:"scheduledTimestamp,omitempty"`
+	ExpirationTimestamp    *int64                `json:"expirationTimestamp,omitempty"`
 }
 
 // ToWire translates a PendingActivityInfo struct into a Thrift-level intermediate
@@ -22366,7 +22369,7 @@ type PendingActivityInfo struct {
 //   }
 func (v *PendingActivityInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -22426,6 +22429,30 @@ func (v *PendingActivityInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.MaximumAttempts != nil {
+		w, err = wire.NewValueI32(*(v.MaximumAttempts)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.ScheduledTimestamp != nil {
+		w, err = wire.NewValueI64(*(v.ScheduledTimestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.ExpirationTimestamp != nil {
+		w, err = wire.NewValueI64(*(v.ExpirationTimestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
 		i++
 	}
 
@@ -22526,6 +22553,36 @@ func (v *PendingActivityInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 80:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.MaximumAttempts = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 90:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ScheduledTimestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 100:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ExpirationTimestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -22539,7 +22596,7 @@ func (v *PendingActivityInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [10]string
 	i := 0
 	if v.ActivityID != nil {
 		fields[i] = fmt.Sprintf("ActivityID: %v", *(v.ActivityID))
@@ -22567,6 +22624,18 @@ func (v *PendingActivityInfo) String() string {
 	}
 	if v.Attempt != nil {
 		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
+		i++
+	}
+	if v.MaximumAttempts != nil {
+		fields[i] = fmt.Sprintf("MaximumAttempts: %v", *(v.MaximumAttempts))
+		i++
+	}
+	if v.ScheduledTimestamp != nil {
+		fields[i] = fmt.Sprintf("ScheduledTimestamp: %v", *(v.ScheduledTimestamp))
+		i++
+	}
+	if v.ExpirationTimestamp != nil {
+		fields[i] = fmt.Sprintf("ExpirationTimestamp: %v", *(v.ExpirationTimestamp))
 		i++
 	}
 
@@ -22614,6 +22683,15 @@ func (v *PendingActivityInfo) Equals(rhs *PendingActivityInfo) bool {
 	if !_I32_EqualsPtr(v.Attempt, rhs.Attempt) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.MaximumAttempts, rhs.MaximumAttempts) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ScheduledTimestamp, rhs.ScheduledTimestamp) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ExpirationTimestamp, rhs.ExpirationTimestamp) {
+		return false
+	}
 
 	return true
 }
@@ -22644,6 +22722,15 @@ func (v *PendingActivityInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err e
 	}
 	if v.Attempt != nil {
 		enc.AddInt32("attempt", *v.Attempt)
+	}
+	if v.MaximumAttempts != nil {
+		enc.AddInt32("maximumAttempts", *v.MaximumAttempts)
+	}
+	if v.ScheduledTimestamp != nil {
+		enc.AddInt64("scheduledTimestamp", *v.ScheduledTimestamp)
+	}
+	if v.ExpirationTimestamp != nil {
+		enc.AddInt64("expirationTimestamp", *v.ExpirationTimestamp)
 	}
 	return err
 }
@@ -22751,6 +22838,51 @@ func (v *PendingActivityInfo) GetAttempt() (o int32) {
 // IsSetAttempt returns true if Attempt is not nil.
 func (v *PendingActivityInfo) IsSetAttempt() bool {
 	return v != nil && v.Attempt != nil
+}
+
+// GetMaximumAttempts returns the value of MaximumAttempts if it is set or its
+// zero value if it is unset.
+func (v *PendingActivityInfo) GetMaximumAttempts() (o int32) {
+	if v != nil && v.MaximumAttempts != nil {
+		return *v.MaximumAttempts
+	}
+
+	return
+}
+
+// IsSetMaximumAttempts returns true if MaximumAttempts is not nil.
+func (v *PendingActivityInfo) IsSetMaximumAttempts() bool {
+	return v != nil && v.MaximumAttempts != nil
+}
+
+// GetScheduledTimestamp returns the value of ScheduledTimestamp if it is set or its
+// zero value if it is unset.
+func (v *PendingActivityInfo) GetScheduledTimestamp() (o int64) {
+	if v != nil && v.ScheduledTimestamp != nil {
+		return *v.ScheduledTimestamp
+	}
+
+	return
+}
+
+// IsSetScheduledTimestamp returns true if ScheduledTimestamp is not nil.
+func (v *PendingActivityInfo) IsSetScheduledTimestamp() bool {
+	return v != nil && v.ScheduledTimestamp != nil
+}
+
+// GetExpirationTimestamp returns the value of ExpirationTimestamp if it is set or its
+// zero value if it is unset.
+func (v *PendingActivityInfo) GetExpirationTimestamp() (o int64) {
+	if v != nil && v.ExpirationTimestamp != nil {
+		return *v.ExpirationTimestamp
+	}
+
+	return
+}
+
+// IsSetExpirationTimestamp returns true if ExpirationTimestamp is not nil.
+func (v *PendingActivityInfo) IsSetExpirationTimestamp() bool {
+	return v != nil && v.ExpirationTimestamp != nil
 }
 
 type PendingActivityState int32
