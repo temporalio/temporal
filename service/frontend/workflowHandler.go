@@ -47,6 +47,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -1778,7 +1779,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(err, scope)
 	}
 
-	if err := common.ValidateCronSchedule(startRequest.GetCronSchedule()); err != nil {
+	if err := cron.ValidateSchedule(startRequest.GetCronSchedule()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2184,7 +2185,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	if err := common.ValidateCronSchedule(signalWithStartRequest.GetCronSchedule()); err != nil {
+	if err := cron.ValidateSchedule(signalWithStartRequest.GetCronSchedule()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 

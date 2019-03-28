@@ -23,8 +23,6 @@ package history
 import (
 	"time"
 
-	"github.com/uber/cadence/common/errors"
-
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -32,6 +30,8 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/cron"
+	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -132,7 +132,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 			b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, attributes)
 
-			b.timerTasks = append(b.timerTasks, b.scheduleWorkflowTimerTask(event, b.msBuilder))
+			b.timerTasks = append(b.timerTasks, b.scheduleWorkflowTimerTask(event, b.msBuilder)...)
 			if eventStoreVersion == persistence.EventStoreVersionV2 {
 				err := b.msBuilder.SetHistoryTree(execution.GetRunId())
 				if err != nil {
@@ -537,10 +537,23 @@ func (b *stateBuilderImpl) scheduleActivityTimerTask(event *shared.HistoryEvent,
 }
 
 func (b *stateBuilderImpl) scheduleWorkflowTimerTask(event *shared.HistoryEvent,
-	msBuilder mutableState) persistence.Task {
+	msBuilder mutableState) []persistence.Task {
+	timerTasks := []persistence.Task{}
 	now := time.Unix(0, event.GetTimestamp())
 	timeout := now.Add(time.Duration(msBuilder.GetExecutionInfo().WorkflowTimeout) * time.Second)
-	return &persistence.WorkflowTimeoutTask{VisibilityTimestamp: timeout}
+
+	cronSchedule := b.msBuilder.GetExecutionInfo().CronSchedule
+	cronBackoffDuration := cron.GetBackoffForNextSchedule(cronSchedule, now)
+	if cronBackoffDuration != cron.NoBackoff {
+		timeout = timeout.Add(cronBackoffDuration)
+		timerTasks = append(timerTasks, &persistence.WorkflowBackoffTimerTask{
+			VisibilityTimestamp: now.Add(cronBackoffDuration),
+			TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
+		})
+	}
+
+	timerTasks = append(timerTasks, &persistence.WorkflowTimeoutTask{VisibilityTimestamp: timeout})
+	return timerTasks
 }
 
 func (b *stateBuilderImpl) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent, domainID, workflowID string) (persistence.Task, error) {

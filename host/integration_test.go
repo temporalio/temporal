@@ -838,6 +838,9 @@ func (s *integrationSuite) TestCronWorkflow() {
 	tl := "integration-wf-cron-tasklist"
 	identity := "worker1"
 
+	targetBackoffDuration := time.Second * 5
+	backoffDurationTolerance := time.Millisecond * 500
+
 	workflowType := &workflow.WorkflowType{}
 	workflowType.Name = common.StringPtr(wt)
 
@@ -857,6 +860,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		CronSchedule:                        common.StringPtr("@every 5s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
 	}
 
+	startWorkflowTS := time.Now()
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
@@ -901,6 +905,12 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
+
+	// Make sure the cron workflow start running at a proper time, in this case 5 second after the
+	// startWorkflowExecution request
+	backoffDuration := time.Now().Sub(startWorkflowTS)
+	s.True(backoffDuration > targetBackoffDuration)
+	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)

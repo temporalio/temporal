@@ -30,6 +30,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
@@ -908,9 +909,9 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Dur
 func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
 	info := e.executionInfo
 	if len(info.CronSchedule) == 0 {
-		return common.NoRetryBackoff
+		return cron.NoBackoff
 	}
-	return getBackoffForNextCronSchedule(info.CronSchedule, time.Now())
+	return cron.GetBackoffForNextSchedule(info.CronSchedule, time.Now())
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.

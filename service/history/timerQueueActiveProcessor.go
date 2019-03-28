@@ -30,6 +30,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -728,7 +729,7 @@ Update_History_Loop:
 			backoffInterval = msBuilder.GetCronBackoffDuration()
 			continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 		}
-		if backoffInterval == common.NoRetryBackoff {
+		if backoffInterval == cron.NoBackoff {
 			if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {
 				// If we failed to add the event that means the workflow is already completed.
 				// we drop this timeout event.

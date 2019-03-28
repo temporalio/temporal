@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -140,7 +141,15 @@ func (s *stateBuilderSuite) toHistory(events ...*shared.HistoryEvent) []*shared.
 	return events
 }
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_NoCronSchedule() {
+	s.applyEvents_EventTypeWorkflowExecutionStartedTest("")
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_WithCronSchedule() {
+	s.applyEvents_EventTypeWorkflowExecutionStartedTest("* * * * *")
+}
+
+func (s *stateBuilderSuite) applyEvents_EventTypeWorkflowExecutionStartedTest(cronSchedule string) {
 	version := int64(1)
 	requestID := uuid.New()
 	domainID := validDomainID
@@ -153,6 +162,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted() 
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		WorkflowTimeout: 100,
+		CronSchedule:    cronSchedule,
 	}
 
 	now := time.Now()
@@ -188,10 +198,27 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted() 
 
 	s.mockMutableState.On("ClearStickyness").Once()
 	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil, 0, 0)
-	s.Equal(1, len(s.stateBuilder.timerTasks))
-	timerTask, ok := s.stateBuilder.timerTasks[0].(*persistence.WorkflowTimeoutTask)
-	s.True(ok)
-	s.True(timerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(executionInfo.WorkflowTimeout) * time.Second)))
+
+	expectedTimerTasksLength := 1
+	timeout := now.Add(time.Duration(executionInfo.WorkflowTimeout) * time.Second)
+	backoffDuration := cron.GetBackoffForNextSchedule(cronSchedule, now)
+	if backoffDuration != cron.NoBackoff {
+		expectedTimerTasksLength = 2
+		timeout = timeout.Add(backoffDuration)
+	}
+
+	s.Equal(expectedTimerTasksLength, len(s.stateBuilder.timerTasks))
+	for i := 0; i < expectedTimerTasksLength; i++ {
+		switch timerTask := s.stateBuilder.timerTasks[i].(type) {
+		case *persistence.WorkflowTimeoutTask:
+			s.True(timerTask.VisibilityTimestamp.Equal(timeout))
+		case *persistence.WorkflowBackoffTimerTask:
+			s.NotEqual(cron.NoBackoff, backoffDuration)
+			s.True(timerTask.VisibilityTimestamp.Equal(now.Add(backoffDuration)))
+		default:
+			s.FailNow("Unexpected timer task type.")
+		}
+	}
 
 	s.Empty(s.stateBuilder.transferTasks)
 	s.Empty(s.stateBuilder.newRunTimerTasks)

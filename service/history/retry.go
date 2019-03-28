@@ -25,7 +25,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/robfig/cron"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
@@ -61,22 +60,6 @@ func prepareActivityNextRetryWithNowTime(version int64, a *persistence.ActivityI
 		EventID:             a.ScheduleID,
 		Attempt:             a.Attempt,
 	}
-}
-
-func getBackoffForNextCronSchedule(cronSchedule string, nowTime time.Time) time.Duration {
-	if len(cronSchedule) == 0 {
-		return common.NoRetryBackoff
-	}
-
-	schedule, err := cron.ParseStandard(cronSchedule)
-	if err != nil {
-		return common.NoRetryBackoff
-	}
-
-	nowTime = nowTime.In(time.UTC)
-	backoffInterval := schedule.Next(nowTime).Sub(nowTime)
-	roundedInterval := time.Second * time.Duration(math.Ceil(backoffInterval.Seconds()))
-	return roundedInterval
 }
 
 func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int32, backoffCoefficient float64, now, expirationTime time.Time, errReason string, nonRetriableErrors []string) time.Duration {

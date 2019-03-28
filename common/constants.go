@@ -20,7 +20,11 @@
 
 package common
 
-import "time"
+import (
+	"time"
+
+	"github.com/uber/cadence/common/cron"
+)
 
 const (
 	// FirstEventID is the id of the first event in the history
@@ -63,7 +67,7 @@ const (
 )
 
 // NoRetryBackoff is used to represent backoff when no retry is needed
-const NoRetryBackoff = time.Duration(-1)
+const NoRetryBackoff = cron.NoBackoff
 
 type (
 	// EncodingType is an enum that represents various data encoding types
