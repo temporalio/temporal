@@ -55,8 +55,8 @@ ignored = ["github.com/uber/cadence/.gen"]
   name = "github.com/fatih/color"
 
 [[constraint]]
-  branch = "master"
   name = "github.com/gocql/gocql"
+  revision = "70385f88b28b43805bd83d212169ab2d38810b15"
 
 [[constraint]]
   name = "github.com/golang/mock"
