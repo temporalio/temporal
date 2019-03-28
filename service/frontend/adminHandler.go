@@ -175,6 +175,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
+	domainScope := adh.metricsClient.Scope(scope, metrics.DomainTag(request.GetDomain()))
 
 	execution := request.Execution
 	if len(execution.GetWorkflowId()) == 0 {
@@ -292,7 +293,10 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		return nil, err
 	}
 
+	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
+	// domains along with the individual domains stats
 	adh.metricsClient.RecordTimer(scope, metrics.HistorySize, time.Duration(size))
+	domainScope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	serializer := persistence.NewHistorySerializer()
 	blobs := []*gen.DataBlob{}

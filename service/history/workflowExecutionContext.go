@@ -91,8 +91,13 @@ var (
 	kafkaOperationRetryPolicy       = common.CreateKafkaOperationRetryPolicy()
 )
 
-func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExecution, shard ShardContext,
-	executionManager persistence.ExecutionManager, logger bark.Logger) *workflowExecutionContextImpl {
+func newWorkflowExecutionContext(
+	domainID string,
+	execution workflow.WorkflowExecution,
+	shard ShardContext,
+	executionManager persistence.ExecutionManager,
+	logger bark.Logger,
+) *workflowExecutionContextImpl {
 	lg := logger.WithFields(bark.Fields{
 		logging.TagDomainID:            domainID,
 		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
@@ -509,8 +514,17 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		countLimitWarn := config.HistoryCountLimitWarn(executionInfo.DomainID)
 		historyCount := int(c.msBuilder.GetNextEventID()) - 1
 		historySize := int(c.msBuilder.GetHistorySize()) + newHistorySize
+
+		// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
+		// domains along with the individual domains stats
 		c.metricsClient.RecordTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.HistorySize, time.Duration(historySize))
 		c.metricsClient.RecordTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.HistoryCount, time.Duration(historyCount))
+		if entry, err := c.shard.GetDomainCache().GetDomainByID(executionInfo.DomainID); err == nil && entry != nil && entry.GetInfo() != nil {
+			scope := c.metricsClient.Scope(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.DomainTag(entry.GetInfo().Name))
+			scope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
+			scope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
+		}
+
 		if historySize > sizeLimitWarn || historyCount > countLimitWarn {
 			// emit warning
 			c.logger.WithFields(bark.Fields{
@@ -881,8 +895,15 @@ func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(stats *persist
 	if stats == nil {
 		return
 	}
+	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
+	// domains along with the individual domains stats
 	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.HistorySize,
 		time.Duration(executionInfoHistorySize))
+	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
+		c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(entry.GetInfo().Name)).
+			RecordTimer(metrics.HistorySize, time.Duration(executionInfoHistorySize))
+	}
+
 	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.MutableStateSize,
 		time.Duration(stats.MutableStateSize))
 	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.ExecutionInfoSize,
