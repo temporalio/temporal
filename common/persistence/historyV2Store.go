@@ -275,7 +275,6 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 		}
 	}
 
-	minNodeID := token.LastEventID + 1
 	maxNodeID := *allBRs[token.CurrentRangeIndex].EndNodeID
 	if request.MaxEventID < maxNodeID {
 		maxNodeID = request.MaxEventID
@@ -284,7 +283,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 	req := &InternalReadHistoryBranchRequest{
 		TreeID:        treeID,
 		BranchID:      *allBRs[token.CurrentRangeIndex].BranchID,
-		MinNodeID:     minNodeID,
+		MinNodeID:     request.MinEventID,
 		MaxNodeID:     maxNodeID,
 		PageSize:      request.PageSize,
 		NextPageToken: token.StoreToken,
@@ -319,49 +318,48 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 			}
 		}
 
-		fe := es[0]    // first
-		el := len(es)  // length
-		le := es[el-1] // last
+		firstEvent := es[0]           // first
+		eventCount := len(es)         // length
+		lastEvent := es[eventCount-1] // last
 
-		if *fe.Version != *le.Version || *fe.EventId+int64(el-1) != *le.EventId {
+		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be continous
-			logger.Errorf("Corrupted event batch, %v, %v, %v, %v, %v", *fe.Version, *le.Version, *fe.EventId, *le.EventId, el)
+			logger.Errorf("Corrupted event batch, %v, %v, %v, %v, %v", firstEvent.GetVersion(), lastEvent.GetVersion(), firstEvent.GetEventId(), lastEvent.GetEventId(), eventCount)
 			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("corrupted history event batch, wrong version and IDs"),
 			}
 		}
 
-		if *fe.Version < token.LastEventVersion {
+		if firstEvent.GetVersion() < token.LastEventVersion {
 			// version decrease means the this batch are all stale events, we should skip
-			logger.Infof("Stale event batch with version: %v", *fe.Version)
+			logger.Infof("Stale event batch with smaller version: %v", firstEvent.GetVersion())
 			continue
 		}
-
-		if *fe.EventId == token.LastEventID {
-			// we could see it because of batch with smaller txn_id
-			logger.Infof("Stale event batch with eventID: %v", *fe.EventId)
+		if firstEvent.GetEventId() <= token.LastEventID {
+			// we could see it because first batch of next page has a smaller txn_id
+			logger.Infof("Stale event batch with eventID: %v", firstEvent.EventId)
 			continue
 		}
-		if *fe.EventId != token.LastEventID+1 {
-			logger.Errorf("Corrupted incontinouous event batch, %v, %v, %v, %v, %v", *fe.Version, *le.Version, *fe.EventId, *le.EventId, el)
+		if firstEvent.GetEventId() != token.LastEventID+1 {
+			logger.Errorf("Corrupted incontinouous event batch, %v, %v, %v, %v, %v, %v", firstEvent.GetVersion(), lastEvent.GetVersion(), firstEvent.GetEventId(), lastEvent.GetEventId(), eventCount, token.LastEventID)
 			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("corrupted history event batch, eventID is not continouous"),
 			}
 		}
 
-		token.LastEventVersion = *fe.Version
-		token.LastEventID = *le.EventId
+		token.LastEventVersion = firstEvent.GetVersion()
+		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
 			historyBatches = append(historyBatches, &workflow.History{Events: es})
 		} else {
 			events = append(events, es...)
 		}
 		dataSize += len(b.Data)
-		lastFirstEventID = *fe.EventId
+		lastFirstEventID = firstEvent.GetEventId()
 	}
 
 	var nextToken []byte
-	if len(token.StoreToken) == 0 {
+	if len(resp.NextPageToken) == 0 {
 		if token.CurrentRangeIndex == token.FinalRangeIndex {
 			// this means that we have reached the final page of final branchRange
 			nextToken = nil

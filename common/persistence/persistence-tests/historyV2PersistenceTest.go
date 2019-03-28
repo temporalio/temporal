@@ -117,6 +117,127 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 }
 
 //TestConcurrentlyCreateAndAppendBranches test
+func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
+	treeID := uuid.New()
+	bi, err := s.newHistoryBranch(treeID)
+	s.Nil(err)
+
+	historyW := &workflow.History{}
+	events := s.genRandomEvents([]int64{1, 2, 3}, 1)
+	err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
+	s.Nil(err)
+	historyW.Events = events
+
+	events = s.genRandomEvents([]int64{4}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{5, 6, 7, 8}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{9}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{10}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{11}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{12}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{13, 14, 15}, 1)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	// we don't append this batch because we will fork from 13
+	//historyW.Events = append(historyW.Events, events...)
+
+	// fork from here
+	bi2, err := s.fork(bi, 13)
+	s.Nil(err)
+
+	events = s.genRandomEvents([]int64{13}, 1)
+	err = s.appendNewNode(bi2, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{14}, 1)
+	err = s.appendNewNode(bi2, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{15, 16, 17}, 1)
+	err = s.appendNewNode(bi2, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	events = s.genRandomEvents([]int64{18, 19, 20}, 1)
+	err = s.appendNewNode(bi2, events, 1)
+	s.Nil(err)
+	historyW.Events = append(historyW.Events, events...)
+
+	//read branch to verify
+	historyR := &workflow.History{}
+
+	req := &p.ReadHistoryBranchRequest{
+		BranchToken:   bi2,
+		MinEventID:    1,
+		MaxEventID:    21,
+		PageSize:      3,
+		NextPageToken: nil,
+	}
+	// first page
+	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(8, len(resp.HistoryEvents))
+	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	req.NextPageToken = resp.NextPageToken
+
+	// second page
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(3, len(resp.HistoryEvents))
+	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	req.NextPageToken = resp.NextPageToken
+
+	// 3rd page, since we fork from nodeID=13, we can only see one batch of 12 here
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(1, len(resp.HistoryEvents))
+	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	req.NextPageToken = resp.NextPageToken
+
+	// 4th page, 13~17
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(5, len(resp.HistoryEvents))
+	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	req.NextPageToken = resp.NextPageToken
+
+	// last page: one batch of 18-20
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(3, len(resp.HistoryEvents))
+	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	req.NextPageToken = resp.NextPageToken
+
+	s.True(historyW.Equals(historyR))
+	s.Equal(0, len(resp.NextPageToken))
+}
+
+//TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 	treeID := uuid.New()
 
@@ -510,12 +631,8 @@ func (s *HistoryV2PersistenceSuite) read(branch []byte, minID, maxID int64) []*w
 
 func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID int64) ([]*workflow.HistoryEvent, error) {
 
-	// 0 or 1, randomly use small page size or large page size
-	ri := rand.Intn(2)
+	// use small page size to enforce pagination
 	randPageSize := 2
-	if ri == 0 {
-		randPageSize = 100
-	}
 	res := make([]*workflow.HistoryEvent, 0)
 	token := []byte{}
 	for {
