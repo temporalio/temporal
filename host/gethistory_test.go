@@ -23,10 +23,11 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/common/persistence"
 	"strconv"
 	"time"
+
+	"github.com/uber/cadence/.gen/go/admin"
+	"github.com/uber/cadence/common/persistence"
 
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -491,7 +492,12 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	} else {
 		s.Equal(int32(0), resp.GetEventStoreVersion())
 	}
-	s.Nil(token)
+	if token != nil {
+		resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
+		s.Nil(err)
+		s.Equal(0, len(resp.HistoryBatches))
+		s.Nil(resp.NextPageToken)
+	}
 	// until now, only start event and decision task scheduled should be in the history
 	events := convertBlob(blobs)
 	s.True(len(events) == 2)
@@ -503,7 +509,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
 		s.Nil(err)
-		s.True(len(resp.HistoryBatches) == pageSize)
+		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
 		if *EnableEventsV2 {
@@ -528,7 +534,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
 		s.Nil(err)
-		s.True(len(resp.HistoryBatches) == pageSize)
+		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
 		if *EnableEventsV2 {
@@ -555,7 +561,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
 		s.Nil(err)
-		s.True(len(resp.HistoryBatches) == pageSize)
+		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
 		if *EnableEventsV2 {
@@ -582,7 +588,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, 4, 7, token)
 		s.Nil(err)
-		s.True(len(resp.HistoryBatches) == pageSize)
+		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
 		if *EnableEventsV2 {
