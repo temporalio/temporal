@@ -137,6 +137,29 @@ func (_m *BlobstoreClient) GetRetryPolicy() backoff.RetryPolicy {
 	return r0
 }
 
+// GetTags provides a mock function with given fields: ctx, bucket, key
+func (_m *BlobstoreClient) GetTags(ctx context.Context, bucket string, key blob.Key) (map[string]string, error) {
+	ret := _m.Called(ctx, bucket, key)
+
+	var r0 map[string]string
+	if rf, ok := ret.Get(0).(func(context.Context, string, blob.Key) map[string]string); ok {
+		r0 = rf(ctx, bucket, key)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]string)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, blob.Key) error); ok {
+		r1 = rf(ctx, bucket, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // IsRetryableError provides a mock function with given fields: err
 func (_m *BlobstoreClient) IsRetryableError(err error) bool {
 	ret := _m.Called(err)

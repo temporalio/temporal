@@ -1022,6 +1022,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 		Header: &archiver.HistoryBlobHeader{
 			CurrentPageToken: common.IntPtr(common.FirstBlobPageToken),
 			NextPageToken:    common.IntPtr(common.FirstBlobPageToken + 1),
+			IsLast:           common.BoolPtr(false),
 		},
 		Body: &shared.History{},
 	}
@@ -1058,6 +1059,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetLastPage() {
 		Header: &archiver.HistoryBlobHeader{
 			CurrentPageToken: common.IntPtr(5),
 			NextPageToken:    common.IntPtr(common.LastBlobNextPageToken),
+			IsLast:           common.BoolPtr(true),
 		},
 		Body: &shared.History{},
 	}

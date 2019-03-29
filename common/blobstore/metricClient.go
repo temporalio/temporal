@@ -68,6 +68,19 @@ func (c *metricClient) Download(ctx context.Context, bucket string, key blob.Key
 	return resp, err
 }
 
+func (c *metricClient) GetTags(ctx context.Context, bucket string, key blob.Key) (map[string]string, error) {
+	c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.BlobstoreClientGetTagsScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetTags(ctx, bucket, key)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) Exists(ctx context.Context, bucket string, key blob.Key) (bool, error) {
 	c.metricsClient.IncCounter(metrics.BlobstoreClientExistsScope, metrics.CadenceClientRequests)
 

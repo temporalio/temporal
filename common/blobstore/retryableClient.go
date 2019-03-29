@@ -61,6 +61,17 @@ func (c *retryableClient) Download(ctx context.Context, bucket string, key blob.
 	return resp, err
 }
 
+func (c *retryableClient) GetTags(ctx context.Context, bucket string, key blob.Key) (map[string]string, error) {
+	var resp map[string]string
+	op := func() error {
+		var err error
+		resp, err = c.client.GetTags(ctx, bucket, key)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) Exists(ctx context.Context, bucket string, key blob.Key) (bool, error) {
 	var resp bool
 	op := func() error {

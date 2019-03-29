@@ -53,25 +53,26 @@ type (
 
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
-		PublicClient        public.Client
-		MetricsClient       metrics.Client
-		Logger              bark.Logger
-		ClusterMetadata     cluster.Metadata
-		HistoryManager      persistence.HistoryManager
-		HistoryV2Manager    persistence.HistoryV2Manager
-		Blobstore           blobstore.Client
-		DomainCache         cache.DomainCache
-		Config              *Config
-		HistoryBlobIterator HistoryBlobIterator // this is only set in testing code
+		PublicClient      public.Client
+		MetricsClient     metrics.Client
+		Logger            bark.Logger
+		ClusterMetadata   cluster.Metadata
+		HistoryManager    persistence.HistoryManager
+		HistoryV2Manager  persistence.HistoryV2Manager
+		Blobstore         blobstore.Client
+		DomainCache       cache.DomainCache
+		Config            *Config
+		HistoryBlobReader HistoryBlobReader // this is only set in testing code
 	}
 
 	// Config for ClientWorker
 	Config struct {
-		EnableArchivalCompression dynamicconfig.BoolPropertyFnWithDomainFilter
-		HistoryPageSize           dynamicconfig.IntPropertyFnWithDomainFilter
-		TargetArchivalBlobSize    dynamicconfig.IntPropertyFnWithDomainFilter
-		ArchiverConcurrency       dynamicconfig.IntPropertyFn
-		ArchivalsPerIteration     dynamicconfig.IntPropertyFn
+		EnableArchivalCompression                 dynamicconfig.BoolPropertyFnWithDomainFilter
+		HistoryPageSize                           dynamicconfig.IntPropertyFnWithDomainFilter
+		TargetArchivalBlobSize                    dynamicconfig.IntPropertyFnWithDomainFilter
+		ArchiverConcurrency                       dynamicconfig.IntPropertyFn
+		ArchivalsPerIteration                     dynamicconfig.IntPropertyFn
+		DeterministicConstructionCheckProbability dynamicconfig.FloatPropertyFn
 	}
 
 	contextKey int

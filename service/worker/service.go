@@ -92,11 +92,12 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 			ReplicationTaskMaxRetry:            dc.GetIntProperty(dynamicconfig.WorkerReplicationTaskMaxRetry, 50),
 		},
 		ArchiverConfig: &archiver.Config{
-			EnableArchivalCompression: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchivalCompression, true),
-			HistoryPageSize:           dc.GetIntPropertyFilteredByDomain(dynamicconfig.WorkerHistoryPageSize, 250),
-			TargetArchivalBlobSize:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.WorkerTargetArchivalBlobSize, 2*1024*1024), // 2MB
-			ArchiverConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
-			ArchivalsPerIteration:     dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
+			EnableArchivalCompression:                 dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchivalCompression, true),
+			HistoryPageSize:                           dc.GetIntPropertyFilteredByDomain(dynamicconfig.WorkerHistoryPageSize, 250),
+			TargetArchivalBlobSize:                    dc.GetIntPropertyFilteredByDomain(dynamicconfig.WorkerTargetArchivalBlobSize, 2*1024*1024), // 2MB
+			ArchiverConcurrency:                       dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
+			ArchivalsPerIteration:                     dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
+			DeterministicConstructionCheckProbability: dc.GetFloat64Property(dynamicconfig.WorkerDeterministicConstructionCheckProbability, 0.002),
 		},
 		IndexerCfg: &indexer.Config{
 			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 1000),

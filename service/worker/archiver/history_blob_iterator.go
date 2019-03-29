@@ -121,6 +121,7 @@ func (i *historyBlobIterator) Next() (*HistoryBlob, error) {
 		RunID:                &i.runID,
 		CurrentPageToken:     common.IntPtr(i.blobPageToken),
 		NextPageToken:        common.IntPtr(common.LastBlobNextPageToken),
+		IsLast:               common.BoolPtr(true),
 		FirstFailoverVersion: firstEvent.Version,
 		LastFailoverVersion:  lastEvent.Version,
 		FirstEventID:         firstEvent.EventId,
@@ -133,6 +134,7 @@ func (i *historyBlobIterator) Next() (*HistoryBlob, error) {
 	if i.HasNext() {
 		i.blobPageToken++
 		header.NextPageToken = common.IntPtr(i.blobPageToken)
+		header.IsLast = common.BoolPtr(false)
 	}
 	return &HistoryBlob{
 		Header: header,

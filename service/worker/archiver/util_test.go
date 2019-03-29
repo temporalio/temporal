@@ -180,3 +180,28 @@ func (s *UtilSuite) TestHashesEqual() {
 		s.Equal(tc.equal, hashesEqual(tc.a, tc.b))
 	}
 }
+
+func (s *UtilSuite) TestIsLast() {
+	testCases := []struct {
+		header *HistoryBlobHeader
+		isLast bool
+	}{
+		{
+			header: &HistoryBlobHeader{IsLast: common.BoolPtr(true)},
+			isLast: true,
+		},
+		{
+			header: &HistoryBlobHeader{IsLast: common.BoolPtr(false)},
+			isLast: false,
+		},
+		{
+			header: &HistoryBlobHeader{},
+			isLast: false,
+		},
+	}
+	for _, tc := range testCases {
+		tags, err := ConvertHeaderToTags(tc.header)
+		s.NoError(err)
+		s.Equal(tc.isLast, IsLast(tags))
+	}
+}

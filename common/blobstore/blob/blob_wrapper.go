@@ -100,7 +100,7 @@ func Wrap(blob *Blob, functions ...WrapFn) (*Blob, error) {
 	if blob == nil {
 		return nil, nil
 	}
-	wrappedBlob := DeepCopy(blob)
+	wrappedBlob := blob.DeepCopy()
 	for _, f := range functions {
 		if err := f(wrappedBlob); err != nil {
 			return nil, err
@@ -116,7 +116,7 @@ func Unwrap(blob *Blob) (*Blob, *WrappingLayers, error) {
 	if blob == nil {
 		return nil, wrappingLayers, nil
 	}
-	unwrappedBlob := DeepCopy(blob)
+	unwrappedBlob := blob.DeepCopy()
 	wrappers, ok := blob.Tags[wrappersTag]
 	if !ok {
 		return unwrappedBlob, wrappingLayers, nil

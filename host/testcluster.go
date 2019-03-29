@@ -117,7 +117,7 @@ func (tc *TestCluster) setupBlobstore() {
 			RetentionDays: 10,
 		},
 	}
-	client, err := filestore.NewClient(cfg, tc.Logger)
+	client, err := filestore.NewClient(cfg)
 	if err != nil {
 		tc.Logger.WithField("error", err).Fatal("Failed to construct blobstore client")
 	}

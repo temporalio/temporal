@@ -46,6 +46,7 @@ type (
 		RunID                *string `json:"run_id,omitempty"`
 		CurrentPageToken     *int    `json:"current_page_token,omitempty"`
 		NextPageToken        *int    `json:"next_page_token,omitempty"`
+		IsLast               *bool   `json:"is_last,omitempty"`
 		FirstFailoverVersion *int64  `json:"first_failover_version,omitempty"`
 		LastFailoverVersion  *int64  `json:"last_failover_version,omitempty"`
 		FirstEventID         *int64  `json:"first_event_id,omitempty"`
@@ -102,6 +103,12 @@ func ConvertHeaderToTags(header *HistoryBlobHeader) (map[string]string, error) {
 		result[k] = fmt.Sprintf("%v", v)
 	}
 	return result, nil
+}
+
+// IsLast returns true if tags indicate blob is the last blob in archived history, false otherwise
+func IsLast(tags map[string]string) bool {
+	last, ok := tags["is_last"]
+	return ok && last == "true"
 }
 
 func hashArchiveRequest(archiveRequest ArchiveRequest) uint64 {

@@ -161,22 +161,23 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 
-	WorkerPersistenceMaxQPS:                  "worker.persistenceMaxQPS",
-	WorkerReplicatorConcurrency:              "worker.replicatorConcurrency",
-	WorkerReplicatorActivityBufferRetryCount: "worker.replicatorActivityBufferRetryCount",
-	WorkerReplicatorHistoryBufferRetryCount:  "worker.replicatorHistoryBufferRetryCount",
-	WorkerReplicationTaskMaxRetry:            "worker.replicationTaskMaxRetry",
-	WorkerIndexerConcurrency:                 "worker.indexerConcurrency",
-	WorkerESProcessorNumOfWorkers:            "worker.ESProcessorNumOfWorkers",
-	WorkerESProcessorBulkActions:             "worker.ESProcessorBulkActions",
-	WorkerESProcessorBulkSize:                "worker.ESProcessorBulkSize",
-	WorkerESProcessorFlushInterval:           "worker.ESProcessorFlushInterval",
-	EnableArchivalCompression:                "worker.EnableArchivalCompression",
-	WorkerHistoryPageSize:                    "worker.WorkerHistoryPageSize",
-	WorkerTargetArchivalBlobSize:             "worker.WorkerTargetArchivalBlobSize",
-	WorkerArchiverConcurrency:                "worker.ArchiverConcurrency",
-	WorkerArchivalsPerIteration:              "worker.ArchivalsPerIteration",
-	WorkerThrottledLogRPS:                    "worker.throttledLogRPS",
+	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
+	WorkerReplicatorConcurrency:                     "worker.replicatorConcurrency",
+	WorkerReplicatorActivityBufferRetryCount:        "worker.replicatorActivityBufferRetryCount",
+	WorkerReplicatorHistoryBufferRetryCount:         "worker.replicatorHistoryBufferRetryCount",
+	WorkerReplicationTaskMaxRetry:                   "worker.replicationTaskMaxRetry",
+	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
+	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
+	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
+	WorkerESProcessorBulkSize:                       "worker.ESProcessorBulkSize",
+	WorkerESProcessorFlushInterval:                  "worker.ESProcessorFlushInterval",
+	EnableArchivalCompression:                       "worker.EnableArchivalCompression",
+	WorkerHistoryPageSize:                           "worker.WorkerHistoryPageSize",
+	WorkerTargetArchivalBlobSize:                    "worker.WorkerTargetArchivalBlobSize",
+	WorkerArchiverConcurrency:                       "worker.ArchiverConcurrency",
+	WorkerArchivalsPerIteration:                     "worker.ArchivalsPerIteration",
+	WorkerDeterministicConstructionCheckProbability: "worker.DeterministicConstructionCheckProbability",
+	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
 }
 
 const (
@@ -449,6 +450,8 @@ const (
 	WorkerArchiverConcurrency
 	// WorkerArchivalsPerIteration controls the number of archivals handled in each iteration of archival workflow
 	WorkerArchivalsPerIteration
+	// WorkerDeterministicConstructionCheckProbability controls the probability of running a deterministic construction check for any given archival
+	WorkerDeterministicConstructionCheckProbability
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS
 
