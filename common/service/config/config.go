@@ -142,6 +142,8 @@ type (
 		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
 		// VisibilityListMaxQPS max QPS for list workflow
 		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
+		// ESIndexMaxResultWindow ElasticSearch index setting max_result_window
+		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster

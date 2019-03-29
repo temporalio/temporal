@@ -48,6 +48,7 @@ type Config struct {
 	EnableVisibilityToKafka         dynamicconfig.BoolPropertyFn
 	EnableReadVisibilityFromES      dynamicconfig.BoolPropertyFnWithDomainFilter
 	ESVisibilityListMaxQPS          dynamicconfig.IntPropertyFnWithDomainFilter
+	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                             dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
@@ -81,6 +82,7 @@ func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool, enabl
 		EnableVisibilityToKafka:         dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
 		EnableReadVisibilityFromES:      dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, false),
 		ESVisibilityListMaxQPS:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
+		ESIndexMaxResultWindow:          dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                             dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		MaxIDLengthLimit:                dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -147,14 +149,16 @@ func (s *Service) Start() {
 	var visibilityFromES persistence.VisibilityManager
 	if s.config.EnableVisibilityToKafka() {
 		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
-		visibilityFromES = elasticsearch.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, log)
+		visibilityConfigForES := &config.VisibilityConfig{
+			VisibilityListMaxQPS:   s.config.ESVisibilityListMaxQPS,
+			ESIndexMaxResultWindow: s.config.ESIndexMaxResultWindow,
+		}
+
+		visibilityFromES = elasticsearch.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, visibilityConfigForES, log)
 		// wrap with rate limiter
 		esRateLimiter := tokenbucket.New(s.config.PersistenceMaxQPS(), clock.NewRealTimeSource())
 		visibilityFromES = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
 		// wrap with advanced rate limit for list
-		visibilityConfigForES := &config.VisibilityConfig{
-			VisibilityListMaxQPS: s.config.ESVisibilityListMaxQPS,
-		}
 		visibilityFromES = persistence.NewVisibilitySamplingClient(visibilityFromES, visibilityConfigForES, base.GetMetricsClient(), log)
 		// wrap with metrics
 		visibilityFromES = elasticsearch.NewVisibilityMetricsClient(visibilityFromES, base.GetMetricsClient(), log)

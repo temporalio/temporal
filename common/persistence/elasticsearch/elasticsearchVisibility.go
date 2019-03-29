@@ -32,19 +32,27 @@ import (
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/logging"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 )
 
-const esPersistenceName = "elasticsearch"
+const (
+	esPersistenceName = "elasticsearch"
+)
 
 type (
 	esVisibilityManager struct {
 		esClient es.Client
 		index    string
 		logger   bark.Logger
+		config   *config.VisibilityConfig
 	}
 
 	esVisibilityPageToken struct {
+		// for ES API From+Size
 		From int
+		// for ES API searchAfter
+		SortTime   int64  // startTime or closeTime
+		TieBreaker string // runID
 	}
 
 	visibilityRecord struct {
@@ -67,11 +75,12 @@ var (
 )
 
 // NewElasticSearchVisibilityManager create a visibility manager connecting to ElasticSearch
-func NewElasticSearchVisibilityManager(esClient es.Client, index string, logger bark.Logger) p.VisibilityManager {
+func NewElasticSearchVisibilityManager(esClient es.Client, index string, config *config.VisibilityConfig, logger bark.Logger) p.VisibilityManager {
 	return &esVisibilityManager{
 		esClient: esClient,
 		index:    index,
 		logger:   logger.WithField(logging.TagWorkflowComponent, logging.TagValueESVisibilityManager),
+		config:   config,
 	}
 }
 
@@ -271,7 +280,7 @@ func (v *esVisibilityManager) getNextPageToken(token []byte) (*esVisibilityPageT
 			return nil, err
 		}
 	} else {
-		result = &esVisibilityPageToken{From: 0}
+		result = &esVisibilityPageToken{}
 	}
 	return result, nil
 }
@@ -314,6 +323,12 @@ func (v *esVisibilityManager) getSearchResult(request *p.ListWorkflowExecutionsR
 	} else {
 		params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.CloseTime).Desc())
 	}
+	params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.RunID).Desc())
+
+	if token.SortTime != 0 && token.TieBreaker != "" {
+		params.SearchAfter = []interface{}{token.SortTime, token.TieBreaker}
+	}
+
 	return v.esClient.Search(ctx, params)
 }
 
@@ -324,19 +339,36 @@ func (v *esVisibilityManager) getListWorkflowExecutionsResponse(searchHits *elas
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 
-	if numOfActualHits == pageSize {
-		nextPageToken, err := v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
-		if err != nil {
-			return nil, err
-		}
-		response.NextPageToken = make([]byte, len(nextPageToken))
-		copy(response.NextPageToken, nextPageToken)
-	}
-
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
 		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i], isOpen)
 		response.Executions = append(response.Executions, workflowExecutionInfo)
+	}
+
+	if numOfActualHits == pageSize { // this means the response is not the last page
+		var nextPageToken []byte
+		var err error
+
+		// ES Search API support pagination using From and PageSize, but has limit that From+PageSize cannot exceed a threshold
+		// to retrieve deeper pages, use ES SearchAfter
+		if searchHits.TotalHits <= int64(v.config.ESIndexMaxResultWindow()) { // use ES Search From+Size
+			nextPageToken, err = v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
+		} else { // use ES Search After
+			lastExecution := response.Executions[len(response.Executions)-1]
+			var sortTime int64
+			if isOpen {
+				sortTime = lastExecution.GetStartTime()
+			} else {
+				sortTime = lastExecution.GetCloseTime()
+			}
+			nextPageToken, err = v.serializePageToken(&esVisibilityPageToken{SortTime: sortTime, TieBreaker: lastExecution.GetExecution().GetRunId()})
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		response.NextPageToken = make([]byte, len(nextPageToken))
+		copy(response.NextPageToken, nextPageToken)
 	}
 
 	return response, nil

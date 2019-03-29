@@ -71,6 +71,7 @@ var keys = map[Key]string{
 	FrontendVisibilityMaxPageSize:  "frontend.visibilityMaxPageSize",
 	FrontendVisibilityListMaxQPS:   "frontend.visibilityListMaxQPS",
 	FrontendESVisibilityListMaxQPS: "frontend.esVisibilityListMaxQPS",
+	FrontendESIndexMaxResultWindow: "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:     "frontend.historyMaxPageSize",
 	FrontendRPS:                    "frontend.rps",
 	FrontendHistoryMgrNumConns:     "frontend.historyMgrNumConns",
@@ -243,6 +244,8 @@ const (
 	FrontendVisibilityListMaxQPS
 	// FrontendESVisibilityListMaxQPS is max qps frontend can list open/close workflows from ElasticSearch
 	FrontendESVisibilityListMaxQPS
+	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
+	FrontendESIndexMaxResultWindow
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize
 	// FrontendRPS is workflow rate limit per second

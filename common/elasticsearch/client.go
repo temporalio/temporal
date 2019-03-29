@@ -37,11 +37,12 @@ type (
 
 	// SearchParameters holds all required and optional parameters for executing a search
 	SearchParameters struct {
-		Index    string
-		Query    elastic.Query
-		From     int
-		PageSize int
-		Sorter   []elastic.Sorter
+		Index       string
+		Query       elastic.Query
+		From        int
+		PageSize    int
+		Sorter      []elastic.Sorter
+		SearchAfter []interface{}
 	}
 
 	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
@@ -89,6 +90,10 @@ func (c *elasticWrapper) Search(ctx context.Context, p *SearchParameters) (*elas
 
 	if p.PageSize != 0 {
 		searchService.Size(p.PageSize)
+	}
+
+	if len(p.SearchAfter) != 0 {
+		searchService.SearchAfter(p.SearchAfter...)
 	}
 
 	return searchService.Do(ctx)
