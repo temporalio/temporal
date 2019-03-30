@@ -108,7 +108,6 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: 10 * time.Minute,
 		StartToCloseTimeout:    5 * time.Minute,
-		HeartbeatTimeout:       2 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
@@ -147,7 +146,6 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 	ao = workflow.ActivityOptions{
 		ScheduleToStartTimeout: 10 * time.Minute,
 		StartToCloseTimeout:    5 * time.Minute,
-		HeartbeatTimeout:       2 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,

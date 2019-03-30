@@ -205,7 +205,6 @@ func getBlob(ctx context.Context, historyBlobReader HistoryBlobReader, blobPage 
 		return err
 	}
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if !common.IsPersistenceTransientError(err) {
 			return nil, cadence.NewCustomError(errReadBlob)
 		}
@@ -222,7 +221,6 @@ func getTags(ctx context.Context, blobstoreClient blobstore.Client, bucket strin
 	tags, err := blobstoreClient.GetTags(bCtx, bucket, key)
 	cancel()
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if err == blobstore.ErrBlobNotExists {
 			return nil, err
 		}
@@ -244,7 +242,6 @@ func uploadBlob(ctx context.Context, blobstoreClient blobstore.Client, bucket st
 	err := blobstoreClient.Upload(bCtx, bucket, key, blob)
 	cancel()
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if !blobstoreClient.IsRetryableError(err) {
 			return cadence.NewCustomError(errUploadBlob)
 		}
@@ -263,7 +260,6 @@ func downloadBlob(ctx context.Context, blobstoreClient blobstore.Client, bucket 
 	blob, err := blobstoreClient.Download(bCtx, bucket, key)
 	cancel()
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if !blobstoreClient.IsRetryableError(err) {
 			return nil, cadence.NewCustomError(errDownloadBlob)
 		}
@@ -284,7 +280,6 @@ func getDomainByID(ctx context.Context, domainCache cache.DomainCache, id string
 		return err
 	}
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if !common.IsPersistenceTransientError(err) {
 			return nil, cadence.NewCustomError(errGetDomainByID)
 		}
@@ -332,7 +327,6 @@ func deleteHistoryV1(ctx context.Context, container *BootstrapContainer, request
 		return container.HistoryManager.DeleteWorkflowExecutionHistory(deleteHistoryReq)
 	}
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if !common.IsPersistenceTransientError(err) {
 			return cadence.NewCustomError(errDeleteHistoryV1)
 		}
@@ -353,7 +347,6 @@ func deleteHistoryV2(ctx context.Context, container *BootstrapContainer, request
 		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, container.Logger)
 	}
 	for err != nil {
-		activity.RecordHeartbeat(ctx)
 		if !common.IsPersistenceTransientError(err) {
 			return cadence.NewCustomError(errDeleteHistoryV2)
 		}
