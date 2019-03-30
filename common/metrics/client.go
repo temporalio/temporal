@@ -53,8 +53,12 @@ func NewTestStopwatch() Stopwatch {
 // Stop reports time elapsed since the stopwatch start to the recorder.
 func (sw Stopwatch) Stop() {
 	d := time.Now().Sub(sw.start)
-	sw.scope.Timer(sw.name1).Record(d)
-	sw.scope.Timer(sw.name2).Record(d)
+	if len(sw.name1) > 0 {
+		sw.scope.Timer(sw.name1).Record(d)
+	}
+	if len(sw.name2) > 0 {
+		sw.scope.Timer(sw.name2).Record(d)
+	}
 }
 
 // ClientImpl is used for reporting metrics by various Cadence services
@@ -104,7 +108,9 @@ func (m *ClientImpl) IncCounter(scopeIdx int, counterIdx int) {
 	name := string(m.metricDefs[counterIdx].metricName)
 	oldName := string(m.metricDefs[counterIdx].oldMetricName)
 	m.childScopes[scopeIdx].Counter(name).Inc(1)
-	m.childScopes[scopeIdx].Counter(oldName).Inc(1)
+	if len(oldName) > 0 {
+		m.childScopes[scopeIdx].Counter(oldName).Inc(1)
+	}
 }
 
 // AddCounter adds delta to the counter and
@@ -113,7 +119,9 @@ func (m *ClientImpl) AddCounter(scopeIdx int, counterIdx int, delta int64) {
 	name := string(m.metricDefs[counterIdx].metricName)
 	oldName := string(m.metricDefs[counterIdx].oldMetricName)
 	m.childScopes[scopeIdx].Counter(name).Inc(delta)
-	m.childScopes[scopeIdx].Counter(oldName).Inc(delta)
+	if len(oldName) > 0 {
+		m.childScopes[scopeIdx].Counter(oldName).Inc(delta)
+	}
 }
 
 // StartTimer starts a timer for the given
@@ -130,7 +138,9 @@ func (m *ClientImpl) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 	name := string(m.metricDefs[timerIdx].metricName)
 	oldName := string(m.metricDefs[timerIdx].oldMetricName)
 	m.childScopes[scopeIdx].Timer(name).Record(d)
-	m.childScopes[scopeIdx].Timer(oldName).Record(d)
+	if len(oldName) > 0 {
+		m.childScopes[scopeIdx].Timer(oldName).Record(d)
+	}
 }
 
 // UpdateGauge reports Gauge type metric
@@ -138,7 +148,9 @@ func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 	name := string(m.metricDefs[gaugeIdx].metricName)
 	oldName := string(m.metricDefs[gaugeIdx].oldMetricName)
 	m.childScopes[scopeIdx].Gauge(name).Update(value)
-	m.childScopes[scopeIdx].Gauge(oldName).Update(value)
+	if len(oldName) > 0 {
+		m.childScopes[scopeIdx].Gauge(oldName).Update(value)
+	}
 }
 
 // Scope return a new internal metrics scope that can be used to add additional

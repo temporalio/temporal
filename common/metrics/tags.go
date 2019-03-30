@@ -20,7 +20,10 @@
 
 package metrics
 
-const domain = "domain"
+const (
+	domain         = "domain"
+	domainAllValue = "all"
+)
 
 // Tag is an interface to define metrics tags
 type Tag interface {
@@ -31,6 +34,8 @@ type Tag interface {
 type domainTag struct {
 	value string
 }
+
+type domainAllTag struct{}
 
 // DomainTag returns a new domain tag
 func DomainTag(value string) Tag {
@@ -45,4 +50,19 @@ func (d domainTag) Key() string {
 // Value returns the value of a domain tag
 func (d domainTag) Value() string {
 	return d.value
+}
+
+// DomainAllTag returns a new domain all tag-value
+func DomainAllTag() Tag {
+	return domainAllTag{}
+}
+
+// Key returns the key of the domain all tag
+func (d domainAllTag) Key() string {
+	return domain
+}
+
+// Value returns the value of the domain all tag
+func (d domainAllTag) Value() string {
+	return domainAllValue
 }

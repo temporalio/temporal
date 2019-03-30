@@ -723,6 +723,8 @@ const (
 	HistoryResetWorkflowExecutionScope
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
 	HistoryProcessDeleteHistoryEventScope
+	// WorkflowCompletionStatsScope tracks workflow completion updates
+	WorkflowCompletionStatsScope
 
 	NumHistoryScopes
 )
@@ -1086,6 +1088,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ExecutionCountStatsScope:                     {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
 		SessionSizeStatsScope:                        {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
 		SessionCountStatsScope:                       {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
+		WorkflowCompletionStatsScope:                 {operation: "CompletionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -1280,6 +1283,11 @@ const (
 	WorkflowCleanupDeleteCount
 	WorkflowCleanupArchiveCount
 	WorkflowCleanupNopCount
+	WorkflowSuccessCount
+	WorkflowCancelCount
+	WorkflowFailedCount
+	WorkflowTimeoutCount
+	WorkflowTerminateCount
 
 	NumHistoryMetrics
 )
@@ -1499,6 +1507,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowCleanupDeleteCount:                   {metricName: "workflow_cleanup_delete", oldMetricName: "workflow-cleanup-delete", metricType: Counter},
 		WorkflowCleanupArchiveCount:                  {metricName: "workflow_cleanup_archive", oldMetricName: "workflow-cleanup-archive", metricType: Counter},
 		WorkflowCleanupNopCount:                      {metricName: "workflow_cleanup_nop", oldMetricName: "workflow-cleanup-nop", metricType: Counter},
+		WorkflowSuccessCount:                         {metricName: "workflow_success", metricType: Counter},
+		WorkflowCancelCount:                          {metricName: "workflow_cancel", metricType: Counter},
+		WorkflowFailedCount:                          {metricName: "workflow_failed", metricType: Counter},
+		WorkflowTimeoutCount:                         {metricName: "workflow_timeout", metricType: Counter},
+		WorkflowTerminateCount:                       {metricName: "workflow_terminate", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success", oldMetricName: "poll.success"},
