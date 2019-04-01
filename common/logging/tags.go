@@ -191,10 +191,6 @@ const (
 	TagBucket  = "bucket"
 	TagBlobKey = "blob-key"
 
-	// archival tags (file blobstore tags)
-	TagFileBlobstoreBlobPath     = "file-blobstore-blob-path"
-	TagFileBlobstoreMetadataPath = "file-blobstore-metadata-path"
-
 	// archival tags (other tags)
 	TagClusterArchivalStatus    = "cluster-archival-status"
 	TagArchivalUploadSkipReason = "archival-upload-skip-reason"

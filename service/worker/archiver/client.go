@@ -37,6 +37,7 @@ import (
 type (
 	// ArchiveRequest is request to Archive
 	ArchiveRequest struct {
+		ShardID              int
 		DomainID             string
 		WorkflowID           string
 		RunID                string

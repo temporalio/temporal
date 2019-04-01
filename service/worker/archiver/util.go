@@ -111,6 +111,11 @@ func IsLast(tags map[string]string) bool {
 	return ok && last == "true"
 }
 
+func modifyBlobForConstCheck(historyBlob *HistoryBlob, existingTags map[string]string) {
+	historyBlob.Header.UploadCluster = common.StringPtr(existingTags["upload_cluster"])
+	historyBlob.Header.UploadDateTime = common.StringPtr(existingTags["upload_date_time"])
+}
+
 func hashArchiveRequest(archiveRequest ArchiveRequest) uint64 {
 	var b bytes.Buffer
 	gob.NewEncoder(&b).Encode(archiveRequest)
@@ -137,11 +142,12 @@ func hashesEqual(a []uint64, b []uint64) bool {
 
 func tagLoggerWithRequest(logger bark.Logger, request ArchiveRequest) bark.Logger {
 	return logger.WithFields(bark.Fields{
+		logging.TagHistoryShardID:                     request.ShardID,
 		logging.TagArchiveRequestDomainID:             request.DomainID,
 		logging.TagArchiveRequestWorkflowID:           request.WorkflowID,
 		logging.TagArchiveRequestRunID:                request.RunID,
 		logging.TagArchiveRequestEventStoreVersion:    request.EventStoreVersion,
-		logging.TagArchiveRequestBranchToken:          string(request.BranchToken),
+		logging.TagArchiveRequestBranchToken:          request.BranchToken,
 		logging.TagArchiveRequestNextEventID:          request.NextEventID,
 		logging.TagArchiveRequestCloseFailoverVersion: request.CloseFailoverVersion,
 	})

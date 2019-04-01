@@ -127,7 +127,8 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			return err
 		}
 		runConstTest := false
-		if err == nil {
+		blobAlreadyExists := err == nil
+		if blobAlreadyExists {
 			handledLastBlob = IsLast(tags)
 			// this is a sampling based sanity check used to ensure deterministic blob construction
 			// is operating as expected, the correctness of archival depends on this deterministic construction
@@ -140,6 +141,11 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		if err != nil {
 			logging.LogFailArchivalUploadAttempt(logger, err, "could not get history blob from reader", bucket, "")
 			return err
+		}
+		if runConstTest {
+			// some tags are specific to the cluster and time a blob was uploaded from/when
+			// this only updates those specific tags, all other parts of the blob are left unchanged
+			modifyBlobForConstCheck(historyBlob, tags)
 		}
 		blob, reason, err := constructBlob(historyBlob, container.Config.EnableArchivalCompression(domainName))
 		if err != nil {
