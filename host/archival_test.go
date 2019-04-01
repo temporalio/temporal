@@ -79,14 +79,7 @@ func (s *integrationSuite) TestArchival_NotEnabled() {
 			RunId:      common.StringPtr(runID),
 		},
 	}
-	for i := 0; i < 10; i++ {
-		_, err = s.engine.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
-		if err != nil {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.True(s.historyDeletedFromPersistence(getHistoryReq))
 }
 
 func (s *integrationSuite) TestArchival_Enabled() {
@@ -128,24 +121,43 @@ func (s *integrationSuite) TestArchival_Enabled() {
 	numActivities := 1
 	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, domain, numActivities)
 
+	// getHistoryReq without runID will cause history to attempt to be read from persistence
+	// the correct way to do this should be to update dynamic config
+	// but there is not currently a good way to do this in test the framework
 	getHistoryReq := &workflow.GetWorkflowExecutionHistoryRequest{
 		Domain: common.StringPtr(domain),
 		Execution: &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
 		},
 	}
-	var getHistoryResp *workflow.GetWorkflowExecutionHistoryResponse
+	s.True(s.historyDeletedFromPersistence(getHistoryReq))
+	s.False(s.historyArchived(getHistoryReq))
+	// update getHistoryReq to include runID thereby enabling history to be fetched from archival
+	getHistoryReq.Execution.RunId = common.StringPtr(runID)
+	s.True(s.historyArchived(getHistoryReq))
+}
+
+func (s *integrationSuite) historyDeletedFromPersistence(getHistoryReq *workflow.GetWorkflowExecutionHistoryRequest) bool {
 	for i := 0; i < 10; i++ {
-		getHistoryResp, err = s.engine.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
-		if getHistoryResp != nil && getHistoryResp.GetArchived() {
-			break
+		_, err := s.engine.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err != nil {
+			_, ok := err.(*workflow.EntityNotExistsError)
+			return ok
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	s.NoError(err)
-	s.NotNil(getHistoryResp)
-	s.True(getHistoryResp.GetArchived())
+	return false
+}
+
+func (s *integrationSuite) historyArchived(getHistoryReq *workflow.GetWorkflowExecutionHistoryRequest) bool {
+	for i := 0; i < 10; i++ {
+		getHistoryResp, _ := s.engine.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if getHistoryResp != nil && getHistoryResp.GetArchived() {
+			return true
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return false
 }
 
 func (s *integrationSuite) startAndFinishWorkflow(id string, wt string, tl string, domain string, numActivities int) string {
