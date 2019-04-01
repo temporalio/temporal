@@ -19,6 +19,10 @@ matrix:
       - TEST_SUITE=integration
   - go: "1.11.1"
     env:
+      - TEST_SUITE=integration
+      - EVENTSV2=true
+  - go: "1.11.1"
+    env:
       - TEST_SUITE=xdc
       - ZOOKEEPER_PEERS=localhost:2181
       - KAFKA_PEERS=localhost:9092
