@@ -57,6 +57,11 @@ func TestScopeDefsMapped(t *testing.T) {
 		require.True(t, ok)
 		require.NotEmpty(t, key)
 	}
+	for i := NumWorkerScopes; i < NumBlobstoreScopes; i++ {
+		key, ok := ScopeDefs[Blobstore][i]
+		require.True(t, ok)
+		require.NotEmpty(t, key)
+	}
 }
 
 func TestMetricDefsMapped(t *testing.T) {
