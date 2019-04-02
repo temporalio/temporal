@@ -1081,6 +1081,68 @@ func ResetWorkflow(c *cli.Context) {
 	prettyPrintJSONObject(resp)
 }
 
+// CompleteActivity completes an activity
+func CompleteActivity(c *cli.Context) {
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := getRequiredOption(c, FlagRunID)
+	activityID := getRequiredOption(c, FlagActivityID)
+	if len(activityID) == 0 {
+		ErrorAndExit("Invalid activityID", fmt.Errorf("activityID cannot be empty"))
+	}
+	result := getRequiredOption(c, FlagResult)
+	identity := getRequiredOption(c, FlagIdentity)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	frontendClient := cFactory.ServerFrontendClient(c)
+	err := frontendClient.RespondActivityTaskCompletedByID(ctx, &shared.RespondActivityTaskCompletedByIDRequest{
+		Domain:     common.StringPtr(domain),
+		WorkflowID: common.StringPtr(wid),
+		RunID:      common.StringPtr(rid),
+		ActivityID: common.StringPtr(activityID),
+		Result:     []byte(result),
+		Identity:   common.StringPtr(identity),
+	})
+	if err != nil {
+		ErrorAndExit("Completing activity failed", err)
+	} else {
+		fmt.Println("Complete activity successfully.")
+	}
+}
+
+// FailActivity fails an activity
+func FailActivity(c *cli.Context) {
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := getRequiredOption(c, FlagRunID)
+	activityID := getRequiredOption(c, FlagActivityID)
+	if len(activityID) == 0 {
+		ErrorAndExit("Invalid activityID", fmt.Errorf("activityID cannot be empty"))
+	}
+	reason := getRequiredOption(c, FlagReason)
+	detail := getRequiredOption(c, FlagDetail)
+	identity := getRequiredOption(c, FlagIdentity)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	frontendClient := cFactory.ServerFrontendClient(c)
+	err := frontendClient.RespondActivityTaskFailedByID(ctx, &shared.RespondActivityTaskFailedByIDRequest{
+		Domain:     common.StringPtr(domain),
+		WorkflowID: common.StringPtr(wid),
+		RunID:      common.StringPtr(rid),
+		ActivityID: common.StringPtr(activityID),
+		Reason:     common.StringPtr(reason),
+		Details:    []byte(detail),
+		Identity:   common.StringPtr(identity),
+	})
+	if err != nil {
+		ErrorAndExit("Failing activity failed", err)
+	} else {
+		fmt.Println("Fail activity successfully.")
+	}
+}
+
 // ObserveHistoryWithID show the process of running workflow
 func ObserveHistoryWithID(c *cli.Context) {
 	if !c.Args().Present() {

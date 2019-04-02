@@ -25,6 +25,12 @@ import "github.com/urfave/cli"
 func newWorkflowCommands() []cli.Command {
 	return []cli.Command{
 		{
+			Name:        "activity",
+			Aliases:     []string{"act"},
+			Usage:       "Operate activities of workflow",
+			Subcommands: newActivityCommands(),
+		},
+		{
 			Name:  "show",
 			Usage: "show workflow history",
 			Flags: getFlagsForShow(),
@@ -214,6 +220,74 @@ func newWorkflowCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				ResetWorkflow(c)
+			},
+		},
+	}
+}
+
+func newActivityCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "complete",
+			Aliases: []string{"comp"},
+			Usage:   "Complete an activity",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagActivityIDWithAlias,
+					Usage: "The activityID to operate on",
+				},
+				cli.StringFlag{
+					Name:  FlagResult,
+					Usage: "Result of the activity",
+				},
+				cli.StringFlag{
+					Name:  FlagIdentity,
+					Usage: "Identity of the operator",
+				},
+			},
+			Action: func(c *cli.Context) {
+				CompleteActivity(c)
+			},
+		},
+		{
+			Name:  "fail",
+			Usage: "fail an activity",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagActivityIDWithAlias,
+					Usage: "The activityID to operate on",
+				},
+				cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason to fail the activity",
+				},
+				cli.StringFlag{
+					Name:  FlagDetail,
+					Usage: "Detail to fail the activity",
+				},
+				cli.StringFlag{
+					Name:  FlagIdentity,
+					Usage: "Identity of the operator",
+				},
+			},
+			Action: func(c *cli.Context) {
+				FailActivity(c)
 			},
 		},
 	}
