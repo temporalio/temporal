@@ -240,12 +240,13 @@ func rowToInfo(row *sqldb.VisibilityRow) *workflow.WorkflowExecutionInfo {
 			WorkflowId: common.StringPtr(row.WorkflowID),
 			RunId:      common.StringPtr(row.RunID),
 		},
-		Type: &workflow.WorkflowType{Name: common.StringPtr(row.WorkflowTypeName)},
+		Type:      &workflow.WorkflowType{Name: common.StringPtr(row.WorkflowTypeName)},
+		StartTime: common.Int64Ptr(row.StartTime.UnixNano()),
 	}
 	if row.CloseStatus != nil {
 		status := workflow.WorkflowExecutionCloseStatus(*row.CloseStatus)
 		info.CloseStatus = &status
-		closeTime := row.CloseTime.Unix()
+		closeTime := row.CloseTime.UnixNano()
 		info.CloseTime = &closeTime
 		info.HistoryLength = row.HistoryLength
 	}
