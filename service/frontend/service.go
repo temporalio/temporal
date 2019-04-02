@@ -21,8 +21,6 @@
 package frontend
 
 import (
-	"fmt"
-
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
@@ -69,32 +67,36 @@ type Config struct {
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
 
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
+
+	// Domain specific config
+	EnableDomainNotActiveAutoForwarding dynamicconfig.BoolPropertyFnWithDomainFilter
 }
 
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool, enableReadHistoryFromArchival bool) *Config {
 	return &Config{
-		PersistenceMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		VisibilityMaxPageSize:           dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
-		EnableVisibilitySampling:        dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		EnableReadFromClosedExecutionV2: dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
-		VisibilityListMaxQPS:            dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
-		EnableVisibilityToKafka:         dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
-		EnableReadVisibilityFromES:      dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, false),
-		ESVisibilityListMaxQPS:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
-		ESIndexMaxResultWindow:          dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
-		HistoryMaxPageSize:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
-		RPS:                             dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		MaxIDLengthLimit:                dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		EnableReadHistoryFromArchival:   dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadHistoryFromArchival, enableReadHistoryFromArchival),
-		HistoryMgrNumConns:              dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
-		MaxDecisionStartToCloseTimeout:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
-		EnableAdminProtection:           dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
-		AdminOperationToken:             dc.GetStringProperty(dynamicconfig.AdminOperationToken, "CadenceTeamONLY"),
-		DisableListVisibilityByFilter:   dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
-		BlobSizeLimitError:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:               dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1204),
-		ThrottledLogRPS:                 dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
+		PersistenceMaxQPS:                   dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		VisibilityMaxPageSize:               dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		EnableVisibilitySampling:            dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
+		EnableReadFromClosedExecutionV2:     dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
+		VisibilityListMaxQPS:                dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
+		EnableVisibilityToKafka:             dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
+		EnableReadVisibilityFromES:          dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, false),
+		ESVisibilityListMaxQPS:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
+		ESIndexMaxResultWindow:              dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
+		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
+		MaxIDLengthLimit:                    dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		EnableReadHistoryFromArchival:       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadHistoryFromArchival, enableReadHistoryFromArchival),
+		HistoryMgrNumConns:                  dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
+		MaxDecisionStartToCloseTimeout:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
+		EnableAdminProtection:               dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
+		AdminOperationToken:                 dc.GetStringProperty(dynamicconfig.AdminOperationToken, "CadenceTeamONLY"),
+		DisableListVisibilityByFilter:       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
+		BlobSizeLimitError:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:                   dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1204),
+		ThrottledLogRPS:                     dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
+		EnableDomainNotActiveAutoForwarding: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableDomainNotActiveAutoForwarding, false),
 	}
 }
 
@@ -185,28 +187,11 @@ func (s *Service) Start() {
 		kafkaProducer = &mocks.KafkaProducer{}
 	}
 
-	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, params.BlobstoreClient)
+	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer,
+		params.BlobstoreClient)
 	wfHandler.Start()
-	switch params.DCRedirectionPolicy.Policy {
-	case DCRedirectionPolicyDefault:
-		base.GetDispatcher().Register(workflowserviceserver.New(wfHandler))
-	case DCRedirectionPolicyNoop:
-		base.GetDispatcher().Register(workflowserviceserver.New(wfHandler))
-	case DCRedirectionPolicyForwarding:
-		dcRedirectionPolicy := RedirectionPolicyGenerator(
-			base.GetClusterMetadata(),
-			wfHandler.domainCache,
-			params.DCRedirectionPolicy,
-		)
-		currentClusteName := base.GetClusterMetadata().GetCurrentClusterName()
-		dcRediectionHandle := NewDCRedirectionHandler(
-			currentClusteName, dcRedirectionPolicy, base, wfHandler,
-		)
-		base.GetDispatcher().Register(workflowserviceserver.New(dcRediectionHandle))
-	default:
-		panic(fmt.Sprintf("Unknown DC redirection policy %v", params.DCRedirectionPolicy.Policy))
-	}
-
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
+	base.GetDispatcher().Register(workflowserviceserver.New(dcRedirectionHandler))
 	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, metadata, history, historyV2)
 	adminHandler.Start()
 

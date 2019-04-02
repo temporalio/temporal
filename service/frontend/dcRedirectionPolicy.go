@@ -40,17 +40,17 @@ const (
 type (
 	// DCRedirectionPolicy is DC redirection policy interface
 	DCRedirectionPolicy interface {
-		GetTargetDatacenterByName(domainName string) (string, error)
-		GetTargetDatacenterByID(domainName string) (string, error)
+		GetTargetDataCenterByName(domainName string) (string, error)
+		GetTargetDataCenterByID(domainName string) (string, error)
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
 	NoopRedirectionPolicy struct {
-		currentClusteName string
+		currentClusterName string
 	}
 
 	// ForwardingDCRedirectionPolicy is DC redirection policy which forwards
-	// API calls if domain is effective global, fromDC is current cluster,
+	// API calls if domain is effectively global, fromDC is current cluster,
 	// fromDC is not in replication config and toDC is in replication config,
 	ForwardingDCRedirectionPolicy struct {
 		fromDC      string
@@ -83,23 +83,23 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata,
 }
 
 // NewNoopRedirectionPolicy is DC redirection policy which does nothing
-func NewNoopRedirectionPolicy(currentClusteName string) *NoopRedirectionPolicy {
+func NewNoopRedirectionPolicy(currentClusterName string) *NoopRedirectionPolicy {
 	return &NoopRedirectionPolicy{
-		currentClusteName: currentClusteName,
+		currentClusterName: currentClusterName,
 	}
 }
 
-// GetTargetDatacenterByName get target cluster name by domain Name
-func (policy *NoopRedirectionPolicy) GetTargetDatacenterByName(domainName string) (string, error) {
-	return policy.currentClusteName, nil
+// GetTargetDataCenterByName get target cluster name by domain Name
+func (policy *NoopRedirectionPolicy) GetTargetDataCenterByName(domainName string) (string, error) {
+	return policy.currentClusterName, nil
 }
 
-// GetTargetDatacenterByID get target cluster name by domain ID
-func (policy *NoopRedirectionPolicy) GetTargetDatacenterByID(domainID string) (string, error) {
-	return policy.currentClusteName, nil
+// GetTargetDataCenterByID get target cluster name by domain ID
+func (policy *NoopRedirectionPolicy) GetTargetDataCenterByID(domainID string) (string, error) {
+	return policy.currentClusterName, nil
 }
 
-// NewForwardingDCRedirectionPolicy creates a datacenter redirection policy forwarding API calls
+// NewForwardingDCRedirectionPolicy creates a data center redirection policy forwarding API calls
 func NewForwardingDCRedirectionPolicy(fromDC string, toDC string, domainCache cache.DomainCache) *ForwardingDCRedirectionPolicy {
 	return &ForwardingDCRedirectionPolicy{
 		fromDC:      fromDC,
@@ -108,27 +108,27 @@ func NewForwardingDCRedirectionPolicy(fromDC string, toDC string, domainCache ca
 	}
 }
 
-// GetTargetDatacenterByName get target cluster name by domain Name
-func (policy *ForwardingDCRedirectionPolicy) GetTargetDatacenterByName(domainName string) (string, error) {
+// GetTargetDataCenterByName get target cluster name by domain Name
+func (policy *ForwardingDCRedirectionPolicy) GetTargetDataCenterByName(domainName string) (string, error) {
 	domainEntry, err := policy.domainCache.GetDomain(domainName)
 	if err != nil {
 		return "", err
 	}
 
-	return policy.getTargetDatacenter(domainEntry), nil
+	return policy.getTargetDataCenter(domainEntry), nil
 }
 
-// GetTargetDatacenterByID get target cluster name by domain ID
-func (policy *ForwardingDCRedirectionPolicy) GetTargetDatacenterByID(domainID string) (string, error) {
+// GetTargetDataCenterByID get target cluster name by domain ID
+func (policy *ForwardingDCRedirectionPolicy) GetTargetDataCenterByID(domainID string) (string, error) {
 	domainEntry, err := policy.domainCache.GetDomainByID(domainID)
 	if err != nil {
 		return "", err
 	}
 
-	return policy.getTargetDatacenter(domainEntry), nil
+	return policy.getTargetDataCenter(domainEntry), nil
 }
 
-func (policy *ForwardingDCRedirectionPolicy) getTargetDatacenter(domainEntry *cache.DomainCacheEntry) string {
+func (policy *ForwardingDCRedirectionPolicy) getTargetDataCenter(domainEntry *cache.DomainCacheEntry) string {
 	if !domainEntry.IsGlobalDomain() {
 		return policy.fromDC
 	}

@@ -48,14 +48,15 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
-	EnableGlobalDomain:              "system.enableGlobalDomain",
-	EnableNewKafkaClient:            "system.enableNewKafkaClient",
-	EnableVisibilitySampling:        "system.enableVisibilitySampling",
-	EnableReadFromClosedExecutionV2: "system.enableReadFromClosedExecutionV2",
-	EnableVisibilityToKafka:         "system.enableVisibilityToKafka",
-	EnableReadVisibilityFromES:      "system.enableReadVisibilityFromES",
-	ArchivalStatus:                  "system.archivalStatus",
-	EnableReadHistoryFromArchival:   "system.enableReadHistoryFromArchival",
+	EnableGlobalDomain:                  "system.enableGlobalDomain",
+	EnableNewKafkaClient:                "system.enableNewKafkaClient",
+	EnableVisibilitySampling:            "system.enableVisibilitySampling",
+	EnableReadFromClosedExecutionV2:     "system.enableReadFromClosedExecutionV2",
+	EnableVisibilityToKafka:             "system.enableVisibilityToKafka",
+	EnableReadVisibilityFromES:          "system.enableReadVisibilityFromES",
+	ArchivalStatus:                      "system.archivalStatus",
+	EnableReadHistoryFromArchival:       "system.enableReadHistoryFromArchival",
+	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -216,6 +217,9 @@ const (
 	ArchivalStatus
 	// EnableReadHistoryFromArchival is key for enabling reading history from archival store
 	EnableReadHistoryFromArchival
+	// EnableDomainNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
+	// for signal / start / signal with start API if domain is not active
+	EnableDomainNotActiveAutoForwarding
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError

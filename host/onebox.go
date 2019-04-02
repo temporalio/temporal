@@ -356,14 +356,16 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.frontEndService = service.New(params)
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.numberOfHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
+	frontendConfig := frontend.NewConfig(dynamicconfig.NewNopCollection(), false, c.enableReadHistoryFromArchival)
 	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection(), false, c.enableReadHistoryFromArchival),
-		c.metadataMgr, c.historyMgr, c.historyV2Mgr, c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
+		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
+		c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
 	err = c.frontendHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")
 	}
-	c.frontEndService.GetDispatcher().Register(workflowserviceserver.New(c.frontendHandler))
+	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
+	c.frontEndService.GetDispatcher().Register(workflowserviceserver.New(dcRedirectionHandler))
 	err = c.adminHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start admin")
