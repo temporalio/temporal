@@ -23,16 +23,21 @@ package host
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/pborman/uuid"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 )
 
 type (
@@ -40,7 +45,14 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		IntegrationBase
+		suite.Suite
+
+		testCluster       *TestCluster
+		logger            bark.Logger
+		engine            FrontendClient
+		ClusterMetadata   cluster.Metadata
+		MetadataManager   persistence.MetadataManager
+		MetadataManagerV2 persistence.MetadataManager
 	}
 )
 
@@ -50,7 +62,15 @@ func TestIntegrationCrossDCSuite(t *testing.T) {
 }
 
 func (s *integrationCrossDCSuite) SetupSuite() {
-	s.setupLogger()
+	if testing.Verbose() {
+		log.SetOutput(os.Stdout)
+	}
+
+	logger := log.New()
+	formatter := &log.TextFormatter{}
+	formatter.FullTimestamp = true
+	logger.Formatter = formatter
+	s.logger = bark.NewLoggerFromLogrus(logger)
 }
 
 func (s *integrationCrossDCSuite) TearDownSuite() {
@@ -62,13 +82,31 @@ func (s *integrationCrossDCSuite) SetupTest() {
 }
 
 func (s *integrationCrossDCSuite) TearDownTest() {
-	if s.Host != nil {
-		s.tearDownSuite()
+	if s.testCluster != nil {
+		s.testCluster.TearDownCluster()
+		s.testCluster = nil
+		s.engine = nil
+		s.ClusterMetadata = nil
+		s.MetadataManager = nil
+		s.MetadataManagerV2 = nil
 	}
 }
 
 func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterCluster bool) {
-	s.setupCadenceHost(enableGlobalDomain, isMasterCluster, false, false)
+	c, err := NewCluster(&TestClusterConfig{
+		PersistOptions: &persistencetests.TestBaseOptions{
+			EnableGlobalDomain: enableGlobalDomain,
+			IsMasterCluster:    isMasterCluster,
+			EnableArchival:     false,
+		},
+		EnableWorker: false,
+	}, s.logger)
+	s.Require().NoError(err)
+	s.testCluster = c
+	s.engine = c.GetFrontendClient()
+	s.ClusterMetadata = c.testBase.ClusterMetadata
+	s.MetadataManager = c.testBase.MetadataManager
+	s.MetadataManagerV2 = c.testBase.MetadataManagerV2
 }
 
 // Note: if the global domain is not enabled, active clusters and clusters

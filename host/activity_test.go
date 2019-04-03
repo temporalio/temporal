@@ -879,7 +879,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(60),
 						ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(60),
-						HeartbeatTimeoutSeconds:       common.Int32Ptr(3),
+						HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 					},
 				}
 
@@ -1127,7 +1127,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	}
 
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	cancelCh := make(chan struct{})
 
@@ -1136,12 +1136,12 @@ func (s *integrationSuite) TestActivityCancellation() {
 		scheduleActivity = false
 		requestCancellation = true
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.True(err == nil || err == matching.ErrNoTasks)
+		s.True(err == nil || err == matching.ErrNoTasks, err)
 		cancelCh <- struct{}{}
 	}()
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	<-cancelCh
 	s.Logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)

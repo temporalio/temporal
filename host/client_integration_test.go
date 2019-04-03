@@ -74,7 +74,7 @@ func TestClientIntegrationSuite(t *testing.T) {
 }
 
 func (s *clientIntegrationSuite) SetupSuite() {
-	s.setupSuite(false, false, false, false)
+	s.setupSuite("testdata/clientintegrationtestcluster.yaml")
 
 	var err error
 	s.wfService, err = s.buildServiceClient()
@@ -98,9 +98,11 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Int
 	cadenceClientName := "cadence-client"
 	cadenceFrontendService := common.FrontendServiceName
 	hostPort := "127.0.0.1:7104"
+	if *frontendAddress != "" {
+		hostPort = *frontendAddress
+	}
 
-	ch, err := tchannel.NewChannelTransport(
-		tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
+	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName))
 	if err != nil {
 		s.Logger.Fatalf("Failed to create transport channel: %v", err)
 	}

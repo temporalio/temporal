@@ -454,7 +454,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	getHistory := func(domain string, execution *workflow.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
 
-		return s.Host.GetAdminClient().GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
+		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          common.StringPtr(domain),
 			Execution:       execution,
 			FirstEventId:    common.Int64Ptr(firstEventID),
@@ -487,7 +487,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	s.True(len(resp.HistoryBatches) == pageSize)
 	blobs = append(blobs, resp.HistoryBatches...)
 	token = resp.NextPageToken
-	if *EnableEventsV2 {
+	if s.testClusterConfig.EnableEventsV2 {
 		s.Equal(int32(2), resp.GetEventStoreVersion())
 	} else {
 		s.Equal(int32(0), resp.GetEventStoreVersion())
@@ -512,7 +512,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if *EnableEventsV2 {
+		if s.testClusterConfig.EnableEventsV2 {
 			s.Equal(int32(2), resp.GetEventStoreVersion())
 		} else {
 			s.Equal(int32(0), resp.GetEventStoreVersion())
@@ -537,7 +537,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if *EnableEventsV2 {
+		if s.testClusterConfig.EnableEventsV2 {
 			s.Equal(int32(2), resp.GetEventStoreVersion())
 		} else {
 			s.Equal(int32(0), resp.GetEventStoreVersion())
@@ -564,7 +564,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if *EnableEventsV2 {
+		if s.testClusterConfig.EnableEventsV2 {
 			s.Equal(int32(2), resp.GetEventStoreVersion())
 		} else {
 			s.Equal(int32(0), resp.GetEventStoreVersion())
@@ -591,7 +591,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if *EnableEventsV2 {
+		if s.testClusterConfig.EnableEventsV2 {
 			s.Equal(int32(2), resp.GetEventStoreVersion())
 		} else {
 			s.Equal(int32(0), resp.GetEventStoreVersion())

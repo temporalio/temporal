@@ -1,0 +1,126 @@
+- persistoptions:
+    dbname: integration_active
+    cassandra:
+      dbport: 0
+      schemadir: ""
+    sql:
+      dbport: 0
+      schemadir: ""
+      drivername: ""
+    enableglobaldomain: false
+    ismastercluster: false
+    clusterinfo:
+      enableGlobalDomain: true
+      failoverVersionIncrement: 10
+      masterClusterName: active
+      currentClusterName: active
+      clusterInitialFailoverVersion:
+        active: 0
+        standby: 1
+      clusterAddress:
+        active:
+          rpcName: cadence-frontend
+          rpcAddress: 127.0.0.1:7104
+        standby:
+          rpcName: cadence-frontend
+          rpcAddress: 127.0.0.1:8104
+    enablearchival: false
+  enableworker: true
+  enableeventsv2: false
+  enablearchival: false
+  clusterno: 0
+  numhistoryshards: 1
+  numhistoryhosts: 1
+  messagingclientconfig:
+    usemock: false
+    kafkaconfig:
+      clusters:
+        test:
+          brokers:
+            - 127.0.0.1:9092
+      topics:
+        active:
+          cluster: test
+        active-dlq:
+          cluster: test
+        active-retry:
+          cluster: test
+        standby:
+          cluster: test
+        standby-dlq:
+          cluster: test
+        standby-retry:
+          cluster: test
+      cadence-cluster-topics:
+        active:
+          topic: active
+          retry-topic: active-retry
+          dlq-topic: active-dlq
+        standby:
+          topic: standby
+          retry-topic: standby-retry
+          dlq-topic: standby-dlq
+      applications: {}
+- persistoptions:
+    dbname: integration_standby
+    cassandra:
+      dbport: 0
+      schemadir: ""
+    sql:
+      dbport: 0
+      schemadir: ""
+      drivername: ""
+    enableglobaldomain: false
+    ismastercluster: false
+    clusterinfo:
+      enableGlobalDomain: true
+      failoverVersionIncrement: 10
+      masterClusterName: active
+      currentClusterName: standby
+      clusterInitialFailoverVersion:
+        active: 0
+        standby: 1
+      clusterAddress:
+        active:
+          rpcName: cadence-frontend
+          rpcAddress: 127.0.0.1:7104
+        standby:
+          rpcName: cadence-frontend
+          rpcAddress: 127.0.0.1:8104
+    enablearchival: false
+  enableworker: true
+  enableeventsv2: false
+  enablearchival: false
+  clusterno: 1
+  numhistoryshards: 1
+  numhistoryhosts: 1
+  messagingclientconfig:
+    usemock: false
+    kafkaconfig:
+      clusters:
+        test:
+          brokers:
+            - 127.0.0.1:9092
+      topics:
+        active:
+          cluster: test
+        active-dlq:
+          cluster: test
+        active-retry:
+          cluster: test
+        standby:
+          cluster: test
+        standby-dlq:
+          cluster: test
+        standby-retry:
+          cluster: test
+      cadence-cluster-topics:
+        active:
+          topic: active
+          retry-topic: active-retry
+          dlq-topic: active-dlq
+        standby:
+          topic: standby
+          retry-topic: standby-retry
+          dlq-topic: standby-dlq
+      applications: {}

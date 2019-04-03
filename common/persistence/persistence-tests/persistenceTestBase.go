@@ -63,9 +63,10 @@ type (
 		}
 		// TODO this is used for global domain test
 		// when cross DC is public, remove EnableGlobalDomain
-		EnableGlobalDomain bool // is global domain enabled
-		IsMasterCluster    bool // is master cluster
-		ClusterMetadata    cluster.Metadata
+		EnableGlobalDomain bool             // is global domain enabled
+		IsMasterCluster    bool             // is master cluster
+		ClusterMetadata    cluster.Metadata `yaml:"-"`
+		ClusterInfo        *config.ClustersInfo
 		EnableArchival     bool // is archival enabled
 	}
 

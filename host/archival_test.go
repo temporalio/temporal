@@ -23,48 +23,30 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/uber/cadence/common/cluster"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/cluster"
 )
 
 func (s *integrationSuite) TestArchival_NotEnabled() {
-	s.Equal(cluster.ArchivalEnabled, s.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
+	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
 
-	domainID := uuid.New()
-	domain := "archival_domain_not_enabled"
-	archivalBucket := s.bucketName
-	_, err := s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
-			ID:          domainID,
-			Name:        domain,
-			Status:      persistence.DomainStatusRegistered,
-			Description: "Test domain for archival not enabled integration test",
-		},
-		Config: &persistence.DomainConfig{
-			Retention:      0,
-			EmitMetric:     false,
-			ArchivalStatus: workflow.ArchivalStatusDisabled,
-			ArchivalBucket: archivalBucket,
-		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{},
-	})
-	s.NoError(err)
+	domain := fmt.Sprintf("archival_domain_not_enabled-%v", uuid.New())
+	description := "Test domain for archival not enabled integration test"
+	bucketName := "default-test-bucket"
+	err := s.registerDomain(domain, description, workflow.ArchivalStatusDisabled, bucketName)
+	s.Require().NoError(err)
 
-	getDomainReq := &persistence.GetDomainRequest{
-		ID: domainID,
-	}
-	getDomainResp, err := s.MetadataManager.GetDomain(getDomainReq)
-	s.NoError(err)
-	s.NotNil(getDomainResp)
-	s.Equal(int32(0), getDomainResp.Config.Retention)
-	s.Equal(workflow.ArchivalStatusDisabled, getDomainResp.Config.ArchivalStatus)
-	s.Equal(archivalBucket, getDomainResp.Config.ArchivalBucket)
+	getDomainResp, err := s.describeDomain(domain)
+	s.Require().NoError(err)
+	s.Equal(int32(0), *getDomainResp.Configuration.WorkflowExecutionRetentionPeriodInDays)
+	s.Equal(workflow.ArchivalStatusDisabled, *getDomainResp.Configuration.ArchivalStatus)
+	s.Equal(bucketName, *getDomainResp.Configuration.ArchivalBucketName)
 
 	workflowID := "archival-workflow-id"
 	workflowType := "archival-workflow-type"
@@ -83,37 +65,21 @@ func (s *integrationSuite) TestArchival_NotEnabled() {
 }
 
 func (s *integrationSuite) TestArchival_Enabled() {
-	s.Equal(cluster.ArchivalEnabled, s.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
+	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
 
-	domainID := uuid.New()
-	domain := "archival_domain_enabled"
-	archivalBucket := s.bucketName
-	_, err := s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
-			ID:          domainID,
-			Name:        domain,
-			Status:      persistence.DomainStatusRegistered,
-			Description: "Test domain for archival enabled integration test",
-		},
-		Config: &persistence.DomainConfig{
-			Retention:      0,
-			EmitMetric:     false,
-			ArchivalStatus: workflow.ArchivalStatusEnabled,
-			ArchivalBucket: archivalBucket,
-		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{},
-	})
-	s.NoError(err)
+	domain := fmt.Sprintf("archival_domain_enabled-%v", uuid.New())
+	desc := "Test domain for archival enabled integration test"
+	bucketName := "default-test-bucket"
 
-	getDomainReq := &persistence.GetDomainRequest{
-		ID: domainID,
-	}
-	getDomainResp, err := s.MetadataManager.GetDomain(getDomainReq)
+	err := s.registerDomain(domain, desc, workflow.ArchivalStatusEnabled, bucketName)
+	s.Require().NoError(err)
+
+	getDomainResp, err := s.describeDomain(domain)
 	s.NoError(err)
 	s.NotNil(getDomainResp)
-	s.Equal(int32(0), getDomainResp.Config.Retention)
-	s.Equal(workflow.ArchivalStatusEnabled, getDomainResp.Config.ArchivalStatus)
-	s.Equal(archivalBucket, getDomainResp.Config.ArchivalBucket)
+	s.Equal(int32(0), *getDomainResp.Configuration.WorkflowExecutionRetentionPeriodInDays)
+	s.Equal(workflow.ArchivalStatusEnabled, *getDomainResp.Configuration.ArchivalStatus)
+	s.Equal(bucketName, *getDomainResp.Configuration.ArchivalBucketName)
 
 	workflowID := "archival-workflow-id"
 	workflowType := "archival-workflow-type"
