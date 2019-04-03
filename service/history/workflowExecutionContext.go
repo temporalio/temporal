@@ -583,6 +583,14 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 					return err
 				}
 				executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
+
+				// add clean up tasks
+				tranT, timerT, err := getWorkflowHistoryCleanupTasksFromShard(c.shard, executionInfo.DomainID, executionInfo.WorkflowID, nil)
+				if err != nil {
+					return err
+				}
+				transferTasks = append(transferTasks, tranT)
+				timerTasks = append(timerTasks, timerT)
 			} // end of hard terminate workflow
 		} // end of enforce history size/count limit
 

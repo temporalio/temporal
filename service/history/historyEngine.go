@@ -51,10 +51,10 @@ import (
 )
 
 const (
-	conditionalRetryCount                    = 5
-	activityCancelationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
-	activityCancelationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
-	timerCancelationMsgTimerIDUnknown        = "TIMER_ID_UNKNOWN"
+	conditionalRetryCount                     = 5
+	activityCancellationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
+	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
+	timerCancellationMsgTimerIDUnknown        = "TIMER_ID_UNKNOWN"
 )
 
 type (
@@ -86,7 +86,7 @@ type (
 		currentClusterName string
 		ShardContext
 		txProcessor          transferQueueProcessor
-		replcatorProcessor   queueProcessor
+		replicatorProcessor  queueProcessor
 		historyEventNotifier historyEventNotifier
 	}
 )
@@ -188,7 +188,7 @@ func NewEngineWithShardContext(
 	if publisher != nil {
 		replicatorProcessor := newReplicatorQueueProcessor(shard, historyEngImpl.historyCache, publisher, executionManager, historyManager, historyV2Manager, logger)
 		historyEngImpl.replicatorProcessor = replicatorProcessor
-		shardWrapper.replcatorProcessor = replicatorProcessor
+		shardWrapper.replicatorProcessor = replicatorProcessor
 		historyEngImpl.replicator = newHistoryReplicator(shard, historyEngImpl, historyCache, shard.GetDomainCache(), historyManager, historyV2Manager,
 			logger)
 	}
@@ -1523,7 +1523,7 @@ Update_History_Loop:
 					common.StringDefault(request.Identity))
 				if !isRunning {
 					msBuilder.AddRequestCancelActivityTaskFailedEvent(completedID, activityID,
-						activityCancelationMsgActivityIDUnknown)
+						activityCancellationMsgActivityIDUnknown)
 					continue Process_Decision_Loop
 				}
 
@@ -1531,7 +1531,7 @@ Update_History_Loop:
 					// We haven't started the activity yet, we can cancel the activity right away and
 					// schedule a decision task to ensure the workflow makes progress.
 					msBuilder.AddActivityTaskCanceledEvent(ai.ScheduleID, ai.StartedID, *actCancelReqEvent.EventId,
-						[]byte(activityCancelationMsgActivityNotStarted), common.StringDefault(request.Identity))
+						[]byte(activityCancellationMsgActivityNotStarted), common.StringDefault(request.Identity))
 					activityNotStartedCancelled = true
 				}
 
@@ -2792,8 +2792,20 @@ func getWorkflowHistoryCleanupTasksFromShard(
 	} else {
 		retentionInDays = domainEntry.GetRetentionDays(workflowID)
 	}
-	deleteTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
+	deleteTask := createDeleteHistoryEventTimerTask(tBuilder, retentionInDays)
 	return &persistence.CloseExecutionTask{}, deleteTask, nil
+}
+
+func createDeleteHistoryEventTimerTask(tBuilder *timerBuilder, retentionInDays int32) *persistence.DeleteHistoryEventTask {
+	retention := time.Duration(retentionInDays) * time.Hour * 24
+	if tBuilder != nil {
+		return tBuilder.createDeleteHistoryEventTimerTask(retention)
+	} else {
+		expiryTime := clock.NewRealTimeSource().Now().Add(retention)
+		return &persistence.DeleteHistoryEventTask{
+			VisibilityTimestamp: expiryTime,
+		}
+	}
 }
 
 func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder mutableState,
@@ -2866,11 +2878,11 @@ func (e *historyEngineImpl) failDecision(context workflowExecutionContext, sched
 }
 
 func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *timerBuilder {
-	lg := e.logger.WithFields(bark.Fields{
+	log := e.logger.WithFields(bark.Fields{
 		logging.TagWorkflowExecutionID: we.WorkflowId,
 		logging.TagWorkflowRunID:       we.RunId,
 	})
-	return newTimerBuilder(e.shard.GetConfig(), lg, clock.NewRealTimeSource())
+	return newTimerBuilder(e.shard.GetConfig(), log, clock.NewRealTimeSource())
 }
 
 func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
@@ -2878,7 +2890,7 @@ func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.Updat
 	if err == nil {
 		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
-			s.replcatorProcessor.notifyNewTask()
+			s.replicatorProcessor.notifyNewTask()
 		}
 	}
 	return resp, err
@@ -2890,7 +2902,7 @@ func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.Creat
 	if err == nil {
 		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
-			s.replcatorProcessor.notifyNewTask()
+			s.replicatorProcessor.notifyNewTask()
 		}
 	}
 	return resp, err

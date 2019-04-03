@@ -2286,7 +2286,7 @@ func (e *mutableStateBuilder) AddCancelTimerFailedEvent(decisionCompletedEventID
 	// No Operation: We couldn't cancel it probably TIMER_ID_UNKNOWN
 	timerID := attributes.GetTimerId()
 	return e.hBuilder.AddCancelTimerFailedEvent(timerID, decisionCompletedEventID,
-		timerCancelationMsgTimerIDUnknown, identity)
+		timerCancellationMsgTimerIDUnknown, identity)
 }
 
 func (e *mutableStateBuilder) AddRecordMarkerEvent(decisionCompletedEventID int64,
