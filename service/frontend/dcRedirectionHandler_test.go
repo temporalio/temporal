@@ -26,8 +26,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/uber/cadence/common/service/config"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
@@ -44,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 

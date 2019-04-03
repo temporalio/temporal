@@ -23,25 +23,21 @@ package common
 import (
 	"encoding/json"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common/cron"
-
-	"github.com/uber/cadence/common/logging"
-	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
-
 	farm "github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
-
-	"math/rand"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cron"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
+	"go.uber.org/yarpc/yarpcerrors"
+	"golang.org/x/net/context"
 )
 
 const (

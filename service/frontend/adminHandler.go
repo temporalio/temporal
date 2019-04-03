@@ -22,11 +22,10 @@ package frontend
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"strconv"
 
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/admin"

@@ -164,8 +164,9 @@ var keys = map[Key]string{
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
-	WorkerReplicatorConcurrency:                     "worker.replicatorConcurrency",
-	WorkerReplicatorActivityBufferRetryCount:        "worker.replicatorActivityBufferRetryCount",
+	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
+	WorkerReplicatorTaskConcurrency:                 "worker.replicatorTaskConcurrency",
+	WorkerReplicatorMessageConcurrency:              "worker.replicatorMessageConcurrency",
 	WorkerReplicatorHistoryBufferRetryCount:         "worker.replicatorHistoryBufferRetryCount",
 	WorkerReplicationTaskMaxRetry:                   "worker.replicationTaskMaxRetry",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
@@ -429,10 +430,12 @@ const (
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS
-	// WorkerReplicatorConcurrency is the max concurrent tasks to be processed at any given time
-	WorkerReplicatorConcurrency
-	// WorkerReplicatorActivityBufferRetryCount is the retry attempt when encounter retry error on activity
-	WorkerReplicatorActivityBufferRetryCount
+	// WorkerReplicatorMetaTaskConcurrency is the number of coroutine handling metadata related tasks
+	WorkerReplicatorMetaTaskConcurrency
+	// WorkerReplicatorTaskConcurrency is the number of coroutine handling non metadata related tasks
+	WorkerReplicatorTaskConcurrency
+	// WorkerReplicatorMessageConcurrency is the max concurrent tasks provided by messaging client
+	WorkerReplicatorMessageConcurrency
 	// WorkerReplicatorHistoryBufferRetryCount is the retry attempt when encounter retry error on history
 	WorkerReplicatorHistoryBufferRetryCount
 	// WorkerReplicationTaskMaxRetry is the max retry for any task

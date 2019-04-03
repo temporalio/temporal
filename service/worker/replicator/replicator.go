@@ -25,22 +25,21 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
-
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/client/admin"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/xdc"
-
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/common/xdc"
 )
 
 type (
@@ -61,11 +60,12 @@ type (
 
 	// Config contains all the replication config for worker
 	Config struct {
-		PersistenceMaxQPS                  dynamicconfig.IntPropertyFn
-		ReplicatorConcurrency              dynamicconfig.IntPropertyFn
-		ReplicatorActivityBufferRetryCount dynamicconfig.IntPropertyFn
-		ReplicatorHistoryBufferRetryCount  dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetry            dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                 dynamicconfig.IntPropertyFn
+		ReplicatorMetaTaskConcurrency     dynamicconfig.IntPropertyFn
+		ReplicatorTaskConcurrency         dynamicconfig.IntPropertyFn
+		ReplicatorMessageConcurrency      dynamicconfig.IntPropertyFn
+		ReplicatorHistoryBufferRetryCount dynamicconfig.IntPropertyFn
+		ReplicationTaskMaxRetry           dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -128,8 +128,16 @@ func (r *Replicator) Start() error {
 				replicationTimeout,
 				logger,
 			)
-			r.processors = append(r.processors, newReplicationTaskProcessor(currentClusterName, cluster, consumerName, r.client,
-				r.config, logger, r.metricsClient, r.domainReplicator, historyRereplicator, r.historyClient))
+			r.processors = append(r.processors, newReplicationTaskProcessor(
+				currentClusterName, cluster, consumerName, r.client,
+				r.config, logger, r.metricsClient, r.domainReplicator,
+				historyRereplicator, r.historyClient,
+				task.NewSequentialTaskProcessor(
+					r.config.ReplicatorTaskConcurrency(),
+					r.config.ReplicatorMessageConcurrency(),
+					logger,
+				),
+			))
 		}
 	}
 

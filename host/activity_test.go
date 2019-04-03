@@ -969,7 +969,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		s.Logger.Infof("End Heartbeating. ID: %v", activityID)
 
 		s.Logger.Infof("Sleeping activity before completion. ID: %v", activityID)
-		time.Sleep(5 * time.Second)
+		time.Sleep(7 * time.Second)
 
 		return []byte("Activity Result."), false, nil
 	}

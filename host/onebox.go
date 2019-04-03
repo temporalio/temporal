@@ -481,7 +481,7 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
-	workerConfig.ReplicationCfg.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
+	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	c.replicator = replicator.NewReplicator(
 		c.clusterMetadata,
 		metadataManager,

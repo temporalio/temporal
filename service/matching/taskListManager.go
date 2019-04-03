@@ -28,17 +28,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/cache"
 )
 
 const (

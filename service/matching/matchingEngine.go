@@ -26,19 +26,18 @@ import (
 	"math"
 	"sync"
 
+	"github.com/pborman/uuid"
+	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-
-	"github.com/pborman/uuid"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/cache"
 )
 
 // Implements matching.Engine

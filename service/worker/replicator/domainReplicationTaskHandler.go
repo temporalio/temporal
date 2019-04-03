@@ -53,6 +53,11 @@ var (
 // NOTE: the counterpart of domain replication transmission logic is in service/fropntend package
 
 type (
+	// DomainReplicator is the interface which can replicate the domain
+	DomainReplicator interface {
+		HandleReceivingTask(task *replicator.DomainTaskAttributes) error
+	}
+
 	domainReplicatorImpl struct {
 		metadataManagerV2 persistence.MetadataManager
 		logger            bark.Logger
