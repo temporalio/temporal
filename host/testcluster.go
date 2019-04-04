@@ -32,7 +32,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	metricsmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/zap"
 )
@@ -106,7 +106,7 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 		EnableWorker:                  options.EnableWorker,
 		EnableEventsV2:                options.EnableEventsV2,
 		EnableVisibilityToKafka:       false,
-		EnableReadHistoryFromArchival: true,
+		EnableReadHistoryFromArchival: options.EnableArchival,
 		Blobstore:                     blobstore.client,
 	}
 	cluster := NewCadence(cadenceParams)

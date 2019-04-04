@@ -43,13 +43,14 @@ type (
 	IntegrationBase struct {
 		suite.Suite
 
-		testCluster       *TestCluster
-		testClusterConfig *TestClusterConfig
-		engine            FrontendClient
-		adminClient       AdminClient
-		Logger            bark.Logger
-		domainName        string
-		foreignDomainName string
+		testCluster        *TestCluster
+		testClusterConfig  *TestClusterConfig
+		engine             FrontendClient
+		adminClient        AdminClient
+		Logger             bark.Logger
+		domainName         string
+		foreignDomainName  string
+		archivalDomainName string
 	}
 )
 
@@ -96,6 +97,15 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.Require().NoError(s.testCluster.GetFrontendClient().RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
 		Name:                                   &s.foreignDomainName,
 		WorkflowExecutionRetentionPeriodInDays: &retentionDays,
+	}))
+
+	retentionDays = 0
+	s.archivalDomainName = s.randomizeStr("integration-archival-enabled-domain")
+	s.Require().NoError(s.testCluster.GetFrontendClient().RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name:                                   &s.archivalDomainName,
+		WorkflowExecutionRetentionPeriodInDays: &retentionDays,
+		ArchivalStatus:                         common.ArchivalStatusPtr(workflow.ArchivalStatusEnabled),
+		ArchivalBucketName:                     &s.testCluster.blobstore.bucketName,
 	}))
 }
 

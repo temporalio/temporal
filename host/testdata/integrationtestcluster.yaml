@@ -4,7 +4,7 @@ persistoptions:
   enablearchival: true
 enableworker: true
 enableeventsv2: false
-enablearchival: false
+enablearchival: true
 clusterno: 0
 numhistoryshards: 4
 numhistoryhosts: 1
