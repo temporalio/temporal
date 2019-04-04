@@ -193,6 +193,24 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
 
+func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success_Overdue() {
+	replicationAttr := &replicator.SyncShardStatusTaskAttributes{
+		SourceCluster: common.StringPtr("some random source cluster"),
+		ShardId:       common.Int64Ptr(2333),
+		Timestamp:     common.Int64Ptr(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold).UnixNano()),
+	}
+	replicationTask := &replicator.ReplicationTask{
+		TaskType:                      replicator.ReplicationTaskTypeSyncShardStatus.Ptr(),
+		SyncShardStatusTaskAttributes: replicationAttr,
+	}
+	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	s.Nil(err)
+	s.mockMsg.On("Value").Return(replicationTaskBinary)
+	s.mockMsg.On("Ack").Return(nil).Once()
+
+	s.processor.decodeMsgAndSubmit(s.mockMsg)
+}
+
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedThenSuccess() {
 	replicationAttr := &replicator.SyncShardStatusTaskAttributes{
 		SourceCluster: common.StringPtr("some random source cluster"),

@@ -302,6 +302,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 	logger.Debugf("Received sync shard task %v.", attr)
 
 	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+		p.ackMsg(msg, logger)
 		return nil
 	}
 
