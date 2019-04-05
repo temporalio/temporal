@@ -7,3 +7,5 @@ messagingclientconfig:
 historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
+  historycountlimiterror: 20
+  historycountlimitwarn: 10

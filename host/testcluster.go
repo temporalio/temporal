@@ -54,11 +54,10 @@ type (
 		EnableArchival        bool
 		IsMasterCluster       bool
 		ClusterNo             int
-		NumHistoryShards      int
-		NumHistoryHosts       int
 		ClusterInfo           config.ClustersInfo
 		MessagingClientConfig *MessagingClientConfig
 		Persistence           persistencetests.TestBaseOptions
+		HistoryConfig         *HistoryConfig
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -91,11 +90,11 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 	options.Persistence.ClusterMetadata = clusterMetadata
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()
-	setupShards(testBase, options.NumHistoryShards, logger)
+	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	blobstore := setupBlobstore(logger)
 
 	pConfig := testBase.Config()
-	pConfig.NumHistoryShards = options.NumHistoryShards
+	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 	cadenceParams := &CadenceParams{
 		ClusterMetadata:               clusterMetadata,
 		PersistenceConfig:             pConfig,
@@ -109,8 +108,6 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 		ExecutionMgrFactory:           testBase.ExecutionMgrFactory,
 		TaskMgr:                       testBase.TaskMgr,
 		VisibilityMgr:                 testBase.VisibilityMgr,
-		NumberOfHistoryShards:         options.NumHistoryShards,
-		NumberOfHistoryHosts:          options.NumHistoryHosts,
 		Logger:                        logger,
 		ClusterNo:                     options.ClusterNo,
 		EnableWorker:                  options.EnableWorker,
@@ -118,6 +115,7 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 		EnableVisibilityToKafka:       false,
 		EnableReadHistoryFromArchival: options.EnableArchival,
 		Blobstore:                     blobstore.client,
+		HistoryConfig:                 options.HistoryConfig,
 	}
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {

@@ -118,7 +118,7 @@ func (s *IntegrationBase) setupLogger() {
 	s.Logger = bark.NewLoggerFromLogrus(logger)
 }
 
-// GetTestClusterConfig returns test cluster config
+// GetTestClusterConfig return test cluster config
 func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	environment.SetupEnv()
 

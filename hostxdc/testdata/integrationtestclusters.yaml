@@ -18,10 +18,10 @@
   enablearchival: false
   enableworker: true
   enableeventsv2: false
-  enablearchival: false
   clusterno: 0
-  numhistoryshards: 1
-  numhistoryhosts: 1
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
   messagingclientconfig:
     usemock: false
     kafkaconfig:
@@ -72,10 +72,10 @@
   enablearchival: false
   enableworker: true
   enableeventsv2: false
-  enablearchival: false
   clusterno: 1
-  numhistoryshards: 1
-  numhistoryhosts: 1
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
   messagingclientconfig:
     usemock: false
     kafkaconfig:

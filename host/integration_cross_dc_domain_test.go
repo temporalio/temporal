@@ -99,6 +99,10 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 		ClusterInfo: config.ClustersInfo{
 			EnableGlobalDomain: enableGlobalDomain,
 		},
+		HistoryConfig: &HistoryConfig{
+			NumHistoryHosts:  1,
+			NumHistoryShards: 1,
+		},
 	}, s.logger)
 	s.Require().NoError(err)
 	s.testCluster = c

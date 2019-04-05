@@ -81,8 +81,6 @@ type (
 		frontendHandler               *frontend.WorkflowHandler
 		matchingHandler               *matching.Handler
 		historyHandlers               []*history.Handler
-		numberOfHistoryShards         int
-		numberOfHistoryHosts          int
 		logger                        bark.Logger
 		clusterMetadata               cluster.Metadata
 		persistenceConfig             config.Persistence
@@ -107,9 +105,18 @@ type (
 		enableVisibilityToKafka       bool
 		blobstoreClient               blobstore.Client
 		enableReadHistoryFromArchival bool
+		historyConfig                 *HistoryConfig
 	}
 
-	// CadenceParams contains everything needed to boostrap Cadence
+	// HistoryConfig contains configs for history service
+	HistoryConfig struct {
+		NumHistoryShards       int
+		NumHistoryHosts        int
+		HistoryCountLimitError int
+		HistoryCountLimitWarn  int
+	}
+
+	// CadenceParams contains everything needed to bootstrap Cadence
 	CadenceParams struct {
 		ClusterMetadata               cluster.Metadata
 		PersistenceConfig             config.Persistence
@@ -123,8 +130,6 @@ type (
 		ExecutionMgrFactory           persistence.ExecutionManagerFactory
 		TaskMgr                       persistence.TaskManager
 		VisibilityMgr                 persistence.VisibilityManager
-		NumberOfHistoryShards         int
-		NumberOfHistoryHosts          int
 		Logger                        bark.Logger
 		ClusterNo                     int
 		EnableWorker                  bool
@@ -132,6 +137,7 @@ type (
 		EnableVisibilityToKafka       bool
 		Blobstore                     blobstore.Client
 		EnableReadHistoryFromArchival bool
+		HistoryConfig                 *HistoryConfig
 	}
 
 	ringpopFactoryImpl struct {
@@ -143,8 +149,6 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		numberOfHistoryShards:         params.NumberOfHistoryShards,
-		numberOfHistoryHosts:          params.NumberOfHistoryHosts,
 		logger:                        params.Logger,
 		clusterMetadata:               params.ClusterMetadata,
 		persistenceConfig:             params.PersistenceConfig,
@@ -165,6 +169,7 @@ func NewCadence(params *CadenceParams) Cadence {
 		enableVisibilityToKafka:       params.EnableVisibilityToKafka,
 		blobstoreClient:               params.Blobstore,
 		enableReadHistoryFromArchival: params.EnableReadHistoryFromArchival,
+		historyConfig:                 params.HistoryConfig,
 	}
 }
 
@@ -241,7 +246,7 @@ func (c *cadenceImpl) HistoryServiceAddress() []string {
 	if c.clusterNo != 0 {
 		startPort = 8200
 	}
-	for i := 0; i < c.numberOfHistoryHosts; i++ {
+	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
 		port := startPort + i
 		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%v", port))
 	}
@@ -256,7 +261,7 @@ func (c *cadenceImpl) HistoryPProfPort() []int {
 	if c.clusterNo != 0 {
 		startPort = 8300
 	}
-	for i := 0; i < c.numberOfHistoryHosts; i++ {
+	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
 		port := startPort + i
 		ports = append(ports, port)
 	}
@@ -340,7 +345,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.initLock.Lock()
 	c.frontEndService = service.New(params)
 	c.adminHandler = frontend.NewAdminHandler(
-		c.frontEndService, c.numberOfHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
+		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
 	frontendConfig := frontend.NewConfig(dynamicconfig.NewNopCollection(), false, c.enableReadHistoryFromArchival)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
@@ -383,10 +388,17 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, en
 
 		c.initLock.Lock()
 		service := service.New(params)
-		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards, c.enableVisibilityToKafka, config.StoreTypeCassandra)
-		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
-		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
+		hConfig := c.historyConfig
+		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), hConfig.NumHistoryShards, c.enableVisibilityToKafka, config.StoreTypeCassandra)
+		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
+		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)
+		if hConfig.HistoryCountLimitWarn != 0 {
+			historyConfig.HistoryCountLimitWarn = dynamicconfig.GetIntPropertyFilteredByDomain(hConfig.HistoryCountLimitWarn)
+		}
+		if hConfig.HistoryCountLimitError != 0 {
+			historyConfig.HistoryCountLimitError = dynamicconfig.GetIntPropertyFilteredByDomain(hConfig.HistoryCountLimitError)
+		}
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
 			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory)
 		handler.Start()
