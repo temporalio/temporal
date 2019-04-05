@@ -135,6 +135,7 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 		},
 	}
 	deleteSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
+	defer deleteSW.Stop()
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	err := workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
 	if err == nil {
@@ -160,5 +161,4 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
 	}
-	deleteSW.Stop()
 }

@@ -1351,6 +1351,7 @@ const (
 	IndexProcessorCorruptedData
 	ArchiverNonRetryableErrorCount
 	ArchiverSkipUploadCount
+	ArchiverRunningDeterministicConstructionCheckCount
 	ArchiverDeterministicConstructionCheckFailedCount
 	ArchiverCouldNotRunDeterministicConstructionCheckCount
 	ArchiverStartedCount
@@ -1375,10 +1376,8 @@ const (
 	ArchiverNumPumpedRequestsCount
 	ArchiverNumHandledRequestsCount
 	ArchiverPumpedNotEqualHandledCount
-	ArchiverReadDynamicConfigErrorCount
 	ArchiverHandleAllRequestsLatency
 	ArchiverWorkflowStoppingCount
-	ArchiverClientSendSignalFailureCount
 
 	NumWorkerMetrics
 )
@@ -1567,6 +1566,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		IndexProcessorCorruptedData:                            {metricName: "index_processor_corrupted_data", oldMetricName: "index-processor.corrupted-data"},
 		ArchiverNonRetryableErrorCount:                         {metricName: "archiver_non_retryable_error", oldMetricName: "archiver.non-retryable-error"},
 		ArchiverSkipUploadCount:                                {metricName: "archiver_skip_upload", oldMetricName: "archiver.skip-upload"},
+		ArchiverRunningDeterministicConstructionCheckCount:     {metricName: "archiver_running_deterministic_construction_check", oldMetricName: "archiver.running-deterministic-construction-check"},
 		ArchiverDeterministicConstructionCheckFailedCount:      {metricName: "archiver_deterministic_construction_check_failed", oldMetricName: "archiver.deterministic-construction-check-failed"},
 		ArchiverCouldNotRunDeterministicConstructionCheckCount: {metricName: "archiver_could_not_run_deterministic_construction_check", oldMetricName: "archiver.could-not-run-deterministic-construction-check"},
 		ArchiverStartedCount:                                   {metricName: "archiver_started", oldMetricName: "archiver.started"},
@@ -1591,10 +1591,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchiverNumPumpedRequestsCount:                         {metricName: "archiver_num_pumped_requests", oldMetricName: "archiver.num-pumped-requests"},
 		ArchiverNumHandledRequestsCount:                        {metricName: "archiver_num_handled_requests", oldMetricName: "archiver.num-handled-requests"},
 		ArchiverPumpedNotEqualHandledCount:                     {metricName: "archiver_pumped_not_equal_handled", oldMetricName: "archiver.pumped-not-equal-handled"},
-		ArchiverReadDynamicConfigErrorCount:                    {metricName: "archiver_read_dynamic_config_error", oldMetricName: "archiver.read-dynamic-config-error"},
 		ArchiverHandleAllRequestsLatency:                       {metricName: "archiver_handle_all_requests_latency", oldMetricName: "archiver.handle-all-requests-latency"},
 		ArchiverWorkflowStoppingCount:                          {metricName: "archiver_workflow_stopping", oldMetricName: "archiver.workflow-stopping"},
-		ArchiverClientSendSignalFailureCount:                   {metricName: "archiver_client_send_signal_error", oldMetricName: "archiver.client-send-signal-error"},
 	},
 }
 

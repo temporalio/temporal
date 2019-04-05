@@ -77,6 +77,7 @@ func NewClient(
 
 // Archive starts an archival task
 func (c *client) Archive(request *ArchiveRequest) error {
+	c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceRequests)
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numWorkflows()))
 	workflowOptions := cclient.StartWorkflowOptions{
 		ID:                              workflowID,
@@ -92,7 +93,7 @@ func (c *client) Archive(request *ArchiveRequest) error {
 			logging.TagWorkflowExecutionID: exec.ID,
 			logging.TagWorkflowRunID:       exec.RunID,
 		}).Error("failed to SignalWithStartWorkflow to archival system workflow")
-		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.ArchiverClientSendSignalFailureCount)
+		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceFailures)
 	}
 	return err
 }

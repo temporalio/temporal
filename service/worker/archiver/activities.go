@@ -136,6 +136,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if !runConstTest {
 				continue
 			}
+			metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverRunningDeterministicConstructionCheckCount)
 		}
 		historyBlob, err := getBlob(ctx, historyBlobReader, pageToken)
 		if err != nil {
