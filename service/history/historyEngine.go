@@ -2800,11 +2800,10 @@ func createDeleteHistoryEventTimerTask(tBuilder *timerBuilder, retentionInDays i
 	retention := time.Duration(retentionInDays) * time.Hour * 24
 	if tBuilder != nil {
 		return tBuilder.createDeleteHistoryEventTimerTask(retention)
-	} else {
-		expiryTime := clock.NewRealTimeSource().Now().Add(retention)
-		return &persistence.DeleteHistoryEventTask{
-			VisibilityTimestamp: expiryTime,
-		}
+	}
+	expiryTime := clock.NewRealTimeSource().Now().Add(retention)
+	return &persistence.DeleteHistoryEventTask{
+		VisibilityTimestamp: expiryTime,
 	}
 }
 

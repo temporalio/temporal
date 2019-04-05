@@ -524,18 +524,6 @@ func NewDynamicConfigForEventsV2Test() *Config {
 	return config
 }
 
-// SetupWorkflowStoreWithOptions to setup workflow test base
-func (s *TestBase) SetupWorkflowStoreWithOptions(options persistencetests.TestBaseOptions) {
-	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.TestBase.Setup()
-	log := bark.NewLoggerFromLogrus(log.New())
-	config := NewDynamicConfigForTest()
-	clusterMetadata := cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster, options.EnableArchival)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
-		clusterMetadata, nil, config, log)
-	s.TestBase.TaskIDGenerator = s.ShardContext
-}
-
 // SetupWorkflowStore to setup workflow test base
 func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})

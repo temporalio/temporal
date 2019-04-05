@@ -433,7 +433,7 @@ type (
 		InitiatedEventEncoding string
 		StartedID              int64
 		StartedWorkflowID      string
-		StartedRunID           string
+		StartedRunID           UUID
 		StartedEvent           *[]byte
 		StartedEventEncoding   string
 		CreateRequestID        string

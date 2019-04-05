@@ -27,12 +27,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go.uber.org/cadence/activity"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/cadence/activity"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -98,8 +99,8 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Int
 	cadenceClientName := "cadence-client"
 	cadenceFrontendService := common.FrontendServiceName
 	hostPort := "127.0.0.1:7104"
-	if *frontendAddress != "" {
-		hostPort = *frontendAddress
+	if TestFlags.FrontendAddr != "" {
+		hostPort = TestFlags.FrontendAddr
 	}
 
 	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName))

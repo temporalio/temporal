@@ -27,7 +27,7 @@ CREATE TABLE domain_metadata (
   notification_version BIGINT NOT NULL
 );
 
-INSERT INTO domain_metadata (notification_version) VALUES (0);
+INSERT INTO domain_metadata (notification_version) VALUES (1);
 
 CREATE TABLE shards (
 	shard_id INT NOT NULL,
@@ -353,3 +353,22 @@ CREATE TABLE signals_requested_sets (
 	--
 	PRIMARY KEY (shard_id, domain_id, workflow_id, run_id, signal_id)
 );
+
+insert into domains(
+id,
+name,
+status,
+description,
+owner_email,
+retention,
+emit_metric,
+archival_bucket,
+archival_status,
+config_version,
+notification_version,
+failover_notification_version,
+failover_version,
+is_global_domain,
+active_cluster_name) values(
+UNHEX('32049b68787240948e63d0dd59896a83'),
+'cadence-system', 0, 'cadence system workflow domain', 'cadence-dev-group@uber.com', 3, 0, '', 0, 0, 0, 0, 0, 0, "");

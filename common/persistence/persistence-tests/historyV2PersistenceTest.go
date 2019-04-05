@@ -116,7 +116,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	s.Equal(concurrency, cnt)
 }
 
-//TestConcurrentlyCreateAndAppendBranches test
+//TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	treeID := uuid.New()
 	bi, err := s.newHistoryBranch(treeID)

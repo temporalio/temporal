@@ -49,21 +49,15 @@ type TestCluster struct {
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(port int, keyspace string, schemaDir string) *TestCluster {
-	if schemaDir == "" {
-		schemaDir = testSchemaDir
-	}
-	if port == 0 {
-		port = testPort
-	}
+func NewTestCluster(keyspace string) *TestCluster {
 	var result TestCluster
 	result.keyspace = keyspace
-	result.schemaDir = schemaDir
+	result.schemaDir = testSchemaDir
 	result.cfg = config.Cassandra{
 		User:     testUser,
 		Password: testPassword,
 		Hosts:    testWorkflowClusterHosts,
-		Port:     port,
+		Port:     testPort,
 		MaxConns: 2,
 		Keyspace: keyspace,
 	}

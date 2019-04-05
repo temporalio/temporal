@@ -180,7 +180,9 @@ func (h *Handler) Stop() {
 	h.controller.Stop()
 	h.shardManager.Close()
 	h.historyMgr.Close()
-	h.historyV2Mgr.Close()
+	if h.historyV2Mgr != nil {
+		h.historyV2Mgr.Close()
+	}
 	h.executionMgrFactory.Close()
 	h.metadataMgr.Close()
 	h.visibilityMgr.Close()

@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	templateCreateWorkflowExecutionStarted = `INSERT INTO executions_visibility (` +
+	templateCreateWorkflowExecutionStarted = `REPLACE INTO executions_visibility (` +
 		`domain_id, workflow_id, run_id, start_time, workflow_type_name) ` +
 		`VALUES (?, ?, ?, ?, ?)`
 

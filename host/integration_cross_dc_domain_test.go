@@ -37,7 +37,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
@@ -94,12 +94,11 @@ func (s *integrationCrossDCSuite) TearDownTest() {
 
 func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterCluster bool) {
 	c, err := NewCluster(&TestClusterConfig{
-		PersistOptions: &persistencetests.TestBaseOptions{
+		EnableWorker:    false,
+		IsMasterCluster: isMasterCluster,
+		ClusterInfo: config.ClustersInfo{
 			EnableGlobalDomain: enableGlobalDomain,
-			IsMasterCluster:    isMasterCluster,
-			EnableArchival:     false,
 		},
-		EnableWorker: false,
 	}, s.logger)
 	s.Require().NoError(err)
 	s.testCluster = c
@@ -363,6 +362,10 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 }
 
 func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
+	if TestFlags.PersistenceType == config.StoreTypeSQL {
+		s.T().Skip("skipping until sql supports ListDomains pagination")
+		return
+	}
 	// re-initialize to enable global domain
 	s.TearDownTest()
 	s.setupTest(true, true)

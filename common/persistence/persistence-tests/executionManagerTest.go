@@ -1293,16 +1293,35 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
 	s.NoError(err)
 
-	repTasks, err := s.GetReplicationTasks(1, true)
+	respTasks, err := s.GetReplicationTasks(1, true)
 	s.NoError(err)
-	s.Equal(len(replicationTasks), len(repTasks))
+	s.Equal(len(replicationTasks), len(respTasks))
 
 	for index := range replicationTasks {
-		s.Equal(replicationTasks[index].GetTaskID(), repTasks[index].GetTaskID())
-		s.Equal(replicationTasks[index].GetType(), repTasks[index].GetTaskType())
-		s.Equal(replicationTasks[index].GetVersion(), repTasks[index].GetVersion())
-
-		err = s.CompleteReplicationTask(repTasks[index].GetTaskID())
+		s.Equal(replicationTasks[index].GetTaskID(), respTasks[index].GetTaskID())
+		s.Equal(replicationTasks[index].GetType(), respTasks[index].GetTaskType())
+		s.Equal(replicationTasks[index].GetVersion(), respTasks[index].GetVersion())
+		switch replicationTasks[index].GetType() {
+		case p.ReplicationTaskTypeHistory:
+			expected := replicationTasks[index].(*p.HistoryReplicationTask)
+			s.Equal(expected.FirstEventID, respTasks[index].FirstEventID)
+			s.Equal(expected.NextEventID, respTasks[index].NextEventID)
+			s.Equal(expected.EventStoreVersion, respTasks[index].EventStoreVersion)
+			s.Equal(expected.BranchToken, respTasks[index].BranchToken)
+			s.Equal(expected.NewRunBranchToken, respTasks[index].NewRunBranchToken)
+			s.Equal(expected.ResetWorkflow, respTasks[index].ResetWorkflow)
+			s.Equal(len(expected.LastReplicationInfo), len(respTasks[index].LastReplicationInfo))
+			for k, v := range expected.LastReplicationInfo {
+				got, ok := respTasks[index].LastReplicationInfo[k]
+				s.True(ok, "replication info missing key")
+				s.Equal(v.Version, got.Version)
+				s.Equal(v.LastEventID, got.LastEventID)
+			}
+		case p.ReplicationTaskTypeSyncActivity:
+			expected := replicationTasks[index].(*p.SyncActivityTask)
+			s.Equal(expected.ScheduledID, respTasks[index].ScheduledID)
+		}
+		err = s.CompleteReplicationTask(respTasks[index].GetTaskID())
 		s.NoError(err)
 	}
 }

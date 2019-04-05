@@ -988,6 +988,7 @@ func (m *sqlExecutionManager) GetReplicationTasks(request *p.GetReplicationTasks
 			NextEventID:         row.NextEventID,
 			Version:             row.Version,
 			LastReplicationInfo: lastReplicationInfo,
+			ScheduledID:         row.ScheduledID,
 		}
 	}
 	var nextPageToken []byte

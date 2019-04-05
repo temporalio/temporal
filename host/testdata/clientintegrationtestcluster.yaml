@@ -1,7 +1,3 @@
-persistoptions:
-  enableglobaldomain: false
-  ismastercluster: false
-  enablearchival: false
 enableworker: false
 enableeventsv2: false
 enablearchival: false

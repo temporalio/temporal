@@ -37,7 +37,7 @@ const (
 	testPort                 = 3306
 	testUser                 = "uber"
 	testPassword             = "uber"
-	testSchemaDir            = "schema/mysql/v56"
+	testSchemaDir            = "schema/mysql/v57"
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -49,25 +49,16 @@ type TestCluster struct {
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(port int, dbName string, schemaDir string, driverName string) *TestCluster {
-	if schemaDir == "" {
-		schemaDir = testSchemaDir
-	}
-	if port == 0 {
-		port = testPort
-	}
-	if driverName == "" {
-		driverName = defaultDriverName
-	}
+func NewTestCluster(dbName string) *TestCluster {
 	var result TestCluster
 	result.dbName = dbName
-	result.schemaDir = schemaDir
+	result.schemaDir = testSchemaDir
 	result.cfg = config.SQL{
 		User:            testUser,
 		Password:        testPassword,
-		ConnectAddr:     fmt.Sprintf("%v:%v", testWorkflowClusterHosts, port),
+		ConnectAddr:     fmt.Sprintf("%v:%v", testWorkflowClusterHosts, testPort),
 		ConnectProtocol: "tcp",
-		DriverName:      driverName,
+		DriverName:      defaultDriverName,
 		DatabaseName:    dbName,
 		NumShards:       4,
 	}

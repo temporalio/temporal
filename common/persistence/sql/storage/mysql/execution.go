@@ -365,8 +365,8 @@ scheduled_id`
 FROM replication_tasks WHERE
 shard_id = ? AND
 task_id > ? AND
-task_id <= ?
-LIMIT ?`
+task_id <= ? 
+ORDER BY task_id LIMIT ?`
 
 	deleteReplicationTaskQry = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
 

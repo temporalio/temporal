@@ -51,23 +51,9 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		DBName    string
-		Cassandra struct {
-			DBPort    int
-			SchemaDir string
-		}
-		SQL struct {
-			DBPort     int
-			SchemaDir  string
-			DriverName string
-		}
-		// TODO this is used for global domain test
-		// when cross DC is public, remove EnableGlobalDomain
-		EnableGlobalDomain bool             // is global domain enabled
-		IsMasterCluster    bool             // is master cluster
-		ClusterMetadata    cluster.Metadata `yaml:"-"`
-		ClusterInfo        *config.ClustersInfo
-		EnableArchival     bool // is archival enabled
+		DBName          string
+		StoreType       string           `yaml:"-"`
+		ClusterMetadata cluster.Metadata `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -119,7 +105,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(10)
 	}
-	testCluster := cassandra.NewTestCluster(options.Cassandra.DBPort, options.DBName, options.Cassandra.SchemaDir)
+	testCluster := cassandra.NewTestCluster(options.DBName)
 	return newTestBase(options, testCluster)
 }
 
@@ -128,15 +114,26 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	sqlOpts := options.SQL
-	testCluster := sql.NewTestCluster(sqlOpts.DBPort, options.DBName, sqlOpts.SchemaDir, sqlOpts.DriverName)
+	testCluster := sql.NewTestCluster(options.DBName)
 	return newTestBase(options, testCluster)
+}
+
+// NewTestBase returns a persistence test base backed by either cassandra or sql
+func NewTestBase(options *TestBaseOptions) TestBase {
+	switch options.StoreType {
+	case config.StoreTypeSQL:
+		return NewTestBaseWithSQL(options)
+	case config.StoreTypeCassandra:
+		return NewTestBaseWithCassandra(options)
+	default:
+		panic("invalid storeType " + options.StoreType)
+	}
 }
 
 func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) TestBase {
 	metadata := options.ClusterMetadata
 	if metadata == nil {
-		metadata = cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster, options.EnableArchival)
+		metadata = cluster.GetTestClusterMetadata(false, false, false)
 	}
 	options.ClusterMetadata = metadata
 	return TestBase{
@@ -144,6 +141,18 @@ func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) T
 		VisibilityTestCluster: testCluster,
 		ClusterMetadata:       metadata,
 	}
+}
+
+// Config returns the persistence configuration for this test
+func (s *TestBase) Config() config.Persistence {
+	cfg := s.DefaultTestCluster.Config()
+	if s.DefaultTestCluster == s.VisibilityTestCluster {
+		return cfg
+	}
+	vCfg := s.VisibilityTestCluster.Config()
+	cfg.VisibilityStore = "visibility_ " + vCfg.VisibilityStore
+	cfg.DataStores[cfg.VisibilityStore] = vCfg.DataStores[vCfg.VisibilityStore]
+	return cfg
 }
 
 // Setup sets up the test base, must be called as part of SetupSuite

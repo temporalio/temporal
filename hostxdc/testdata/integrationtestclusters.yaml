@@ -1,30 +1,21 @@
-- persistoptions:
+- persisence:
     dbname: integration_active
-    cassandra:
-      dbport: 0
-      schemadir: ""
-    sql:
-      dbport: 0
-      schemadir: ""
-      drivername: ""
-    enableglobaldomain: false
-    ismastercluster: false
-    clusterinfo:
-      enableGlobalDomain: true
-      failoverVersionIncrement: 10
-      masterClusterName: active
-      currentClusterName: active
-      clusterInitialFailoverVersion:
-        active: 0
-        standby: 1
-      clusterAddress:
-        active:
-          rpcName: cadence-frontend
-          rpcAddress: 127.0.0.1:7104
-        standby:
-          rpcName: cadence-frontend
-          rpcAddress: 127.0.0.1:8104
-    enablearchival: false
+  clusterinfo:
+    enableGlobalDomain: true
+    failoverVersionIncrement: 10
+    masterClusterName: active
+    currentClusterName: active
+    clusterInitialFailoverVersion:
+      active: 0
+      standby: 1
+    clusterAddress:
+      active:
+        rpcName: cadence-frontend
+        rpcAddress: 127.0.0.1:7104
+      standby:
+        rpcName: cadence-frontend
+        rpcAddress: 127.0.0.1:8104
+  enablearchival: false
   enableworker: true
   enableeventsv2: false
   enablearchival: false
@@ -61,33 +52,24 @@
           retry-topic: standby-retry
           dlq-topic: standby-dlq
       applications: {}
-- persistoptions:
+- persistence:
     dbname: integration_standby
-    cassandra:
-      dbport: 0
-      schemadir: ""
-    sql:
-      dbport: 0
-      schemadir: ""
-      drivername: ""
-    enableglobaldomain: false
-    ismastercluster: false
-    clusterinfo:
-      enableGlobalDomain: true
-      failoverVersionIncrement: 10
-      masterClusterName: active
-      currentClusterName: standby
-      clusterInitialFailoverVersion:
-        active: 0
-        standby: 1
-      clusterAddress:
-        active:
-          rpcName: cadence-frontend
-          rpcAddress: 127.0.0.1:7104
-        standby:
-          rpcName: cadence-frontend
-          rpcAddress: 127.0.0.1:8104
-    enablearchival: false
+  clusterinfo:
+    enableGlobalDomain: true
+    failoverVersionIncrement: 10
+    masterClusterName: active
+    currentClusterName: standby
+    clusterInitialFailoverVersion:
+      active: 0
+      standby: 1
+    clusterAddress:
+      active:
+        rpcName: cadence-frontend
+        rpcAddress: 127.0.0.1:7104
+      standby:
+        rpcName: cadence-frontend
+        rpcAddress: 127.0.0.1:8104
+  enablearchival: false
   enableworker: true
   enableeventsv2: false
   enablearchival: false

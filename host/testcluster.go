@@ -32,7 +32,8 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	metricsmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/mocks"
-	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/zap"
 )
@@ -48,14 +49,16 @@ type (
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
 		FrontendAddress       string
-		PersistOptions        *persistencetests.TestBaseOptions
 		EnableWorker          bool
 		EnableEventsV2        bool
 		EnableArchival        bool
+		IsMasterCluster       bool
 		ClusterNo             int
 		NumHistoryShards      int
 		NumHistoryHosts       int
+		ClusterInfo           config.ClustersInfo
 		MessagingClientConfig *MessagingClientConfig
+		Persistence           persistencetests.TestBaseOptions
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -67,28 +70,35 @@ type (
 
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, error) {
-	if options.PersistOptions.ClusterInfo != nil {
-		options.PersistOptions.ClusterMetadata = cluster.NewMetadata(
+	clusterInfo := options.ClusterInfo
+	clusterMetadata := cluster.GetTestClusterMetadata(clusterInfo.EnableGlobalDomain, options.IsMasterCluster, options.EnableArchival)
+	if !options.IsMasterCluster && options.ClusterInfo.MasterClusterName != "" { // xdc cluster metadata setup
+		clusterMetadata = cluster.NewMetadata(
 			logger,
 			&metricsmocks.Client{},
-			dynamicconfig.GetBoolPropertyFn(options.PersistOptions.ClusterInfo.EnableGlobalDomain),
-			options.PersistOptions.ClusterInfo.FailoverVersionIncrement,
-			options.PersistOptions.ClusterInfo.MasterClusterName,
-			options.PersistOptions.ClusterInfo.CurrentClusterName,
-			options.PersistOptions.ClusterInfo.ClusterInitialFailoverVersions,
-			options.PersistOptions.ClusterInfo.ClusterAddress,
+			dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
+			clusterInfo.FailoverVersionIncrement,
+			clusterInfo.MasterClusterName,
+			clusterInfo.CurrentClusterName,
+			clusterInfo.ClusterInitialFailoverVersions,
+			clusterInfo.ClusterAddress,
 			dynamicconfig.GetStringPropertyFn("disabled"),
 			"",
 		)
 	}
 
-	testBase := persistencetests.NewTestBaseWithCassandra(options.PersistOptions)
+	options.Persistence.StoreType = TestFlags.PersistenceType
+	options.Persistence.ClusterMetadata = clusterMetadata
+	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()
 	setupShards(testBase, options.NumHistoryShards, logger)
 	blobstore := setupBlobstore(logger)
 
+	pConfig := testBase.Config()
+	pConfig.NumHistoryShards = options.NumHistoryShards
 	cadenceParams := &CadenceParams{
-		ClusterMetadata:               testBase.ClusterMetadata,
+		ClusterMetadata:               clusterMetadata,
+		PersistenceConfig:             pConfig,
 		DispatcherProvider:            client.NewIPYarpcDispatcherProvider(),
 		MessagingClient:               getMessagingClient(options.MessagingClientConfig, logger),
 		MetadataMgr:                   testBase.MetadataProxy,

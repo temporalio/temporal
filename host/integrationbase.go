@@ -33,6 +33,7 @@ import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"gopkg.in/yaml.v2"
@@ -62,13 +63,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
-		s.Logger.WithField("address", *frontendAddress).Info("Running integration test against specified frontend")
+		s.Logger.WithField("address", TestFlags.FrontendAddr).Info("Running integration test against specified frontend")
 		channel, err := tchannel.NewChannelTransport(tchannel.ServiceName("cadence-frontend"))
 		s.Require().NoError(err)
 		dispatcher := yarpc.NewDispatcher(yarpc.Config{
 			Name: "unittest",
 			Outbounds: yarpc.Outbounds{
-				"cadence-frontend": {Unary: channel.NewSingleOutbound(*frontendAddress)},
+				"cadence-frontend": {Unary: channel.NewSingleOutbound(TestFlags.FrontendAddr)},
 			},
 		})
 		if err := dispatcher.Start(); err != nil {
@@ -86,27 +87,21 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
 
-	var retentionDays int32 = 1
 	s.domainName = s.randomizeStr("integration-test-domain")
-	s.Require().NoError(s.testCluster.GetFrontendClient().RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
-		Name:                                   &s.domainName,
-		WorkflowExecutionRetentionPeriodInDays: &retentionDays,
-	}))
+	s.Require().NoError(
+		s.registerDomain(s.domainName, 1, workflow.ArchivalStatusDisabled, "default-test-bucket"))
 
 	s.foreignDomainName = s.randomizeStr("integration-foreign-test-domain")
-	s.Require().NoError(s.testCluster.GetFrontendClient().RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
-		Name:                                   &s.foreignDomainName,
-		WorkflowExecutionRetentionPeriodInDays: &retentionDays,
-	}))
+	s.Require().NoError(
+		s.registerDomain(s.foreignDomainName, 1, workflow.ArchivalStatusDisabled, ""))
 
-	retentionDays = 0
 	s.archivalDomainName = s.randomizeStr("integration-archival-enabled-domain")
-	s.Require().NoError(s.testCluster.GetFrontendClient().RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
-		Name:                                   &s.archivalDomainName,
-		WorkflowExecutionRetentionPeriodInDays: &retentionDays,
-		ArchivalStatus:                         common.ArchivalStatusPtr(workflow.ArchivalStatusEnabled),
-		ArchivalBucketName:                     &s.testCluster.blobstore.bucketName,
-	}))
+	s.Require().NoError(
+		s.registerDomain(s.archivalDomainName, 0, workflow.ArchivalStatusEnabled, s.testCluster.blobstore.bucketName))
+
+	// this sleep is necessary because domainv2 cache gets refreshed in the
+	// background only every domainCacheRefreshInterval period
+	time.Sleep(cache.DomainCacheRefreshInterval + time.Second)
 }
 
 func (s *IntegrationBase) setupLogger() {
@@ -121,10 +116,11 @@ func (s *IntegrationBase) setupLogger() {
 	s.Logger = bark.NewLoggerFromLogrus(logger)
 }
 
+// GetTestClusterConfig returns test cluster config
 func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	configLocation := configFile
-	if *TestClusterConfigFile != "" {
-		configLocation = *TestClusterConfigFile
+	if TestFlags.TestClusterConfigFile != "" {
+		configLocation = TestFlags.TestClusterConfigFile
 	}
 	file, err := os.Open(configLocation)
 	if err != nil {
@@ -136,8 +132,8 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 		return nil, fmt.Errorf("failed to decode test cluster config: %v", err)
 	}
 
-	options.EnableEventsV2 = *EnableEventsV2
-	options.FrontendAddress = *frontendAddress
+	options.EnableEventsV2 = TestFlags.EnableEventsV2
+	options.FrontendAddress = TestFlags.FrontendAddr
 	return &options, nil
 }
 
@@ -150,14 +146,18 @@ func (s *IntegrationBase) tearDownSuite() {
 	}
 }
 
-func (s *IntegrationBase) registerDomain(domain string, desc string, archivalStatus workflow.ArchivalStatus, archivalBucket string) error {
+func (s *IntegrationBase) registerDomain(
+	domain string,
+	retentionDays int,
+	archivalStatus workflow.ArchivalStatus, archivalBucket string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return s.engine.RegisterDomain(ctx, &workflow.RegisterDomainRequest{
-		Name:               &domain,
-		Description:        &desc,
-		ArchivalStatus:     &archivalStatus,
-		ArchivalBucketName: &archivalBucket,
+		Name:                                   &domain,
+		Description:                            &domain,
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
+		ArchivalStatus:                         &archivalStatus,
+		ArchivalBucketName:                     &archivalBucket,
 	})
 }
 
