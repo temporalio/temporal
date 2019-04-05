@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -43,6 +44,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/host"
 	"gopkg.in/yaml.v2"
 )
@@ -102,11 +104,14 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	if host.TestFlags.TestClusterConfigFile != "" {
 		fileName = host.TestFlags.TestClusterConfigFile
 	}
-	file, err := os.Open(fileName)
+	environment.SetupEnv()
+
+	confContent, err := ioutil.ReadFile(fileName)
 	s.Require().NoError(err)
+	confContent = []byte(os.ExpandEnv(string(confContent)))
 
 	var clusterConfigs []*host.TestClusterConfig
-	s.Require().NoError(yaml.NewDecoder(file).Decode(&clusterConfigs))
+	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
 	c, err := host.NewCluster(clusterConfigs[0], s.logger.WithField("Cluster", clusterName[0]))
 	s.Require().NoError(err)

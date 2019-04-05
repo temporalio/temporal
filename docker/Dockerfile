@@ -19,7 +19,7 @@
 # THE SOFTWARE.
 
 # Build cadence binaries
-FROM golang:1.11.1 as builder
+FROM golang:1.12.1 as builder
 
 # Specify the cadence version to be built into this docker image
 # See https://github.com/uber/cadence/tags

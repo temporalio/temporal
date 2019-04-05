@@ -1,4 +1,4 @@
-FROM golang:1.9 as go-builder
+FROM golang:1.12.1 as go-builder
 
 RUN apt-get update && apt-get install -y git
 

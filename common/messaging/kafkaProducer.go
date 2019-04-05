@@ -22,6 +22,7 @@ package messaging
 
 import (
 	"errors"
+
 	"github.com/Shopify/sarama"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/indexer"

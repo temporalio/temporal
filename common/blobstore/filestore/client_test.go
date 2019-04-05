@@ -23,15 +23,16 @@ package filestore
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/blobstore/blob"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
 )
 
 const (
@@ -66,18 +67,6 @@ func (s *ClientSuite) TestNewClient_Fail_InvalidConfig() {
 	}
 
 	client, err := NewClient(invalidCfg)
-	s.Error(err)
-	s.Nil(client)
-}
-
-func (s *ClientSuite) TestNewClient_Fail_SetupDirectoryFailure() {
-	dir, err := ioutil.TempDir("", "TestNewClient_Fail_SetupDirectoryFailure")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	os.Chmod(dir, os.FileMode(0600))
-
-	cfg := s.constructConfig(dir)
-	client, err := NewClient(cfg)
 	s.Error(err)
 	s.Nil(client)
 }
@@ -143,23 +132,6 @@ func (s *ClientSuite) TestDownload_Fail_BlobNotExists() {
 	s.NoError(err)
 	b, err := client.Download(context.Background(), defaultBucketName, key)
 	s.Equal(blobstore.ErrBlobNotExists, err)
-	s.Nil(b)
-}
-
-func (s *ClientSuite) TestDownload_Fail_NoPermissions() {
-	dir, err := ioutil.TempDir("", "TestDownload_Fail_NoPermissions")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	client := s.constructClient(dir)
-
-	b := blob.NewBlob([]byte("blob body"), map[string]string{"tagKey": "tagValue"})
-	key, err := blob.NewKeyFromString("blob.blob")
-	s.NoError(err)
-	s.NoError(client.Upload(context.Background(), defaultBucketName, key, b))
-	os.Chmod(bucketItemPath(dir, defaultBucketName, key.String()), os.FileMode(0000))
-
-	b, err = client.Download(context.Background(), defaultBucketName, key)
-	s.Equal(ErrReadFile, err)
 	s.Nil(b)
 }
 

@@ -1,0 +1,133 @@
+version: "3.5"
+
+services:
+  cassandra:
+    image: cassandra:3.11
+    ports:
+      - "9042:9042"
+    networks:
+      services-network:
+        aliases:
+          - cassandra
+
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_DATABASE: db
+      MYSQL_ROOT_PASSWORD: uber
+    volumes:
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    networks:
+      services-network:
+        aliases:
+          - mysql
+
+  zookeeper:
+    image: wurstmeister/zookeeper:3.4.6
+    ports:
+      - "2181:2181"
+    networks:
+      services-network:
+        aliases:
+          - zookeeper
+
+  kafka:
+    image: wurstmeister/kafka:2.12-2.1.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    networks:
+      services-network:
+        aliases:
+          - kafka
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+  unit-test:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "MYSQL_SEEDS=mysql"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - cassandra
+      - mysql
+    volumes:
+      - ../../:/go/src/github.com/uber/cadence
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - unit-test
+
+  integration-test:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - cassandra
+    volumes:
+      - ../../:/go/src/github.com/uber/cadence
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
+  integration-test-xdc:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "KAFKA_SEEDS=kafka"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - cassandra
+      - kafka
+    volumes:
+      - ../../:/go/src/github.com/uber/cadence
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test-xdc
+
+networks:
+  services-network:
+    name: services-network
+    driver: bridge

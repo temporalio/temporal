@@ -25,8 +25,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/uber/cadence/environment"
 
+	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/service/config"
@@ -56,7 +57,7 @@ func NewTestCluster(dbName string) *TestCluster {
 	result.cfg = config.SQL{
 		User:            testUser,
 		Password:        testPassword,
-		ConnectAddr:     fmt.Sprintf("%v:%v", testWorkflowClusterHosts, testPort),
+		ConnectAddr:     fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
 		ConnectProtocol: "tcp",
 		DriverName:      defaultDriverName,
 		DatabaseName:    dbName,

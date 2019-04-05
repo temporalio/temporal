@@ -1,0 +1,32 @@
+steps:
+  - label: ":golang: unit test"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "make cover_ci"
+    plugins:
+      - docker-compose#v3.0.0:
+          run: unit-test
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "make cover_integration_ci"
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration xdc test"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "make cover_xdc_ci"
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-xdc
+          config: docker/buildkite/docker-compose.yml
+
+  - wait

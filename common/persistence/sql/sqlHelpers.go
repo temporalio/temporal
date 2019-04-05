@@ -70,7 +70,7 @@ func dropDatabase(db *sqlx.DB, dbName string) (err error) {
 	return nil
 }
 
-// LoadCassandraSchema loads the schema from the given .sql files on this database
+// loadDatabaseSchema loads the schema from the given .sql files on this database
 func loadDatabaseSchema(dir string, fileNames []string, db *sqlx.DB, override bool) (err error) {
 
 	for _, file := range fileNames {

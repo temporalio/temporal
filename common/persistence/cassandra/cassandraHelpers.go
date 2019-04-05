@@ -22,10 +22,11 @@ package cassandra
 
 import (
 	"fmt"
-	"github.com/uber/cadence/tools/cassandra"
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"github.com/uber/cadence/tools/cassandra"
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
@@ -91,7 +92,7 @@ func DropCassandraKeyspace(s *gocql.Session, keyspace string) (err error) {
 
 // LoadCassandraSchema loads the schema from the given .cql files on this keyspace
 func LoadCassandraSchema(
-	dir string, fileNames []string, port int, keyspace string, override bool,
+	dir string, fileNames []string, hosts []string, port int, keyspace string, override bool,
 ) (err error) {
 
 	tmpFile, err := ioutil.TempFile("", "_cadence_")
@@ -113,7 +114,7 @@ func LoadCassandraSchema(
 
 	config := &cassandra.SetupSchemaConfig{
 		BaseConfig: cassandra.BaseConfig{
-			CassHosts:    "127.0.0.1",
+			CassHosts:    strings.Join(hosts, ","),
 			CassPort:     port,
 			CassKeyspace: keyspace,
 		},

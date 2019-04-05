@@ -23,6 +23,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -34,6 +35,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/environment"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"gopkg.in/yaml.v2"
@@ -118,17 +120,19 @@ func (s *IntegrationBase) setupLogger() {
 
 // GetTestClusterConfig returns test cluster config
 func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
+	environment.SetupEnv()
+
 	configLocation := configFile
 	if TestFlags.TestClusterConfigFile != "" {
 		configLocation = TestFlags.TestClusterConfigFile
 	}
-	file, err := os.Open(configLocation)
+	confContent, err := ioutil.ReadFile(configLocation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open test cluster config file %v: %v", configLocation, err)
+		return nil, fmt.Errorf("failed to read test cluster config file %v: %v", configLocation, err)
 	}
-
+	confContent = []byte(os.ExpandEnv(string(confContent)))
 	var options TestClusterConfig
-	if err := yaml.NewDecoder(file).Decode(&options); err != nil {
+	if err := yaml.Unmarshal(confContent, &options); err != nil {
 		return nil, fmt.Errorf("failed to decode test cluster config: %v", err)
 	}
 

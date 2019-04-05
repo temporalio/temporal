@@ -28,7 +28,7 @@
       clusters:
         test:
           brokers:
-            - 127.0.0.1:9092
+            - "${KAFKA_SEEDS}:9092"
       topics:
         active:
           cluster: test
@@ -82,7 +82,7 @@
       clusters:
         test:
           brokers:
-            - 127.0.0.1:9092
+            - "${KAFKA_SEEDS}:9092"
       topics:
         active:
           cluster: test

@@ -43,12 +43,6 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
-const (
-	testWorkflowClusterHosts = "127.0.0.1"
-	testDatacenter           = ""
-	testSchemaDir            = "../.."
-)
-
 var (
 	testDomainActiveID           = "7b3fe0f6-e98f-4960-bdb7-220d0fb3f521"
 	testDomainStandbyID          = "ede1e8a6-bdb7-e98f-4960-448b0cdef134"
