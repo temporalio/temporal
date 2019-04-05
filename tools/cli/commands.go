@@ -184,6 +184,8 @@ func RegisterDomain(c *cli.Context) {
 		Clusters:                               clusters,
 		ActiveClusterName:                      common.StringPtr(activeClusterName),
 		SecurityToken:                          common.StringPtr(securityToken),
+		ArchivalStatus:                         archivalStatus(c),
+		ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
 	}
 
 	ctx, cancel := newContext(c)
@@ -279,6 +281,8 @@ func UpdateDomain(c *cli.Context) {
 		updateConfig := &s.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 			EmitMetric:                             common.BoolPtr(emitMetric),
+			ArchivalStatus:                         archivalStatus(c),
+			ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
 		}
 		replicationConfig := &s.DomainReplicationConfiguration{
 			Clusters: clusters,
@@ -323,23 +327,37 @@ func DescribeDomain(c *cli.Context) {
 	if err != nil {
 		if _, ok := err.(*s.EntityNotExistsError); !ok {
 			ErrorAndExit("Operation DescribeDomain failed.", err)
-		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 		}
-	} else {
-		fmt.Printf("Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n"+
-			"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\n",
-			resp.DomainInfo.GetName(),
-			resp.DomainInfo.GetUUID(),
-			resp.DomainInfo.GetDescription(),
-			resp.DomainInfo.GetOwnerEmail(),
-			resp.DomainInfo.Data,
-			resp.DomainInfo.GetStatus(),
-			resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
-			resp.Configuration.GetEmitMetric(),
-			resp.ReplicationConfiguration.GetActiveClusterName(),
-			clustersToString(resp.ReplicationConfiguration.Clusters))
+		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 	}
+
+	var formatStr = "Name: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
+		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nArchivalStatus: %v\n"
+	descValues := []interface{}{
+		resp.DomainInfo.GetName(),
+		resp.DomainInfo.GetDescription(),
+		resp.DomainInfo.GetOwnerEmail(),
+		resp.DomainInfo.Data,
+		resp.DomainInfo.GetStatus(),
+		resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
+		resp.Configuration.GetEmitMetric(),
+		resp.ReplicationConfiguration.GetActiveClusterName(),
+		clustersToString(resp.ReplicationConfiguration.Clusters),
+		resp.Configuration.GetArchivalStatus().String(),
+	}
+	if resp.Configuration.GetArchivalBucketName() != "" {
+		formatStr = formatStr + "BucketName: %v\n"
+		descValues = append(descValues, resp.Configuration.GetArchivalBucketName())
+	}
+	if resp.Configuration.GetArchivalRetentionPeriodInDays() != 0 {
+		formatStr = formatStr + "ArchivalRetentionInDays: %v\n"
+		descValues = append(descValues, resp.Configuration.GetArchivalRetentionPeriodInDays())
+	}
+	if resp.Configuration.GetArchivalBucketOwner() != "" {
+		formatStr = formatStr + "BucketOwner: %v\n"
+		descValues = append(descValues, resp.Configuration.GetArchivalBucketOwner())
+	}
+	fmt.Printf(formatStr, descValues...)
 }
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
@@ -1370,5 +1388,19 @@ func getWorkflowIDReusePolicy(value int) *s.WorkflowIdReusePolicy {
 	}
 	// At this point, the policy should return if the value is valid
 	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIDReusePolicy), nil)
+	return nil
+}
+
+func archivalStatus(c *cli.Context) *s.ArchivalStatus {
+	if c.IsSet(FlagArchivalStatus) {
+		switch c.String(FlagArchivalStatus) {
+		case "disabled":
+			return common.ClientArchivalStatusPtr(s.ArchivalStatusDisabled)
+		case "enabled":
+			return common.ClientArchivalStatusPtr(s.ArchivalStatusEnabled)
+		default:
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagArchivalStatus), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
+		}
+	}
 	return nil
 }

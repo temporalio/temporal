@@ -22,6 +22,7 @@ package common
 
 import (
 	s "github.com/uber/cadence/.gen/go/shared"
+	"go.uber.org/cadence/.gen/go/shared"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.
@@ -131,6 +132,11 @@ func ChildWorkflowExecutionFailedCausePtr(t s.ChildWorkflowExecutionFailedCause)
 
 // ArchivalStatusPtr makes a copy and returns the pointer to an ArchivalStatus.
 func ArchivalStatusPtr(t s.ArchivalStatus) *s.ArchivalStatus {
+	return &t
+}
+
+// ClientArchivalStatusPtr makes a copy and returns the pointer to a client ArchivalStatus.
+func ClientArchivalStatusPtr(t shared.ArchivalStatus) *shared.ArchivalStatus {
 	return &t
 }
 

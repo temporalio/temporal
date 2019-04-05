@@ -101,6 +101,14 @@ func newDomainCommands() []cli.Command {
 					Name:  FlagSecurityTokenWithAlias,
 					Usage: "Security token with permission",
 				},
+				cli.StringFlag{
+					Name:  FlagArchivalStatusWithAlias,
+					Usage: "Flag to set archival status, valid values are \"disabled\" and \"enabled\"",
+				},
+				cli.StringFlag{
+					Name:  FlagArchivalBucketNameWithAlias,
+					Usage: "Optionally specify bucket (cannot be changed after first time archival is enabled)",
+				},
 			},
 			Action: func(c *cli.Context) {
 				RegisterDomain(c)
@@ -142,6 +150,14 @@ func newDomainCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagSecurityTokenWithAlias,
 					Usage: "Security token with permission ",
+				},
+				cli.StringFlag{
+					Name:  FlagArchivalStatusWithAlias,
+					Usage: "Flag to set archival status, valid values are \"disabled\" and \"enabled\"",
+				},
+				cli.StringFlag{
+					Name:  FlagArchivalBucketNameWithAlias,
+					Usage: "Optionally specify bucket (cannot be changed after first time archival is enabled)",
 				},
 			},
 			Action: func(c *cli.Context) {
