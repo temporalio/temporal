@@ -102,6 +102,31 @@ services:
         aliases:
           - integration-test
 
+  integration-test-v2:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    command:
+      - /bin/sh
+      - -e
+      - -c
+      - |
+        make cover_integration_profile EVENTSV2=true
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+    depends_on:
+      - cassandra
+    volumes:
+      - ../../:/go/src/github.com/uber/cadence
+    networks:
+      services-network:
+        aliases:
+          - integration-test
 
   integration-test-xdc:
     build:

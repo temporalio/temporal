@@ -19,6 +19,16 @@ steps:
           run: integration-test
           config: docker/buildkite/docker-compose.yml
 
+  - label: ":golang: integration test event v2"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "make cover_integration_ci EVENTSV2=true"
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test
+          config: docker/buildkite/docker-compose.yml
+
   - label: ":golang: integration xdc test"
     agents:
       queue: "workers"
