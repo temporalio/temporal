@@ -2526,9 +2526,6 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	}
 
 	filterCount := 0
-	if listRequest.ExecutionFilter != nil {
-		filterCount++
-	}
 	if listRequest.TypeFilter != nil {
 		filterCount++
 	}
@@ -2539,7 +2536,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	if filterCount > 1 {
 		return nil, wh.error(&gen.BadRequestError{
 			Message: "Only one of ExecutionFilter, TypeFilter or StatusFilter is allowed"}, scope)
-	}
+	} // If ExecutionFilter is provided with one of TypeFilter or StatusFilter, use ExecutionFilter and ignore other filter
 
 	if listRequest.GetMaximumPageSize() <= 0 {
 		listRequest.MaximumPageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
