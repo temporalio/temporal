@@ -210,6 +210,7 @@ struct RequestCancelWorkflowExecutionRequest {
 struct ScheduleDecisionTaskRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution workflowExecution
+  30: optional bool isFirstDecision
 }
 
 struct DescribeWorkflowExecutionRequest {

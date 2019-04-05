@@ -7441,6 +7441,7 @@ func (v *RespondDecisionTaskFailedRequest) IsSetFailedRequest() bool {
 type ScheduleDecisionTaskRequest struct {
 	DomainUUID        *string                   `json:"domainUUID,omitempty"`
 	WorkflowExecution *shared.WorkflowExecution `json:"workflowExecution,omitempty"`
+	IsFirstDecision   *bool                     `json:"isFirstDecision,omitempty"`
 }
 
 // ToWire translates a ScheduleDecisionTaskRequest struct into a Thrift-level intermediate
@@ -7460,7 +7461,7 @@ type ScheduleDecisionTaskRequest struct {
 //   }
 func (v *ScheduleDecisionTaskRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7480,6 +7481,14 @@ func (v *ScheduleDecisionTaskRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.IsFirstDecision != nil {
+		w, err = wire.NewValueBool(*(v.IsFirstDecision)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
 
@@ -7526,6 +7535,16 @@ func (v *ScheduleDecisionTaskRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.IsFirstDecision = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -7539,7 +7558,7 @@ func (v *ScheduleDecisionTaskRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -7547,6 +7566,10 @@ func (v *ScheduleDecisionTaskRequest) String() string {
 	}
 	if v.WorkflowExecution != nil {
 		fields[i] = fmt.Sprintf("WorkflowExecution: %v", v.WorkflowExecution)
+		i++
+	}
+	if v.IsFirstDecision != nil {
+		fields[i] = fmt.Sprintf("IsFirstDecision: %v", *(v.IsFirstDecision))
 		i++
 	}
 
@@ -7569,6 +7592,9 @@ func (v *ScheduleDecisionTaskRequest) Equals(rhs *ScheduleDecisionTaskRequest) b
 	if !((v.WorkflowExecution == nil && rhs.WorkflowExecution == nil) || (v.WorkflowExecution != nil && rhs.WorkflowExecution != nil && v.WorkflowExecution.Equals(rhs.WorkflowExecution))) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.IsFirstDecision, rhs.IsFirstDecision) {
+		return false
+	}
 
 	return true
 }
@@ -7584,6 +7610,9 @@ func (v *ScheduleDecisionTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder
 	}
 	if v.WorkflowExecution != nil {
 		err = multierr.Append(err, enc.AddObject("workflowExecution", v.WorkflowExecution))
+	}
+	if v.IsFirstDecision != nil {
+		enc.AddBool("isFirstDecision", *v.IsFirstDecision)
 	}
 	return err
 }
@@ -7616,6 +7645,21 @@ func (v *ScheduleDecisionTaskRequest) GetWorkflowExecution() (o *shared.Workflow
 // IsSetWorkflowExecution returns true if WorkflowExecution is not nil.
 func (v *ScheduleDecisionTaskRequest) IsSetWorkflowExecution() bool {
 	return v != nil && v.WorkflowExecution != nil
+}
+
+// GetIsFirstDecision returns the value of IsFirstDecision if it is set or its
+// zero value if it is unset.
+func (v *ScheduleDecisionTaskRequest) GetIsFirstDecision() (o bool) {
+	if v != nil && v.IsFirstDecision != nil {
+		return *v.IsFirstDecision
+	}
+
+	return
+}
+
+// IsSetIsFirstDecision returns true if IsFirstDecision is not nil.
+func (v *ScheduleDecisionTaskRequest) IsSetIsFirstDecision() bool {
+	return v != nil && v.IsFirstDecision != nil
 }
 
 type ShardOwnershipLostError struct {

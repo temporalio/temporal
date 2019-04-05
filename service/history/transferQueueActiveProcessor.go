@@ -889,6 +889,7 @@ func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(domainID stri
 	err := t.historyClient.ScheduleDecisionTask(nil, &h.ScheduleDecisionTaskRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: execution,
+		IsFirstDecision:   common.BoolPtr(true),
 	})
 
 	if err != nil {

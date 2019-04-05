@@ -538,7 +538,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx context.Context, startReq
 
 	taskList := request.TaskList.GetName()
 	cronBackoffSeconds := startRequest.GetFirstDecisionTaskBackoffSeconds()
-	// Generate first decision task event if not child WF
+	// Generate first decision task event if not child WF and no first decision task backoff
 	transferTasks, firstDecisionTask, retError := e.generateFirstDecisionTask(domainID, msBuilder, startRequest.ParentExecutionInfo, taskList, cronBackoffSeconds)
 	if retError != nil {
 		return
@@ -550,7 +550,9 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx context.Context, startReq
 	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(timeoutDuration),
 	}}
-	if cronBackoffSeconds != 0 {
+
+	// Only schedule the backoff timer task if not child WF and there's first decision task backoff
+	if cronBackoffSeconds != 0 && startRequest.ParentExecutionInfo == nil {
 		timerTasks = append(timerTasks, &persistence.WorkflowBackoffTimerTask{
 			VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(cronBackoffDuration),
 			TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
@@ -2567,15 +2569,26 @@ func (e *historyEngineImpl) ScheduleDecisionTask(ctx context.Context, scheduleRe
 		RunId:      scheduleRequest.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
-		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+	return e.updateWorkflowExecutionWithAction(ctx, domainID, execution,
+		func(msBuilder mutableState, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
 			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
-			// Noop
+			postActions := &updateWorkflowAction{
+				createDecision: true,
+			}
 
-			return nil, nil
+			cronBackoffDuration := msBuilder.GetCronBackoffDuration()
+			if scheduleRequest.GetIsFirstDecision() && cronBackoffDuration != cron.NoBackoff {
+				postActions.timerTasks = append(postActions.timerTasks, &persistence.WorkflowBackoffTimerTask{
+					VisibilityTimestamp: time.Now().Add(cronBackoffDuration),
+					TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
+				})
+				postActions.createDecision = false
+			}
+
+			return postActions, nil
 		})
 }
 

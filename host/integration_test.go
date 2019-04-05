@@ -1692,6 +1692,166 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution)
 }
 
+func (s *integrationSuite) TestCronChildWorkflowExecution() {
+	parentID := "integration-cron-child-workflow-test-parent"
+	childID := "integration-cron-child-workflow-test-child"
+	wtParent := "integration-cron-child-workflow-test-parent-type"
+	wtChild := "integration-cron-child-workflow-test-child-type"
+	tlParent := "integration-cron-child-workflow-test-parent-tasklist"
+	tlChild := "integration-cron-child-workflow-test-child-tasklist"
+	identity := "worker1"
+
+	cronSchedule := "@every 3s"
+	targetBackoffDuration := time.Second * 3
+	backoffDurationTolerance := time.Second
+
+	parentWorkflowType := &workflow.WorkflowType{}
+	parentWorkflowType.Name = common.StringPtr(wtParent)
+
+	childWorkflowType := &workflow.WorkflowType{}
+	childWorkflowType.Name = common.StringPtr(wtChild)
+
+	taskListParent := &workflow.TaskList{}
+	taskListParent.Name = common.StringPtr(tlParent)
+	taskListChild := &workflow.TaskList{}
+	taskListChild.Name = common.StringPtr(tlChild)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(parentID),
+		WorkflowType:                        parentWorkflowType,
+		TaskList:                            taskListParent,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	childExecutionStarted := false
+	var parentStartedEvent *workflow.HistoryEvent
+	var terminatedEvent *workflow.HistoryEvent
+	var startChildWorkflowTS time.Time
+	// Parent Decider Logic
+	dtHandlerParent := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		s.Logger.Infof("Processing decision task for WorkflowID: %v", *execution.WorkflowId)
+
+		if !childExecutionStarted {
+			s.Logger.Info("Starting child execution.")
+			childExecutionStarted = true
+			parentStartedEvent = history.Events[0]
+			startChildWorkflowTS = time.Now()
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
+				StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+					WorkflowId:                          common.StringPtr(childID),
+					WorkflowType:                        childWorkflowType,
+					TaskList:                            taskListChild,
+					Input:                               nil,
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+					ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
+					Control:                             nil,
+					CronSchedule:                        common.StringPtr(cronSchedule),
+				},
+			}}, nil
+		}
+		for _, event := range history.Events[previousStartedEventID:] {
+			if *event.EventType == workflow.EventTypeChildWorkflowExecutionTerminated {
+				terminatedEvent = event
+				return nil, []*workflow.Decision{{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+					CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+						Result: []byte("Done."),
+					},
+				}}, nil
+			}
+		}
+		return nil, nil, nil
+	}
+
+	// Child Decider Logic
+	dtHandlerChild := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		s.Logger.Infof("Processing decision task for Child WorkflowID: %v", *execution.WorkflowId)
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{},
+		}}, nil
+	}
+
+	pollerParent := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskListParent,
+		Identity:        identity,
+		DecisionHandler: dtHandlerParent,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	pollerChild := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskListChild,
+		Identity:        identity,
+		DecisionHandler: dtHandlerChild,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	// Make first decision to start child execution
+	_, err := pollerParent.PollAndProcessDecisionTask(false, false)
+	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(childExecutionStarted)
+	s.Equal(workflow.ChildPolicyRequestCancel,
+		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
+
+	// Process ChildExecution Started event
+	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
+	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	for i := 0; i < 2; i++ {
+		_, err = pollerChild.PollAndProcessDecisionTask(false, false)
+		s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(err)
+
+		backoffDuration := time.Now().Sub(startChildWorkflowTS)
+		s.True(backoffDuration > targetBackoffDuration)
+		s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
+		startChildWorkflowTS = time.Now()
+	}
+
+	// terminate the childworkflow
+	terminateErr := s.engine.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(childID),
+		},
+	})
+	s.Nil(terminateErr)
+
+	// Process ChildExecution terminated event and complete parent execution
+	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
+	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.NotNil(terminatedEvent)
+	terminatedAttributes := terminatedEvent.ChildWorkflowExecutionTerminatedEventAttributes
+	s.Nil(terminatedAttributes.Domain)
+	s.Equal(childID, *terminatedAttributes.WorkflowExecution.WorkflowId)
+	s.Equal(wtChild, *terminatedAttributes.WorkflowType.Name)
+}
+
 func (s *integrationSuite) TestWorkflowTimeout() {
 	startTime := time.Now().UnixNano()
 

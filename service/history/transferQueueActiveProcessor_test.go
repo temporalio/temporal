@@ -1185,6 +1185,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 			WorkflowId: common.StringPtr(childWorkflowID),
 			RunId:      common.StringPtr(childRunID),
 		},
+		IsFirstDecision: common.BoolPtr(true),
 	}).Return(nil).Once()
 	s.mockTimerQueueProcessor.On("NotifyNewTimers", cluster.TestCurrentClusterName, mock.Anything, mock.Anything).Once()
 
@@ -1360,6 +1361,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 			WorkflowId: common.StringPtr(childWorkflowID),
 			RunId:      common.StringPtr(childRunID),
 		},
+		IsFirstDecision: common.BoolPtr(true),
 	}).Return(nil).Once()
 
 	_, err := s.transferQueueActiveProcessor.process(transferTask, true)
