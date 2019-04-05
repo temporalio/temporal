@@ -80,13 +80,10 @@ clustersInfo:
     standby:
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:8933"
-    other:
-      rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:9933"
 
 dcRedirectionPolicy:
-  policy: "forwarding"
-  toDC: "other"
+  policy: "noop"
+  toDC: ""
 
 kafka:
   clusters:
@@ -106,12 +103,6 @@ kafka:
       cluster: test
     standby-dlq:
       cluster: test
-    other:
-      cluster: test
-    other-retry:
-      cluster: test
-    other-dlq:
-      cluster: test
   cadence-cluster-topics:
     active:
       topic: active
@@ -121,10 +112,6 @@ kafka:
       topic: standby
       retry-topic: standby-retry
       dlq-topic: standby-dlq
-    other:
-      topic: other
-      retry-topic: other-retry
-      dlq-topic: other-dlq
 
 archival:
   status: "enabled"
