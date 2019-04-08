@@ -76,36 +76,35 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		initLock                      sync.Mutex
-		adminHandler                  *frontend.AdminHandler
-		frontendHandler               *frontend.WorkflowHandler
-		matchingHandler               *matching.Handler
-		historyHandlers               []*history.Handler
-		logger                        bark.Logger
-		clusterMetadata               cluster.Metadata
-		persistenceConfig             config.Persistence
-		dispatcherProvider            client.DispatcherProvider
-		messagingClient               messaging.Client
-		metadataMgr                   persistence.MetadataManager
-		metadataMgrV2                 persistence.MetadataManager
-		shardMgr                      persistence.ShardManager
-		historyMgr                    persistence.HistoryManager
-		historyV2Mgr                  persistence.HistoryV2Manager
-		taskMgr                       persistence.TaskManager
-		visibilityMgr                 persistence.VisibilityManager
-		executionMgrFactory           persistence.ExecutionManagerFactory
-		shutdownCh                    chan struct{}
-		shutdownWG                    sync.WaitGroup
-		frontEndService               service.Service
-		clusterNo                     int // cluster number
-		replicator                    *replicator.Replicator
-		clientWorker                  archiver.ClientWorker
-		enableWorkerService           bool // tmp flag used to tell if onebox should create worker service
-		enableEventsV2                bool
-		enableVisibilityToKafka       bool
-		blobstoreClient               blobstore.Client
-		enableReadHistoryFromArchival bool
-		historyConfig                 *HistoryConfig
+		initLock                sync.Mutex
+		adminHandler            *frontend.AdminHandler
+		frontendHandler         *frontend.WorkflowHandler
+		matchingHandler         *matching.Handler
+		historyHandlers         []*history.Handler
+		logger                  bark.Logger
+		clusterMetadata         cluster.Metadata
+		persistenceConfig       config.Persistence
+		dispatcherProvider      client.DispatcherProvider
+		messagingClient         messaging.Client
+		metadataMgr             persistence.MetadataManager
+		metadataMgrV2           persistence.MetadataManager
+		shardMgr                persistence.ShardManager
+		historyMgr              persistence.HistoryManager
+		historyV2Mgr            persistence.HistoryV2Manager
+		taskMgr                 persistence.TaskManager
+		visibilityMgr           persistence.VisibilityManager
+		executionMgrFactory     persistence.ExecutionManagerFactory
+		shutdownCh              chan struct{}
+		shutdownWG              sync.WaitGroup
+		frontEndService         service.Service
+		clusterNo               int // cluster number
+		replicator              *replicator.Replicator
+		clientWorker            archiver.ClientWorker
+		enableWorkerService     bool // tmp flag used to tell if onebox should create worker service
+		enableEventsV2          bool
+		enableVisibilityToKafka bool
+		blobstoreClient         blobstore.Client
+		historyConfig           *HistoryConfig
 	}
 
 	// HistoryConfig contains configs for history service
@@ -149,27 +148,26 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		logger:                        params.Logger,
-		clusterMetadata:               params.ClusterMetadata,
-		persistenceConfig:             params.PersistenceConfig,
-		dispatcherProvider:            params.DispatcherProvider,
-		messagingClient:               params.MessagingClient,
-		metadataMgr:                   params.MetadataMgr,
-		metadataMgrV2:                 params.MetadataMgrV2,
-		visibilityMgr:                 params.VisibilityMgr,
-		shardMgr:                      params.ShardMgr,
-		historyMgr:                    params.HistoryMgr,
-		historyV2Mgr:                  params.HistoryV2Mgr,
-		taskMgr:                       params.TaskMgr,
-		executionMgrFactory:           params.ExecutionMgrFactory,
-		shutdownCh:                    make(chan struct{}),
-		clusterNo:                     params.ClusterNo,
-		enableWorkerService:           params.EnableWorker,
-		enableEventsV2:                params.EnableEventsV2,
-		enableVisibilityToKafka:       params.EnableVisibilityToKafka,
-		blobstoreClient:               params.Blobstore,
-		enableReadHistoryFromArchival: params.EnableReadHistoryFromArchival,
-		historyConfig:                 params.HistoryConfig,
+		logger:                  params.Logger,
+		clusterMetadata:         params.ClusterMetadata,
+		persistenceConfig:       params.PersistenceConfig,
+		dispatcherProvider:      params.DispatcherProvider,
+		messagingClient:         params.MessagingClient,
+		metadataMgr:             params.MetadataMgr,
+		metadataMgrV2:           params.MetadataMgrV2,
+		visibilityMgr:           params.VisibilityMgr,
+		shardMgr:                params.ShardMgr,
+		historyMgr:              params.HistoryMgr,
+		historyV2Mgr:            params.HistoryV2Mgr,
+		taskMgr:                 params.TaskMgr,
+		executionMgrFactory:     params.ExecutionMgrFactory,
+		shutdownCh:              make(chan struct{}),
+		clusterNo:               params.ClusterNo,
+		enableWorkerService:     params.EnableWorker,
+		enableEventsV2:          params.EnableEventsV2,
+		enableVisibilityToKafka: params.EnableVisibilityToKafka,
+		blobstoreClient:         params.Blobstore,
+		historyConfig:           params.HistoryConfig,
 	}
 }
 
@@ -346,7 +344,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.frontEndService = service.New(params)
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
-	frontendConfig := frontend.NewConfig(dynamicconfig.NewNopCollection(), false, c.enableReadHistoryFromArchival)
+	frontendConfig := frontend.NewConfig(dynamicconfig.NewNopCollection(), false)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
 		c.visibilityMgr, kafkaProducer, params.BlobstoreClient)

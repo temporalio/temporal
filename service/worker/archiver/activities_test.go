@@ -772,7 +772,7 @@ func (s *activitiesSuite) archivalConfig(
 	}
 	mockMetadataMgr := &mocks.MetadataManager{}
 	mockClusterMetadata := &mocks.ClusterMetadata{}
-	mockClusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterDefaultBucket))
+	mockClusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterDefaultBucket, clusterEnablesArchival))
 	mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	mockClusterMetadata.On("GetCurrentClusterName").Return(testCurrentClusterName)
 	mockMetadataMgr.On("GetDomain", mock.Anything).Return(

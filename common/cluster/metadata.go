@@ -81,6 +81,8 @@ type (
 		archivalStatus dynamicconfig.StringPropertyFn
 		// defaultBucket is the default archival bucket name used for this cluster
 		defaultBucket string
+		// enableReadFromArchival whether reading history from archival is enabled
+		enableReadFromArchival dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -96,6 +98,7 @@ func NewMetadata(
 	clusterToAddress map[string]config.Address,
 	archivalStatus dynamicconfig.StringPropertyFn,
 	defaultBucket string,
+	enableReadFromArchival dynamicconfig.BoolPropertyFn,
 ) Metadata {
 
 	if len(clusterInitialFailoverVersions) == 0 {
@@ -137,12 +140,12 @@ func NewMetadata(
 		}
 	}
 
-	status, err := GetArchivalStatus(archivalStatus())
+	status, err := getArchivalStatus(archivalStatus())
 	if err != nil {
 		panic(err)
 	}
-	archivalConfig := NewArchivalConfig(status, defaultBucket)
-	if !archivalConfig.IsValid() {
+	archivalConfig := NewArchivalConfig(status, defaultBucket, enableReadFromArchival())
+	if !archivalConfig.isValid() {
 		panic("Archival config is not valid")
 	}
 
@@ -158,6 +161,7 @@ func NewMetadata(
 		clusterToAddress:               clusterToAddress,
 		archivalStatus:                 archivalStatus,
 		defaultBucket:                  defaultBucket,
+		enableReadFromArchival:         enableReadFromArchival,
 	}
 }
 
@@ -229,12 +233,9 @@ func (metadata *metadataImpl) GetAllClientAddress() map[string]config.Address {
 }
 
 // ArchivalConfig returns the archival config of the cluster.
-// This method always return a well formed ArchivalConfig of which there are only three forms:
-// 1. ArchivalDisabled and empty DefaultBucket
-// 2. ArchivalPaused and non-empty DefaultBucket
-// 3. ArchivalEnabled and non-empty DefaultBucket
+// This method always return a well formed ArchivalConfig (this means ArchivalConfig().IsValid always returns true).
 func (metadata *metadataImpl) ArchivalConfig() (retCfg *ArchivalConfig) {
-	status, err := GetArchivalStatus(metadata.archivalStatus())
+	status, err := getArchivalStatus(metadata.archivalStatus())
 	if err != nil {
 		metadata.logger.WithFields(bark.Fields{
 			logging.TagClusterArchivalStatus: metadata.archivalStatus(),
@@ -242,5 +243,5 @@ func (metadata *metadataImpl) ArchivalConfig() (retCfg *ArchivalConfig) {
 		}).Error("error getting archival config, invalid archival status in dynamic config")
 		metadata.metricsClient.IncCounter(metrics.ClusterMetadataArchivalConfigScope, metrics.ArchivalConfigFailures)
 	}
-	return NewArchivalConfig(status, metadata.defaultBucket)
+	return NewArchivalConfig(status, metadata.defaultBucket, metadata.enableReadFromArchival())
 }

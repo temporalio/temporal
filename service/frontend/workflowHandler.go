@@ -1914,7 +1914,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	}
 
 	configuredForArchival := wh.GetClusterMetadata().ArchivalConfig().ConfiguredForArchival()
-	enableArchivalRead := wh.config.EnableReadHistoryFromArchival(getRequest.GetDomain())
+	enableArchivalRead := wh.GetClusterMetadata().ArchivalConfig().EnableReadFromArchival()
 	historyArchived := wh.historyArchived(ctx, getRequest, domainID)
 	if configuredForArchival && enableArchivalRead && historyArchived {
 		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)

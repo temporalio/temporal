@@ -89,7 +89,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log2)
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
-	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), false, false)
+	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), false)
 	s.redirectionPolicy = config.DCRedirectionPolicy{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 

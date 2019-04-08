@@ -50,7 +50,6 @@ type Config struct {
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                             dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
-	EnableReadHistoryFromArchival   dynamicconfig.BoolPropertyFnWithDomainFilter
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -73,7 +72,7 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool, enableReadHistoryFromArchival bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool) *Config {
 	return &Config{
 		PersistenceMaxQPS:                   dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		VisibilityMaxPageSize:               dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
@@ -87,7 +86,6 @@ func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool, enabl
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		MaxIDLengthLimit:                    dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		EnableReadHistoryFromArchival:       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadHistoryFromArchival, enableReadHistoryFromArchival),
 		HistoryMgrNumConns:                  dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxDecisionStartToCloseTimeout:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
 		EnableAdminProtection:               dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
@@ -110,7 +108,7 @@ type Service struct {
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.ESConfig.Enable, false)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.ESConfig.Enable)
 	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,

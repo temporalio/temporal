@@ -31,8 +31,9 @@ type (
 
 	// ArchivalConfig is an immutable representation of the current archival configuration of the cluster
 	ArchivalConfig struct {
-		status        ArchivalStatus
-		defaultBucket string
+		status                 ArchivalStatus
+		defaultBucket          string
+		enableReadFromArchival bool
 	}
 )
 
@@ -45,40 +46,21 @@ const (
 	ArchivalEnabled
 )
 
-// NewArchivalConfig constructs a new ArchivalConfig
-func NewArchivalConfig(status ArchivalStatus, defaultBucket string) *ArchivalConfig {
+// NewArchivalConfig constructs a new valid ArchivalConfig
+func NewArchivalConfig(status ArchivalStatus, defaultBucket string, enableReadFromArchival bool) *ArchivalConfig {
 	ac := &ArchivalConfig{
-		status:        status,
-		defaultBucket: defaultBucket,
+		status:                 status,
+		defaultBucket:          defaultBucket,
+		enableReadFromArchival: enableReadFromArchival,
 	}
-	if !ac.IsValid() {
+	if !ac.isValid() {
 		return &ArchivalConfig{
-			status:        ArchivalDisabled,
-			defaultBucket: "",
+			status:                 ArchivalDisabled,
+			defaultBucket:          "",
+			enableReadFromArchival: false,
 		}
 	}
 	return ac
-}
-
-// GetArchivalStatus converts input string to ArchivalStatus. Returns error on invalid input.
-func GetArchivalStatus(str string) (ArchivalStatus, error) {
-	str = strings.TrimSpace(strings.ToLower(str))
-	switch str {
-	case "", "disabled":
-		return ArchivalDisabled, nil
-	case "paused":
-		return ArchivalPaused, nil
-	case "enabled":
-		return ArchivalEnabled, nil
-	}
-	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
-}
-
-// IsValid returns true if ArchivalConfig is valid, false otherwise.
-func (a *ArchivalConfig) IsValid() bool {
-	bucketSet := len(a.defaultBucket) != 0
-	disabled := a.status == ArchivalDisabled
-	return (!bucketSet && disabled) || (bucketSet && !disabled)
 }
 
 // GetDefaultBucket returns the default bucket for ArchivalConfig
@@ -94,8 +76,32 @@ func (a *ArchivalConfig) GetArchivalStatus() ArchivalStatus {
 // ConfiguredForArchival returns true if cluster is configured to handle archival, false otherwise.
 // If cluster is configured for archival then defaultBucket will be set.
 func (a *ArchivalConfig) ConfiguredForArchival() bool {
-	if !a.IsValid() {
+	if !a.isValid() {
 		return false
 	}
 	return a.status != ArchivalDisabled
+}
+
+// EnableReadFromArchival indicates whether history can be read from archival
+func (a *ArchivalConfig) EnableReadFromArchival() bool {
+	return a.enableReadFromArchival
+}
+
+func getArchivalStatus(str string) (ArchivalStatus, error) {
+	str = strings.TrimSpace(strings.ToLower(str))
+	switch str {
+	case "", "disabled":
+		return ArchivalDisabled, nil
+	case "paused":
+		return ArchivalPaused, nil
+	case "enabled":
+		return ArchivalEnabled, nil
+	}
+	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
+}
+
+func (a *ArchivalConfig) isValid() bool {
+	bucketSet := len(a.defaultBucket) != 0
+	disabled := a.status == ArchivalDisabled
+	return (!bucketSet && disabled) || (bucketSet && !disabled)
 }

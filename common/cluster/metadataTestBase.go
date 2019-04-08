@@ -96,6 +96,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 			TestAllClusterAddress,
 			dynamicconfig.GetStringPropertyFn(archivalStatus),
 			clusterDefaultBucket,
+			dynamicconfig.GetBoolPropertyFn(enableArchival),
 		)
 	}
 
@@ -110,5 +111,6 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 		TestSingleDCAllClusterAddress,
 		dynamicconfig.GetStringPropertyFn(archivalStatus),
 		clusterDefaultBucket,
+		dynamicconfig.GetBoolPropertyFn(enableArchival),
 	)
 }

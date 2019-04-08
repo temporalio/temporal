@@ -83,6 +83,7 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 			clusterInfo.ClusterAddress,
 			dynamicconfig.GetStringPropertyFn("disabled"),
 			"",
+			dynamicconfig.GetBoolPropertyFn(false),
 		)
 	}
 
@@ -96,26 +97,25 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 	cadenceParams := &CadenceParams{
-		ClusterMetadata:               clusterMetadata,
-		PersistenceConfig:             pConfig,
-		DispatcherProvider:            client.NewIPYarpcDispatcherProvider(),
-		MessagingClient:               getMessagingClient(options.MessagingClientConfig, logger),
-		MetadataMgr:                   testBase.MetadataProxy,
-		MetadataMgrV2:                 testBase.MetadataManagerV2,
-		ShardMgr:                      testBase.ShardMgr,
-		HistoryMgr:                    testBase.HistoryMgr,
-		HistoryV2Mgr:                  testBase.HistoryV2Mgr,
-		ExecutionMgrFactory:           testBase.ExecutionMgrFactory,
-		TaskMgr:                       testBase.TaskMgr,
-		VisibilityMgr:                 testBase.VisibilityMgr,
-		Logger:                        logger,
-		ClusterNo:                     options.ClusterNo,
-		EnableWorker:                  options.EnableWorker,
-		EnableEventsV2:                options.EnableEventsV2,
-		EnableVisibilityToKafka:       false,
-		EnableReadHistoryFromArchival: options.EnableArchival,
-		Blobstore:                     blobstore.client,
-		HistoryConfig:                 options.HistoryConfig,
+		ClusterMetadata:         clusterMetadata,
+		PersistenceConfig:       pConfig,
+		DispatcherProvider:      client.NewIPYarpcDispatcherProvider(),
+		MessagingClient:         getMessagingClient(options.MessagingClientConfig, logger),
+		MetadataMgr:             testBase.MetadataProxy,
+		MetadataMgrV2:           testBase.MetadataManagerV2,
+		ShardMgr:                testBase.ShardMgr,
+		HistoryMgr:              testBase.HistoryMgr,
+		HistoryV2Mgr:            testBase.HistoryV2Mgr,
+		ExecutionMgrFactory:     testBase.ExecutionMgrFactory,
+		TaskMgr:                 testBase.TaskMgr,
+		VisibilityMgr:           testBase.VisibilityMgr,
+		Logger:                  logger,
+		ClusterNo:               options.ClusterNo,
+		EnableWorker:            options.EnableWorker,
+		EnableEventsV2:          options.EnableEventsV2,
+		EnableVisibilityToKafka: false,
+		Blobstore:               blobstore.client,
+		HistoryConfig:           options.HistoryConfig,
 	}
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {

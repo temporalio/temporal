@@ -119,6 +119,7 @@ func (s *server) startService() common.Daemon {
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 	enableGlobalDomain := dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, s.cfg.ClustersInfo.EnableGlobalDomain)
 	archivalStatus := dc.GetStringProperty(dynamicconfig.ArchivalStatus, s.cfg.Archival.Status)
+	enableReadFromArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromArchival, s.cfg.Archival.EnableReadFromArchival)
 
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
 
@@ -134,6 +135,7 @@ func (s *server) startService() common.Daemon {
 		s.cfg.ClustersInfo.ClusterAddress,
 		archivalStatus,
 		s.cfg.Archival.DefaultBucket,
+		enableReadFromArchival,
 	)
 	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
 	params.ESConfig = &s.cfg.ElasticSearch
