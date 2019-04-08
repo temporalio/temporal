@@ -3329,7 +3329,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	s.Equal(currentRunID, prevRunID)
 }
 
-func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning() {
+func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning_LowerVersion() {
 	incomingVersion := int64(4096)
 	incomingTimestamp := int64(11238)
 	incomingCluster := cluster.TestAlternativeClusterName
@@ -3397,8 +3397,9 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
-		RunID:       currentRunID,
-		CloseStatus: persistence.WorkflowCloseStatusNone,
+		RunID:            currentRunID,
+		CloseStatus:      persistence.WorkflowCloseStatusNone,
+		LastWriteVersion: incomingVersion - 10,
 	}, nil)
 
 	terminationEvent := &shared.HistoryEvent{
@@ -3434,4 +3435,39 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	prevRunID, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
 	s.Nil(err)
 	s.Equal(currentRunID, prevRunID)
+}
+
+func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning_NotLowerVersion() {
+	incomingVersion := int64(4096)
+	incomingTimestamp := int64(11238)
+	incomingCluster := cluster.TestAlternativeClusterName
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", incomingVersion).Return(incomingCluster)
+
+	domainID := validDomainID
+	workflowID := "some random target workflow ID"
+	targetRunID := uuid.New()
+
+	msBuilderTarget := &mockMutableState{}
+	defer msBuilderTarget.AssertExpectations(s.T())
+	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(false)
+	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
+		DomainID:    domainID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
+		CloseStatus: persistence.WorkflowCloseStatusContinuedAsNew,
+	})
+
+	currentRunID := uuid.New()
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{
+		RunID:            currentRunID,
+		CloseStatus:      persistence.WorkflowCloseStatusNone,
+		LastWriteVersion: incomingVersion,
+	}, nil)
+
+	prevRunID, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
+	s.Nil(err)
+	s.Equal("", prevRunID)
 }

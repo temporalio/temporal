@@ -930,9 +930,13 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	runID0, err1 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.NoError(err1)
-	s.Equal(*workflowExecution.RunId, runID0)
+	response, err := s.ExecutionManager.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowExecution.GetWorkflowId(),
+	})
+	s.NoError(err)
+	s.Equal(*workflowExecution.RunId, response.RunID)
+	s.Equal(common.EmptyVersion, response.LastWriteVersion)
 
 	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)

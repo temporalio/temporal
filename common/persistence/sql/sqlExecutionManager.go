@@ -873,10 +873,11 @@ func (m *sqlExecutionManager) GetCurrentExecution(request *p.GetCurrentExecution
 		}
 	}
 	return &p.GetCurrentExecutionResponse{
-		StartRequestID: row.CreateRequestID,
-		RunID:          row.RunID.String(),
-		State:          int(row.State),
-		CloseStatus:    int(row.CloseStatus),
+		StartRequestID:   row.CreateRequestID,
+		RunID:            row.RunID.String(),
+		State:            int(row.State),
+		CloseStatus:      int(row.CloseStatus),
+		LastWriteVersion: row.LastWriteVersion,
 	}, nil
 }
 

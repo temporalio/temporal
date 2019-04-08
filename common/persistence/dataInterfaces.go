@@ -713,10 +713,11 @@ type (
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
 	GetCurrentExecutionResponse struct {
-		StartRequestID string
-		RunID          string
-		State          int
-		CloseStatus    int
+		StartRequestID   string
+		RunID            string
+		State            int
+		CloseStatus      int
+		LastWriteVersion int64
 	}
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution

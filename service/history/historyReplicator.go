@@ -1051,6 +1051,17 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 	}
 	currentRunID = resp.RunID
 	currentCloseStatus := resp.CloseStatus
+	currentLastWriteVetsion := resp.LastWriteVersion
+
+	// this handle the edge case where
+	// local run 1 do continue as new -> run 2L
+	// remote run 1 become active, and do continue as new -> run 2R
+	// run 2R comes earlier, force terminate run 2L and replicate 2R
+	// remote run 1's version trigger a conflict resolution trying to force terminate run 2R
+	// conflict resolution should only force terminate workflow if that workflow has lower last write version
+	if incomingVersion <= currentLastWriteVetsion {
+		return "", nil
+	}
 
 	if currentCloseStatus != persistence.WorkflowCloseStatusNone {
 		// current workflow finished
@@ -1175,6 +1186,13 @@ func (r *historyReplicator) resetMutableState(ctx context.Context, context workf
 	currentRunID, err := r.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx, msBuilder, incomingVersion, incomingTimestamp, logger)
 	if err != nil {
 		return nil, err
+	}
+
+	// if cannot force terminate a workflow (meaning that workflow has last version >= incoming version)
+	// just abandon force termination & conflict resolution
+	// since the current workflow is after this one
+	if currentRunID == "" {
+		return nil, nil
 	}
 
 	resolver := r.getNewConflictResolver(context, logger)
