@@ -939,8 +939,8 @@ type (
 		DomainID     string
 		TaskList     string
 		TaskType     int
-		ReadLevel    int64
-		MaxReadLevel int64 // inclusive
+		ReadLevel    int64  // range exclusive
+		MaxReadLevel *int64 // optional: range inclusive when specified
 		BatchSize    int
 	}
 

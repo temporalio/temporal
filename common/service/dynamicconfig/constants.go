@@ -181,6 +181,7 @@ var keys = map[Key]string{
 	WorkerArchivalsPerIteration:                     "worker.ArchivalsPerIteration",
 	WorkerDeterministicConstructionCheckProbability: "worker.DeterministicConstructionCheckProbability",
 	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
+	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
 }
 
 const (
@@ -464,6 +465,8 @@ const (
 	WorkerDeterministicConstructionCheckProbability
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS
+	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
+	ScannerPersistenceMaxQPS
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

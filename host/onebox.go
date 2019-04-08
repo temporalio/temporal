@@ -478,7 +478,7 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 
 func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
-	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
+	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	c.replicator = replicator.NewReplicator(
 		c.clusterMetadata,
@@ -505,7 +505,7 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 		blobstore.NewMetricClient(c.blobstoreClient, service.GetMetricsClient()),
 		c.blobstoreClient.GetRetryPolicy(),
 		c.blobstoreClient.IsRetryableError)
-	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
+	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     publicClient,

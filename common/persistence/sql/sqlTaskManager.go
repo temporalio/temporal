@@ -344,7 +344,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 		TaskListName: request.TaskList,
 		TaskType:     int64(request.TaskType),
 		MinTaskID:    &request.ReadLevel,
-		MaxTaskID:    &request.MaxReadLevel,
+		MaxTaskID:    request.MaxReadLevel,
 		PageSize:     &request.BatchSize,
 	})
 	if err != nil {

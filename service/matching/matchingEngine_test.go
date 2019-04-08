@@ -1867,7 +1867,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 		if taskID <= request.ReadLevel {
 			continue
 		}
-		if taskID > request.MaxReadLevel {
+		if taskID > *request.MaxReadLevel {
 			break
 		}
 		tasks = append(tasks, it.Value().(*persistence.TaskInfo))

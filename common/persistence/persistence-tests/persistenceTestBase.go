@@ -1123,7 +1123,7 @@ func (s *TestBase) GetTasks(domainID, taskList string, taskType int, batchSize i
 		TaskList:     taskList,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
-		MaxReadLevel: math.MaxInt64,
+		MaxReadLevel: common.Int64Ptr(math.MaxInt64),
 	})
 
 	if err != nil {

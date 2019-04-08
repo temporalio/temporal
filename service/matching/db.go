@@ -141,8 +141,8 @@ func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) 
 		TaskList:     db.taskListName,
 		TaskType:     db.taskType,
 		BatchSize:    batchSize,
-		ReadLevel:    minTaskID, // exclusive
-		MaxReadLevel: maxTaskID, // inclusive
+		ReadLevel:    minTaskID,  // exclusive
+		MaxReadLevel: &maxTaskID, // inclusive
 	})
 }
 

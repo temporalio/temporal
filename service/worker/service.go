@@ -34,10 +34,12 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/indexer"
 	"github.com/uber/cadence/service/worker/replicator"
+	"github.com/uber/cadence/service/worker/scanner"
 	"go.uber.org/cadence/.gen/go/shared"
 )
 
@@ -65,6 +67,7 @@ type (
 		ReplicationCfg  *replicator.Config
 		ArchiverConfig  *archiver.Config
 		IndexerCfg      *indexer.Config
+		ScannerCfg      *scanner.Config
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 	}
 )
@@ -72,7 +75,7 @@ type (
 // NewService builds a new cadence-worker service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.WorkerServiceName)
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
+	config := NewConfig(params)
 	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
@@ -82,7 +85,8 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 }
 
 // NewConfig builds the new Config for cadence-worker service
-func NewConfig(dc *dynamicconfig.Collection) *Config {
+func NewConfig(params *service.BootstrapParams) *Config {
+	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 	return &Config{
 		ReplicationCfg: &replicator.Config{
 			PersistenceMaxQPS:                 dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
@@ -106,6 +110,11 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 			ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
 			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
 			ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 10*time.Second),
+		},
+		ScannerCfg: &scanner.Config{
+			PersistenceMaxQPS: dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
+			Persistence:       &params.PersistenceConfig,
+			ClusterMetadata:   params.ClusterMetadata,
 		},
 		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 	}
@@ -133,6 +142,8 @@ func (s *Service) Start() {
 		s.startIndexer(base)
 	}
 
+	s.startScanner(base)
+
 	s.logger.Infof("%v started", common.WorkerServiceName)
 	<-s.stopC
 	base.Stop()
@@ -145,6 +156,30 @@ func (s *Service) Stop() {
 	}
 	close(s.stopC)
 	s.params.Logger.Infof("%v stopped", common.WorkerServiceName)
+}
+
+func (s *Service) startScanner(base service.Service) {
+	storeType := s.config.ScannerCfg.Persistence.DefaultStoreType()
+	if storeType != config.StoreTypeSQL {
+		s.logger.Infof("Scanner not started: incompatible persistence store type %v", storeType)
+		return
+	}
+	sdkClient := public.NewRetryableClient(
+		base.GetClientBean().GetPublicClient(),
+		common.CreatePublicClientRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
+	params := &scanner.BootstrapParams{
+		Config:        *s.config.ScannerCfg,
+		SDKClient:     sdkClient,
+		MetricsClient: s.metricsClient,
+		Logger:        s.logger,
+		TallyScope:    s.params.MetricScope,
+	}
+	scanner := scanner.New(params)
+	if err := scanner.Start(); err != nil {
+		s.logger.Fatalf("error starting scanner:%v", err)
+	}
 }
 
 func (s *Service) startReplicator(base service.Service, pFactory persistencefactory.Factory) {

@@ -128,6 +128,55 @@ func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 	s.Equal(int64(5), tasks1Response.Tasks[0].ScheduleID)
 }
 
+// TestGetTasksWithNoMaxReadLevel test
+func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
+	if s.TaskMgr.GetName() == "cassandra" {
+		s.T().Skip("this test is not applicable for cassandra persistence")
+	}
+	domainID := "f1116985-d1f1-40e0-aba9-83344db915bc"
+	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("complete-decision-task-test"),
+		RunId: common.StringPtr("2aa0a74e-16ee-4f27-983d-48b07ec1915d")}
+	taskList := "48b07ec1915d"
+	_, err0 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
+		10: taskList,
+		20: taskList,
+		30: taskList,
+		40: taskList,
+		50: taskList,
+	})
+	s.NoError(err0)
+
+	nTasks := 5
+	firstTaskID := s.GetNextSequenceNumber() - int64(nTasks)
+
+	testCases := []struct {
+		batchSz   int
+		readLevel int64
+		taskIDs   []int64
+	}{
+		{1, -1, []int64{firstTaskID}},
+		{2, firstTaskID, []int64{firstTaskID + 1, firstTaskID + 2}},
+		{5, firstTaskID + 2, []int64{firstTaskID + 3, firstTaskID + 4}},
+	}
+
+	for _, tc := range testCases {
+		s.Run(fmt.Sprintf("tc_%v_%v", tc.batchSz, tc.readLevel), func() {
+			response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
+				DomainID:  domainID,
+				TaskList:  taskList,
+				TaskType:  p.TaskListTypeActivity,
+				BatchSize: tc.batchSz,
+				ReadLevel: tc.readLevel,
+			})
+			s.NoError(err)
+			s.Equal(len(tc.taskIDs), len(response.Tasks), "wrong number of tasks")
+			for i := range tc.taskIDs {
+				s.Equal(tc.taskIDs[i], response.Tasks[i].TaskID, "wrong set of tasks")
+			}
+		})
+	}
+}
+
 // TestCompleteDecisionTask test
 func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 	domainID := "f1116985-d1f1-40e0-aba9-83344db915bc"

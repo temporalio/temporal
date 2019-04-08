@@ -105,6 +105,64 @@ func (_m *TaskManager) CompleteTask(request *persistence.CompleteTaskRequest) er
 	return r0
 }
 
+// CompleteTasksLessThan
+func (_m *TaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
+	ret := _m.Called(request)
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func(*persistence.CompleteTasksLessThanRequest) int); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(int)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.CompleteTasksLessThanRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+func (_m *TaskManager) ListTaskList(request *persistence.ListTaskListRequest) (*persistence.ListTaskListResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.ListTaskListResponse
+	if rf, ok := ret.Get(0).(func(request *persistence.ListTaskListRequest) *persistence.ListTaskListResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.ListTaskListResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.ListTaskListRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+func (_m *TaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.DeleteTaskListRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CreateTasks provides a mock function with given fields: request
 func (_m *TaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
 	ret := _m.Called(request)
@@ -133,8 +191,8 @@ func (_m *TaskManager) GetTasks(request *persistence.GetTasksRequest) (*persiste
 	ret := _m.Called(request)
 
 	var r0 *persistence.GetTasksResponse
-	if rf, ok := ret.Get(0).(func(*persistence.GetTasksRequest) (*persistence.GetTasksResponse, error)); ok {
-		return rf(request)
+	if rf, ok := ret.Get(0).(func(*persistence.GetTasksRequest) *persistence.GetTasksResponse); ok {
+		r0 = rf(request)
 	} else if ret.Get(0) != nil {
 		r0 = ret.Get(0).(*persistence.GetTasksResponse)
 	}

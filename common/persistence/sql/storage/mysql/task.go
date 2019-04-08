@@ -64,9 +64,14 @@ task_type = :task_type
 	lockTaskListQry = `SELECT range_id FROM task_lists ` +
 		`WHERE shard_id = ? AND domain_id = ? AND name = ? AND task_type = ? FOR UPDATE`
 
-	getTaskQry = `SELECT workflow_id, run_id, schedule_id, task_id, expiry_ts ` +
+	getTaskMinMaxQry = `SELECT workflow_id, run_id, schedule_id, task_id, expiry_ts ` +
 		`FROM tasks ` +
-		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? AND task_id <= ? LIMIT ?`
+		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? AND task_id <= ? ` +
+		` ORDER BY task_id LIMIT ?`
+
+	getTaskMinQry = `SELECT workflow_id, run_id, schedule_id, task_id, expiry_ts ` +
+		`FROM tasks ` +
+		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? ORDER BY task_id LIMIT ?`
 
 	createTaskQry = `INSERT INTO ` +
 		`tasks(domain_id, workflow_id, run_id, schedule_id, task_list_name, task_type, task_id, expiry_ts) ` +
@@ -92,8 +97,14 @@ func (mdb *DB) InsertIntoTasks(rows []sqldb.TasksRow) (sql.Result, error) {
 func (mdb *DB) SelectFromTasks(filter *sqldb.TasksFilter) ([]sqldb.TasksRow, error) {
 	var err error
 	var rows []sqldb.TasksRow
-	err = mdb.conn.Select(&rows, getTaskQry, filter.DomainID,
-		filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+	switch {
+	case filter.MaxTaskID != nil:
+		err = mdb.conn.Select(&rows, getTaskMinMaxQry, filter.DomainID,
+			filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+	default:
+		err = mdb.conn.Select(&rows, getTaskMinQry, filter.DomainID,
+			filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.PageSize)
+	}
 	if err != nil {
 		return nil, err
 	}
