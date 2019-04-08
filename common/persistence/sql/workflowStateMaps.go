@@ -333,6 +333,7 @@ func updateChildExecutionInfos(tx sqldb.Tx,
 	if len(childExecutionInfos) > 0 {
 		rows := make([]sqldb.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
+			initEvent, initEncoding := persistence.FromDataBlob(v.InitiatedEvent)
 			rows[i] = sqldb.ChildExecutionInfoMapsRow{
 				ShardID:                int64(shardID),
 				DomainID:               domainID,
@@ -344,8 +345,8 @@ func updateChildExecutionInfos(tx sqldb.Tx,
 				StartedID:              v.StartedID,
 				StartedWorkflowID:      v.StartedWorkflowID,
 				StartedRunID:           sqldb.MustParseUUID(v.StartedRunID),
-				InitiatedEvent:         &v.InitiatedEvent.Data,
-				InitiatedEventEncoding: string(v.InitiatedEvent.Encoding),
+				InitiatedEvent:         &initEvent,
+				InitiatedEventEncoding: initEncoding,
 				CreateRequestID:        v.CreateRequestID,
 				DomainName:             v.DomainName,
 				WorkflowTypeName:       v.WorkflowTypeName,

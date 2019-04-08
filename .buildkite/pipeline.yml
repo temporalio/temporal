@@ -9,34 +9,54 @@ steps:
           run: unit-test
           config: docker/buildkite/docker-compose.yml
 
-  - label: ":golang: integration test"
+  - label: ":golang: integration test with cassandra"
     agents:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_ci"
     plugins:
       - docker-compose#v3.0.0:
-          run: integration-test
+          run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
 
-  - label: ":golang: integration test event v2"
+  - label: ":golang: integration test event v2 with cassandra"
     agents:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_ci EVENTSV2=true"
     plugins:
       - docker-compose#v3.0.0:
-          run: integration-test
+          run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
 
-  - label: ":golang: integration xdc test"
+  - label: ":golang: integration xdc test with cassandra"
     agents:
       queue: "workers"
       docker: "*"
     command: "make cover_xdc_ci"
     plugins:
       - docker-compose#v3.0.0:
-          run: integration-test-xdc
+          run: integration-test-xdc-cassandra
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test with mysql"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "make cover_integration_ci"
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-mysql
+          config: docker/buildkite/docker-compose.yml
+
+  - label: ":golang: integration xdc test with mysql"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "make cover_xdc_ci"
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-xdc-mysql
           config: docker/buildkite/docker-compose.yml
 
   - wait

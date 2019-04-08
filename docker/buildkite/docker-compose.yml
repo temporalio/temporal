@@ -75,7 +75,7 @@ services:
         aliases:
           - unit-test
 
-  integration-test:
+  integration-test-cassandra:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
@@ -100,7 +100,33 @@ services:
         aliases:
           - integration-test
 
-  integration-test-xdc:
+  integration-test-mysql:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "MYSQL_SEEDS=mysql"
+      - "PERSISTENCE_TYPE=sql"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - mysql
+    volumes:
+      - ../../:/go/src/github.com/uber/cadence
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
+  integration-test-xdc-cassandra:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
@@ -118,6 +144,34 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - cassandra
+      - kafka
+    volumes:
+      - ../../:/go/src/github.com/uber/cadence
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test-xdc
+
+  integration-test-xdc-mysql:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "MYSQL_SEEDS=mysql"
+      - "KAFKA_SEEDS=kafka"
+      - "PERSISTENCE_TYPE=sql"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - mysql
       - kafka
     volumes:
       - ../../:/go/src/github.com/uber/cadence

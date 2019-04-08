@@ -1731,7 +1731,7 @@ func updateExecution(tx sqldb.Tx,
 		}
 	}
 	if rowsAffected != 1 {
-		return &workflow.InternalServiceError{
+		return &workflow.EntityNotExistsError{
 			Message: fmt.Sprintf("Failed to update executions row. Affected %v rows updated instead of 1.", rowsAffected),
 		}
 	}

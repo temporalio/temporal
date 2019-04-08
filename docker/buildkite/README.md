@@ -18,12 +18,12 @@ docker-compose -f docker/buildkite/docker-compose-local.yml build unit-test
 
 integration tests:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml build integration-test
+docker-compose -f docker/buildkite/docker-compose-local.yml build integration-test-cassandra
 ```
 
 cross DC integration tests:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml build integration-test-xdc
+docker-compose -f docker/buildkite/docker-compose-local.yml build integration-test-xdc-cassandra
 ```
 
 Run the integration tests:
@@ -35,12 +35,12 @@ docker-compose -f docker/buildkite/docker-compose-local.yml run unit-test
 
 integration tests:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml run integration-test
+docker-compose -f docker/buildkite/docker-compose-local.yml run integration-test-cassandra
 ```
 
 cross DC integration tests:
 ```bash
-docker-compose -f docker/buildkite/docker-compose-local.yml run integration-test-xdc
+docker-compose -f docker/buildkite/docker-compose-local.yml run integration-test-xdc-cassandra
 ```
 
 Note that BuildKite will run basically the same commands.

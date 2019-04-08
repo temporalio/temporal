@@ -98,7 +98,10 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.RecordWork
 		return fmt.Errorf("RecordWorkflowExecutionStarted rowsAffected error: %v", err)
 	}
 	if noRowsAffected != 1 {
-		return fmt.Errorf("RecordWorkflowExecutionStarted %v rows updated instead of one", noRowsAffected)
+		// TODO:this should never happen since we always create the record before setting it to closed
+		// However, its ideal to provide same semantics as cassandra API here i.e. always upsert old
+		// record and return success
+		return nil
 	}
 	return nil
 }
