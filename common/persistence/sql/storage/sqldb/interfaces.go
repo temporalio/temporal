@@ -739,8 +739,11 @@ type (
 		// - multiple rows - {shardID, domainID, workflowID, runID}
 		DeleteFromSignalsRequestedSets(filter *SignalsRequestedSetsFilter) (sql.Result, error)
 
+		// InsertIntoVisibility inserts a row into visibility table. If a row already exist,
+		// no changes will be made by this API
 		InsertIntoVisibility(row *VisibilityRow) (sql.Result, error)
-		UpdateVisibility(row *VisibilityRow) (sql.Result, error)
+		// ReplaceIntoVisibility deletes old row (if it exist) and inserts new row into visibility table
+		ReplaceIntoVisibility(row *VisibilityRow) (sql.Result, error)
 		// SelectFromVisibility returns one or more rows from visibility table
 		// Required filter params:
 		// - getClosedWorkflowExecution - retrieves single row - {domainID, runID, closed=true}

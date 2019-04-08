@@ -22,21 +22,20 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
 const (
-	templateCreateWorkflowExecutionStarted = `REPLACE INTO executions_visibility (` +
+	templateCreateWorkflowExecutionStarted = `INSERT IGNORE INTO executions_visibility (` +
 		`domain_id, workflow_id, run_id, start_time, workflow_type_name) ` +
 		`VALUES (?, ?, ?, ?, ?)`
 
-	templateUpdateWorkflowExecutionClosed = `UPDATE executions_visibility SET
-		close_time = ?, 
-        close_status = ?, 
-        history_length = ?
-        WHERE domain_id = ? AND run_id = ?`
+	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
+		`domain_id, workflow_id, run_id, start_time, workflow_type_name, close_time, close_status, history_length) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND domain_id = ?
@@ -72,7 +71,10 @@ const (
 		 AND run_id = ?`
 )
 
-// InsertIntoVisibility inserts a row into executions_visibility table
+var errCloseParams = errors.New("missing one of {closeStatus, closeTime, historyLength} params")
+
+// InsertIntoVisibility inserts a row into visibility table. If an row already exist,
+// its left as such and no update will be made
 func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error) {
 	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 	return mdb.conn.Exec(templateCreateWorkflowExecutionStarted,
@@ -83,15 +85,23 @@ func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error
 		row.WorkflowTypeName)
 }
 
-// UpdateVisibility updates a row in executions_visibility table
-func (mdb *DB) UpdateVisibility(row *sqldb.VisibilityRow) (sql.Result, error) {
-	closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
-	return mdb.conn.Exec(templateUpdateWorkflowExecutionClosed,
-		closeTime,
-		*row.CloseStatus,
-		*row.HistoryLength,
-		row.DomainID,
-		row.RunID)
+func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error) {
+	switch {
+	case row.CloseStatus != nil && row.CloseTime != nil && row.HistoryLength != nil:
+		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
+		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
+		return mdb.conn.Exec(templateCreateWorkflowExecutionClosed,
+			row.DomainID,
+			row.WorkflowID,
+			row.RunID,
+			row.StartTime,
+			row.WorkflowTypeName,
+			closeTime,
+			*row.CloseStatus,
+			*row.HistoryLength)
+	default:
+		return nil, errCloseParams
+	}
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
