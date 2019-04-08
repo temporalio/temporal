@@ -34,11 +34,9 @@ import (
 )
 
 const (
-	testWorkflowClusterHosts = "127.0.0.1"
-	testPort                 = 3306
-	testUser                 = "uber"
-	testPassword             = "uber"
-	testSchemaDir            = "schema/mysql/v57"
+	testUser      = "uber"
+	testPassword  = "uber"
+	testSchemaDir = "schema/mysql/v57"
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -50,14 +48,20 @@ type TestCluster struct {
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(dbName string) *TestCluster {
+func NewTestCluster(dbName string, port int, schemaDir string) *TestCluster {
 	var result TestCluster
 	result.dbName = dbName
-	result.schemaDir = testSchemaDir
+	if port == 0 {
+		port = environment.GetMySQLPort()
+	}
+	if schemaDir == "" {
+		schemaDir = testSchemaDir
+	}
+	result.schemaDir = schemaDir
 	result.cfg = config.SQL{
 		User:            testUser,
 		Password:        testPassword,
-		ConnectAddr:     fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
+		ConnectAddr:     fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), port),
 		ConnectProtocol: "tcp",
 		DriverName:      defaultDriverName,
 		DatabaseName:    dbName,

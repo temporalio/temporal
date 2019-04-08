@@ -52,7 +52,9 @@ type (
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
 		DBName          string
+		DBPort          int              `yaml:"-"`
 		StoreType       string           `yaml:"-"`
+		SchemaDir       string           `yaml:"-"`
 		ClusterMetadata cluster.Metadata `yaml:"-"`
 	}
 
@@ -105,7 +107,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(10)
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName)
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBPort, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
@@ -114,7 +116,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	testCluster := sql.NewTestCluster(options.DBName)
+	testCluster := sql.NewTestCluster(options.DBName, options.DBPort, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
