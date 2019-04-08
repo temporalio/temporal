@@ -24,10 +24,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/uber/cadence/common/logging"
+
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
 )
 
 type (
@@ -109,7 +110,8 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 
 // GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
 func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest, byBatch bool) ([]*workflow.History, *workflow.History, []byte, int64, int, error) {
-	token, err := m.deserializeToken(request)
+	defaultLastEventID := request.FirstEventID - 1
+	token, err := m.deserializeToken(request, defaultLastEventID)
 	if err != nil {
 		return nil, nil, nil, 0, 0, err
 	}
@@ -150,13 +152,21 @@ func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExe
 		}
 
 		if len(historyBatch) == 0 || historyBatch[0].GetEventId() > token.LastEventID+1 {
-			logger := m.logger.WithFields(bark.Fields{
-				logging.TagWorkflowExecutionID: request.Execution.GetWorkflowId(),
-				logging.TagWorkflowRunID:       request.Execution.GetRunId(),
-				logging.TagDomainID:            request.DomainID,
-			})
-			logger.Error("Unexpected event batch")
-			return nil, nil, nil, 0, 0, fmt.Errorf("corrupted history event batch")
+			if defaultLastEventID == 0 || token.LastEventID != defaultLastEventID {
+				// We assume application layer want to read from MinEventID(inclusive)
+				// However, for getting history from remote cluster, there is scenario that we have to read from middle without knowing the firstEventID.
+				// In that case we don't validate history continuousness for the first page
+				// TODO: in this case, some events returned can be invalid(stale). application layer need to make sure it won't make any problems to XDC
+				logger := m.logger.WithFields(bark.Fields{
+					logging.TagWorkflowExecutionID: request.Execution.GetWorkflowId(),
+					logging.TagWorkflowRunID:       request.Execution.GetRunId(),
+					logging.TagDomainID:            request.DomainID,
+				})
+				logger.Error("Unexpected event batch")
+				return nil, nil, nil, 0, 0, fmt.Errorf("corrupted history event batch")
+			} else {
+				token.LastEventID = historyBatch[0].GetEventId() - 1
+			}
 		}
 
 		if historyBatch[0].GetEventId() != token.LastEventID+1 {
@@ -183,10 +193,10 @@ func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExe
 	return historyBatches, history, nextToken, lastFirstEventID, size, nil
 }
 
-func (m *historyManagerImpl) deserializeToken(request *GetWorkflowExecutionHistoryRequest) (*historyToken, error) {
+func (m *historyManagerImpl) deserializeToken(request *GetWorkflowExecutionHistoryRequest, defaultLastEventID int64) (*historyToken, error) {
 	token := &historyToken{
 		LastEventBatchVersion: common.EmptyVersion,
-		LastEventID:           request.FirstEventID - 1,
+		LastEventID:           defaultLastEventID,
 	}
 
 	if len(request.NextPageToken) == 0 {

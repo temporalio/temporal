@@ -130,9 +130,9 @@ func (s *HistoryPersistenceSuite) TestGetHistoryEventsCompatibility() {
 	batches := []*gen.History{
 		newBatchEventForTest([]int64{1, 2}, 1),
 		newBatchEventForTest([]int64{3}, 1),
-		newBatchEventForTest([]int64{4, 5}, 1),
-		newBatchEventForTest([]int64{5}, 1), // staled batch, should be ignored
-		newBatchEventForTest([]int64{6, 7}, 1),
+		newBatchEventForTest([]int64{4, 5, 6}, 1),
+		newBatchEventForTest([]int64{6}, 1), // staled batch, should be ignored
+		newBatchEventForTest([]int64{7, 8}, 1),
 	}
 
 	for i, be := range batches {
@@ -144,7 +144,7 @@ func (s *HistoryPersistenceSuite) TestGetHistoryEventsCompatibility() {
 	history, token, err := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, 8, 3, nil)
 	s.Nil(err)
 	s.NotNil(token)
-	s.Equal(5, len(history.Events))
+	s.Equal(6, len(history.Events))
 	for i, e := range history.Events {
 		s.Equal(int64(i+1), e.GetEventId())
 	}
@@ -154,8 +154,18 @@ func (s *HistoryPersistenceSuite) TestGetHistoryEventsCompatibility() {
 	s.Nil(err)
 	s.Nil(token)
 	s.Equal(2, len(history.Events))
+	s.Equal(int64(7), history.Events[0].GetEventId())
+	s.Equal(int64(8), history.Events[1].GetEventId())
+
+	// Start over, but read from middle, should not return error, but the first batch should be ignored by application layer
+	token = nil
+	history, token, err = s.GetWorkflowExecutionHistory(domainID, workflowExecution, 5, 8, 3, token)
+	s.Nil(err)
+	s.Nil(token)
+	s.Equal(3, len(history.Events))
 	s.Equal(int64(6), history.Events[0].GetEventId())
 	s.Equal(int64(7), history.Events[1].GetEventId())
+	s.Equal(int64(8), history.Events[2].GetEventId())
 }
 
 // TestDeleteHistoryEvents test

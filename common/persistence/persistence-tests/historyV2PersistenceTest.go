@@ -138,10 +138,37 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	s.Nil(err)
 	historyW.Events = append(historyW.Events, events...)
 
+	// stale event batch
+	events = s.genRandomEvents([]int64{6, 7, 8}, 0)
+	err = s.appendNewNode(bi, events, 1)
+	s.Nil(err)
+	// stale event batch
+	events = s.genRandomEvents([]int64{6, 7, 8}, 0)
+	err = s.appendNewNode(bi, events, 2)
+	s.Nil(err)
+	// stale event batch
+	events = s.genRandomEvents([]int64{6, 7, 8}, 1)
+	err = s.appendNewNode(bi, events, 3)
+	s.Nil(err)
+
 	events = s.genRandomEvents([]int64{9}, 1)
 	err = s.appendNewNode(bi, events, 1)
 	s.Nil(err)
 	historyW.Events = append(historyW.Events, events...)
+
+	// Start to read from middle, should not return error, but the first batch should be ignored by application layer
+	req := &p.ReadHistoryBranchRequest{
+		BranchToken:   bi,
+		MinEventID:    6,
+		MaxEventID:    10,
+		PageSize:      4,
+		NextPageToken: nil,
+	}
+	// first page
+	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(4, len(resp.HistoryEvents))
+	s.Equal(int64(6), resp.HistoryEvents[0].GetEventId())
 
 	events = s.genRandomEvents([]int64{10}, 1)
 	err = s.appendNewNode(bi, events, 1)
@@ -191,7 +218,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	//read branch to verify
 	historyR := &workflow.History{}
 
-	req := &p.ReadHistoryBranchRequest{
+	req = &p.ReadHistoryBranchRequest{
 		BranchToken:   bi2,
 		MinEventID:    1,
 		MaxEventID:    21,
@@ -199,12 +226,18 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		NextPageToken: nil,
 	}
 	// first page
-	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
 	s.Nil(err)
 	s.Equal(8, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 
+	// this page is all stale batches
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.Nil(err)
+	s.Equal(0, len(resp.HistoryEvents))
+	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	req.NextPageToken = resp.NextPageToken
 	// second page
 	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
 	s.Nil(err)

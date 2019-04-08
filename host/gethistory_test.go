@@ -604,3 +604,150 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	s.True(len(blobs) == 2)
 	s.True(len(events) == 3)
 }
+
+func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
+	workflowID := "integration-get-workflow-history-raw-events-in-the-middle"
+	workflowTypeName := "integration-get-workflow-history-raw-events-in-the-middle-type"
+	tasklistName := "integration-get-workflow-history-raw-events-in-the-middle-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(workflowTypeName)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tasklistName)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(workflowID),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+	execution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(we.GetRunId()),
+	}
+
+	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	activityScheduled := false
+	activityData := int32(1)
+	// var signalEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:                      taskList,
+					Input:                         buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
+				},
+			}}, nil
+		}
+
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	// activity handler
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	getHistory := func(domain string, execution *workflow.WorkflowExecution, firstEventID int64, nextEventID int64,
+		token []byte) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
+
+		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
+			Domain:          common.StringPtr(domain),
+			Execution:       execution,
+			FirstEventId:    common.Int64Ptr(firstEventID),
+			NextEventId:     common.Int64Ptr(nextEventID),
+			MaximumPageSize: common.Int32Ptr(1),
+			NextPageToken:   token,
+		})
+	}
+
+	// poll so workflow will make progress
+	poller.PollAndProcessDecisionTask(false, false)
+	// continue the workflow by processing activity
+	poller.PollAndProcessActivityTask(false)
+	// poll so workflow will make progress
+	poller.PollAndProcessDecisionTask(false, false)
+
+	// now, there shall be 5 batches of events:
+	// 1. start event and decision task scheduled;
+	// 2. decision task started
+	// 3. decision task completed and activity task scheduled
+	// 4. activity task started
+	// 5. activity task completed and decision task scheduled
+	// 6. decision task started
+	// 7. decision task completed and workflow execution completed
+
+	// trying getting history from the middle to the end
+	firstEventID := int64(5)
+	var token []byte
+	// this should get the #4 batch, activity task started
+	resp, err := getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	s.Nil(err)
+	s.Equal(1, len(resp.HistoryBatches))
+	token = resp.NextPageToken
+	s.NotEmpty(token)
+
+	// this should get the #5 batch, activity task completed and decision task scheduled
+	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	s.Nil(err)
+	s.Equal(1, len(resp.HistoryBatches))
+	token = resp.NextPageToken
+	s.NotEmpty(token)
+
+	// this should get the #6 batch, decision task started
+	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	s.Nil(err)
+	s.Equal(1, len(resp.HistoryBatches))
+	token = resp.NextPageToken
+	s.NotEmpty(token)
+
+	// this should get the #7 batch, decision task completed and workflow execution completed
+	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	s.Nil(err)
+	s.Equal(1, len(resp.HistoryBatches))
+}
