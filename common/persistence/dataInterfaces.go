@@ -99,6 +99,7 @@ const (
 	TransferTaskTypeCancelExecution
 	TransferTaskTypeStartChildExecution
 	TransferTaskTypeSignalExecution
+	TransferTaskTypeRecordWorkflowStarted
 )
 
 // Types of replication tasks
@@ -387,6 +388,13 @@ type (
 		ScheduleID          int64
 		Version             int64
 		RecordVisibility    bool
+	}
+
+	// RecordWorkflowStartedTask identifites a transfer task for writing visibility open execution record
+	RecordWorkflowStartedTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
 	}
 
 	// CloseExecutionTask identifies a transfer task for deletion of execution
@@ -1553,6 +1561,41 @@ func (d *DecisionTask) GetVisibilityTimestamp() time.Time {
 // SetVisibilityTimestamp set the visibility timestamp
 func (d *DecisionTask) SetVisibilityTimestamp(timestamp time.Time) {
 	d.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the record workflow started task
+func (a *RecordWorkflowStartedTask) GetType() int {
+	return TransferTaskTypeRecordWorkflowStarted
+}
+
+// GetVersion returns the version of the record workflow started task
+func (a *RecordWorkflowStartedTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the record workflow started task
+func (a *RecordWorkflowStartedTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the record workflow started task
+func (a *RecordWorkflowStartedTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the record workflow started task
+func (a *RecordWorkflowStartedTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
+func (a *RecordWorkflowStartedTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (a *RecordWorkflowStartedTask) SetVisibilityTimestamp(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
 }
 
 // GetType returns the type of the close execution task

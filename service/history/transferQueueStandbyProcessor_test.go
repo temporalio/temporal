@@ -382,8 +382,6 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Pending() {
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Return(nil)
-	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 	_, err := s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 }
@@ -431,9 +429,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Pending_Pus
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Return(nil)
 	s.mockMatchingClient.On("AddDecisionTask", mock.Anything, mock.Anything).Return(nil).Once()
-	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	_, err := s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Nil(nil, err)
@@ -483,20 +479,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Success_Fir
 	di.StartedID = event.GetEventId()
 
 	persistenceMutableState := createMutableState(msBuilder)
-	executionInfo := msBuilder.GetExecutionInfo()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID: executionInfo.DomainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
-			RunId:      common.StringPtr(executionInfo.RunID),
-		},
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
-	}).Return(nil).Once()
-	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
-
 	_, err := s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Nil(err)
 }
@@ -1014,6 +997,64 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessStartChildExecution_Succ
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
+	_, err := s.transferQueueStandbyProcessor.process(transferTask, true)
+	s.Nil(err)
+}
+
+func (s *transferQueueStandbyProcessorSuite) TestProcessRecordWorkflowStartedTask() {
+	domainID := "some random domain ID"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard, s.mockShard.GetEventsCache(), s.logger, version, execution.GetRunId())
+	event := msBuilder.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+
+	taskID := int64(59)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), version, event.GetEventId())
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		VisibilityTimestamp: time.Now(),
+		TaskID:              taskID,
+		TaskList:            taskListName,
+		TaskType:            persistence.TransferTaskTypeRecordWorkflowStarted,
+		ScheduleID:          event.GetEventId(),
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	executionInfo := msBuilder.GetExecutionInfo()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
+		DomainUUID: executionInfo.DomainID,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+			RunId:      common.StringPtr(executionInfo.RunID),
+		},
+		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+	}).Return(nil).Once()
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 	_, err := s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Nil(err)
 }

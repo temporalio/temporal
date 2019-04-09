@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -243,6 +244,12 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo, shouldPr
 		}
 		return metrics.TransferActiveTaskStartChildExecutionScope, err
 
+	case persistence.TransferTaskTypeRecordWorkflowStarted:
+		if shouldProcessTask {
+			err = t.processRecordWorkflowStarted(task)
+		}
+		return metrics.TransferActiveTaskRecordWorkflowStartedScope, err
+
 	default:
 		return metrics.TransferActiveQueueProcessorScope, errUnknownTransferTask
 	}
@@ -328,8 +335,6 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	executionInfo := msBuilder.GetExecutionInfo()
 	workflowTimeout := executionInfo.WorkflowTimeout
 	decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
-	wfTypeName := executionInfo.WorkflowTypeName
-	startTimestamp := executionInfo.StartTimestamp
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky decision, if so convert the decision to a sticky decision.
@@ -346,13 +351,6 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	if task.ScheduleID <= common.FirstEventID+2 || task.RecordVisibility {
-		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, task.GetTaskID())
-		if err != nil {
-			return err
-		}
-	}
-
 	return t.pushDecision(task, tasklist, decisionTimeout)
 }
 
@@ -412,12 +410,13 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	workflowCloseTimestamp := wfCloseTime
 	workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 	workflowHistoryLength := msBuilder.GetNextEventID() - 1
+	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder).UnixNano()
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
-		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(),
+		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(),
 	)
 	if err != nil {
 		return err
@@ -790,6 +789,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 				},
 				InitiatedId: common.Int64Ptr(initiatedEventID),
 			},
+			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
 		}
 
 		var startResponse *workflow.StartWorkflowExecutionResponse
@@ -830,6 +830,47 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 	}
 
 	return err
+}
+
+func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *persistence.TransferTaskInfo) (retError error) {
+	var err error
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
+
+	// get workflow timeout
+	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	var msBuilder mutableState
+	msBuilder, err = loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
+	if err != nil {
+		return err
+	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
+	if err != nil {
+		return err
+	} else if !ok {
+		return nil
+	}
+
+	executionInfo := msBuilder.GetExecutionInfo()
+	workflowTimeout := executionInfo.WorkflowTimeout
+	wfTypeName := executionInfo.WorkflowTypeName
+	startTimestamp := executionInfo.StartTimestamp.UnixNano()
+	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder).UnixNano()
+
+	// release the context lock since we no longer need mutable state builder and
+	// the rest of logic is making RPC call, which takes time.
+	release(nil)
+	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp, workflowTimeout, task.GetTaskID())
 }
 
 func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *persistence.TransferTaskInfo,

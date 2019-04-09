@@ -343,16 +343,20 @@ func (e *historyEngineImpl) generateFirstDecisionTask(domainID string, msBuilder
 		DecisionTimeout: int32(0),
 	}
 	var transferTasks []persistence.Task
-	if parentInfo == nil && cronBackoffSeconds == 0 {
-		// DecisionTask is only created when it is not a Child Workflow Execution and no backoff is needed
-		di = msBuilder.AddDecisionTaskScheduledEvent()
-		if di == nil {
-			return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
-		}
+	if parentInfo == nil {
+		// RecordWorkflowStartedTask is only created when it is not a Child Workflow
+		transferTasks = append(transferTasks, &persistence.RecordWorkflowStartedTask{})
+		if cronBackoffSeconds == 0 {
+			// DecisionTask is only created when it is not a Child Workflow and no backoff is needed
+			di = msBuilder.AddDecisionTaskScheduledEvent()
+			if di == nil {
+				return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+			}
 
-		transferTasks = []persistence.Task{&persistence.DecisionTask{
-			DomainID: domainID, TaskList: taskListName, ScheduleID: di.ScheduleID,
-		}}
+			transferTasks = append(transferTasks, &persistence.DecisionTask{
+				DomainID: domainID, TaskList: taskListName, ScheduleID: di.ScheduleID,
+			})
+		}
 	}
 	return transferTasks, di, nil
 }
@@ -2438,9 +2442,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	if firstDecisionTask == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 	}
-	transferTasks := []persistence.Task{&persistence.DecisionTask{
-		DomainID: domainID, TaskList: taskList, ScheduleID: firstDecisionTask.ScheduleID,
-	}}
+	transferTasks := []persistence.Task{
+		&persistence.DecisionTask{
+			DomainID: domainID, TaskList: taskList, ScheduleID: firstDecisionTask.ScheduleID,
+		},
+		&persistence.RecordWorkflowStartedTask{},
+	}
 	// first timer task
 	duration := time.Duration(*request.ExecutionStartToCloseTimeoutSeconds) * time.Second
 	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
@@ -2577,12 +2584,13 @@ func (e *historyEngineImpl) ScheduleDecisionTask(ctx context.Context, scheduleRe
 
 			postActions := &updateWorkflowAction{
 				createDecision: true,
+				transferTasks:  []persistence.Task{&persistence.RecordWorkflowStartedTask{}},
 			}
 
-			cronBackoffDuration := msBuilder.GetCronBackoffDuration()
-			if scheduleRequest.GetIsFirstDecision() && cronBackoffDuration != cron.NoBackoff {
+			executionTimestamp := getWorkflowExecutionTimestamp(msBuilder)
+			if scheduleRequest.GetIsFirstDecision() && executionTimestamp.After(time.Now()) {
 				postActions.timerTasks = append(postActions.timerTasks, &persistence.WorkflowBackoffTimerTask{
-					VisibilityTimestamp: time.Now().Add(cronBackoffDuration),
+					VisibilityTimestamp: executionTimestamp,
 					TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
 				})
 				postActions.createDecision = false

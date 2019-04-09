@@ -4,6 +4,7 @@ CREATE TABLE open_executions (
   workflow_id          text,
   run_id               uuid,
   start_time           timestamp,
+  execution_time       timestamp,
   workflow_type_name   text,
   PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
@@ -23,6 +24,7 @@ CREATE TABLE closed_executions (
   workflow_id          text,
   run_id               uuid,
   start_time           timestamp,
+  execution_time       timestamp,
   close_time           timestamp,
   status               int,  -- enum WorkflowExecutionCloseStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   workflow_type_name   text,
@@ -46,6 +48,7 @@ CREATE TABLE closed_executions_v2 (
   workflow_id          text,
   run_id               uuid,
   start_time           timestamp,
+  execution_time       timestamp,
   close_time           timestamp,
   status               int,  -- enum WorkflowExecutionCloseStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   workflow_type_name   text,

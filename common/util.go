@@ -22,7 +22,6 @@ package common
 
 import (
 	"encoding/json"
-	"math"
 	"math/rand"
 	"sync"
 	"time"
@@ -376,10 +375,7 @@ func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.S
 		deadline := time.Now().Add(time.Second * time.Duration(expirationInSeconds))
 		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
 	}
-	cronBackoff := cron.GetBackoffForNextSchedule(startRequest.GetCronSchedule(), time.Now())
-	if cronBackoff != NoRetryBackoff {
-		histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(int32(math.Ceil(cronBackoff.Seconds())))
-	}
+	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), time.Now()))
 	return histRequest
 }
 

@@ -43,12 +43,12 @@ const (
 
 const (
 	templateCreateWorkflowExecutionStartedWithTTL = `INSERT INTO open_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, workflow_type_name) ` +
-		`VALUES (?, ?, ?, ?, ?, ?) using TTL ?`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, workflow_type_name) ` +
-		`VALUES (?, ?, ?, ?, ?, ?)`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	templateDeleteWorkflowExecutionStarted = `DELETE FROM open_executions ` +
 		`WHERE domain_id = ? ` +
@@ -57,36 +57,36 @@ const (
 		`AND run_id = ?`
 
 	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosedWithTTLV2 = `INSERT INTO closed_executions_v2 (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosedV2 = `INSERT INTO closed_executions_v2 (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, workflow_type_name ` +
+	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name ` +
 		`FROM open_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
-	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
-	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, workflow_type_name ` +
+	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name ` +
 		`FROM open_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -94,7 +94,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -102,7 +102,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, workflow_type_name ` +
+	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name ` +
 		`FROM open_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -110,7 +110,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -118,7 +118,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -126,7 +126,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND status = ? `
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -179,6 +179,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			*request.Execution.WorkflowId,
 			*request.Execution.RunId,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
+			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 		)
 	} else {
@@ -188,6 +189,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 			*request.Execution.WorkflowId,
 			*request.Execution.RunId,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
+			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
 			ttl,
 		)
@@ -235,6 +237,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			*request.Execution.WorkflowId,
 			*request.Execution.RunId,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
+			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
@@ -247,6 +250,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			*request.Execution.WorkflowId,
 			*request.Execution.RunId,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
+			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
@@ -259,6 +263,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			*request.Execution.WorkflowId,
 			*request.Execution.RunId,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
+			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
@@ -272,6 +277,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 			*request.Execution.WorkflowId,
 			*request.Execution.RunId,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
+			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
@@ -635,7 +641,8 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExecut
 	var runID gocql.UUID
 	var typeName string
 	var startTime time.Time
-	if iter.Scan(&workflowID, &runID, &startTime, &typeName) {
+	var executionTime time.Time
+	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName) {
 		execution := &workflow.WorkflowExecution{}
 		execution.WorkflowId = common.StringPtr(workflowID)
 		execution.RunId = common.StringPtr(runID.String())
@@ -643,9 +650,14 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExecut
 		wfType := &workflow.WorkflowType{}
 		wfType.Name = common.StringPtr(typeName)
 
+		if executionTime.UnixNano() == 0 {
+			executionTime = startTime
+		}
+
 		record := &workflow.WorkflowExecutionInfo{}
 		record.Execution = execution
 		record.StartTime = common.Int64Ptr(startTime.UnixNano())
+		record.ExecutionTime = common.Int64Ptr(executionTime.UnixNano())
 		record.Type = wfType
 		return record, true
 	}
@@ -657,10 +669,11 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExec
 	var runID gocql.UUID
 	var typeName string
 	var startTime time.Time
+	var executionTime time.Time
 	var closeTime time.Time
 	var status workflow.WorkflowExecutionCloseStatus
 	var historyLength int64
-	if iter.Scan(&workflowID, &runID, &startTime, &closeTime, &typeName, &status, &historyLength) {
+	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength) {
 		execution := &workflow.WorkflowExecution{}
 		execution.WorkflowId = common.StringPtr(workflowID)
 		execution.RunId = common.StringPtr(runID.String())
@@ -668,9 +681,14 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExec
 		wfType := &workflow.WorkflowType{}
 		wfType.Name = common.StringPtr(typeName)
 
+		if executionTime.UnixNano() == 0 {
+			executionTime = startTime
+		}
+
 		record := &workflow.WorkflowExecutionInfo{}
 		record.Execution = execution
 		record.StartTime = common.Int64Ptr(startTime.UnixNano())
+		record.ExecutionTime = common.Int64Ptr(executionTime.UnixNano())
 		record.CloseTime = common.Int64Ptr(closeTime.UnixNano())
 		record.Type = wfType
 		record.CloseStatus = &status

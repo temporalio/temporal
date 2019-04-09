@@ -29,6 +29,7 @@ const (
 	RunID         = "RunID"
 	WorkflowType  = "WorkflowType"
 	StartTime     = "StartTime"
+	ExecutionTime = "ExecutionTime"
 	CloseTime     = "CloseTime"
 	CloseStatus   = "CloseStatus"
 	HistoryLength = "HistoryLength"
@@ -50,6 +51,7 @@ var (
 		RunID:         struct{}{},
 		WorkflowType:  struct{}{},
 		StartTime:     struct{}{},
+		ExecutionTime: struct{}{},
 		CloseTime:     struct{}{},
 		CloseStatus:   struct{}{},
 		HistoryLength: struct{}{},

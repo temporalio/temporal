@@ -22,6 +22,7 @@ package cassandra
 
 import (
 	"fmt"
+
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -30,14 +31,14 @@ import (
 )
 
 const (
-	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition IN (?) ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? `
 
-	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -45,7 +46,7 @@ const (
 		`AND close_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -53,7 +54,7 @@ const (
 		`AND close_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +

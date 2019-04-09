@@ -838,7 +838,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	tl := "integration-wf-cron-tasklist"
 	identity := "worker1"
 
-	targetBackoffDuration := time.Second * 5
+	targetBackoffDuration := time.Second * 3
 	backoffDurationTolerance := time.Millisecond * 500
 
 	workflowType := &workflow.WorkflowType{}
@@ -857,7 +857,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
-		CronSchedule:                        common.StringPtr("@every 5s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		CronSchedule:                        common.StringPtr("@every 3s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
 	}
 
 	startWorkflowTS := time.Now()
@@ -903,10 +903,30 @@ func (s *integrationSuite) TestCronWorkflow() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
+	startFilter := &workflow.StartTimeFilter{}
+	startFilter.EarliestTime = common.Int64Ptr(startWorkflowTS.UnixNano())
+	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+
+	// Sleep some time before checking the open executions.
+	// This will not cost extra time as the polling for first decision task will be blocked for 3 seconds.
+	time.Sleep(2 * time.Second)
+	resp, err := s.engine.ListOpenWorkflowExecutions(createContext(), &workflow.ListOpenWorkflowExecutionsRequest{
+		Domain:          common.StringPtr(s.domainName),
+		MaximumPageSize: common.Int32Ptr(100),
+		StartTimeFilter: startFilter,
+		ExecutionFilter: &workflow.WorkflowExecutionFilter{
+			WorkflowId: common.StringPtr(id),
+		},
+	})
+	s.Nil(err)
+	s.Equal(1, len(resp.GetExecutions()))
+	executionInfo := resp.GetExecutions()[0]
+	s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 
-	// Make sure the cron workflow start running at a proper time, in this case 5 second after the
+	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
 	backoffDuration := time.Now().Sub(startWorkflowTS)
 	s.True(backoffDuration > targetBackoffDuration)
@@ -952,6 +972,30 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+
+	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+	var closedExecutions []*workflow.WorkflowExecutionInfo
+	for i := 0; i < 10; i++ {
+		resp, err := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: startFilter,
+			ExecutionFilter: &workflow.WorkflowExecutionFilter{
+				WorkflowId: common.StringPtr(id),
+			},
+		})
+		s.Nil(err)
+		if len(resp.GetExecutions()) == 4 {
+			closedExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.NotNil(closedExecutions)
+	for i := 0; i != 4; i++ {
+		executionInfo := closedExecutions[i]
+		s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
+	}
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {
@@ -1729,6 +1773,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		Identity:                            common.StringPtr(identity),
 	}
 
+	startParentWorkflowTS := time.Now()
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
@@ -1821,7 +1866,27 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
+	startFilter := &workflow.StartTimeFilter{}
+	startFilter.EarliestTime = common.Int64Ptr(startChildWorkflowTS.UnixNano())
+
 	for i := 0; i < 2; i++ {
+		// Sleep some time before checking the open executions.
+		// This will not cost extra time as the polling for first decision task will be blocked for 3 seconds.
+		time.Sleep(2 * time.Second)
+		startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+		resp, err := s.engine.ListOpenWorkflowExecutions(createContext(), &workflow.ListOpenWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: startFilter,
+			ExecutionFilter: &workflow.WorkflowExecutionFilter{
+				WorkflowId: common.StringPtr(childID),
+			},
+		})
+		s.Nil(err)
+		s.Equal(1, len(resp.GetExecutions()))
+		executionInfo := resp.GetExecutions()[0]
+		s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
+
 		_, err = pollerChild.PollAndProcessDecisionTask(false, false)
 		s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err)
@@ -1850,6 +1915,32 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Nil(terminatedAttributes.Domain)
 	s.Equal(childID, *terminatedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, *terminatedAttributes.WorkflowType.Name)
+
+	startFilter.EarliestTime = common.Int64Ptr(startParentWorkflowTS.UnixNano())
+	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+	var closedExecutions []*workflow.WorkflowExecutionInfo
+	for i := 0; i < 10; i++ {
+		resp, err := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: startFilter,
+		})
+		s.Nil(err)
+		if len(resp.GetExecutions()) == 4 {
+			closedExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.NotNil(closedExecutions)
+	for i := 0; i != 4; i++ {
+		executionInfo := closedExecutions[i]
+		if executionInfo.GetExecution().GetWorkflowId() == childID {
+			s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
+		} else {
+			s.Equal(executionInfo.GetExecutionTime(), executionInfo.GetStartTime())
+		}
+	}
 }
 
 func (s *integrationSuite) TestWorkflowTimeout() {

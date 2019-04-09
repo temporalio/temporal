@@ -120,6 +120,8 @@ func (s *engine3Suite) SetupTest() {
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockEventsCache = &MockEventsCache{}
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything).Return()
 
 	mockShard := &shardContextImpl{
 		service:                   s.mockService,

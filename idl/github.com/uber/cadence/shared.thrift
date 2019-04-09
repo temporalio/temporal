@@ -296,6 +296,7 @@ struct WorkflowExecutionInfo {
   60: optional i64 (js.type = "Long") historyLength
   70: optional string parentDomainId
   80: optional WorkflowExecution parentExecution
+  90: optional i64 (js.type = "Long") executionTime
 }
 
 struct WorkflowExecutionConfiguration {

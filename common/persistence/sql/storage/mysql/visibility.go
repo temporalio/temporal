@@ -30,12 +30,12 @@ import (
 
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT IGNORE INTO executions_visibility (` +
-		`domain_id, workflow_id, run_id, start_time, workflow_type_name) ` +
-		`VALUES (?, ?, ?, ?, ?)`
+		`domain_id, workflow_id, run_id, start_time, execution_time, workflow_type_name) ` +
+		`VALUES (?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
-		`domain_id, workflow_id, run_id, start_time, workflow_type_name, close_time, close_status, history_length) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		`domain_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, close_status, history_length) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND domain_id = ?
@@ -45,7 +45,7 @@ const (
          ORDER BY start_time DESC, run_id
          LIMIT ?`
 
-	templateOpenFieldNames = `workflow_id, run_id, start_time, workflow_type_name`
+	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE close_status IS NULL `
 
 	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, close_status, history_length
@@ -65,7 +65,7 @@ const (
 
 	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND close_status = ?` + templateConditions
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, close_status, history_length
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, close_status, history_length
 		 FROM executions_visibility
 		 WHERE domain_id = ? AND close_status IS NOT NULL
 		 AND run_id = ?`
@@ -82,6 +82,7 @@ func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error
 		row.WorkflowID,
 		row.RunID,
 		row.StartTime,
+		row.ExecutionTime,
 		row.WorkflowTypeName)
 }
 
@@ -95,6 +96,7 @@ func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, erro
 			row.WorkflowID,
 			row.RunID,
 			row.StartTime,
+			row.ExecutionTime,
 			row.WorkflowTypeName,
 			closeTime,
 			*row.CloseStatus,
@@ -180,6 +182,7 @@ func (mdb *DB) SelectFromVisibility(filter *sqldb.VisibilityFilter) ([]sqldb.Vis
 	}
 	for i := range rows {
 		rows[i].StartTime = mdb.converter.FromMySQLDateTime(rows[i].StartTime)
+		rows[i].ExecutionTime = mdb.converter.FromMySQLDateTime(rows[i].ExecutionTime)
 		if rows[i].CloseTime != nil {
 			closeTime := mdb.converter.FromMySQLDateTime(*rows[i].CloseTime)
 			rows[i].CloseTime = &closeTime

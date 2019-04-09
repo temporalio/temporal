@@ -1220,6 +1220,29 @@ func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, bool) {
 	return r0, r1
 }
 
+// GetStartEvent provides a mock function with given fields:
+func (_m *mockMutableState) GetStartEvent() (*shared.HistoryEvent, bool) {
+	ret := _m.Called()
+
+	var r0 *shared.HistoryEvent
+	if rf, ok := ret.Get(0).(func() *shared.HistoryEvent); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.HistoryEvent)
+		}
+	}
+
+	var r1 bool
+	if rf, ok := ret.Get(1).(func() bool); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	return r0, r1
+}
+
 // GetContinueAsNew provides a mock function with given fields:
 func (_m *mockMutableState) GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest {
 	ret := _m.Called()
@@ -2108,7 +2131,7 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionSignaled(_a0 *shared.Histo
 }
 
 // ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
-func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 string, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.WorkflowExecutionStartedEventAttributes) {
+func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 string, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.HistoryEvent) {
 	_m.Called(_a0, _a1, _a2, _a3, _a4)
 }
 

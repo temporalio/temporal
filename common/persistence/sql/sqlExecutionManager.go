@@ -1389,6 +1389,9 @@ func createTransferTasks(tx sqldb.Tx, transferTasks []p.Task, shardID int, domai
 		case p.TransferTaskTypeCloseExecution:
 			// No explicit property needs to be set
 
+		case p.TransferTaskTypeRecordWorkflowStarted:
+			// No explicit property needs to be set
+
 		default:
 			// hmm what should i do here?
 			//d.logger.Fatal("Unknown Transfer Task.")

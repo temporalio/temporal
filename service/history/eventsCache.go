@@ -21,9 +21,9 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
 	"time"
 
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"

@@ -370,12 +370,14 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, 
 		return
 	}
 
-	transferTasks = append(transferTasks, &persistence.DecisionTask{
-		DomainID:         domainID,
-		TaskList:         di.TaskList,
-		ScheduleID:       di.ScheduleID,
-		RecordVisibility: true,
-	})
+	transferTasks = append(transferTasks,
+		&persistence.DecisionTask{
+			DomainID:   domainID,
+			TaskList:   di.TaskList,
+			ScheduleID: di.ScheduleID,
+		},
+		&persistence.RecordWorkflowStartedTask{},
+	)
 
 	// fork a new history branch
 	forkResp, retError := w.eng.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{

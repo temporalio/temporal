@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.4",
+  "MinCompatibleVersion": "0.4",
+  "Description": "add execution_time field to all visibility tables",
+  "SchemaUpdateCqlFiles": [
+    "add_execution_time.cql"
+  ]
+}

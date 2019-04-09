@@ -37,10 +37,9 @@ import (
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
-
-	"github.com/uber/cadence/.gen/go/shared"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 )
@@ -722,8 +721,9 @@ func ListWorkflow(c *cli.Context) {
 	more := c.Bool(FlagMore)
 	pageSize := c.Int(FlagPageSize)
 
-	table := createTableForListWorkflow(false)
-	prepareTable := listWorkflow(c, table)
+	queryOpen := c.Bool(FlagOpen)
+	table := createTableForListWorkflow(false, queryOpen)
+	prepareTable := listWorkflow(c, table, queryOpen)
 
 	if !more { // default mode only show one page items
 		prepareTable(nil)
@@ -755,8 +755,9 @@ func ListWorkflow(c *cli.Context) {
 
 // ListAllWorkflow list all workflow executions based on filters
 func ListAllWorkflow(c *cli.Context) {
-	table := createTableForListWorkflow(true)
-	prepareTable := listWorkflow(c, table)
+	queryOpen := c.Bool(FlagOpen)
+	table := createTableForListWorkflow(true, queryOpen)
+	prepareTable := listWorkflow(c, table, queryOpen)
 	var resultSize int
 	var nextPageToken []byte
 	for {
@@ -900,22 +901,27 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 	}
 }
 
-func createTableForListWorkflow(listAll bool) *tablewriter.Table {
+func createTableForListWorkflow(listAll bool, queryOpen bool) *tablewriter.Table {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	table.SetHeader([]string{"Workflow Type", "Workflow ID", "Run ID", "Start Time", "End Time"})
+	header := []string{"Workflow Type", "Workflow ID", "Run ID", "Start Time", "Execution Time"}
+	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
+	if !queryOpen {
+		header = append(header, "End Time")
+		headerColor = append(headerColor, tableHeaderBlue)
+	}
+	table.SetHeader(header)
 	if !listAll { // color is only friendly to ANSI terminal
-		table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue)
+		table.SetHeaderColor(headerColor...)
 	}
 	table.SetHeaderLine(false)
 	return table
 }
 
-func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte, int) {
+func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
 	wfClient := getWorkflowClient(c)
 
-	queryOpen := c.Bool(FlagOpen)
 	earliestTime := parseTime(c.String(FlagEarliestTime), 0)
 	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano())
 	workflowID := c.String(FlagWorkflowID)
@@ -951,15 +957,21 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 		}
 
 		for _, e := range result {
-			var startTime, closeTime string
+			var startTime, executionTime, closeTime string
 			if printRawTime {
 				startTime = fmt.Sprintf("%d", e.GetStartTime())
+				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
 				closeTime = fmt.Sprintf("%d", e.GetCloseTime())
 			} else {
 				startTime = convertTime(e.GetStartTime(), !printDateTime)
+				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
 				closeTime = convertTime(e.GetCloseTime(), !printDateTime)
 			}
-			table.Append([]string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, closeTime})
+			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
+			if !queryOpen {
+				row = append(row, closeTime)
+			}
+			table.Append(row)
 		}
 
 		return nextPageToken, len(result)

@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -340,8 +341,6 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecisio
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.On("AddDecisionTask", nil, s.createAddDecisionTaskRequest(transferTask, msBuilder)).Once().Return(nil)
-	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", s.createRecordWorkflowExecutionStartedRequest(transferTask, msBuilder)).Once().Return(nil)
-	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	_, err := s.transferQueueActiveProcessor.process(transferTask, true)
 	s.Nil(err)
@@ -1454,6 +1453,58 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveProcessorSuite) TestProcessRecordWorkflowStartedTask() {
+	domainID := "some random domain ID"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+	cronSchedule := "@every 5s"
+	backoffSeconds := int32(5)
+
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+
+	event := msBuilder.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+				CronSchedule:                        common.StringPtr(cronSchedule),
+			},
+			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoffSeconds),
+		},
+	)
+
+	taskID := int64(59)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:    s.version,
+		DomainID:   domainID,
+		WorkflowID: execution.GetWorkflowId(),
+		RunID:      execution.GetRunId(),
+		TaskID:     taskID,
+		TaskList:   taskListName,
+		TaskType:   persistence.TransferTaskTypeRecordWorkflowStarted,
+		ScheduleID: event.GetEventId(),
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", s.createRecordWorkflowExecutionStartedRequest(transferTask, msBuilder, backoffSeconds)).Once().Return(nil)
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
+
+	_, err := s.transferQueueActiveProcessor.process(transferTask, true)
+	s.Nil(err)
+}
+
 func (s *transferQueueActiveProcessorSuite) createAddActivityTaskRequest(task *persistence.TransferTaskInfo,
 	ai *persistence.ActivityInfo) *matching.AddActivityTaskRequest {
 	execution := workflow.WorkflowExecution{
@@ -1496,18 +1547,21 @@ func (s *transferQueueActiveProcessorSuite) createAddDecisionTaskRequest(task *p
 }
 
 func (s *transferQueueActiveProcessorSuite) createRecordWorkflowExecutionStartedRequest(task *persistence.TransferTaskInfo,
-	msBuilder mutableState) *persistence.RecordWorkflowExecutionStartedRequest {
+	msBuilder mutableState, backoffSeconds int32) *persistence.RecordWorkflowExecutionStartedRequest {
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
 	executionInfo := msBuilder.GetExecutionInfo()
+	executionTimestamp := executionInfo.StartTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
+
 	return &persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID:       task.DomainID,
-		Execution:        execution,
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+		DomainUUID:         task.DomainID,
+		Execution:          execution,
+		WorkflowTypeName:   executionInfo.WorkflowTypeName,
+		StartTimestamp:     executionInfo.StartTimestamp.UnixNano(),
+		ExecutionTimestamp: executionTimestamp.UnixNano(),
+		WorkflowTimeout:    int64(executionInfo.WorkflowTimeout),
 	}
 }
 
@@ -1599,5 +1653,6 @@ func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(
 			Execution:   &execution,
 			InitiatedId: common.Int64Ptr(task.ScheduleID),
 		},
+		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
 	}
 }

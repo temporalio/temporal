@@ -165,6 +165,12 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo, shouldP
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope, err
 
+	case persistence.TransferTaskTypeRecordWorkflowStarted:
+		if shouldProcessTask {
+			err = t.processRecordWorkflowStarted(task)
+		}
+		return metrics.TransferStandbyTaskRecordWorkflowStartedScope, err
+
 	default:
 		return metrics.TransferStandbyQueueProcessorScope, errUnknownTransferTask
 	}
@@ -215,41 +221,21 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 	var tasklist *workflow.TaskList
 	processTaskIfClosed := false
 
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(transferTask.WorkflowID),
-		RunId:      common.StringPtr(transferTask.RunID),
-	}
-
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
+		if !isPending {
+			return nil
+		}
 
 		executionInfo := msBuilder.GetExecutionInfo()
 		workflowTimeout := executionInfo.WorkflowTimeout
 		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
-		wfTypeName := executionInfo.WorkflowTypeName
-		startTimestamp := executionInfo.StartTimestamp
-
-		markWorkflowAsOpen := transferTask.ScheduleID <= common.FirstEventID+2
-
-		if !isPending {
-			if markWorkflowAsOpen {
-				err := t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, transferTask.GetTaskID())
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		}
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, decisionInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
 			return nil
-		}
-
-		if markWorkflowAsOpen {
-			err = t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout, transferTask.GetTaskID())
 		}
 
 		now := t.shard.GetCurrentTime(t.clusterName)
@@ -307,6 +293,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		workflowCloseTimestamp := wfCloseTime
 		workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := msBuilder.GetNextEventID() - 1
+		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder).UnixNano()
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
 		if err != nil {
@@ -319,7 +306,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		// since event replication should be done by active cluster
 
 		return t.recordWorkflowClosed(
-			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, transferTask.GetTaskID(),
+			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, transferTask.GetTaskID(),
 		)
 	}, standbyTaskPostActionNoOp) // no op post action, since the entire workflow is finished
 }
@@ -434,6 +421,32 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 		}
 		return ErrTaskRetry
 	}, postProcessingFn)
+}
+
+func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStarted(transferTask *persistence.TransferTaskInfo) error {
+	processTaskIfClosed := false
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(transferTask.WorkflowID),
+		RunId:      common.StringPtr(transferTask.RunID),
+	}
+
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		executionInfo := msBuilder.GetExecutionInfo()
+		workflowTimeout := executionInfo.WorkflowTimeout
+		wfTypeName := executionInfo.WorkflowTypeName
+		startTimestamp := executionInfo.StartTimestamp.UnixNano()
+		executionTimestamp := getWorkflowExecutionTimestamp(msBuilder).UnixNano()
+
+		return t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp, workflowTimeout, transferTask.GetTaskID())
+	}, standbyTaskPostActionNoOp)
 }
 
 func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo,

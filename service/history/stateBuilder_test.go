@@ -192,7 +192,7 @@ func (s *stateBuilderSuite) applyWorkflowExecutionStartedEventTest(cronSchedule 
 		}, nil,
 	).Once()
 	s.mockMutableState.On("ReplicateWorkflowExecutionStartedEvent",
-		domainID, &parentDomainID, execution, requestID, event.WorkflowExecutionStartedEventAttributes).Once()
+		domainID, &parentDomainID, execution, requestID, event).Once()
 	s.mockUpdateVersion(event)
 	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
 
@@ -220,7 +220,9 @@ func (s *stateBuilderSuite) applyWorkflowExecutionStartedEventTest(cronSchedule 
 		}
 	}
 
-	s.Empty(s.stateBuilder.transferTasks)
+	s.Equal(1, len(s.stateBuilder.transferTasks))
+	s.IsType(&persistence.RecordWorkflowStartedTask{}, s.stateBuilder.transferTasks[0])
+
 	s.Empty(s.stateBuilder.newRunTimerTasks)
 	s.Empty(s.stateBuilder.newRunTransferTasks)
 }
@@ -539,6 +541,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
 	s.mockMutableState.On("ClearStickyness").Once()
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Twice()
 	_, _, newRunStateBuilder, err := s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events, 0, 0)
 	s.Nil(err)
 	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(
@@ -556,7 +559,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			RunId:      common.StringPtr(newRunID),
 		},
 		newRunStateBuilder.GetExecutionInfo().CreateRequestID,
-		newRunStartedEvent.WorkflowExecutionStartedEventAttributes,
+		newRunStartedEvent,
 	)
 	expectedNewRunStateBuilder.ReplicateWorkflowExecutionSignaled(newRunSignalEvent)
 	expectedNewRunStateBuilder.ReplicateDecisionTaskScheduledEvent(
@@ -582,11 +585,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	newRunTimerTask, ok := s.stateBuilder.newRunTimerTasks[0].(*persistence.WorkflowTimeoutTask)
 	s.True(ok)
 	s.True(newRunTimerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(workflowTimeoutSecond) * time.Second)))
-	s.Equal([]persistence.Task{&persistence.DecisionTask{
-		DomainID:   domainID,
-		TaskList:   tasklist,
-		ScheduleID: newRunDecisionEvent.GetEventId(),
-	}}, s.stateBuilder.newRunTransferTasks)
+	s.Equal([]persistence.Task{
+		&persistence.RecordWorkflowStartedTask{},
+		&persistence.DecisionTask{
+			DomainID:   domainID,
+			TaskList:   tasklist,
+			ScheduleID: newRunDecisionEvent.GetEventId(),
+		},
+	}, s.stateBuilder.newRunTransferTasks)
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted() {
@@ -863,7 +869,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
 	s.mockMutableState.On("ClearStickyness").Once()
-	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Times(3)
 
 	_, _, newRunStateBuilder, err := stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events,
 		0, persistence.EventStoreVersionV2)
@@ -883,7 +889,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			RunId:      common.StringPtr(newRunID),
 		},
 		newRunStateBuilder.GetExecutionInfo().CreateRequestID,
-		newRunStartedEvent.WorkflowExecutionStartedEventAttributes,
+		newRunStartedEvent,
 	)
 	expectedNewRunStateBuilder.ReplicateWorkflowExecutionSignaled(newRunSignalEvent)
 	expectedNewRunStateBuilder.ReplicateDecisionTaskScheduledEvent(
@@ -912,11 +918,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	newRunTimerTask, ok := stateBuilder.newRunTimerTasks[0].(*persistence.WorkflowTimeoutTask)
 	s.True(ok)
 	s.True(newRunTimerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(workflowTimeoutSecond) * time.Second)))
-	s.Equal([]persistence.Task{&persistence.DecisionTask{
-		DomainID:   domainID,
-		TaskList:   tasklist,
-		ScheduleID: newRunDecisionEvent.GetEventId(),
-	}}, stateBuilder.newRunTransferTasks)
+	s.Equal([]persistence.Task{
+		&persistence.RecordWorkflowStartedTask{},
+		&persistence.DecisionTask{
+			DomainID:   domainID,
+			TaskList:   tasklist,
+			ScheduleID: newRunDecisionEvent.GetEventId(),
+		},
+	}, stateBuilder.newRunTransferTasks)
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {

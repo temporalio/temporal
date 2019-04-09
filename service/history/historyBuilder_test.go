@@ -21,8 +21,9 @@
 package history
 
 import (
-	"github.com/stretchr/testify/mock"
 	"testing"
+
+	"github.com/stretchr/testify/mock"
 
 	log "github.com/sirupsen/logrus"
 
@@ -667,6 +668,8 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.WorkflowExecution, workflowType,
 	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything).Return()
 
 	request := &workflow.StartWorkflowExecutionRequest{
 		WorkflowId:                          common.StringPtr(*we.WorkflowId),

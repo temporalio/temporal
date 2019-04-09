@@ -66,6 +66,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.RecordWor
 		WorkflowID:       *request.Execution.WorkflowId,
 		RunID:            *request.Execution.RunId,
 		StartTime:        time.Unix(0, request.StartTimestamp),
+		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 	})
 	return err
@@ -78,6 +79,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.RecordWork
 		WorkflowID:       *request.Execution.WorkflowId,
 		RunID:            *request.Execution.RunId,
 		StartTime:        time.Unix(0, request.StartTimestamp),
+		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 		CloseTime:        &closeTime,
 		CloseStatus:      common.Int32Ptr(int32(request.Status)),
@@ -228,13 +230,17 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 }
 
 func rowToInfo(row *sqldb.VisibilityRow) *workflow.WorkflowExecutionInfo {
+	if row.ExecutionTime.UnixNano() == 0 {
+		row.ExecutionTime = row.StartTime
+	}
 	info := &workflow.WorkflowExecutionInfo{
 		Execution: &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(row.WorkflowID),
 			RunId:      common.StringPtr(row.RunID),
 		},
-		Type:      &workflow.WorkflowType{Name: common.StringPtr(row.WorkflowTypeName)},
-		StartTime: common.Int64Ptr(row.StartTime.UnixNano()),
+		Type:          &workflow.WorkflowType{Name: common.StringPtr(row.WorkflowTypeName)},
+		StartTime:     common.Int64Ptr(row.StartTime.UnixNano()),
+		ExecutionTime: common.Int64Ptr(row.ExecutionTime.UnixNano()),
 	}
 	if row.CloseStatus != nil {
 		status := workflow.WorkflowExecutionCloseStatus(*row.CloseStatus)

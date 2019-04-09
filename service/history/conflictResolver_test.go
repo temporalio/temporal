@@ -60,6 +60,7 @@ type (
 		mockContext         *workflowExecutionContextImpl
 		mockDomainCache     *cache.DomainCacheMock
 		mockClientBean      *client.MockClientBean
+		mockEventsCache     *MockEventsCache
 
 		conflictResolver *conflictResolverImpl
 	}
@@ -97,6 +98,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
 	s.mockDomainCache = &cache.DomainCacheMock{}
+	s.mockEventsCache = &MockEventsCache{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -111,6 +113,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		logger:                    s.logger,
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		eventsCache:               s.mockEventsCache,
 	}
 	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -129,6 +132,7 @@ func (s *conflictResolverSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
+	s.mockEventsCache.AssertExpectations(s.T())
 }
 
 func (s *conflictResolverSuite) TestGetHistory() {
@@ -295,6 +299,7 @@ func (s *conflictResolverSuite) TestReset() {
 	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, nil), nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, executionInfo)
 	s.Nil(err)

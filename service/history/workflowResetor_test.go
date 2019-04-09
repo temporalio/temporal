@@ -184,6 +184,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -814,10 +815,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
 	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
 
-	// one activity task and one decision task
-	s.Equal(2, len(resetReq.InsertTransferTasks))
+	// one activity task, one decision task and one record workflow started task
+	s.Equal(3, len(resetReq.InsertTransferTasks))
 	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
 	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[1].GetType())
+	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.InsertTransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.InsertTimerTasks))
@@ -871,6 +873,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -1449,6 +1452,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -2100,10 +2104,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
 	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
 
-	s.Equal(3, len(resetReq.InsertTransferTasks))
+	s.Equal(4, len(resetReq.InsertTransferTasks))
 	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
 	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[1].GetType())
 	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[2].GetType())
+	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.InsertTransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.InsertTimerTasks))
@@ -2152,6 +2157,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -2748,6 +2754,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -3384,10 +3391,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
 	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
 
-	s.Equal(3, len(resetReq.InsertTransferTasks))
+	s.Equal(4, len(resetReq.InsertTransferTasks))
 	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
 	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[1].GetType())
 	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[2].GetType())
+	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.InsertTransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.InsertTimerTasks))
@@ -3434,6 +3442,7 @@ func (s *resetorSuite) TestApplyReset() {
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	mockTxProcessor := &MockTransferQueueProcessor{}
 	mockTimerProcessor := &MockTimerQueueProcessor{}

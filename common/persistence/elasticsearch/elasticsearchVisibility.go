@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/olivere/elastic"
 	"github.com/pkg/errors"
 	"github.com/uber-common/bark"
@@ -60,6 +61,7 @@ type (
 		RunID         string
 		WorkflowType  string
 		StartTime     int64
+		ExecutionTime int64
 		CloseTime     int64
 		CloseStatus   workflow.WorkflowExecutionCloseStatus
 		HistoryLength int64
@@ -100,7 +102,6 @@ func (v *esVisibilityManager) RecordWorkflowExecutionClosed(request *p.RecordWor
 
 func (v *esVisibilityManager) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
-
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
@@ -413,19 +414,24 @@ func (v *esVisibilityManager) convertSearchResultToVisibilityRecord(hit *elastic
 	wfType := &workflow.WorkflowType{
 		Name: common.StringPtr(source.WorkflowType),
 	}
+	if source.ExecutionTime == 0 {
+		source.ExecutionTime = source.StartTime
+	}
 
 	var record *workflow.WorkflowExecutionInfo
 	if isOpen {
 		record = &workflow.WorkflowExecutionInfo{
-			Execution: execution,
-			Type:      wfType,
-			StartTime: common.Int64Ptr(source.StartTime),
+			Execution:     execution,
+			Type:          wfType,
+			StartTime:     common.Int64Ptr(source.StartTime),
+			ExecutionTime: common.Int64Ptr(source.ExecutionTime),
 		}
 	} else {
 		record = &workflow.WorkflowExecutionInfo{
 			Execution:     execution,
 			Type:          wfType,
 			StartTime:     common.Int64Ptr(source.StartTime),
+			ExecutionTime: common.Int64Ptr(source.ExecutionTime),
 			CloseTime:     common.Int64Ptr(source.CloseTime),
 			CloseStatus:   &source.CloseStatus,
 			HistoryLength: common.Int64Ptr(source.HistoryLength),

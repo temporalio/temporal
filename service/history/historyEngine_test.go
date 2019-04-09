@@ -4976,6 +4976,8 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		DecisionTimeout:              sourceInfo.DecisionTimeout,
 		EventStoreVersion:            sourceInfo.EventStoreVersion,
 		BranchToken:                  sourceInfo.BranchToken,
+		HasRetryPolicy:               sourceInfo.HasRetryPolicy,
+		CronSchedule:                 sourceInfo.CronSchedule,
 	}
 }
 

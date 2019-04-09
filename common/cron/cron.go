@@ -59,3 +59,13 @@ func GetBackoffForNextSchedule(cronSchedule string, nowTime time.Time) time.Dura
 	roundedInterval := time.Second * time.Duration(math.Ceil(backoffInterval.Seconds()))
 	return roundedInterval
 }
+
+// GetBackoffForNextScheduleInSeconds calculates the backoff time in seconds for the
+// next run given a cronSchedule and current time
+func GetBackoffForNextScheduleInSeconds(cronSchedule string, nowTime time.Time) int32 {
+	backoffDuration := GetBackoffForNextSchedule(cronSchedule, nowTime)
+	if backoffDuration == NoBackoff {
+		return 0
+	}
+	return int32(math.Ceil(backoffDuration.Seconds()))
+}
