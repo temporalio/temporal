@@ -22,12 +22,14 @@ package config
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"github.com/uber/ringpop-go/discovery/statichosts"
-	"gopkg.in/yaml.v2"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/uber-common/bark"
+	"github.com/uber/ringpop-go/discovery/statichosts"
+	"gopkg.in/yaml.v2"
 )
 
 type RingpopSuite struct {
@@ -54,7 +56,7 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	cfg.validate()
 	s.Nil(err)
-	f, err := cfg.NewFactory()
+	f, err := cfg.NewFactory(bark.NewNopLogger(), "test")
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -69,7 +71,7 @@ func (s *RingpopSuite) TestFileMode() {
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	err = cfg.validate()
 	s.Nil(err)
-	f, err := cfg.NewFactory()
+	f, err := cfg.NewFactory(bark.NewNopLogger(), "test")
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -83,7 +85,7 @@ func (s *RingpopSuite) TestCustomMode() {
 	s.NotNil(cfg.validate())
 	cfg.DiscoveryProvider = statichosts.New("127.0.0.1")
 	s.Nil(cfg.validate())
-	f, err := cfg.NewFactory()
+	f, err := cfg.NewFactory(bark.NewNopLogger(), "test")
 	s.Nil(err)
 	s.NotNil(f)
 }

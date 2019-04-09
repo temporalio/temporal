@@ -27,6 +27,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/membership"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery"
 	"github.com/uber/ringpop-go/discovery/jsonfile"
@@ -52,15 +55,25 @@ const (
 	defaultMaxJoinDuration = 10 * time.Second
 )
 
+// CadenceServices indicate the list of cadence services
+var CadenceServices = []string{
+	common.FrontendServiceName,
+	common.HistoryServiceName,
+	common.MatchingServiceName,
+	common.WorkerServiceName,
+}
+
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
-	config *Ringpop
+	config      *Ringpop
+	logger      bark.Logger
+	serviceName string
 }
 
 // NewFactory builds a ringpop factory conforming
 // to the underlying configuration
-func (rpConfig *Ringpop) NewFactory() (*RingpopFactory, error) {
-	return newRingpopFactory(rpConfig)
+func (rpConfig *Ringpop) NewFactory(logger bark.Logger, serviceName string) (*RingpopFactory, error) {
+	return newRingpopFactory(rpConfig, logger, serviceName)
 }
 
 func (rpConfig *Ringpop) validate() error {
@@ -115,18 +128,41 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 	return nil
 }
 
-func newRingpopFactory(rpConfig *Ringpop) (*RingpopFactory, error) {
+func newRingpopFactory(rpConfig *Ringpop, logger bark.Logger, serviceName string) (*RingpopFactory, error) {
 	if err := rpConfig.validate(); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
 	}
-	return &RingpopFactory{config: rpConfig}, nil
+	return &RingpopFactory{config: rpConfig, logger: logger, serviceName: serviceName}, nil
 }
 
-// CreateRingpop is the implementation for RingpopFactory.CreateRingpop
-func (factory *RingpopFactory) CreateRingpop(dispatcher *yarpc.Dispatcher) (*ringpop.Ringpop, error) {
+// Create is the implementation for MembershipMonitorFactory.Create
+func (factory *RingpopFactory) Create(dispatcher *yarpc.Dispatcher) (membership.Monitor, error) {
+	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
+	rp, err := factory.createRingpop(dispatcher)
+	if err != nil {
+		return nil, fmt.Errorf("ringpop creation failed: %v", err)
+	}
+
+	labels, err := rp.Labels()
+	if err != nil {
+		return nil, fmt.Errorf("ringpop get node labels failed: %v", err)
+	}
+
+	if err = labels.Set(membership.RoleKey, factory.serviceName); err != nil {
+		return nil, fmt.Errorf("ringpop setting role label failed: %v", err)
+	}
+
+	membershipMonitor := membership.NewRingpopMonitor(CadenceServices, rp, factory.logger)
+	if err = membershipMonitor.Start(); err != nil {
+		return nil, err
+	}
+	return membershipMonitor, nil
+}
+
+func (factory *RingpopFactory) createRingpop(dispatcher *yarpc.Dispatcher) (*ringpop.Ringpop, error) {
 	var ch *tcg.Channel
 	var err error
 	if ch, err = factory.getChannel(dispatcher); err != nil {

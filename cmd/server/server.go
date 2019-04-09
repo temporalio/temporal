@@ -105,7 +105,7 @@ func (s *server) startService() common.Daemon {
 	params.Logger = s.cfg.Log.NewBarkLogger()
 	params.PersistenceConfig = s.cfg.Persistence
 
-	params.RingpopFactory, err = s.cfg.Ringpop.NewFactory()
+	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name)
 	if err != nil {
 		log.Fatalf("error creating ringpop factory: %v", err)
 	}

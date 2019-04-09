@@ -21,9 +21,7 @@
 package host
 
 import (
-	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -40,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -53,10 +52,6 @@ import (
 	"github.com/uber/cadence/service/worker"
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/replicator"
-	"github.com/uber/ringpop-go"
-	"github.com/uber/ringpop-go/discovery/statichosts"
-	"github.com/uber/ringpop-go/swim"
-	tcg "github.com/uber/tchannel-go"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 )
@@ -139,9 +134,9 @@ type (
 		HistoryConfig                 *HistoryConfig
 	}
 
-	ringpopFactoryImpl struct {
-		rpHosts  []string
-		initLock *sync.Mutex
+	membershipFactoryImpl struct {
+		serviceName string
+		hosts       map[string][]string
 	}
 )
 
@@ -176,28 +171,27 @@ func (c *cadenceImpl) enableWorker() bool {
 }
 
 func (c *cadenceImpl) Start() error {
-	var rpHosts []string
-	rpHosts = append(rpHosts, c.HistoryServiceAddress()...)
+	hosts := make(map[string][]string)
+	hosts[common.FrontendServiceName] = []string{c.FrontendAddress()}
+	hosts[common.MatchingServiceName] = []string{c.MatchingServiceAddress()}
+	hosts[common.HistoryServiceName] = c.HistoryServiceAddress()
+	if c.enableWorker() {
+		hosts[common.WorkerServiceName] = []string{c.WorkerServiceAddress()}
+	}
 
 	var startWG sync.WaitGroup
-	startWG.Add(1)
-	go c.startHistory(rpHosts, &startWG, c.enableEventsV2)
+	startWG.Add(2)
+	go c.startHistory(hosts, &startWG, c.enableEventsV2)
+	go c.startMatching(hosts, &startWG)
 	startWG.Wait()
 
-	rpHosts = append(rpHosts, c.MatchingServiceAddress())
 	startWG.Add(1)
-	go c.startMatching(rpHosts, &startWG)
-	startWG.Wait()
-
-	rpHosts = append(rpHosts, c.FrontendAddress())
-	startWG.Add(1)
-	go c.startFrontend(rpHosts, &startWG)
+	go c.startFrontend(hosts, &startWG)
 	startWG.Wait()
 
 	if c.enableWorker() {
-		rpHosts = append(rpHosts, c.WorkerServiceAddress())
 		startWG.Add(1)
-		go c.startWorker(rpHosts, &startWG)
+		go c.startWorker(hosts, &startWG)
 		startWG.Wait()
 	}
 
@@ -309,7 +303,7 @@ func (c *cadenceImpl) GetFrontendService() service.Service {
 	return c.frontEndService
 }
 
-func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
+func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := new(service.BootstrapParams)
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
@@ -318,14 +312,14 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.FrontendPProfPort())
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
-	params.RingpopFactory = newRingpopFactory(rpHosts)
+	params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
 	params.MessagingClient = c.messagingClient
 	params.BlobstoreClient = c.blobstoreClient
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
-	params.DynamicConfig = dynamicconfig.NewNopClient()
+	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 
 	// TODO when cross DC is public, remove this temporary override
 	var kafkaProducer messaging.Producer
@@ -344,7 +338,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.frontEndService = service.New(params)
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
-	frontendConfig := frontend.NewConfig(dynamicconfig.NewNopCollection(), false)
+	frontendConfig := frontend.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), false)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
 		c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
@@ -365,7 +359,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, enableEventsV2 bool) {
+func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.WaitGroup, enableEventsV2 bool) {
 
 	pprofPorts := c.HistoryPProfPort()
 	for i, hostport := range c.HistoryServiceAddress() {
@@ -376,7 +370,7 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, en
 		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, c.logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-		params.RingpopFactory = newRingpopFactory(rpHosts)
+		params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 		params.ClusterMetadata = c.clusterMetadata
 		params.DispatcherProvider = c.dispatcherProvider
 		params.MessagingClient = c.messagingClient
@@ -387,7 +381,7 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, en
 		c.initLock.Lock()
 		service := service.New(params)
 		hConfig := c.historyConfig
-		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), hConfig.NumHistoryShards, c.enableVisibilityToKafka, config.StoreTypeCassandra)
+		historyConfig := history.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), hConfig.NumHistoryShards, c.enableVisibilityToKafka, config.StoreTypeCassandra)
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)
@@ -409,7 +403,7 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, en
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startMatching(rpHosts []string, startWG *sync.WaitGroup) {
+func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
 
 	params := new(service.BootstrapParams)
 	params.Name = common.MatchingServiceName
@@ -418,17 +412,17 @@ func (c *cadenceImpl) startMatching(rpHosts []string, startWG *sync.WaitGroup) {
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.MatchingPProfPort())
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
-	params.RingpopFactory = newRingpopFactory(rpHosts)
+	params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
-	params.DynamicConfig = dynamicconfig.NewNopClient()
+	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 
 	c.initLock.Lock()
 	service := service.New(params)
 	c.matchingHandler = matching.NewHandler(
-		service, matching.NewConfig(dynamicconfig.NewNopCollection()), c.taskMgr, c.metadataMgr,
+		service, matching.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger)), c.taskMgr, c.metadataMgr,
 	)
 	c.matchingHandler.Start()
 	c.initLock.Unlock()
@@ -438,19 +432,19 @@ func (c *cadenceImpl) startMatching(rpHosts []string, startWG *sync.WaitGroup) {
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
+func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := new(service.BootstrapParams)
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.WorkerPProfPort())
 	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
-	params.RingpopFactory = newRingpopFactory(rpHosts)
+	params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
-	params.DynamicConfig = dynamicconfig.NewNopClient()
+	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 
 	c.initLock.Lock()
 	service := service.New(params)
@@ -523,59 +517,15 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 	}
 }
 
-func newRingpopFactory(rpHosts []string) service.RingpopFactory {
-	return &ringpopFactoryImpl{
-		rpHosts: rpHosts,
+func newMembershipFactory(serviceName string, hosts map[string][]string) service.MembershipMonitorFactory {
+	return &membershipFactoryImpl{
+		serviceName: serviceName,
+		hosts:       hosts,
 	}
 }
 
-func (p *ringpopFactoryImpl) CreateRingpop(dispatcher *yarpc.Dispatcher) (*ringpop.Ringpop, error) {
-	var ch *tcg.Channel
-	var err error
-	if ch, err = p.getChannel(dispatcher); err != nil {
-		return nil, err
-	}
-
-	rp, err := ringpop.New(fmt.Sprintf("%s", rpAppNamePrefix), ringpop.Channel(ch))
-	if err != nil {
-		return nil, err
-	}
-	err = p.bootstrapRingpop(rp, p.rpHosts)
-	if err != nil {
-		return nil, err
-	}
-	return rp, nil
-}
-
-func (p *ringpopFactoryImpl) getChannel(dispatcher *yarpc.Dispatcher) (*tcg.Channel, error) {
-	t := dispatcher.Inbounds()[0].Transports()[0].(*tchannel.ChannelTransport)
-	ty := reflect.ValueOf(t.Channel())
-	var ch *tcg.Channel
-	var ok bool
-	if ch, ok = ty.Interface().(*tcg.Channel); !ok {
-		return nil, errors.New("Unable to get tchannel out of the dispatcher")
-	}
-	return ch, nil
-}
-
-// bootstrapRingpop tries to bootstrap the given ringpop instance using the hosts list
-func (p *ringpopFactoryImpl) bootstrapRingpop(rp *ringpop.Ringpop, rpHosts []string) error {
-	// TODO: log ring hosts
-
-	bOptions := new(swim.BootstrapOptions)
-	bOptions.DiscoverProvider = statichosts.New(rpHosts...)
-	bOptions.MaxJoinDuration = maxRpJoinTimeout
-	bOptions.JoinSize = 1 // this ensures the first guy comes up quickly
-
-	_, err := rp.Bootstrap(bOptions)
-	return err
-}
-
-type rpcFactoryImpl struct {
-	ch          *tchannel.ChannelTransport
-	serviceName string
-	hostPort    string
-	logger      bark.Logger
+func (p *membershipFactoryImpl) Create(dispatcher *yarpc.Dispatcher) (membership.Monitor, error) {
+	return newSimpleMonitor(p.serviceName, p.hosts), nil
 }
 
 func newPProfInitializerImpl(logger bark.Logger, port int) common.PProfInitializer {
@@ -585,6 +535,13 @@ func newPProfInitializerImpl(logger bark.Logger, port int) common.PProfInitializ
 		},
 		Logger: logger,
 	}
+}
+
+type rpcFactoryImpl struct {
+	ch          *tchannel.ChannelTransport
+	serviceName string
+	hostPort    string
+	logger      bark.Logger
 }
 
 func newRPCFactoryImpl(sName string, hostPort string, logger bark.Logger) common.RPCFactory {

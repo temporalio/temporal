@@ -85,6 +85,10 @@ func (rpo *ringpopMonitor) Stop() {
 		ring.Stop()
 	}
 	rpo.stopped = true
+
+	if rpo.rp != nil {
+		rpo.rp.Destroy()
+	}
 }
 
 func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {

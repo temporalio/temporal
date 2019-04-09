@@ -41,7 +41,6 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/ringpop-go"
 	"go.uber.org/yarpc"
 )
 
@@ -60,7 +59,7 @@ type (
 		Logger              bark.Logger
 		ThrottledLogger     bark.Logger
 		MetricScope         tally.Scope
-		RingpopFactory      RingpopFactory
+		MembershipFactory   MembershipMonitorFactory
 		RPCFactory          common.RPCFactory
 		PProfInitializer    common.PProfInitializer
 		PersistenceConfig   config.Persistence
@@ -76,10 +75,10 @@ type (
 		DCRedirectionPolicy config.DCRedirectionPolicy
 	}
 
-	// RingpopFactory provides a bootstrapped ringpop
-	RingpopFactory interface {
-		// CreateRingpop vends a bootstrapped ringpop object
-		CreateRingpop(d *yarpc.Dispatcher) (*ringpop.Ringpop, error)
+	// MembershipMonitorFactory provides a bootstrapped membership monitor
+	MembershipMonitorFactory interface {
+		// Create vends a bootstrapped membership monitor
+		Create(d *yarpc.Dispatcher) (membership.Monitor, error)
 	}
 
 	// Service contains the objects specific to this service
@@ -89,8 +88,7 @@ type (
 		hostName               string
 		hostInfo               *membership.HostInfo
 		dispatcher             *yarpc.Dispatcher
-		rp                     *ringpop.Ringpop
-		rpFactory              RingpopFactory
+		membershipFactory      MembershipMonitorFactory
 		membershipMonitor      membership.Monitor
 		rpcFactory             common.RPCFactory
 		pprofInitializer       common.PProfInitializer
@@ -117,7 +115,7 @@ func New(params *BootstrapParams) Service {
 		logger:                params.Logger,
 		throttledLogger:       params.ThrottledLogger,
 		rpcFactory:            params.RPCFactory,
-		rpFactory:             params.RingpopFactory,
+		membershipFactory:     params.MembershipFactory,
 		pprofInitializer:      params.PProfInitializer,
 		metricsScope:          params.MetricScope,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
@@ -172,22 +170,11 @@ func (h *serviceImpl) Start() {
 		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Failed to start yarpc dispatcher")
 	}
 
-	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
-	h.rp, err = h.rpFactory.CreateRingpop(h.dispatcher)
+	h.membershipMonitor, err = h.membershipFactory.Create(h.dispatcher)
 	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop creation failed")
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Membership monitor creation failed")
 	}
 
-	labels, err := h.rp.Labels()
-	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop get node labels failed")
-	}
-	err = labels.Set(membership.RoleKey, h.sName)
-	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop setting role label failed")
-	}
-
-	h.membershipMonitor = membership.NewRingpopMonitor(cadenceServices, h.rp, h.logger)
 	err = h.membershipMonitor.Start()
 	if err != nil {
 		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("starting membership monitor failed")
@@ -223,10 +210,6 @@ func (h *serviceImpl) Stop() {
 
 	if h.membershipMonitor != nil {
 		h.membershipMonitor.Stop()
-	}
-
-	if h.rp != nil {
-		h.rp.Destroy()
 	}
 
 	if h.dispatcher != nil {
