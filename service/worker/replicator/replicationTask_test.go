@@ -152,6 +152,8 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 	s.Equal(
 		&activityReplicationTask{
 			workflowReplicationTask: workflowReplicationTask{
+				metricsScope: metrics.SyncActivityTaskScope,
+				startTime:    task.startTime,
 				partitionID: definition.NewWorkflowIdentifier(
 					replicationAttr.GetDomainId(),
 					replicationAttr.GetWorkflowId(),
@@ -304,6 +306,8 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 	s.Equal(
 		&historyReplicationTask{
 			workflowReplicationTask: workflowReplicationTask{
+				metricsScope: metrics.HistoryReplicationTaskScope,
+				startTime:    task.startTime,
 				partitionID: definition.NewWorkflowIdentifier(
 					replicationAttr.GetDomainId(),
 					replicationAttr.GetWorkflowId(),
