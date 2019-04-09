@@ -167,11 +167,11 @@ func (s *Service) Start() {
 
 	history, err := pFactory.NewHistoryManager()
 	if err != nil {
-		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
+		log.Fatalf("Creating history manager persistence failed: %v", err)
 	}
 	historyV2, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
-		log.Warnf("Creating Cassandra historyV2 manager persistence failed: %v", err)
+		log.Fatalf("Creating historyV2 manager persistence failed: %v", err)
 	}
 
 	// TODO when global domain is enabled, uncomment the line below and remove the line after

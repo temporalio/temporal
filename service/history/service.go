@@ -225,11 +225,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 20),
 	}
 
-	if storeType == config.StoreTypeSQL {
-		// SQL based stores don't have support for historyv2 yet, so set default to false
-		cfg.EnableEventsV2 = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, false)
-	}
-
 	return cfg
 }
 
@@ -302,13 +297,12 @@ func (s *Service) Start() {
 
 	history, err := pFactory.NewHistoryManager()
 	if err != nil {
-		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
+		log.Fatalf("Creating history manager persistence failed: %v", err)
 	}
 
 	historyV2, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
-		// TODO change this to Fatalf when SQL also support eventsV2
-		log.Warnf("Creating Cassandra historyV2 manager persistence failed: %v, cannot use eventsV2 features", err)
+		log.Fatalf("Creating historyV2 manager persistence failed: %v", err)
 	}
 
 	handler := NewHandler(base,

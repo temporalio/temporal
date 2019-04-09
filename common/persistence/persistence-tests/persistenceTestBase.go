@@ -28,8 +28,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"fmt"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
@@ -188,10 +186,7 @@ func (s *TestBase) Setup() {
 	s.fatalOnError("NewHistoryManager", err)
 
 	s.HistoryV2Mgr, err = factory.NewHistoryV2Manager()
-	// TODO SQL currently doesn't have support for HistoryV2Mgr.
-	if err != nil {
-		log.Warnf(fmt.Sprintf("failed to initialize historyV2, it is expected for MySQL, %v", err))
-	}
+	s.fatalOnError("NewHistoryV2Manager", err)
 
 	s.ShardMgr, err = factory.NewShardManager()
 	s.fatalOnError("NewShardManager", err)

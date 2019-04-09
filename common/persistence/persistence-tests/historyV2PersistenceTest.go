@@ -339,18 +339,18 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			events = s.read(branch, 1, 25)
 			s.Equal(20, len(events))
 
-			// override with same txn_id but greater version
+			// override with greater txn_id but greater version
 			events = s.genRandomEvents([]int64{5}, 2)
-			err = s.appendNewNode(branch, events, 1)
+			err = s.appendNewNode(branch, events, 2)
 			s.Nil(err)
 
 			// read to verify override success
 			events = s.read(branch, 1, 25)
 			s.Equal(5, len(events))
 
-			// override with larger txn_id and same version
+			// override with even larger txn_id and same version
 			events = s.genRandomEvents([]int64{5, 6}, 1)
-			err = s.appendNewNode(branch, events, 2)
+			err = s.appendNewNode(branch, events, 3)
 			s.Nil(err)
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
@@ -365,15 +365,12 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			events = s.genRandomEvents([]int64{7, 8}, 1)
 			err = s.appendNewNode(branch, events, 2)
 			s.Nil(err)
-
 			// read to verify override
 			events = s.read(branch, 1, 25)
 			s.Equal(20, len(events))
-
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, 1)
 			err = s.appendNewNode(branch, events, 2)
 			s.Nil(err)
-
 			events = s.read(branch, 1, 25)
 			s.Equal(23, len(events))
 		}(i)
@@ -386,13 +383,11 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
 		s.Nil(err)
-
 		return true
 	})
 
 	branches = s.descTree(treeID)
 	s.Equal(0, len(branches))
-
 }
 
 // TestConcurrentlyForkAndAppendBranches test

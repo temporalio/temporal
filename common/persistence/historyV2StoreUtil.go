@@ -21,9 +21,10 @@
 package persistence
 
 import (
+	"time"
+
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
-	"time"
 )
 
 /*
@@ -136,4 +137,13 @@ func ReadFullPageV2Events(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchR
 		}
 		req.NextPageToken = response.NextPageToken
 	}
+}
+
+func GetBeginNodeID(bi shared.HistoryBranch) int64 {
+	if len(bi.Ancestors) == 0 {
+		// root branch
+		return 1
+	}
+	idx := len(bi.Ancestors) - 1
+	return *bi.Ancestors[idx].EndNodeID
 }

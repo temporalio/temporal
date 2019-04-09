@@ -21,7 +21,6 @@
 package sql
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/uber-common/bark"
@@ -69,7 +68,7 @@ func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
 
 // NewHistoryV2Store returns a new history store
 func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
-	return nil, fmt.Errorf("Not implemented")
+	return newHistoryV2Persistence(f.cfg, f.logger)
 }
 
 // NewMetadataStore returns a new metadata store

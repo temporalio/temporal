@@ -348,6 +348,46 @@ type (
 		PageSize     *int
 	}
 
+	// HistoryNodeRow represents a row in history_node table
+	HistoryNodeRow struct {
+		TreeID   UUID
+		BranchID UUID
+		NodeID   int64
+		// use pointer so that it's easier to multiple by -1
+		TxnID        *int64
+		Data         []byte
+		DataEncoding string
+	}
+
+	// HistoryNodeFilter contains the column names within history_node table that
+	// can be used to filter results through a WHERE clause
+	HistoryNodeFilter struct {
+		TreeID   UUID
+		BranchID UUID
+		// Inclusive
+		MinNodeID *int64
+		// Exclusive
+		MaxNodeID *int64
+		PageSize  *int
+	}
+
+	// HistoryTreeRow represents a row in history_tree table
+	HistoryTreeRow struct {
+		TreeID     UUID
+		BranchID   UUID
+		InProgress bool
+		CreatedTs  time.Time
+		Ancestors  []byte
+		Info       string
+	}
+
+	// HistoryTreeFilter contains the column names within history_tree table that
+	// can be used to filter results through a WHERE clause
+	HistoryTreeFilter struct {
+		TreeID   UUID
+		BranchID *UUID
+	}
+
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
 		ShardID                  int64
@@ -611,11 +651,21 @@ type (
 		DeleteFromTaskLists(filter *TaskListsFilter) (sql.Result, error)
 		LockTaskLists(filter *TaskListsFilter) (int64, error)
 
+		// eventsV1: will be deprecated in favor of eventsV2
 		InsertIntoEvents(row *EventsRow) (sql.Result, error)
 		UpdateEvents(rows *EventsRow) (sql.Result, error)
 		SelectFromEvents(filter *EventsFilter) ([]EventsRow, error)
 		DeleteFromEvents(filter *EventsFilter) (sql.Result, error)
 		LockEvents(filter *EventsFilter) (*EventsRow, error)
+
+		// eventsV2
+		InsertIntoHistoryNode(row *HistoryNodeRow) (sql.Result, error)
+		SelectFromHistoryNode(filter *HistoryNodeFilter) ([]HistoryNodeRow, error)
+		DeleteFromHistoryNode(filter *HistoryNodeFilter) (sql.Result, error)
+		InsertIntoHistoryTree(row *HistoryTreeRow) (sql.Result, error)
+		SelectFromHistoryTree(filter *HistoryTreeFilter) ([]HistoryTreeRow, error)
+		UpdateHistoryTree(row *HistoryTreeRow) (sql.Result, error)
+		DeleteFromHistoryTree(filter *HistoryTreeFilter) (sql.Result, error)
 
 		InsertIntoExecutions(row *ExecutionsRow) (sql.Result, error)
 		UpdateExecutions(row *ExecutionsRow) (sql.Result, error)

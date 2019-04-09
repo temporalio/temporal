@@ -26,6 +26,13 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func TestSQLHistoryV2PersistenceSuite(t *testing.T) {
+	s := new(HistoryV2PersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
 func TestSQLHistoryPersistenceSuite(t *testing.T) {
 	s := new(HistoryPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})

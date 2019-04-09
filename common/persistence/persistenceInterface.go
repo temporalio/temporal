@@ -400,9 +400,9 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
-		// The branch to be fork
+		// The base branch to fork from
 		ForkBranchInfo workflow.HistoryBranch
-		// The nodeID to fork from, the new branch will start from ForkNodeID
+		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
 		NewBranchID string
