@@ -27,7 +27,7 @@ ARG git_branch
 RUN if [ -z "$git_branch" ]; then echo "ERROR: git_branch NOT SET. Usage: docker build . --build-arg git_branch=YOUR_CHECKOUT_BRANCH"; exit 1; else : ; fi
 
 RUN go get -u github.com/golang/dep/cmd/dep
-RUN go get -u github.com/golang/lint/golint
+RUN go get -u golang.org/x/lint/golint
 
 # get and compile cadence-server
 RUN git clone https://github.com/uber/cadence.git /go/src/github.com/uber/cadence
