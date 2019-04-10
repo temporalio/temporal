@@ -1558,6 +1558,10 @@ Update_History_Loop:
 					// since timer builder has a local cached version of timers
 					tBuilder = e.getTimerBuilder(context.getExecution())
 					tBuilder.loadUserTimers(msBuilder)
+
+					// timer deletion is a success, we may have deleted a fired timer in
+					// which case we should reset hasBufferedEvents
+					hasUnhandledEvents = msBuilder.HasBufferedEvents()
 				}
 
 			case workflow.DecisionTypeRecordMarker:

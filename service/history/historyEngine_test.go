@@ -4422,6 +4422,81 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
+func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 6,
+	})
+	identity := "testIdentity"
+	timerID := "t1"
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(), s.mockHistoryEngine.shard, s.eventsCache,
+		bark.NewLoggerFromLogrus(log.New()), we.GetRunId())
+	// Verify cancel timer with a start event.
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID,
+		*decisionStartedEvent.EventId, nil, identity)
+	addTimerStartedEvent(msBuilder, *decisionCompletedEvent.EventId, timerID, 10)
+	di2 := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
+	addTimerFiredEvent(msBuilder, di2.ScheduleID, timerID)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCancelTimer),
+		CancelTimerDecisionAttributes: &workflow.CancelTimerDecisionAttributes{
+			TimerId: common.StringPtr(timerID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: []byte("context"),
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err)
+
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
+	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasBufferedEvents())
+}
+
 func (s *engineSuite) TestSignalWorkflowExecution() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
@@ -4924,7 +4999,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	if len(builder.bufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)
 	}
-	if builder.updateBufferedEvents != nil {
+	if len(builder.updateBufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
 	}
 	var replicationState *persistence.ReplicationState

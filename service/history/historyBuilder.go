@@ -207,8 +207,10 @@ func (b *historyBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
-	timerID string) *workflow.HistoryEvent {
+func (b *historyBuilder) AddTimerFiredEvent(
+	startedEventID int64,
+	timerID string,
+) *workflow.HistoryEvent {
 
 	attributes := &workflow.TimerFiredEventAttributes{}
 	attributes.TimerId = common.StringPtr(timerID)
