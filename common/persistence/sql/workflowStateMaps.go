@@ -650,13 +650,15 @@ func updateBufferedReplicationTasks(tx sqldb.Tx,
 		newRunHistoryData, newRunHistoryEncoding := persistence.FromDataBlob(newBufferedReplicationTask.NewRunHistory)
 		historyBlob := newBufferedReplicationTask.History
 		row := &sqldb.BufferedReplicationTaskMapsRow{
-			ShardID:      int64(shardID),
-			DomainID:     domainID,
-			WorkflowID:   workflowID,
-			RunID:        runID,
-			FirstEventID: newBufferedReplicationTask.FirstEventID,
-			Version:      newBufferedReplicationTask.Version,
-			NextEventID:  newBufferedReplicationTask.NextEventID,
+			ShardID:                 int64(shardID),
+			DomainID:                domainID,
+			WorkflowID:              workflowID,
+			RunID:                   runID,
+			FirstEventID:            newBufferedReplicationTask.FirstEventID,
+			Version:                 newBufferedReplicationTask.Version,
+			NextEventID:             newBufferedReplicationTask.NextEventID,
+			EventStoreVersion:       newBufferedReplicationTask.EventStoreVersion,
+			NewRunEventStoreVersion: newBufferedReplicationTask.NewRunEventStoreVersion,
 		}
 		if historyBlob != nil {
 			row.History = &historyBlob.Data
@@ -733,6 +735,8 @@ func getBufferedReplicationTasks(db sqldb.Interface,
 			task.NewRunHistory = persistence.NewDataBlob(*v.NewRunHistory,
 				common.EncodingType(v.NewRunHistoryEncoding))
 		}
+		task.EventStoreVersion = v.EventStoreVersion
+		task.NewRunEventStoreVersion = v.NewRunEventStoreVersion
 		ret[v.FirstEventID] = task
 	}
 	return ret, nil

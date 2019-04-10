@@ -168,6 +168,8 @@ type (
 		ExpirationSeconds            int
 		ExpirationTime               time.Time
 		NonRetryableErrors           []byte
+		EventStoreVersion            int
+		BranchToken                  []byte
 	}
 
 	// ExecutionsFilter contains the column names within domain table that
@@ -275,17 +277,22 @@ type (
 
 	// ReplicationTasksRow represents a row in replication_tasks table
 	ReplicationTasksRow struct {
-		ShardID             int
-		TaskID              int64
-		DomainID            UUID
-		WorkflowID          string
-		RunID               UUID
-		TaskType            int
-		FirstEventID        int64
-		NextEventID         int64
-		Version             int64
-		LastReplicationInfo []byte
-		ScheduledID         int64
+		ShardID                 int
+		TaskID                  int64
+		DomainID                UUID
+		WorkflowID              string
+		RunID                   UUID
+		TaskType                int
+		FirstEventID            int64
+		NextEventID             int64
+		Version                 int64
+		LastReplicationInfo     []byte
+		ScheduledID             int64
+		EventStoreVersion       int32
+		BranchToken             []byte
+		NewRunEventStoreVersion int32
+		NewRunBranchToken       []byte
+		ResetWorkflow           bool
 	}
 
 	// ReplicationTasksFilter contains the column names within domain table that
@@ -538,17 +545,19 @@ type (
 
 	// BufferedReplicationTaskMapsRow represents a row in buffered_replication_task_maps table
 	BufferedReplicationTaskMapsRow struct {
-		ShardID               int64
-		DomainID              UUID
-		WorkflowID            string
-		RunID                 UUID
-		FirstEventID          int64
-		NextEventID           int64
-		Version               int64
-		History               *[]byte
-		HistoryEncoding       string
-		NewRunHistory         *[]byte
-		NewRunHistoryEncoding string
+		ShardID                 int64
+		DomainID                UUID
+		WorkflowID              string
+		RunID                   UUID
+		FirstEventID            int64
+		NextEventID             int64
+		Version                 int64
+		History                 *[]byte
+		HistoryEncoding         string
+		NewRunHistory           *[]byte
+		NewRunHistoryEncoding   string
+		EventStoreVersion       int32
+		NewRunEventStoreVersion int32
 	}
 
 	// BufferedReplicationTaskMapsFilter contains the column names within domain table that
@@ -672,7 +681,8 @@ type (
 		UpdateExecutions(row *ExecutionsRow) (sql.Result, error)
 		SelectFromExecutions(filter *ExecutionsFilter) (*ExecutionsRow, error)
 		DeleteFromExecutions(filter *ExecutionsFilter) (sql.Result, error)
-		LockExecutions(filter *ExecutionsFilter) (int, error)
+		ReadLockExecutions(filter *ExecutionsFilter) (int, error)
+		WriteLockExecutions(filter *ExecutionsFilter) (int, error)
 
 		LockCurrentExecutionsJoinExecutions(filter *CurrentExecutionsFilter) ([]CurrentExecutionsRow, error)
 

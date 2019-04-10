@@ -68,6 +68,13 @@ func TestSQLExecutionManagerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLExecutionManagerWithEventsV2(t *testing.T) {
+	s := new(ExecutionManagerSuiteForEventsV2)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
 func TestSQLVisibilityPersistenceSuite(t *testing.T) {
 	s := new(VisibilityPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})

@@ -122,6 +122,8 @@ CREATE TABLE executions(
   expiration_seconds INT NOT NULL,
   expiration_time DATETIME(6) NOT NULL, -- retry expiration time
   non_retryable_errors BLOB,
+  event_store_version INT NOT NULL, -- indicates which version of events persistence is using
+  branch_token BLOB,
 	PRIMARY KEY (shard_id, domain_id, workflow_id, run_id)
 );
 
@@ -179,7 +181,7 @@ CREATE TABLE task_lists (
 );
 
 CREATE TABLE replication_tasks (
-  shard_id INT NOT NULL,
+	shard_id INT NOT NULL,
 	task_id BIGINT NOT NULL,
 	--
 	domain_id BINARY(16) NOT NULL,
@@ -189,8 +191,13 @@ CREATE TABLE replication_tasks (
 	first_event_id BIGINT NOT NULL,
 	next_event_id BIGINT NOT NULL,
 	version BIGINT NOT NULL,
-  last_replication_info BLOB NOT NULL,
+	last_replication_info BLOB NOT NULL,
 	scheduled_id BIGINT NOT NULL,
+	event_store_version INT NOT NULL, -- indiciates which version of event store to query
+	branch_token  BLOB, -- if eventV2, then query with this token
+	new_run_event_store_version INT NOT NULL, -- indiciates which version of event store to query for new run(continueAsNew)
+	new_run_branch_token BLOB, -- if eventV2, then query with this token for new run(continueAsNew)
+	reset_workflow BOOLEAN NOT NULL, -- whether the task is for resetWorkflowExecution
 	PRIMARY KEY (shard_id, task_id)
 );
 
@@ -342,6 +349,8 @@ history MEDIUMBLOB,
 history_encoding VARCHAR(16) NOT NULL,
 new_run_history BLOB,
 new_run_history_encoding VARCHAR(16) NOT NULL DEFAULT 'json',
+event_store_version          INT NOT NULL, -- indiciates which version of event store to query
+new_run_event_store_version  INT NOT NULL, -- indiciates which version of event store to query for new run(continueAsNew)
 PRIMARY KEY (shard_id, domain_id, workflow_id, run_id, first_event_id)
 );
 

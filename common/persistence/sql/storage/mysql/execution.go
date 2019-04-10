@@ -67,7 +67,9 @@ maximum_interval,
 maximum_attempts,
 expiration_seconds,
 expiration_time,
-non_retryable_errors
+non_retryable_errors,
+event_store_version,
+branch_token
 `
 
 	executionsColumnsTags = `:shard_id,
@@ -110,7 +112,9 @@ non_retryable_errors
 :maximum_attempts,
 :expiration_seconds,
 :expiration_time,
-:non_retryable_errors`
+:non_retryable_errors,
+:event_store_version,
+:branch_token`
 
 	executionsBlobColumns = `completion_event,
 execution_context`
@@ -208,7 +212,9 @@ maximum_interval = :maximum_interval,
 maximum_attempts = :maximum_attempts,
 expiration_seconds = :expiration_seconds,
 expiration_time = :expiration_time,
-non_retryable_errors = :non_retryable_errors
+non_retryable_errors = :non_retryable_errors,
+event_store_version = :event_store_version,
+branch_token = :branch_token
 
 WHERE
 shard_id = :shard_id AND
@@ -340,7 +346,12 @@ first_event_id,
 next_event_id,
 version,
 last_replication_info,
-scheduled_id`
+scheduled_id,
+event_store_version,
+branch_token,
+new_run_event_store_version,
+new_run_branch_token,
+reset_workflow`
 
 	replicationTaskInfoColumnsTags = `:task_id,
 :domain_id,
@@ -351,7 +362,12 @@ scheduled_id`
 :next_event_id,
 :version,
 :last_replication_info,
-:scheduled_id`
+:scheduled_id,
+:event_store_version,
+:branch_token,
+:new_run_event_store_version,
+:new_run_branch_token,
+:reset_workflow`
 
 	replicationTasksColumns     = `shard_id, ` + replicationTaskInfoColumns
 	replicationTasksColumnsTags = `:shard_id, ` + replicationTaskInfoColumnsTags
@@ -384,14 +400,15 @@ shard_id = ? AND
 ((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) AND
 visibility_timestamp < ?
 ORDER BY visibility_timestamp,task_id LIMIT ?`
-	deleteTimerTaskQry         = `DELETE FROM timer_tasks WHERE shard_id = ? AND visibility_timestamp = ? AND task_id = ?`
-	rangeDeleteTimerTaskQry    = `DELETE FROM timer_tasks WHERE shard_id = ? AND visibility_timestamp >= ? AND visibility_timestamp < ?`
-	lockAndCheckNextEventIDQry = `SELECT next_event_id FROM executions WHERE
+	deleteTimerTaskQry             = `DELETE FROM timer_tasks WHERE shard_id = ? AND visibility_timestamp = ? AND task_id = ?`
+	rangeDeleteTimerTaskQry        = `DELETE FROM timer_tasks WHERE shard_id = ? AND visibility_timestamp >= ? AND visibility_timestamp < ?`
+	lockAndCheckNextEventIDQryBase = `SELECT next_event_id FROM executions WHERE
 shard_id = ? AND
 domain_id = ? AND
 workflow_id = ? AND
-run_id = ?
-FOR UPDATE`
+run_id = ? `
+	writeLockAndCheckNextEventIDQry = lockAndCheckNextEventIDQryBase + `FOR UPDATE`
+	readLockAndCheckNextEventIDQry  = lockAndCheckNextEventIDQryBase + `LOCK IN SHARE MODE`
 
 	bufferedEventsColumns    = `shard_id, domain_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQury = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
@@ -436,10 +453,17 @@ func (mdb *DB) DeleteFromExecutions(filter *sqldb.ExecutionsFilter) (sql.Result,
 	return mdb.conn.Exec(deleteExecutionQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
 }
 
-// LockExecutions acquires a write lock on a single row in executions table
-func (mdb *DB) LockExecutions(filter *sqldb.ExecutionsFilter) (int, error) {
+// ReadLockExecutions acquires a write lock on a single row in executions table
+func (mdb *DB) ReadLockExecutions(filter *sqldb.ExecutionsFilter) (int, error) {
 	var nextEventID int
-	err := mdb.conn.Get(&nextEventID, lockAndCheckNextEventIDQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := mdb.conn.Get(&nextEventID, readLockAndCheckNextEventIDQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return nextEventID, err
+}
+
+// WriteLockExecutions acquires a write lock on a single row in executions table
+func (mdb *DB) WriteLockExecutions(filter *sqldb.ExecutionsFilter) (int, error) {
+	var nextEventID int
+	err := mdb.conn.Get(&nextEventID, writeLockAndCheckNextEventIDQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
 	return nextEventID, err
 }
 

@@ -367,12 +367,16 @@ var (
 		"history_encoding",
 		"new_run_history",
 		"new_run_history_encoding",
+		"event_store_version",
+		"new_run_event_store_version",
 	}
 	bufferedReplicationTasksNoNewRunHistoryMapColumns = []string{
 		"version",
 		"next_event_id",
 		"history",
 		"history_encoding",
+		"event_store_version",
+		"new_run_event_store_version",
 	}
 	bufferedReplicationTasksTableName = "buffered_replication_task_maps"
 	bufferedReplicationTasksKey       = "first_event_id"
