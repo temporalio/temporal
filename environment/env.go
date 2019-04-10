@@ -27,18 +27,28 @@ import (
 )
 
 const (
+	// Localhost default localhost
 	Localhost = "127.0.0.1"
 
-	CassandraSeeds       = "CASSANDRA_SEEDS"
-	CassandraPort        = "CASSANDRA_PORT"
+	// CassandraSeeds env
+	CassandraSeeds = "CASSANDRA_SEEDS"
+	// CassandraPort env
+	CassandraPort = "CASSANDRA_PORT"
+	// CassandraDefaultPort Cassandra default port
 	CassandraDefaultPort = "9042"
 
-	MySQLSeeds       = "MYSQL_SEEDS"
-	MySQLPort        = "MYSQL_PORT"
+	// MySQLSeeds env
+	MySQLSeeds = "MYSQL_SEEDS"
+	// MySQLPort env
+	MySQLPort = "MYSQL_PORT"
+	// MySQLDefaultPort MySQL default port
 	MySQLDefaultPort = "3306"
 
-	KafkaSeeds       = "KAFKA_SEEDS"
-	KafkaPort        = "KAFKA_PORT"
+	// KafkaSeeds env
+	KafkaSeeds = "KAFKA_SEEDS"
+	// KafkaPort env
+	KafkaPort = "KAFKA_PORT"
+	// KafkaDefaultPort Kafka default port
 	KafkaDefaultPort = "9092"
 )
 

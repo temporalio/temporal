@@ -141,6 +141,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      common.StringPtr(uuid.New()),
 	}
+
+	// try to create a workflow while the current workflow is still running
 	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RequestID:                uuid.New(),
 		DomainID:                 domainID,
@@ -154,7 +156,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		RangeID:                  s.ShardInfo.RangeID,
 		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:            workflowExecution.GetRunId(),
-		PreviousLastWriteVersion: common.EmptyVersion,
+		PreviousLastWriteVersion: version,
 		ReplicationState:         replicationState,
 	})
 	s.NotNil(err)
@@ -191,6 +193,47 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	})
 	s.NoError(err)
 
+	// try to create a workflow while the current workflow is complete but run ID is wrong
+	_, err = s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:                uuid.New(),
+		DomainID:                 domainID,
+		Execution:                newExecution,
+		TaskList:                 tasklist,
+		WorkflowTypeName:         workflowType,
+		WorkflowTimeout:          workflowTimeout,
+		DecisionTimeoutValue:     decisionTimeout,
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       lastProcessedEventID,
+		RangeID:                  s.ShardInfo.RangeID,
+		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		PreviousRunID:            uuid.New(),
+		PreviousLastWriteVersion: version,
+		ReplicationState:         replicationState,
+	})
+	s.NotNil(err)
+	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err, err.Error())
+
+	// try to create a workflow while the current workflow is complete but version is wrong
+	_, err = s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:                uuid.New(),
+		DomainID:                 domainID,
+		Execution:                newExecution,
+		TaskList:                 tasklist,
+		WorkflowTypeName:         workflowType,
+		WorkflowTimeout:          workflowTimeout,
+		DecisionTimeoutValue:     decisionTimeout,
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       lastProcessedEventID,
+		RangeID:                  s.ShardInfo.RangeID,
+		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		PreviousRunID:            workflowExecution.GetRunId(),
+		PreviousLastWriteVersion: version - 1,
+		ReplicationState:         replicationState,
+	})
+	s.NotNil(err)
+	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err, err.Error())
+
+	// try to create a workflow while the current workflow is complete with run ID & version correct
 	_, err = s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RequestID:                uuid.New(),
 		DomainID:                 domainID,
@@ -207,7 +250,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		PreviousLastWriteVersion: version,
 		ReplicationState:         replicationState,
 	})
-	s.NoError(err)
+	s.Nil(err)
 }
 
 // TestCreateWorkflowExecutionRunIDReuseWithoutReplication test
