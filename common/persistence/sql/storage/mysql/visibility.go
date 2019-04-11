@@ -69,6 +69,8 @@ const (
 		 FROM executions_visibility
 		 WHERE domain_id = ? AND close_status IS NOT NULL
 		 AND run_id = ?`
+
+	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE domain_id=? AND run_id=?"
 )
 
 var errCloseParams = errors.New("missing one of {closeStatus, closeTime, historyLength} params")
@@ -86,6 +88,7 @@ func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error
 		row.WorkflowTypeName)
 }
 
+// ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
 func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error) {
 	switch {
 	case row.CloseStatus != nil && row.CloseTime != nil && row.HistoryLength != nil:
@@ -104,6 +107,11 @@ func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, erro
 	default:
 		return nil, errCloseParams
 	}
+}
+
+// DeleteFromVisibility deletes a row from visibility table if it exist
+func (mdb *DB) DeleteFromVisibility(filter *sqldb.VisibilityFilter) (sql.Result, error) {
+	return mdb.conn.Exec(templateDeleteWorkflowExecution, filter.DomainID, filter.RunID)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table

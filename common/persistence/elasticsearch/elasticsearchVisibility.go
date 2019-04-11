@@ -272,6 +272,10 @@ func (v *esVisibilityManager) GetClosedWorkflowExecution(
 	return response, nil
 }
 
+func (v *esVisibilityManager) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+	return nil // not applicable for elastic search, which relies on retention policies for deletion
+}
+
 func (v *esVisibilityManager) getNextPageToken(token []byte) (*esVisibilityPageToken, error) {
 	var result *esVisibilityPageToken
 	var err error

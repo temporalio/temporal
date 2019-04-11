@@ -622,6 +622,13 @@ func (p *visibilityRateLimitedPersistenceClient) GetClosedWorkflowExecution(requ
 	return response, err
 }
 
+func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.DeleteWorkflowExecution(request)
+}
+
 func (p *visibilityRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

@@ -110,6 +110,12 @@ type (
 		Execution *s.WorkflowExecutionInfo
 	}
 
+	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
+	VisibilityDeleteWorkflowExecutionRequest struct {
+		DomainID string
+		RunID    string
+	}
+
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
 		Closeable
@@ -124,5 +130,6 @@ type (
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
+		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 	}
 )

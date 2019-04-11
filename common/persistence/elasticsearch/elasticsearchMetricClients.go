@@ -189,6 +189,10 @@ func (p *visibilityMetricsClient) GetClosedWorkflowExecution(request *p.GetClose
 	return response, err
 }
 
+func (v *visibilityMetricsClient) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+	return nil // not applicable for elastic search, which relies on retention policies for deletion
+}
+
 func (p *visibilityMetricsClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *workflow.BadRequestError:

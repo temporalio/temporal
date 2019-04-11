@@ -203,6 +203,10 @@ func (p *visibilitySamplingClient) GetClosedWorkflowExecution(request *GetClosed
 	return p.persistence.GetClosedWorkflowExecution(request)
 }
 
+func (p *visibilitySamplingClient) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	return p.persistence.DeleteWorkflowExecution(request)
+}
+
 func (p *visibilitySamplingClient) Close() {
 	p.persistence.Close()
 }

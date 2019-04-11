@@ -814,6 +814,7 @@ type (
 		//   - OPTIONALLY specify one of following params
 		//     - workflowID, workflowTypeName, closeStatus (along with closed=true)
 		SelectFromVisibility(filter *VisibilityFilter) ([]VisibilityRow, error)
+		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
 	}
 
 	// Tx defines the API for a SQL transaction

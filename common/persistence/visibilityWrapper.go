@@ -105,6 +105,14 @@ func (v *visibilityManagerWrapper) GetClosedWorkflowExecution(request *GetClosed
 	return manager.GetClosedWorkflowExecution(request)
 }
 
+func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
+	// this api is only applicable for sql based persistence as of today
+	if v.visibilityManager != nil {
+		return v.visibilityManager.DeleteWorkflowExecution(request)
+	}
+	return nil
+}
+
 func (v *visibilityManagerWrapper) chooseVisibilityManagerForDomain(domain string) VisibilityManager {
 	var visibilityMgr VisibilityManager
 	if v.enableReadVisibilityFromES(domain) && v.esVisibilityManager != nil {

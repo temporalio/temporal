@@ -636,6 +636,11 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	}, nil
 }
 
+// DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
+func (v *cassandraVisibilityPersistence) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+	return nil
+}
+
 func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID gocql.UUID

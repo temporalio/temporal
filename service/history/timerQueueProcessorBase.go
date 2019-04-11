@@ -711,16 +711,19 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflowVisibility(task *persistence.TimerTaskInfo) error {
-	if t.visibilityProducer == nil {
-		return nil
+	switch {
+	case t.visibilityProducer != nil:
+		msg := getVisibilityMessageForDeletion(task.DomainID, task.WorkflowID, task.RunID, task.GetTaskID())
+		op := func() error {
+			return t.visibilityProducer.Publish(msg)
+		}
+		return backoff.Retry(op, kafkaOperationRetryPolicy, common.IsKafkaTransientError)
+	default:
+		op := func() error {
+			return t.historyService.DeleteExecutionFromVisibility(task.DomainID, task.RunID)
+		}
+		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	}
-
-	msg := getVisibilityMessageForDeletion(task.DomainID, task.WorkflowID, task.RunID, task.GetTaskID())
-	op := func() error {
-		return t.visibilityProducer.Publish(msg)
-	}
-
-	return backoff.Retry(op, kafkaOperationRetryPolicy, common.IsKafkaTransientError)
 }
 
 func getVisibilityMessageForDeletion(domainID, workflowID, runID string, docVersion int64) *indexer.Message {

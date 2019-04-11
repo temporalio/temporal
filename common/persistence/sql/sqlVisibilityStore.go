@@ -229,6 +229,17 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 	return &p.GetClosedWorkflowExecutionResponse{Execution: rowToInfo(&rows[0])}, nil
 }
 
+func (s *sqlVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+	_, err := s.db.DeleteFromVisibility(&sqldb.VisibilityFilter{
+		DomainID: request.DomainID,
+		RunID:    &request.RunID,
+	})
+	if err != nil {
+		return &workflow.InternalServiceError{Message: err.Error()}
+	}
+	return nil
+}
+
 func rowToInfo(row *sqldb.VisibilityRow) *workflow.WorkflowExecutionInfo {
 	if row.ExecutionTime.UnixNano() == 0 {
 		row.ExecutionTime = row.StartTime
