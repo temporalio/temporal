@@ -415,10 +415,6 @@ func (s *historyReplicationTaskSuite) TestRetryErr_Retryable() {
 	task.attempt = 0
 	s.True(task.RetryErr(err))
 	s.False(task.req.GetForceBufferEvents())
-
-	task.attempt = s.config.ReplicatorHistoryBufferRetryCount()
-	s.True(task.RetryErr(err))
-	s.True(task.req.GetForceBufferEvents())
 }
 
 func (s *historyReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {

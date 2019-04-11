@@ -244,9 +244,6 @@ func (t *historyReplicationTask) HandleErr(err error) error {
 
 func (t *historyReplicationTask) RetryErr(err error) bool {
 	t.attempt++
-	if t.attempt >= t.config.ReplicatorHistoryBufferRetryCount() {
-		t.req.ForceBufferEvents = common.BoolPtr(true)
-	}
 
 	if t.attempt <= t.config.ReplicationTaskMaxRetry() && isTransientRetryableError(err) {
 		time.Sleep(replicationTaskRetryDelay)

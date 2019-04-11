@@ -243,7 +243,7 @@ struct ReplicateEventsRequest {
   70: optional map<string, shared.ReplicationInfo> replicationInfo
   80: optional shared.History history
   90: optional shared.History newRunHistory
-  100: optional bool forceBufferEvents
+  100: optional bool forceBufferEvents // this attribute is deprecated
   110: optional i32 eventStoreVersion
   120: optional i32 newRunEventStoreVersion
   130: optional bool resetWorkflow
