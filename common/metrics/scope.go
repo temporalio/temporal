@@ -35,6 +35,11 @@ func newMetricsScope(scope tally.Scope, defs map[int]metricDefinition) Scope {
 	return &metricsScope{scope, defs}
 }
 
+// NoopScope returns a noop scope of metrics
+func NoopScope(serviceIdx ServiceIdx) Scope {
+	return &metricsScope{tally.NoopScope, getMetricDefs(serviceIdx)}
+}
+
 func (m *metricsScope) IncCounter(id int) {
 	name := string(m.defs[id].metricName)
 	m.scope.Counter(name).Inc(1)
