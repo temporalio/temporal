@@ -46,7 +46,7 @@ deliverBufferTasksLoop:
 				"Unable to add buffer task, rate limit failed, domainId: %s, tasklist: %s, error: %s",
 				c.taskListID.domainID, c.taskListID.taskListName, err.Error(),
 			)
-			c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.BufferThrottleCounter)
+			c.domainScope.IncCounter(metrics.BufferThrottleCounter)
 			// This is to prevent busy looping when throttling is set to 0
 			runtime.Gosched()
 			continue
@@ -193,7 +193,7 @@ func (c *taskListManagerImpl) addTasksToBuffer(
 	now := time.Now()
 	for _, t := range tasks {
 		if c.isTaskExpired(t, now) {
-			c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.ExpiredTasksCounter)
+			c.domainScope.IncCounter(metrics.ExpiredTasksCounter)
 			continue
 		}
 		c.taskAckManager.addTask(t.TaskID)

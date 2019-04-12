@@ -24878,8 +24878,9 @@ func (v *PollForDecisionTaskResponse) IsSetWorkflowExecutionTaskList() bool {
 }
 
 type PollerInfo struct {
-	LastAccessTime *int64  `json:"lastAccessTime,omitempty"`
-	Identity       *string `json:"identity,omitempty"`
+	LastAccessTime *int64   `json:"lastAccessTime,omitempty"`
+	Identity       *string  `json:"identity,omitempty"`
+	RatePerSecond  *float64 `json:"ratePerSecond,omitempty"`
 }
 
 // ToWire translates a PollerInfo struct into a Thrift-level intermediate
@@ -24899,7 +24900,7 @@ type PollerInfo struct {
 //   }
 func (v *PollerInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -24919,6 +24920,14 @@ func (v *PollerInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RatePerSecond != nil {
+		w, err = wire.NewValueDouble(*(v.RatePerSecond)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
 
@@ -24967,6 +24976,16 @@ func (v *PollerInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TDouble {
+				var x float64
+				x, err = field.Value.GetDouble(), error(nil)
+				v.RatePerSecond = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -24980,7 +24999,7 @@ func (v *PollerInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.LastAccessTime != nil {
 		fields[i] = fmt.Sprintf("LastAccessTime: %v", *(v.LastAccessTime))
@@ -24990,8 +25009,22 @@ func (v *PollerInfo) String() string {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
 		i++
 	}
+	if v.RatePerSecond != nil {
+		fields[i] = fmt.Sprintf("RatePerSecond: %v", *(v.RatePerSecond))
+		i++
+	}
 
 	return fmt.Sprintf("PollerInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Double_EqualsPtr(lhs, rhs *float64) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this PollerInfo match the
@@ -25010,6 +25043,9 @@ func (v *PollerInfo) Equals(rhs *PollerInfo) bool {
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
 		return false
 	}
+	if !_Double_EqualsPtr(v.RatePerSecond, rhs.RatePerSecond) {
+		return false
+	}
 
 	return true
 }
@@ -25025,6 +25061,9 @@ func (v *PollerInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	}
 	if v.Identity != nil {
 		enc.AddString("identity", *v.Identity)
+	}
+	if v.RatePerSecond != nil {
+		enc.AddFloat64("ratePerSecond", *v.RatePerSecond)
 	}
 	return err
 }
@@ -25057,6 +25096,21 @@ func (v *PollerInfo) GetIdentity() (o string) {
 // IsSetIdentity returns true if Identity is not nil.
 func (v *PollerInfo) IsSetIdentity() bool {
 	return v != nil && v.Identity != nil
+}
+
+// GetRatePerSecond returns the value of RatePerSecond if it is set or its
+// zero value if it is unset.
+func (v *PollerInfo) GetRatePerSecond() (o float64) {
+	if v != nil && v.RatePerSecond != nil {
+		return *v.RatePerSecond
+	}
+
+	return
+}
+
+// IsSetRatePerSecond returns true if RatePerSecond is not nil.
+func (v *PollerInfo) IsSetRatePerSecond() bool {
+	return v != nil && v.RatePerSecond != nil
 }
 
 type QueryFailedError struct {
@@ -33046,16 +33100,6 @@ func (v *RetryPolicy) String() string {
 	return fmt.Sprintf("RetryPolicy{%v}", strings.Join(fields[:i], ", "))
 }
 
-func _Double_EqualsPtr(lhs, rhs *float64) bool {
-	if lhs != nil && rhs != nil {
-
-		x := *lhs
-		y := *rhs
-		return (x == y)
-	}
-	return lhs == nil && rhs == nil
-}
-
 func _List_String_Equals(lhs, rhs []string) bool {
 	if len(lhs) != len(rhs) {
 		return false
@@ -40362,6 +40406,7 @@ type TaskListStatus struct {
 	BacklogCountHint *int64       `json:"backlogCountHint,omitempty"`
 	ReadLevel        *int64       `json:"readLevel,omitempty"`
 	AckLevel         *int64       `json:"ackLevel,omitempty"`
+	RatePerSecond    *float64     `json:"ratePerSecond,omitempty"`
 	TaskIDBlock      *TaskIDBlock `json:"taskIDBlock,omitempty"`
 }
 
@@ -40382,7 +40427,7 @@ type TaskListStatus struct {
 //   }
 func (v *TaskListStatus) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -40410,6 +40455,14 @@ func (v *TaskListStatus) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.RatePerSecond != nil {
+		w, err = wire.NewValueDouble(*(v.RatePerSecond)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 35, Value: w}
 		i++
 	}
 	if v.TaskIDBlock != nil {
@@ -40482,6 +40535,16 @@ func (v *TaskListStatus) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 35:
+			if field.Value.Type() == wire.TDouble {
+				var x float64
+				x, err = field.Value.GetDouble(), error(nil)
+				v.RatePerSecond = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 40:
 			if field.Value.Type() == wire.TStruct {
 				v.TaskIDBlock, err = _TaskIDBlock_Read(field.Value)
@@ -40503,7 +40566,7 @@ func (v *TaskListStatus) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.BacklogCountHint != nil {
 		fields[i] = fmt.Sprintf("BacklogCountHint: %v", *(v.BacklogCountHint))
@@ -40515,6 +40578,10 @@ func (v *TaskListStatus) String() string {
 	}
 	if v.AckLevel != nil {
 		fields[i] = fmt.Sprintf("AckLevel: %v", *(v.AckLevel))
+		i++
+	}
+	if v.RatePerSecond != nil {
+		fields[i] = fmt.Sprintf("RatePerSecond: %v", *(v.RatePerSecond))
 		i++
 	}
 	if v.TaskIDBlock != nil {
@@ -40544,6 +40611,9 @@ func (v *TaskListStatus) Equals(rhs *TaskListStatus) bool {
 	if !_I64_EqualsPtr(v.AckLevel, rhs.AckLevel) {
 		return false
 	}
+	if !_Double_EqualsPtr(v.RatePerSecond, rhs.RatePerSecond) {
+		return false
+	}
 	if !((v.TaskIDBlock == nil && rhs.TaskIDBlock == nil) || (v.TaskIDBlock != nil && rhs.TaskIDBlock != nil && v.TaskIDBlock.Equals(rhs.TaskIDBlock))) {
 		return false
 	}
@@ -40565,6 +40635,9 @@ func (v *TaskListStatus) MarshalLogObject(enc zapcore.ObjectEncoder) (err error)
 	}
 	if v.AckLevel != nil {
 		enc.AddInt64("ackLevel", *v.AckLevel)
+	}
+	if v.RatePerSecond != nil {
+		enc.AddFloat64("ratePerSecond", *v.RatePerSecond)
 	}
 	if v.TaskIDBlock != nil {
 		err = multierr.Append(err, enc.AddObject("taskIDBlock", v.TaskIDBlock))
@@ -40615,6 +40688,21 @@ func (v *TaskListStatus) GetAckLevel() (o int64) {
 // IsSetAckLevel returns true if AckLevel is not nil.
 func (v *TaskListStatus) IsSetAckLevel() bool {
 	return v != nil && v.AckLevel != nil
+}
+
+// GetRatePerSecond returns the value of RatePerSecond if it is set or its
+// zero value if it is unset.
+func (v *TaskListStatus) GetRatePerSecond() (o float64) {
+	if v != nil && v.RatePerSecond != nil {
+		return *v.RatePerSecond
+	}
+
+	return
+}
+
+// IsSetRatePerSecond returns true if RatePerSecond is not nil.
+func (v *TaskListStatus) IsSetRatePerSecond() bool {
+	return v != nil && v.RatePerSecond != nil
 }
 
 // GetTaskIDBlock returns the value of TaskIDBlock if it is set or its

@@ -64,7 +64,7 @@ type (
 		GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
 		SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 		CancelPoller(pollerID string)
-		GetAllPollerInfo() []*pollerInfo
+		GetAllPollerInfo() []*s.PollerInfo
 		DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse
 		String() string
 	}
@@ -106,6 +106,7 @@ type (
 		taskListID    *taskListID
 		logger        bark.Logger
 		metricsClient metrics.Client
+		domainScope   metrics.Scope // domain tagged metric scope
 		engine        *matchingEngineImpl
 		config        *taskListConfig
 
@@ -241,6 +242,7 @@ func newTaskListManagerWithRateLimiter(
 	if taskListKind == nil {
 		taskListKind = common.TaskListKindPtr(s.TaskListKindNormal)
 	}
+
 	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.taskListName, taskList.taskType, int(*taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
 		domainCache:             domainCache,
@@ -256,7 +258,7 @@ func newTaskListManagerWithRateLimiter(
 			logging.TagTaskListType: taskList.taskType,
 			logging.TagTaskListName: taskList.taskListName,
 		}),
-		metricsClient:       e.metricsClient,
+		domainScope:         domainTaggedMetricScope(e.domainCache, taskList.domainID, e.metricsClient, metrics.MatchingTaskListMgrScope),
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
 		taskGC:              newTaskGC(db, config),
@@ -363,8 +365,7 @@ func (c *taskListManagerImpl) GetTaskContext(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*taskContext, error) {
-	c.rateLimiter.UpdateMaxDispatch(maxDispatchPerSecond)
-	result, err := c.getTask(ctx)
+	result, err := c.getTask(ctx, maxDispatchPerSecond)
 	if err != nil {
 		return nil, err
 	}
@@ -407,11 +408,7 @@ func (c *taskListManagerImpl) completeTaskPoll(taskID int64) int64 {
 }
 
 // Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
-func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, error) {
-	scope := metrics.MatchingTaskListMgrScope
-
-	pollerID, ok := ctx.Value(pollerIDKey).(string)
-
+func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond *float64) (*getTaskResult, error) {
 	childCtxTimeout := c.config.LongPollExpirationInterval()
 	if deadline, ok := ctx.Deadline(); ok {
 		// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
@@ -427,6 +424,7 @@ func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, erro
 	childCtx, cancel := context.WithTimeout(ctx, childCtxTimeout)
 	defer cancel()
 
+	pollerID, ok := ctx.Value(pollerIDKey).(string)
 	if ok && pollerID != "" {
 		// Found pollerID on context, add it to the map to allow it to be canceled in
 		// response to CancelPoller call
@@ -442,9 +440,7 @@ func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, erro
 
 	identity, ok := ctx.Value(identityKey).(string)
 	if ok && identity != "" {
-		c.pollerHistory.updatePollerInfo(pollerIdentity{
-			identity: identity,
-		})
+		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
 	}
 
 	var tasksForPoll chan *getTaskResult
@@ -457,21 +453,28 @@ func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, erro
 		tasksForPoll = c.tasksForPoll
 	}
 
+	// the desired global rate limit for the task list comes from the
+	// poller, which lives inside the client side worker. There is
+	// one rateLimiter for this entire task list and as we get polls,
+	// we update the ratelimiter rps if it has changed from the last
+	// value. Last poller wins if different pollers provide different values
+	c.rateLimiter.UpdateMaxDispatch(maxDispatchPerSecond)
+
 	select {
 	case result := <-tasksForPoll:
 		if result.syncMatch {
-			c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
+			c.domainScope.IncCounter(metrics.PollSuccessWithSyncCounter)
 		}
-		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
+		c.domainScope.IncCounter(metrics.PollSuccessCounter)
 		return result, nil
 	case result := <-c.queryTasksForPoll:
 		if result.syncMatch {
-			c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
+			c.domainScope.IncCounter(metrics.PollSuccessWithSyncCounter)
 		}
-		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
+		c.domainScope.IncCounter(metrics.PollSuccessCounter)
 		return result, nil
 	case <-childCtx.Done():
-		c.metricsClient.IncCounter(scope, metrics.PollTimeoutCounter)
+		c.domainScope.IncCounter(metrics.PollTimeoutCounter)
 		return nil, ErrNoTasks
 	}
 }
@@ -492,10 +495,10 @@ func (c *taskListManagerImpl) renewLeaseWithRetry() (taskListState, error) {
 		newState, err = c.db.RenewLease()
 		return
 	}
-	c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.LeaseRequestCounter)
+	c.domainScope.IncCounter(metrics.LeaseRequestCounter)
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.LeaseFailureCounter)
+		c.domainScope.IncCounter(metrics.LeaseFailureCounter)
 		c.engine.unloadTaskList(c.taskListID)
 		return newState, err
 	}
@@ -539,13 +542,8 @@ func (c *taskListManagerImpl) String() string {
 	return r
 }
 
-// updatePollerInfo update the poller information for this tasklist
-func (c *taskListManagerImpl) updatePollerInfo(id pollerIdentity) {
-	c.pollerHistory.updatePollerInfo(id)
-}
-
 // getAllPollerInfo return poller which poll from this tasklist in last few minutes
-func (c *taskListManagerImpl) GetAllPollerInfo() []*pollerInfo {
+func (c *taskListManagerImpl) GetAllPollerInfo() []*s.PollerInfo {
 	return c.pollerHistory.getAllPollerInfo()
 }
 
@@ -553,15 +551,7 @@ func (c *taskListManagerImpl) GetAllPollerInfo() []*pollerInfo {
 // pollers which polled this tasklist in last few minutes and status of tasklist's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse {
-	pollers := []*s.PollerInfo{}
-	for _, poller := range c.GetAllPollerInfo() {
-		pollers = append(pollers, &s.PollerInfo{
-			Identity:       common.StringPtr(poller.identity),
-			LastAccessTime: common.Int64Ptr(poller.lastAccessTime.UnixNano()),
-		})
-	}
-
-	response := &s.DescribeTaskListResponse{Pollers: pollers}
+	response := &s.DescribeTaskListResponse{Pollers: c.GetAllPollerInfo()}
 	if !includeTaskListStatus {
 		return response
 	}
@@ -571,6 +561,7 @@ func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *s.De
 		ReadLevel:        common.Int64Ptr(c.taskAckManager.getReadLevel()),
 		AckLevel:         common.Int64Ptr(c.taskAckManager.getAckLevel()),
 		BacklogCountHint: common.Int64Ptr(c.taskAckManager.getBacklogCountHint()),
+		RatePerSecond:    common.Float64Ptr(c.rateLimiter.Limit()),
 		TaskIDBlock: &s.TaskIDBlock{
 			StartID: common.Int64Ptr(taskIDBlock.start),
 			EndID:   common.Int64Ptr(taskIDBlock.end),
@@ -595,7 +586,10 @@ func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persist
 	rsv := c.rateLimiter.Reserve()
 	// If we have to wait too long for reservation, better to store in task buffer and handle later.
 	if !rsv.OK() || rsv.Delay() > time.Second {
-		c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.SyncThrottleCounter)
+		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out
+			rsv.Cancel()
+		}
+		c.domainScope.IncCounter(metrics.SyncThrottleCounter)
 		return nil, errAddTasklistThrottled
 	}
 	time.Sleep(rsv.Delay())
@@ -628,7 +622,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 	})
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
-		c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.ConditionFailedErrorCounter)
+		c.domainScope.IncCounter(metrics.ConditionFailedErrorCounter)
 		c.logger.Debugf("Stopping task list due to persistence condition failure. Err: %v", err)
 		c.Stop()
 	}
@@ -724,4 +718,12 @@ func createServiceBusyError(msg string) *s.ServiceBusyError {
 
 func (c *taskListManagerImpl) isTaskAddedRecently(lastAddTime time.Time) bool {
 	return time.Now().Sub(lastAddTime) <= c.config.MaxTasklistIdleTime()
+}
+
+func domainTaggedMetricScope(cache cache.DomainCache, domainID string, client metrics.Client, scope int) metrics.Scope {
+	entry, err := cache.GetDomainByID(domainID)
+	if err != nil {
+		return client.Scope(scope)
+	}
+	return client.Scope(scope, metrics.DomainTag(entry.GetInfo().Name))
 }

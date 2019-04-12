@@ -22,6 +22,7 @@ package matching
 
 import (
 	"context"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -96,4 +97,12 @@ func (rl *rateLimiter) Wait(ctx context.Context) error {
 func (rl *rateLimiter) Reserve() *rate.Reservation {
 	limiter := rl.globalLimiter.Load().(*rate.Limiter)
 	return limiter.Reserve()
+}
+
+// Limit returns the current rate per second limit for this ratelimiter
+func (rl *rateLimiter) Limit() float64 {
+	if rl.maxDispatchPerSecond != nil {
+		return *rl.maxDispatchPerSecond
+	}
+	return math.MaxFloat64
 }

@@ -701,7 +701,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync.throttle.count+operation=TaskListMgr"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+domain=domainName,operation=TaskListMgr"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -711,6 +711,24 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
+
+	// check the poller information
+	tlType := workflow.TaskListTypeActivity
+	descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matching.DescribeTaskListRequest{
+		DomainUUID: common.StringPtr(domainID),
+		DescRequest: &workflow.DescribeTaskListRequest{
+			TaskList:              taskList,
+			TaskListType:          &tlType,
+			IncludeTaskListStatus: common.BoolPtr(true),
+		},
+	})
+	s.NoError(err)
+	s.Equal(1, len(descResp.Pollers))
+	s.Equal(identity, descResp.Pollers[0].GetIdentity())
+	s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
+	s.Equal(_defaultTaskDispatchRPS, descResp.Pollers[0].GetRatePerSecond())
+	s.NotNil(descResp.GetTaskListStatus())
+	s.True(descResp.GetTaskListStatus().GetRatePerSecond() >= (_defaultTaskDispatchRPS - 1))
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
@@ -875,8 +893,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 
-	syncCtr := scope.Snapshot().Counters()["test.sync.throttle.count+operation=TaskListMgr"]
-	bufCtr := scope.Snapshot().Counters()["test.buffer.throttle.count+operation=TaskListMgr"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+domain=domainName,operation=TaskListMgr"]
+	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+domain=domainName,operation=TaskListMgr"]
 	total := int64(0)
 	if syncCtr != nil {
 		total += syncCtr.Value()

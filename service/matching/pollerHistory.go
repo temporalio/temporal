@@ -23,6 +23,8 @@ package matching
 import (
 	"time"
 
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 )
 
@@ -33,21 +35,16 @@ const (
 )
 
 type (
-	pollerIdentity struct {
-		identity string
-		// TODO add IP, T1396795
-	}
+	pollerIdentity string
 
 	pollerInfo struct {
-		identity string
-		// TODO add IP, T1396795
-		lastAccessTime time.Time
+		ratePerSecond float64
 	}
 )
 
 type pollerHistory struct {
-	// poller ID -> last access time
-	// pollers map[pollerID]time.Time
+	// poller ID -> pollerInfo
+	// pollers map[pollerID]pollerInfo
 	history cache.Cache
 }
 
@@ -63,23 +60,29 @@ func newPollerHistory() *pollerHistory {
 	}
 }
 
-func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity) {
-	pollers.history.Put(id, nil)
+func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, ratePerSecond *float64) {
+	rps := _defaultTaskDispatchRPS
+	if ratePerSecond != nil {
+		rps = *ratePerSecond
+	}
+	pollers.history.Put(id, &pollerInfo{ratePerSecond: rps})
 }
 
-func (pollers *pollerHistory) getAllPollerInfo() []*pollerInfo {
-	result := []*pollerInfo{}
+func (pollers *pollerHistory) getAllPollerInfo() []*shared.PollerInfo {
+	var result []*shared.PollerInfo
 
 	ite := pollers.history.Iterator()
 	defer ite.Close()
 	for ite.HasNext() {
 		entry := ite.Next()
 		key := entry.Key().(pollerIdentity)
+		value := entry.Value().(*pollerInfo)
+		// TODO add IP, T1396795
 		lastAccessTime := entry.CreateTime()
-		result = append(result, &pollerInfo{
-			identity: key.identity,
-			// TODO add IP, T1396795
-			lastAccessTime: lastAccessTime,
+		result = append(result, &shared.PollerInfo{
+			Identity:       common.StringPtr(string(key)),
+			LastAccessTime: common.Int64Ptr(lastAccessTime.UnixNano()),
+			RatePerSecond:  common.Float64Ptr(value.ratePerSecond),
 		})
 	}
 
