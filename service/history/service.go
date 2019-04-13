@@ -305,15 +305,7 @@ func (s *Service) Start() {
 		log.Fatalf("Creating historyV2 manager persistence failed: %v", err)
 	}
 
-	handler := NewHandler(base,
-		s.config,
-		shardMgr,
-		metadata,
-		visibility,
-		history,
-		historyV2,
-		pFactory)
-
+	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, params.PublicClient)
 	handler.Start()
 
 	log.Infof("%v started", common.HistoryServiceName)

@@ -34,7 +34,6 @@ import (
 	gen "github.com/uber/cadence/.gen/go/shared"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -45,6 +44,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/tokenbucket"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -61,7 +61,7 @@ type (
 		domainCache           cache.DomainCache
 		historyServiceClient  hc.Client
 		matchingServiceClient matching.Client
-		publicClient          public.Client
+		publicClient          workflowserviceclient.Interface
 		hServiceResolver      membership.ServiceResolver
 		controller            *shardController
 		tokenSerializer       common.TaskTokenSerializer
@@ -95,7 +95,7 @@ var (
 func NewHandler(sVice service.Service, config *Config, shardManager persistence.ShardManager,
 	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	executionMgrFactory persistence.ExecutionManagerFactory) *Handler {
+	executionMgrFactory persistence.ExecutionManagerFactory, publicClient workflowserviceclient.Interface) *Handler {
 	handler := &Handler{
 		Service:             sVice,
 		config:              config,
@@ -107,6 +107,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		executionMgrFactory: executionMgrFactory,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
 		rateLimiter:         tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
+		publicClient:        publicClient,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -129,12 +130,6 @@ func (h *Handler) Start() error {
 	h.historyServiceClient = hc.NewRetryableClient(
 		h.GetClientBean().GetHistoryClient(),
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
-	h.publicClient = public.NewRetryableClient(
-		h.GetClientBean().GetPublicClient(),
-		common.CreatePublicClientRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
 

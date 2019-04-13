@@ -131,3 +131,6 @@ archival:
         owner: "custom-owner-2"
         retentionDays: 5
 
+publicClient:
+  hostPort: "127.0.0.1:8933"
+

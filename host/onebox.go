@@ -22,6 +22,7 @@ package host
 
 import (
 	"fmt"
+
 	"sync"
 	"time"
 
@@ -32,7 +33,6 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
@@ -52,6 +52,7 @@ import (
 	"github.com/uber/cadence/service/worker"
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/replicator"
+	cwsc "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 )
@@ -377,6 +378,11 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		params.PersistenceConfig = c.persistenceConfig
 		params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 		params.DynamicConfig = dynamicconfig.NewNopClient()
+		dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, c.FrontendAddress())
+		if err != nil {
+			c.logger.WithField("error", err).Fatal("Failed to get dispatcher for frontend")
+		}
+		params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
 		c.initLock.Lock()
 		service := service.New(params)
@@ -392,7 +398,7 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 			historyConfig.HistoryCountLimitError = dynamicconfig.GetIntPropertyFilteredByDomain(hConfig.HistoryCountLimitError)
 		}
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
-			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory)
+			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, params.PublicClient)
 		handler.Start()
 		c.initLock.Unlock()
 
@@ -446,6 +452,11 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 
+	dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, c.FrontendAddress())
+	if err != nil {
+		c.logger.WithField("error", err).Fatal("Failed to get dispatcher for frontend")
+	}
+	params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
 	c.initLock.Lock()
 	service := service.New(params)
 	service.Start()
@@ -488,11 +499,6 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 }
 
 func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
-	publicClient := public.NewRetryableClient(
-		service.GetClientBean().GetPublicClient(),
-		common.CreatePublicClientRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
 	blobstoreClient := blobstore.NewRetryableClient(
 		blobstore.NewMetricClient(c.blobstoreClient, service.GetMetricsClient()),
 		c.blobstoreClient.GetRetryPolicy(),
@@ -500,7 +506,7 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	bc := &archiver.BootstrapContainer{
-		PublicClient:     publicClient,
+		PublicClient:     params.PublicClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		ClusterMetadata:  service.GetClusterMetadata(),

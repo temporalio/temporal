@@ -27,7 +27,6 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
@@ -37,6 +36,7 @@ import (
 	pfactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
 	cclient "go.uber.org/cadence/client"
 	"go.uber.org/cadence/worker"
@@ -60,7 +60,7 @@ type (
 		// Config contains the configuration for scanner
 		Config Config
 		// SDKClient is an instance of cadence sdk client
-		SDKClient public.Client
+		SDKClient workflowserviceclient.Interface
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		// Logger is an instance of bark logger
@@ -75,7 +75,7 @@ type (
 		taskDB        p.TaskManager
 		domainDB      p.MetadataManager
 		cfg           Config
-		sdkClient     public.Client
+		sdkClient     workflowserviceclient.Interface
 		metricsClient metrics.Client
 		tallyScope    tally.Scope
 		logger        bark.Logger

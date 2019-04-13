@@ -26,11 +26,11 @@ import (
 	"math/rand"
 
 	"github.com/uber-common/bark"
-	"github.com/uber/cadence/client/public"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	cclient "go.uber.org/cadence/client"
 )
 
@@ -64,7 +64,7 @@ type (
 func NewClient(
 	metricsClient metrics.Client,
 	logger bark.Logger,
-	publicClient public.Client,
+	publicClient workflowserviceclient.Interface,
 	numWorkflows dynamicconfig.IntPropertyFn,
 ) Client {
 	return &client{

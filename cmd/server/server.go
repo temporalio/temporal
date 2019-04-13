@@ -26,7 +26,10 @@ import (
 
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/elasticsearch"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
@@ -35,10 +38,7 @@ import (
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"github.com/uber/cadence/service/worker"
-
-	"github.com/uber/cadence/common/blobstore/filestore"
-	"github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/messaging"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/zap"
 )
 
@@ -161,6 +161,12 @@ func (s *server) startService() common.Daemon {
 			log.Fatalf("elastic search config missing visibility index")
 		}
 	}
+
+	dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, s.cfg.PublicClient.HostPort)
+	if err != nil {
+		log.Fatalf("failed to construct dispatcher: %v", err)
+	}
+	params.PublicClient = workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
 	if params.ClusterMetadata.ArchivalConfig().ConfiguredForArchival() {
 		params.BlobstoreClient, err = filestore.NewClient(&s.cfg.Archival.Filestore)

@@ -122,3 +122,6 @@ elasticsearch:
   indices:
     visibility: cadence-visibility-dev
 
+publicClient:
+  hostPort: "127.0.0.1:7933"
+

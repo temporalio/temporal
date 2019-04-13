@@ -56,10 +56,6 @@ const (
 	frontendServiceOperationMaxInterval        = 5 * time.Second
 	frontendServiceOperationExpirationInterval = 15 * time.Second
 
-	publicClientOperationInitialInterval    = 200 * time.Millisecond
-	publicClientOperationMaxInterval        = 5 * time.Second
-	publicClientOperationExpirationInterval = 15 * time.Second
-
 	adminServiceOperationInitialInterval    = 200 * time.Millisecond
 	adminServiceOperationMaxInterval        = 5 * time.Second
 	adminServiceOperationExpirationInterval = 15 * time.Second
@@ -158,15 +154,6 @@ func CreateAdminServiceRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(adminServiceOperationInitialInterval)
 	policy.SetMaximumInterval(adminServiceOperationMaxInterval)
 	policy.SetExpirationInterval(adminServiceOperationExpirationInterval)
-
-	return policy
-}
-
-// CreatePublicClientRetryPolicy creates a retry policy for calls to frontend service
-func CreatePublicClientRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(publicClientOperationInitialInterval)
-	policy.SetMaximumInterval(publicClientOperationMaxInterval)
-	policy.SetExpirationInterval(publicClientOperationExpirationInterval)
 
 	return policy
 }

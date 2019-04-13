@@ -26,21 +26,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/blobstore"
-
+	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cluster"
+	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-
-	"github.com/uber-common/bark"
-	"github.com/uber-go/tally"
-	es "github.com/uber/cadence/common/elasticsearch"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
 )
 
@@ -73,6 +72,7 @@ type (
 		DispatcherProvider  client.DispatcherProvider
 		BlobstoreClient     blobstore.Client
 		DCRedirectionPolicy config.DCRedirectionPolicy
+		PublicClient        workflowserviceclient.Interface
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

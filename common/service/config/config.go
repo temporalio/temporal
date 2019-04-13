@@ -52,8 +52,10 @@ type (
 		Kafka messaging.KafkaConfig `yaml:"kafka"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
-		// ElasticSearch if config for connecting to ElasticSearch
-		ElasticSearch elasticsearch.Config `yaml:elasticsearch`
+		// ElasticSearch is config for connecting to ElasticSearch
+		ElasticSearch elasticsearch.Config `yaml:"elasticsearch"`
+		// PublicClient is config for connecting to cadence frontend
+		PublicClient PublicClient `yaml:"publicClient"`
 	}
 
 	// Service contains the service specific config items
@@ -272,6 +274,12 @@ type (
 		DefaultBucket string `yaml:"defaultBucket"`
 		// Filestore the configuration for file based blobstore
 		Filestore filestore.Config `yaml:"filestore"`
+	}
+
+	// PublicClient is config for connecting to cadence frontend
+	PublicClient struct {
+		// HostPort is the host port to connect on
+		HostPort string `yaml:"hostPort" validate:"nonzero"`
 	}
 
 	// BootstrapMode is an enum type for ringpop bootstrap mode
