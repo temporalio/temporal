@@ -131,6 +131,13 @@ func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExe
 	if err != nil {
 		return nil, nil, nil, 0, 0, err
 	}
+	if len(response.History) == 0 && len(request.NextPageToken) == 0 {
+		return nil, nil, nil, 0, 0, &workflow.EntityNotExistsError{
+			Message: fmt.Sprintf("Workflow execution history not found.  WorkflowId: %v, RunId: %v",
+				request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		}
+	}
+
 	// we store LastEventBatchVersion in the token. The reason we do it here is for historic reason.
 	token.LastEventBatchVersion = response.LastEventBatchVersion
 	token.Data = response.NextPageToken

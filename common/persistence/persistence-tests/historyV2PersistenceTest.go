@@ -36,6 +36,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	gen "github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -260,14 +261,31 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	req.NextPageToken = resp.NextPageToken
 
 	// last page: one batch of 18-20
+	// We have only one page left and the page size is set to one. In this case,
+	// persistence may or may not return a nextPageToken.
+	// If it does return a token, we need to ensure that if the token returned is used
+	// to get history again, no error and history events should be returned.
+	req.PageSize = 1
 	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
 	s.Nil(err)
 	s.Equal(3, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
+	if len(resp.NextPageToken) != 0 {
+		resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+		s.Nil(err)
+		s.Equal(0, len(resp.HistoryEvents))
+	}
 
 	s.True(historyW.Equals(historyR))
 	s.Equal(0, len(resp.NextPageToken))
+
+	// MinEventID is in the middle of the last batch and this is the first request (NextPageToken
+	// is empty), the call should return an error.
+	req.MinEventID = 19
+	req.NextPageToken = nil
+	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	s.IsType(&gen.EntityNotExistsError{}, err)
 }
 
 //TestConcurrentlyCreateAndAppendBranches test

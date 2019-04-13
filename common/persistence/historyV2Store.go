@@ -294,6 +294,9 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 	if err != nil {
 		return nil, nil, nil, 0, 0, err
 	}
+	if len(resp.History) == 0 && len(request.NextPageToken) == 0 {
+		return nil, nil, nil, 0, 0, &workflow.EntityNotExistsError{Message: "Workflow execution history not found."}
+	}
 
 	events := make([]*workflow.HistoryEvent, 0, request.PageSize)
 	historyBatches := make([]*workflow.History, 0, request.PageSize)

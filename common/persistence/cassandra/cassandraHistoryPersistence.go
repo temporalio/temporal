@@ -164,7 +164,6 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Int
 		}
 	}
 
-	found := false
 	nextPageToken := iter.PageState()
 
 	//NOTE: in this method, we need to make sure is NOT decreasing(otherwise we skip the events)
@@ -177,8 +176,6 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Int
 	history := make([]*p.DataBlob, 0, request.PageSize)
 
 	for iter.Scan(nil, &eventBatchVersionPointer, &eventBatch.Data, &eventBatch.Encoding) {
-		found = true
-
 		if eventBatchVersionPointer != nil {
 			eventBatchVersion = *eventBatchVersionPointer
 		}
@@ -195,15 +192,6 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Int
 	if err := iter.Close(); err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("GetWorkflowExecutionHistory operation failed. Error: %v", err),
-		}
-	}
-
-	if !found && len(request.NextPageToken) == 0 {
-		// adding the check of request next token being not nil, since
-		// there can be case when found == false at the very end of pagination.
-		return nil, &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("Workflow execution history not found.  WorkflowId: %v, RunId: %v",
-				*execution.WorkflowId, *execution.RunId),
 		}
 	}
 
