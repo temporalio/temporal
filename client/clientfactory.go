@@ -39,7 +39,6 @@ import (
 )
 
 const (
-	publicCaller   = "cadence-public-client"
 	frontendCaller = "cadence-frontend-client"
 	historyCaller  = "history-service-client"
 	matchingCaller = "matching-service-client"

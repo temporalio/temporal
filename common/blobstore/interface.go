@@ -54,6 +54,7 @@ type Client interface {
 	Delete(ctx context.Context, bucket string, key blob.Key) (bool, error)
 	ListByPrefix(ctx context.Context, bucket string, prefix string) ([]blob.Key, error)
 	BucketMetadata(ctx context.Context, bucket string) (*BucketMetadataResponse, error)
+	BucketExists(ctx context.Context, bucket string) (bool, error)
 
 	IsRetryableError(err error) bool
 	GetRetryPolicy() backoff.RetryPolicy

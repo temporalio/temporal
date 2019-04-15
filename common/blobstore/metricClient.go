@@ -133,6 +133,19 @@ func (c *metricClient) BucketMetadata(ctx context.Context, bucket string) (*Buck
 	return resp, err
 }
 
+func (c *metricClient) BucketExists(ctx context.Context, bucket string) (bool, error) {
+	c.metricsClient.IncCounter(metrics.BlobstoreClientBucketExistsScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.BlobstoreClientBucketExistsScope, metrics.CadenceClientLatency)
+	resp, err := c.client.BucketExists(ctx, bucket)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.BlobstoreClientBucketExistsScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) IsRetryableError(err error) bool {
 	return c.client.IsRetryableError(err)
 }

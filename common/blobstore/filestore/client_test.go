@@ -338,6 +338,21 @@ func (s *ClientSuite) TestBucketMetadata_Success() {
 	s.Equal(defaultBucketOwner, metadata.Owner)
 }
 
+func (s *ClientSuite) TestBucketExists() {
+	dir, err := ioutil.TempDir("", "TestBucketExists")
+	s.NoError(err)
+	defer os.RemoveAll(dir)
+	client := s.constructClient(dir)
+
+	exists, err := client.BucketExists(context.Background(), "bucket-not-exists")
+	s.NoError(err)
+	s.False(exists)
+
+	exists, err = client.BucketExists(context.Background(), defaultBucketName)
+	s.NoError(err)
+	s.True(exists)
+}
+
 func (s *ClientSuite) constructClient(storeDir string) blobstore.Client {
 	cfg := s.constructConfig(storeDir)
 	client, err := NewClient(cfg)

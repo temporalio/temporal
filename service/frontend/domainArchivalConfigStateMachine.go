@@ -21,7 +21,10 @@
 package frontend
 
 import (
+	"context"
+
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/blobstore"
 )
 
 // domainArchivalConfigStateMachine is only used by workflowHandler.
@@ -60,6 +63,7 @@ var (
 var (
 	errDisallowedBucketMetadata = &shared.BadRequestError{Message: "Cannot set bucket owner or bucket retention (must update bucket manually)"}
 	errBucketNameUpdate         = &shared.BadRequestError{Message: "Cannot update existing bucket name"}
+	errBucketDoesNotExist       = &shared.BadRequestError{Message: "Bucket does not exist"}
 )
 
 func neverEnabledState() *archivalState {
@@ -113,7 +117,7 @@ func (s *archivalState) validate() error {
 	return nil
 }
 
-func (s *archivalState) getNextState(e *archivalEvent) (nextState *archivalState, changed bool, err error) {
+func (s *archivalState) getNextState(ctx context.Context, blobstoreClient blobstore.Client, e *archivalEvent) (nextState *archivalState, changed bool, err error) {
 	defer func() {
 		// ensure that any existing bucket name was not mutated
 		if nextState != nil && len(s.bucket) != 0 && s.bucket != nextState.bucket {
@@ -128,6 +132,20 @@ func (s *archivalState) getNextState(e *archivalEvent) (nextState *archivalState
 				nextState = nil
 				changed = false
 				err = nextStateErr
+			}
+		}
+
+		// ensure the bucket exists
+		if nextState != nil && nextState.bucket != "" {
+			exists, bucketExistsErr := blobstoreClient.BucketExists(ctx, nextState.bucket)
+			if bucketExistsErr != nil {
+				nextState = nil
+				changed = false
+				err = bucketExistsErr
+			} else if !exists {
+				nextState = nil
+				changed = false
+				err = errBucketDoesNotExist
 			}
 		}
 	}()

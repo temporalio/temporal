@@ -399,6 +399,8 @@ const (
 	BlobstoreClientListByPrefixScope
 	// BlobstoreClientBucketMetadataScope tracks BucketMetadata calls to blobstore
 	BlobstoreClientBucketMetadataScope
+	// BlobstoreClientBucketExistsScope tracks BucketExists calls to blobstore
+	BlobstoreClientBucketExistsScope
 
 	// ClusterMetadataArchivalConfigScope tracks ArchivalConfig calls to ClusterMetadata
 	ClusterMetadataArchivalConfigScope
@@ -816,6 +818,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientDeleteScope:         {operation: "BlobstoreClientDelete", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientListByPrefixScope:   {operation: "BlobstoreClientListByPrefix", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientBucketMetadataScope: {operation: "BlobstoreClientBucketMetadata", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientBucketExistsScope:   {operation: "BlobstoreClientBucketExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 

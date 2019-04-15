@@ -227,6 +227,18 @@ func (c *client) BucketMetadata(_ context.Context, bucket string) (*blobstore.Bu
 	}, nil
 }
 
+func (c *client) BucketExists(_ context.Context, bucket string) (bool, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	bd := bucketDirectory(c.storeDirectory, bucket)
+	exists, err := directoryExists(bd)
+	if err != nil {
+		return false, ErrCheckBucketExists
+	}
+	return exists, nil
+}
+
 func (c *client) IsRetryableError(err error) bool {
 	return false
 }
