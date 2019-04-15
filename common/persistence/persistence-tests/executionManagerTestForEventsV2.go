@@ -974,6 +974,13 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 
 	insertSignalRequests := []string{uuid.New()}
 
+	// this should fail because the last write version is wrong
+	wrongLastWriteVersion := replicationState0.LastWriteVersion + 1
+	err = s.ResetWorkflowExecution(3,
+		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
+		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000, wrongLastWriteVersion)
+	s.Error(err)
+
 	err = s.ResetWorkflowExecution(3,
 		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
 		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000, replicationState0.LastWriteVersion)
