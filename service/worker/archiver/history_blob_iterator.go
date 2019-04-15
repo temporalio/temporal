@@ -61,6 +61,7 @@ type (
 		domain               string
 		clusterName          string
 		closeFailoverVersion int64
+		shardID              int
 	}
 )
 
@@ -92,6 +93,7 @@ func NewHistoryBlobIterator(
 		domain:               domainName,
 		clusterName:          clusterName,
 		closeFailoverVersion: request.CloseFailoverVersion,
+		shardID:              request.ShardID,
 	}
 }
 
@@ -187,6 +189,7 @@ func (i *historyBlobIterator) readHistory(pageToken []byte) ([]*shared.HistoryEv
 			MaxEventID:    i.nextEventID,
 			PageSize:      i.config.HistoryPageSize(i.domain),
 			NextPageToken: pageToken,
+			ShardID:       common.IntPtr(i.shardID),
 		}
 		return persistence.ReadFullPageV2Events(i.historyV2Manager, req)
 	}

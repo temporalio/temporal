@@ -367,24 +367,26 @@ CREATE TABLE signals_requested_sets (
 
 -- history eventsV2: history_node stores history event data
 CREATE TABLE history_node (
+	shard_id       INT NOT NULL,
 	tree_id        BINARY(16) NOT NULL,
 	branch_id      BINARY(16) NOT NULL,
 	node_id        BIGINT NOT NULL,
 	txn_id         BIGINT NOT NULL,
 	data           MEDIUMBLOB NOT NULL,
 	data_encoding  VARCHAR(16) NOT NULL,
-	PRIMARY KEY (tree_id, branch_id, node_id, txn_id)
+	PRIMARY KEY (shard_id, tree_id, branch_id, node_id, txn_id)
 );
 
 -- history eventsV2: history_tree stores branch metadata
 CREATE TABLE history_tree (
+	shard_id       INT NOT NULL,
 	tree_id        BINARY(16) NOT NULL,
 	branch_id      BINARY(16) NOT NULL,
 	ancestors      BLOB NOT NULL,
 	in_progress    BOOLEAN NOT NULL, -- For fork operation to prevent race condition with deleting history
 	created_ts     DATETIME(6) NOT NULL, -- For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
 	info           VARCHAR(255) NOT NULL, -- For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
-	PRIMARY KEY (tree_id, branch_id)
+	PRIMARY KEY (shard_id, tree_id, branch_id)
 );
 
 insert into domains(

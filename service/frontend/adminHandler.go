@@ -262,6 +262,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 
 	// TODO need to deal with transient decision if to be used by client getting history
 	var historyBatches []*gen.History
+	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, token.PersistenceToken, size, err = historyService.PaginateHistory(
 		adh.historyMgr,
 		adh.historyV2Mgr,
@@ -277,6 +278,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		token.EventStoreVersion,
 		token.BranchToken,
 		pageSize,
+		common.IntPtr(shardID),
 	)
 	if err != nil {
 		if _, ok := err.(*gen.EntityNotExistsError); ok {

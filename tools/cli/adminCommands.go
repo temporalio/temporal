@@ -49,6 +49,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 	tid := c.String(FlagTreeID)
 	bid := c.String(FlagBranchID)
+	sid := c.Int(FlagShardID)
 	outputFileName := c.String(FlagOutputFilename)
 
 	session := connectToCassandra(c)
@@ -72,16 +73,15 @@ func AdminShowWorkflow(c *cli.Context) {
 		}
 
 		history = resp.History
-
 	} else if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, bark.NewNopLogger())
-
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,
 			MinNodeID: 1,
 			MaxNodeID: maxEventID,
 			PageSize:  maxEventID,
+			ShardID:   sid,
 		})
 		if err != nil {
 			ErrorAndExit("ReadHistoryBranch err", err)
@@ -89,7 +89,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 		history = resp.History
 	} else {
-		ErrorAndExit("need to specify either WorkflowId/RunID for v1, or TreeID/BranchID for v2", nil)
+		ErrorAndExit("need to specify either WorkflowId/RunID for v1, or TreeID/BranchID/ShardID for v2", nil)
 	}
 
 	if len(history) == 0 {
@@ -181,7 +181,6 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	rid := c.String(FlagRunID)
 
 	resp := describeMutableState(c)
-	shardID := resp.GetShardId()
 	msStr := resp.GetMutableStateInDatabase()
 	ms := persistence.WorkflowMutableState{}
 	err := json.Unmarshal([]byte(msStr), &ms)
@@ -191,6 +190,11 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	domainID := ms.ExecutionInfo.DomainID
 	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
+	shardID := resp.GetShardId()
+	shardIDInt, err := strconv.Atoi(shardID)
+	if err != nil {
+		ErrorAndExit("strconv.Atoi(shardID) err", err)
+	}
 	if ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
 		branchInfo := shared.HistoryBranch{}
 		thriftrwEncoder := codec.NewThriftRWEncoder()
@@ -203,6 +207,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, bark.NewNopLogger())
 		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
 			BranchInfo: branchInfo,
+			ShardID:    shardIDInt,
 		})
 		if err != nil {
 			if skipError {
@@ -229,10 +234,6 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	shardIDInt, err := strconv.Atoi(shardID)
-	if err != nil {
-		ErrorAndExit("strconv.Atoi(shardID) err", err)
-	}
 	exeStore := cassp.NewWorkflowExecutionPersistenceFromSession(session, shardIDInt, bark.NewNopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		DomainID:   domainID,

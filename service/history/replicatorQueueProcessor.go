@@ -216,8 +216,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 	for _, cluster := range domainEntry.GetReplicationConfig().Clusters {
 		targetClusters = append(targetClusters, cluster.ClusterName)
 	}
-
-	replicationTask, err := GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, p.logger, nil)
+	replicationTask, err := GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, p.logger, nil, common.IntPtr(p.shard.GetShardID()))
 	if err != nil || replicationTask == nil {
 		return err
 	}
@@ -228,12 +227,12 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 // GenerateReplicationTask generate replication task
 func GenerateReplicationTask(targetClusters []string, task *persistence.ReplicationTaskInfo,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	metricsClient metrics.Client, logger bark.Logger, history *shared.History,
+	metricsClient metrics.Client, logger bark.Logger, history *shared.History, shardID *int,
 ) (*replicator.ReplicationTask, error) {
 	var err error
 	if history == nil {
 		history, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-			task.DomainID, task.WorkflowID, task.RunID, task.FirstEventID, task.NextEventID, task.EventStoreVersion, task.BranchToken)
+			task.DomainID, task.WorkflowID, task.RunID, task.FirstEventID, task.NextEventID, task.EventStoreVersion, task.BranchToken, shardID)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +251,7 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
 			newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken)
+				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken, shardID)
 			if err != nil {
 				return nil, err
 			}
@@ -325,7 +324,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	metricsClient metrics.Client, logger bark.Logger, byBatch bool,
 	domainID string, workflowID string, runID string, firstEventID int64,
-	nextEventID int64, eventStoreVersion int32, branchToken []byte) (*shared.History, []*shared.History, error) {
+	nextEventID int64, eventStoreVersion int32, branchToken []byte, shardID *int) (*shared.History, []*shared.History, error) {
 
 	// overall result
 	historyEvents := []*shared.HistoryEvent{}
@@ -343,7 +342,7 @@ func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persisten
 		pageHistoryEvents, pageHistoryBatches, pageToken, pageHistorySize, err = PaginateHistory(
 			historyMgr, historyV2Mgr, metricsClient, logger, byBatch,
 			domainID, workflowID, runID, firstEventID, nextEventID, pageToken,
-			eventStoreVersion, branchToken, defaultHistoryPageSize,
+			eventStoreVersion, branchToken, defaultHistoryPageSize, shardID,
 		)
 		if err != nil {
 			return nil, nil, err
@@ -377,7 +376,7 @@ func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persisten
 func PaginateHistory(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	metricsClient metrics.Client, logger bark.Logger, byBatch bool,
 	domainID, workflowID, runID string, firstEventID,
-	nextEventID int64, tokenIn []byte, eventStoreVersion int32, branchToken []byte, pageSize int) ([]*shared.HistoryEvent, []*shared.History, []byte, int, error) {
+	nextEventID int64, tokenIn []byte, eventStoreVersion int32, branchToken []byte, pageSize int, shardID *int) ([]*shared.HistoryEvent, []*shared.History, []byte, int, error) {
 
 	historyEvents := []*shared.HistoryEvent{}
 	historyBatches := []*shared.History{}
@@ -391,6 +390,7 @@ func PaginateHistory(historyMgr persistence.HistoryManager, historyV2Mgr persist
 			MaxEventID:    nextEventID,
 			PageSize:      pageSize,
 			NextPageToken: tokenIn,
+			ShardID:       shardID,
 		}
 		if byBatch {
 			response, err := historyV2Mgr.ReadHistoryBranchByBatch(req)

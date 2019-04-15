@@ -38,6 +38,7 @@ import (
 
 // Config represents configuration for cadence-frontend service
 type Config struct {
+	NumHistoryShards                int
 	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize           dynamicconfig.IntPropertyFnWithDomainFilter
 	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
@@ -72,8 +73,9 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, enableVisibilityToKafka bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableVisibilityToKafka bool) *Config {
 	return &Config{
+		NumHistoryShards:                    numHistoryShards,
 		PersistenceMaxQPS:                   dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		VisibilityMaxPageSize:               dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableVisibilitySampling:            dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
@@ -108,7 +110,7 @@ type Service struct {
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.ESConfig.Enable)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, params.ESConfig.Enable)
 	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,

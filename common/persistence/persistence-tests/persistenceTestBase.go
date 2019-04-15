@@ -158,7 +158,7 @@ func (s *TestBase) Config() config.Persistence {
 // Setup sets up the test base, must be called as part of SetupSuite
 func (s *TestBase) Setup() {
 	var err error
-	shardID := 0
+	shardID := 10
 	clusterName := s.ClusterMetadata.GetCurrentClusterName()
 	log := bark.NewLoggerFromLogrus(log.New())
 

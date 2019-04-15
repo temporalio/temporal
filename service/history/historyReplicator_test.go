@@ -50,6 +50,10 @@ import (
 	"github.com/uber/cadence/common/service"
 )
 
+const (
+	testShardID = 1
+)
+
 type (
 	historyReplicatorSuite struct {
 		suite.Suite
@@ -107,7 +111,8 @@ func (s *historyReplicatorSuite) SetupTest() {
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
+		shardInfo:                 &persistence.ShardInfo{ShardID: testShardID, RangeID: 1, TransferAckLevel: 0},
+		shardID:                   testShardID,
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
@@ -2623,9 +2628,13 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		State:            currentState,
 		LastWriteVersion: currentVersion,
 	}
+	delReq := &persistence.DeleteHistoryBranchRequest{
+		BranchToken: nil,
+		ShardID:     common.IntPtr(testShardID),
+	}
 	// the test above already assert the create workflow request, so here just use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
-	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
+	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", delReq).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
 		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
 		TableVersion:      p.DomainTableVersionV1,

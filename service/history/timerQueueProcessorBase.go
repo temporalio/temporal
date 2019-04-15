@@ -699,7 +699,7 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 				logging.TagWorkflowExecutionID: task.WorkflowID,
 				logging.TagWorkflowRunID:       task.RunID,
 			})
-			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, msBuilder.GetCurrentBranch(), logger)
+			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, msBuilder.GetCurrentBranch(), common.IntPtr(t.shard.GetShardID()), logger)
 		}
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{

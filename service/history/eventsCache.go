@@ -47,6 +47,7 @@ type (
 		disabled      bool
 		logger        bark.Logger
 		metricsClient metrics.Client
+		shardID       *int
 	}
 
 	eventKey struct {
@@ -65,13 +66,13 @@ var _ eventsCache = (*eventsCacheImpl)(nil)
 
 func newEventsCache(shardCtx ShardContext) eventsCache {
 	config := shardCtx.GetConfig()
-
+	shardID := common.IntPtr(shardCtx.GetShardID())
 	return newEventsCacheWithOptions(config.EventsCacheInitialSize(), config.EventsCacheMaxSize(), config.EventsCacheTTL(),
-		shardCtx.GetHistoryManager(), shardCtx.GetHistoryV2Manager(), false, shardCtx.GetLogger(), shardCtx.GetMetricsClient())
+		shardCtx.GetHistoryManager(), shardCtx.GetHistoryV2Manager(), false, shardCtx.GetLogger(), shardCtx.GetMetricsClient(), shardID)
 }
 
 func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration, eventsMgr persistence.HistoryManager,
-	eventsV2Mgr persistence.HistoryV2Manager, disabled bool, logger bark.Logger, metrics metrics.Client) *eventsCacheImpl {
+	eventsV2Mgr persistence.HistoryV2Manager, disabled bool, logger bark.Logger, metrics metrics.Client, shardID *int) *eventsCacheImpl {
 	opts := &cache.Options{}
 	opts.InitialCapacity = initialSize
 	opts.TTL = ttl
@@ -85,6 +86,7 @@ func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration, even
 			logging.TagWorkflowComponent: logging.TagValueEventsCacheComponent,
 		}),
 		metricsClient: metrics,
+		shardID:       shardID,
 	}
 }
 
@@ -162,6 +164,7 @@ func (e *eventsCacheImpl) getHistoryEventFromStore(domainID, workflowID, runID s
 			MaxEventID:    eventID + 1,
 			PageSize:      1,
 			NextPageToken: nil,
+			ShardID:       e.shardID,
 		})
 
 		if err != nil {

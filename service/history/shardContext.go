@@ -738,6 +738,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 		return 0, err
 	}
 	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.ShardID = common.IntPtr(s.shardID)
 	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all

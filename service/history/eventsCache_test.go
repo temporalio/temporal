@@ -87,7 +87,7 @@ func (s *eventsCacheSuite) TearDownTest() {
 
 func (s *eventsCacheSuite) newTestEventsCache() *eventsCacheImpl {
 	return newEventsCacheWithOptions(16, 32, time.Minute, s.mockEventsMgr, s.mockEventsV2Mgr, false, s.logger,
-		metrics.NewClient(tally.NoopScope, metrics.History))
+		metrics.NewClient(tally.NoopScope, metrics.History), common.IntPtr(10))
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
@@ -238,6 +238,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		MaxEventID:    event6.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
+		ShardID:       common.IntPtr(10),
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents:    []*shared.HistoryEvent{event1, event2, event3, event4, event5, event6},
 		NextPageToken:    nil,
@@ -283,6 +284,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		MaxEventID:    int64(15),
 		PageSize:      1,
 		NextPageToken: nil,
+		ShardID:       common.IntPtr(10),
 	}).Return(nil, expectedErr)
 
 	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, int64(11), int64(14),
@@ -312,6 +314,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		MaxEventID:    event2.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
+		ShardID:       common.IntPtr(10),
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents:    []*shared.HistoryEvent{event2},
 		NextPageToken:    nil,

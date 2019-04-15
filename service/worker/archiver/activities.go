@@ -346,12 +346,12 @@ func deleteHistoryV1(ctx context.Context, container *BootstrapContainer, request
 }
 
 func deleteHistoryV2(ctx context.Context, container *BootstrapContainer, request ArchiveRequest) error {
-	err := persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, container.Logger)
+	err := persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
 	if err == nil {
 		return nil
 	}
 	op := func() error {
-		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, container.Logger)
+		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
 	}
 	for err != nil {
 		if !common.IsPersistenceTransientError(err) {

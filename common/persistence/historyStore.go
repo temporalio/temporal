@@ -171,9 +171,8 @@ func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExe
 				})
 				logger.Error("Unexpected event batch")
 				return nil, nil, nil, 0, 0, fmt.Errorf("corrupted history event batch")
-			} else {
-				token.LastEventID = historyBatch[0].GetEventId() - 1
 			}
+			token.LastEventID = historyBatch[0].GetEventId() - 1
 		}
 
 		if historyBatch[0].GetEventId() != token.LastEventID+1 {

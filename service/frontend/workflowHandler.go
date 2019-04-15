@@ -3026,6 +3026,7 @@ func (wh *WorkflowHandler) getHistory(
 	historyEvents := []*gen.HistoryEvent{}
 	var size int
 	if eventStoreVersion == persistence.EventStoreVersionV2 {
+		shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, wh.config.NumHistoryShards)
 		var err error
 		historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.historyV2Mgr, &persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
@@ -3033,6 +3034,7 @@ func (wh *WorkflowHandler) getHistory(
 			MaxEventID:    nextEventID,
 			PageSize:      int(pageSize),
 			NextPageToken: nextPageToken,
+			ShardID:       common.IntPtr(shardID),
 		})
 		if err != nil {
 			return nil, nil, err

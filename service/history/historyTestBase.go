@@ -434,6 +434,7 @@ func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistor
 // AppendHistoryV2Events append history V2 events
 func (s *TestShardContext) AppendHistoryV2Events(
 	request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error) {
+	request.ShardID = common.IntPtr(s.shardID)
 	resp, err := s.historyV2Mgr.AppendHistoryNodes(request)
 	return resp.Size, err
 }

@@ -73,12 +73,18 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchReque
 	if err != nil {
 		return nil, err
 	}
-
+	shardID, err := getShardID(request.ShardID)
+	if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: err.Error(),
+		}
+	}
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
 		ForkNodeID:     request.ForkNodeID,
 		NewBranchID:    uuid.New(),
 		Info:           request.Info,
+		ShardID:        shardID,
 	}
 
 	resp, err := m.persistence.ForkHistoryBranch(req)
@@ -104,8 +110,16 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(request *DeleteHistoryBranchR
 		return err
 	}
 
+	shardID, err := getShardID(request.ShardID)
+	if err != nil {
+		m.logger.WithError(err).Error("shardID is not set in delete history operation")
+		return &workflow.InternalServiceError{
+			Message: err.Error(),
+		}
+	}
 	req := &InternalDeleteHistoryBranchRequest{
 		BranchInfo: branch,
+		ShardID:    shardID,
 	}
 
 	return m.persistence.DeleteHistoryBranch(req)
@@ -119,9 +133,17 @@ func (m *historyV2ManagerImpl) CompleteForkBranch(request *CompleteForkBranchReq
 		return err
 	}
 
+	shardID, err := getShardID(request.ShardID)
+	if err != nil {
+		m.logger.WithError(err).Error("shardID is not set in complete fork branch operation")
+		return &workflow.InternalServiceError{
+			Message: err.Error(),
+		}
+	}
 	req := &InternalCompleteForkBranchRequest{
 		BranchInfo: branch,
 		Success:    request.Success,
+		ShardID:    shardID,
 	}
 
 	return m.persistence.CompleteForkBranch(req)
@@ -179,6 +201,13 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesReq
 	blob, err := m.historySerializer.SerializeBatchEvents(request.Events, request.Encoding)
 	size := len(blob.Data)
 
+	shardID, err := getShardID(request.ShardID)
+	if err != nil {
+		m.logger.WithError(err).Error("shardID is not set in append history nodes operation")
+		return nil, &workflow.InternalServiceError{
+			Message: err.Error(),
+		}
+	}
 	req := &InternalAppendHistoryNodesRequest{
 		IsNewBranch:   request.IsNewBranch,
 		Info:          request.Info,
@@ -186,6 +215,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesReq
 		NodeID:        nodeID,
 		Events:        blob,
 		TransactionID: request.TransactionID,
+		ShardID:       shardID,
 	}
 
 	err = m.persistence.AppendHistoryNodes(req)
@@ -281,6 +311,13 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 		maxNodeID = request.MaxEventID
 	}
 
+	shardID, err := getShardID(request.ShardID)
+	if err != nil {
+		m.logger.WithError(err).Error("shardID is not set in read history branch operation")
+		return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
+			Message: err.Error(),
+		}
+	}
 	req := &InternalReadHistoryBranchRequest{
 		TreeID:        treeID,
 		BranchID:      *allBRs[token.CurrentRangeIndex].BranchID,
@@ -288,6 +325,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHist
 		MaxNodeID:     maxNodeID,
 		PageSize:      request.PageSize,
 		NextPageToken: token.StoreToken,
+		ShardID:       shardID,
 	}
 
 	resp, err := m.persistence.ReadHistoryBranch(req)

@@ -36,6 +36,8 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
+	gen "github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
@@ -49,6 +51,10 @@ import (
 	cs "github.com/uber/cadence/common/service"
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
+)
+
+const (
+	numHistoryShards = 10
 )
 
 type (
@@ -1078,8 +1084,49 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetLastPage() {
 	s.Nil(resp.NextPageToken)
 }
 
+func (s *workflowHandlerSuite) TestGetHistory() {
+	config := s.newConfig()
+	domainID := uuid.New()
+	firstEventID := int64(100)
+	nextEventID := int64(101)
+	we := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("wid"),
+		RunId:      common.StringPtr("rid"),
+	}
+	shardID := common.WorkflowIDToHistoryShard(*we.WorkflowId, numHistoryShards)
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken:   []byte{},
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      0,
+		NextPageToken: []byte{},
+		ShardID:       common.IntPtr(shardID),
+	}
+	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*workflow.HistoryEvent{
+			{
+				EventId: common.Int64Ptr(int64(1)),
+			},
+		},
+		NextPageToken:    []byte{},
+		Size:             1,
+		LastFirstEventID: nextEventID,
+	}, nil).Once()
+	clusterMetadata := &mocks.ClusterMetadata{}
+	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean, s.logger)
+	mMetadataManager := &mocks.MetadataManager{}
+	mBlobstore := &mocks.BlobstoreClient{}
+	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	scope := wh.metricsClient.Scope(0)
+	history, token, err := wh.getHistory(scope, domainID, we, firstEventID, nextEventID, 0, []byte{}, nil, persistence.EventStoreVersionV2, []byte{})
+	s.NotNil(history)
+	s.Equal([]byte{}, token)
+	s.NoError(err)
+}
+
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), false)
+	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), numHistoryShards, false)
 }
 
 func bucketMetadataResponse(owner string, retentionDays int) *blobstore.BucketMetadataResponse {

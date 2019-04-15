@@ -77,6 +77,12 @@ func newAdminWorkflowCommands() []cli.Command {
 					Name:  FlagKeyspace,
 					Usage: "cassandra keyspace",
 				},
+
+				// support mysql query
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardID",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminShowWorkflow(c)

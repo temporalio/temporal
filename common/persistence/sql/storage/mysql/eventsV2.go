@@ -29,24 +29,24 @@ import (
 const (
 	// below are templates for history_node table
 	addHistoryNodesQry = `INSERT INTO history_node (` +
-		`tree_id, branch_id, node_id, txn_id, data, data_encoding) ` +
-		`VALUES (:tree_id, :branch_id, :node_id, :txn_id, :data, :data_encoding) `
+		`shard_id, tree_id, branch_id, node_id, txn_id, data, data_encoding) ` +
+		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :txn_id, :data, :data_encoding) `
 
 	getHistoryNodesQry = `SELECT node_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? and node_id < ? ORDER BY tree_id, branch_id, node_id, txn_id LIMIT ? `
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? and node_id < ? ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
 
-	deleteHistoryNodesQry = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id >= ? `
+	deleteHistoryNodesQry = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
 
 	// below are templates for history_tree table
 	addHistoryTreeQry = `INSERT INTO history_tree (` +
-		`tree_id, branch_id, ancestors, in_progress, created_ts, info) ` +
-		`VALUES (:tree_id, :branch_id, :ancestors, :in_progress, :created_ts, :info) `
+		`shard_id, tree_id, branch_id, ancestors, in_progress, created_ts, info) ` +
+		`VALUES (:shard_id, :tree_id, :branch_id, :ancestors, :in_progress, :created_ts, :info) `
 
-	getHistoryTreeQry = `SELECT branch_id, ancestors, in_progress, created_ts, info FROM history_tree WHERE tree_id = ? `
+	getHistoryTreeQry = `SELECT branch_id, ancestors, in_progress, created_ts, info FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
-	deleteHistoryTreeQry = `DELETE FROM history_tree WHERE tree_id = ? AND branch_id = ? `
+	deleteHistoryTreeQry = `DELETE FROM history_tree WHERE shard_id = ? AND tree_id = ? AND branch_id = ? `
 
-	updateHistoryTreeQry = `UPDATE history_tree set in_progress = :in_progress WHERE tree_id = :tree_id AND branch_id = :branch_id `
+	updateHistoryTreeQry = `UPDATE history_tree set in_progress = :in_progress WHERE shard_id = :shard_id AND tree_id = :tree_id AND branch_id = :branch_id `
 )
 
 // For history_node table:
@@ -62,7 +62,7 @@ func (mdb *DB) InsertIntoHistoryNode(row *sqldb.HistoryNodeRow) (sql.Result, err
 func (mdb *DB) SelectFromHistoryNode(filter *sqldb.HistoryNodeFilter) ([]sqldb.HistoryNodeRow, error) {
 	var rows []sqldb.HistoryNodeRow
 	err := mdb.conn.Select(&rows, getHistoryNodesQry,
-		filter.TreeID, filter.BranchID, *filter.MinNodeID, *filter.MaxNodeID, *filter.PageSize)
+		filter.ShardID, filter.TreeID, filter.BranchID, *filter.MinNodeID, *filter.MaxNodeID, *filter.PageSize)
 	// NOTE: since we let txn_id multiple by -1 when inserting, we have to revert it back here
 	for _, row := range rows {
 		*row.TxnID *= -1
@@ -72,7 +72,7 @@ func (mdb *DB) SelectFromHistoryNode(filter *sqldb.HistoryNodeFilter) ([]sqldb.H
 
 // DeleteFromHistoryNode deletes one or more rows from history_node table
 func (mdb *DB) DeleteFromHistoryNode(filter *sqldb.HistoryNodeFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteHistoryNodesQry, filter.TreeID, filter.BranchID, *filter.MinNodeID)
+	return mdb.conn.Exec(deleteHistoryNodesQry, filter.ShardID, filter.TreeID, filter.BranchID, *filter.MinNodeID)
 }
 
 // For history_tree table:
@@ -85,7 +85,7 @@ func (mdb *DB) InsertIntoHistoryTree(row *sqldb.HistoryTreeRow) (sql.Result, err
 // SelectFromHistoryTree reads one or more rows from history_tree table
 func (mdb *DB) SelectFromHistoryTree(filter *sqldb.HistoryTreeFilter) ([]sqldb.HistoryTreeRow, error) {
 	var rows []sqldb.HistoryTreeRow
-	err := mdb.conn.Select(&rows, getHistoryTreeQry, filter.TreeID)
+	err := mdb.conn.Select(&rows, getHistoryTreeQry, filter.ShardID, filter.TreeID)
 	return rows, err
 }
 
@@ -96,5 +96,5 @@ func (mdb *DB) UpdateHistoryTree(row *sqldb.HistoryTreeRow) (sql.Result, error) 
 
 // DeleteFromHistoryTree deletes one or more rows from history_tree table
 func (mdb *DB) DeleteFromHistoryTree(filter *sqldb.HistoryTreeFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteHistoryTreeQry, filter.TreeID, *filter.BranchID)
+	return mdb.conn.Exec(deleteHistoryTreeQry, filter.ShardID, filter.TreeID, *filter.BranchID)
 }

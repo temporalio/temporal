@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -437,4 +438,41 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 
 	_, err := s.replicatorQueueProcessor.process(task, true)
 	s.Nil(err)
+}
+
+func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	firstEventID := int64(133)
+	nextEventID := int64(134)
+	pageSize := 1
+	shardID := common.IntPtr(1)
+
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken:   []byte{},
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      pageSize,
+		NextPageToken: []byte{},
+		ShardID:       shardID,
+	}
+	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*workflow.HistoryEvent{
+			{
+				EventId: common.Int64Ptr(int64(1)),
+			},
+		},
+		NextPageToken:    []byte{},
+		Size:             1,
+		LastFirstEventID: nextEventID,
+	}, nil).Once()
+	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryMgr, s.mockHistoryV2Mgr, nil, nil,
+		false, domainID, workflowID, runID, firstEventID, nextEventID, []byte{},
+		persistence.EventStoreVersionV2, []byte{}, pageSize, shardID)
+	s.NotNil(hEvents)
+	s.NotNil(bEvents)
+	s.NotNil(token)
+	s.Equal(1, size)
+	s.NoError(err)
 }

@@ -102,7 +102,7 @@ func (s *conflictResolverSuite) SetupTest() {
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
+		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,

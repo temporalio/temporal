@@ -339,7 +339,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	c.frontEndService = service.New(params)
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
-	frontendConfig := frontend.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), false)
+	frontendConfig := frontend.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), c.historyConfig.NumHistoryShards, false)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
 		c.visibilityMgr, kafkaProducer, params.BlobstoreClient)

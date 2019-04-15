@@ -151,6 +151,7 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 			MaxEventID:    nextEventID,
 			PageSize:      defaultHistoryPageSize,
 			NextPageToken: nextPageToken,
+			ShardID:       common.IntPtr(r.shard.GetShardID()),
 		})
 		if err != nil {
 			return nil, 0, 0, nil, err

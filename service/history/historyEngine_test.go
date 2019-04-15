@@ -105,7 +105,7 @@ func (s *engineSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	shardID := 0
+	shardID := 10
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
@@ -4726,6 +4726,24 @@ func (s *engineSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
 	attributes.Input = []byte("test input")
 	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
 	s.Nil(err)
+}
+
+func (s *engineSuite) TestGetWorkflowStartedEvent() {
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken:   []byte{},
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    common.FirstEventID + 1,
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+		ShardID:       common.IntPtr(0),
+	}
+	events := []*workflow.HistoryEvent{
+		{EventId: common.Int64Ptr(int64(0))},
+	}
+	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: events}, nil)
+	event, err := getWorkflowStartedEvent(s.mockHistoryMgr, s.mockHistoryV2Mgr, p.EventStoreVersionV2, []byte{}, s.logger, "", "", "", common.IntPtr(0))
+	s.NoError(err)
+	s.NotNil(event)
 }
 
 func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
