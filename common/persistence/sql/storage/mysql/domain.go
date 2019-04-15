@@ -22,11 +22,14 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
 const (
+	shardID = 54321
+
 	createDomainQry = `INSERT INTO domains (
 		id,
 		name,
@@ -81,7 +84,7 @@ const (
 		notification_version = :notification_version,
 		failover_notification_version = :failover_notification_version,
 		data = :data
-		WHERE name = :name AND id = :id`
+		WHERE shard_id=54321 AND name = :name AND id = :id`
 
 	getDomainPart = `SELECT
 		id,
@@ -102,19 +105,22 @@ const (
 		failover_notification_version,
 		data FROM domains
 `
-	getDomainByIDQry   = getDomainPart + `WHERE id = ?`
-	getDomainByNameQry = getDomainPart + `WHERE name = ?`
+	getDomainByIDQry   = getDomainPart + `WHERE shard_id=? AND id = ?`
+	getDomainByNameQry = getDomainPart + `WHERE shard_id=? AND name = ?`
 
-	deleteDomainByIDQry   = `DELETE FROM domains WHERE id = ?`
-	deleteDomainByNameQry = `DELETE FROM domains WHERE name = ?`
+	deleteDomainByIDQry   = `DELETE FROM domains WHERE shard_id=? AND id = ?`
+	deleteDomainByNameQry = `DELETE FROM domains WHERE shard_id=? AND name = ?`
 
 	getDomainMetadataQry    = `SELECT notification_version FROM domain_metadata`
 	lockDomainMetadataQry   = `SELECT notification_version FROM domain_metadata FOR UPDATE`
 	updateDomainMetadataQry = `UPDATE domain_metadata SET notification_version = :notification_version + 1 
 WHERE notification_version = :notification_version`
 
-	listDomainsQry = getDomainPart
+	listDomainsQry      = getDomainPart + ` WHERE shard_id=? ORDER BY id LIMIT ?`
+	listDomainsRangeQry = getDomainPart + ` WHERE shard_id=? AND id > ? ORDER BY id LIMIT ?`
 )
+
+var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoDomain inserts a single row into domains table
 func (mdb *DB) InsertIntoDomain(row *sqldb.DomainRow) (sql.Result, error) {
@@ -128,10 +134,14 @@ func (mdb *DB) UpdateDomain(row *sqldb.DomainRow) (sql.Result, error) {
 
 // SelectFromDomain reads one or more rows from domains table
 func (mdb *DB) SelectFromDomain(filter *sqldb.DomainFilter) ([]sqldb.DomainRow, error) {
-	if filter.ID != nil || filter.Name != nil {
+	switch {
+	case filter.ID != nil || filter.Name != nil:
 		return mdb.selectFromDomain(filter)
+	case filter.PageSize != nil && *filter.PageSize > 0:
+		return mdb.selectAllFromDomain(filter)
+	default:
+		return nil, errMissingArgs
 	}
-	return mdb.selectAllFromDomain()
 }
 
 func (mdb *DB) selectFromDomain(filter *sqldb.DomainFilter) ([]sqldb.DomainRow, error) {
@@ -139,9 +149,9 @@ func (mdb *DB) selectFromDomain(filter *sqldb.DomainFilter) ([]sqldb.DomainRow, 
 	var row sqldb.DomainRow
 	switch {
 	case filter.ID != nil:
-		err = mdb.conn.Get(&row, getDomainByIDQry, *filter.ID)
+		err = mdb.conn.Get(&row, getDomainByIDQry, shardID, *filter.ID)
 	case filter.Name != nil:
-		err = mdb.conn.Get(&row, getDomainByNameQry, *filter.Name)
+		err = mdb.conn.Get(&row, getDomainByNameQry, shardID, *filter.Name)
 	}
 	if err != nil {
 		return nil, err
@@ -149,9 +159,15 @@ func (mdb *DB) selectFromDomain(filter *sqldb.DomainFilter) ([]sqldb.DomainRow, 
 	return []sqldb.DomainRow{row}, err
 }
 
-func (mdb *DB) selectAllFromDomain() ([]sqldb.DomainRow, error) {
+func (mdb *DB) selectAllFromDomain(filter *sqldb.DomainFilter) ([]sqldb.DomainRow, error) {
+	var err error
 	var rows []sqldb.DomainRow
-	err := mdb.conn.Select(&rows, listDomainsQry)
+	switch {
+	case filter.GreaterThanID != nil:
+		err = mdb.conn.Select(&rows, listDomainsRangeQry, shardID, *filter.GreaterThanID, *filter.PageSize)
+	default:
+		err = mdb.conn.Select(&rows, listDomainsQry, shardID, filter.PageSize)
+	}
 	return rows, err
 }
 
@@ -161,9 +177,9 @@ func (mdb *DB) DeleteFromDomain(filter *sqldb.DomainFilter) (sql.Result, error) 
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = mdb.conn.Exec(deleteDomainByIDQry, filter.ID)
+		result, err = mdb.conn.Exec(deleteDomainByIDQry, shardID, filter.ID)
 	default:
-		result, err = mdb.conn.Exec(deleteDomainByNameQry, filter.Name)
+		result, err = mdb.conn.Exec(deleteDomainByNameQry, shardID, filter.Name)
 	}
 	return result, err
 }

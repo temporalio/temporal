@@ -1,6 +1,7 @@
 CREATE TABLE domains(
+  shard_id INT NOT NULL DEFAULT 54321,
 /* domain */
-  id BINARY(16) PRIMARY KEY NOT NULL,
+  id BINARY(16) NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
   status INT NOT NULL,
   description VARCHAR(255) NOT NULL,
@@ -19,8 +20,9 @@ CREATE TABLE domains(
   is_global_domain TINYINT(1) NOT NULL,
 /* domain_replication_config */
   active_cluster_name VARCHAR(255) NOT NULL,
-  clusters BLOB
+  clusters BLOB,
 /* end domain_replication_config */
+  PRIMARY KEY(shard_id, id)
 );
 
 CREATE TABLE domain_metadata (

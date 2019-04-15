@@ -316,7 +316,15 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 }
 
 func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.ListDomainsResponse, error) {
-	rows, err := m.db.SelectFromDomain(&sqldb.DomainFilter{})
+	var pageToken *sqldb.UUID
+	if request.NextPageToken != nil {
+		token := sqldb.UUID(request.NextPageToken)
+		pageToken = &token
+	}
+	rows, err := m.db.SelectFromDomain(&sqldb.DomainFilter{
+		GreaterThanID: pageToken,
+		PageSize:      &request.PageSize,
+	})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &persistence.ListDomainsResponse{}, nil
@@ -335,5 +343,10 @@ func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsReque
 		domains = append(domains, resp)
 	}
 
-	return &persistence.ListDomainsResponse{Domains: domains}, nil
+	resp := &persistence.ListDomainsResponse{Domains: domains}
+	if len(rows) >= request.PageSize {
+		resp.NextPageToken = rows[len(rows)-1].ID
+	}
+
+	return resp, nil
 }

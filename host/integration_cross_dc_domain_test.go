@@ -366,10 +366,6 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 }
 
 func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
-	if TestFlags.PersistenceType == config.StoreTypeSQL {
-		s.T().Skip("skipping until sql supports ListDomains pagination")
-		return
-	}
 	// re-initialize to enable global domain
 	s.TearDownTest()
 	s.setupTest(true, true)
@@ -420,6 +416,9 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
 	domains := append(resp1.Domains, resp2.Domains...)
 
 	for _, resp := range domains {
+		if resp.DomainInfo.GetName() == common.SystemDomainName {
+			continue // this domain is always created by schema file
+		}
 		s.True(strings.HasPrefix(resp.DomainInfo.GetName(), domainNamePrefix))
 		ss := strings.Split(*resp.DomainInfo.Name, "-")
 		s.Equal(2, len(ss))

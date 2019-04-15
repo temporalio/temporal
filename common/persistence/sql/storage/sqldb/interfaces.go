@@ -53,8 +53,10 @@ type (
 	// Name will be used for WHERE condition. When both ID and Name are nil,
 	// no WHERE clause will be used
 	DomainFilter struct {
-		ID   *UUID
-		Name *string
+		ID            *UUID
+		Name          *string
+		GreaterThanID *UUID
+		PageSize      *int
 	}
 
 	// DomainMetadataRow represents a row in domain_metadata table
