@@ -1029,6 +1029,10 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessRecordWorkflowStartedTas
 	taskID := int64(59)
 	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), version, event.GetEventId())
 
+	msBuilder.UpdateReplicationStateVersion(version+1, false)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), di.Version, di.ScheduleID)
+
 	transferTask := &persistence.TransferTaskInfo{
 		Version:             version,
 		DomainID:            domainID,

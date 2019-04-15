@@ -854,7 +854,7 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 		return nil
 	}
 
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetStartVersion(), task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
