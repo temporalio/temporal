@@ -153,7 +153,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(ctx context.Context, resetR
 		return
 	}
 
-	newMutableState, transferTasks, timerTasks, retError := w.buildNewMutableStateForReset(ctx, baseMutableState, currMutableState, request.GetReason(), request.GetDecisionFinishEventId(), request.GetRequestId(), newRunID)
+	newMutableState, transferTasks, timerTasks, retError := w.buildNewMutableStateForReset(ctx, domainEntry, baseMutableState, currMutableState, request.GetReason(), request.GetDecisionFinishEventId(), request.GetRequestId(), newRunID)
 	// complete the fork process at the end, it is OK even if this defer fails, because our timer task can still clean up correctly
 	defer func() {
 		if newMutableState != nil && len(newMutableState.GetExecutionInfo().GetCurrentBranch()) > 0 {
@@ -310,7 +310,7 @@ func (w *workflowResetorImpl) scheduleUnstartedActivities(msBuilder mutableState
 	return tasks, nil
 }
 
-func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, baseMutableState, currMutableState mutableState, resetReason string, resetDecisionCompletedEventID int64, requestedID, newRunID string) (newMutableState mutableState, transferTasks, timerTasks []persistence.Task, retError error) {
+func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, domainEntry *cache.DomainCacheEntry, baseMutableState, currMutableState mutableState, resetReason string, resetDecisionCompletedEventID int64, requestedID, newRunID string) (newMutableState mutableState, transferTasks, timerTasks []persistence.Task, retError error) {
 	domainID := baseMutableState.GetExecutionInfo().DomainID
 	workflowID := baseMutableState.GetExecutionInfo().WorkflowID
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
@@ -325,6 +325,11 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(ctx context.Context, 
 	retError = validateResetWorkflowAfterReplay(newMutableState)
 	if retError != nil {
 		return
+	}
+
+	// set the new mutable state with the version in domain
+	if newMutableState.GetReplicationState() != nil {
+		newMutableState.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
 	}
 
 	// failed the in-flight decision(started).
