@@ -58,7 +58,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	workflowComplete := false
 	continueAsNewCount := int32(10)
@@ -101,13 +101,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	for i := 0; i < 10; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err, strconv.Itoa(i))
 	}
 
@@ -145,7 +145,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	workflowComplete := false
 	continueAsNewCount := int32(1)
@@ -184,13 +184,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// process the decision and continue as new
 	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -207,11 +207,11 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
+		common.PrettyPrintHistory(history, s.BarkLogger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTimedOut {
-			s.Logger.Warnf("Execution not timedout yet.")
+			s.BarkLogger.Warnf("Execution not timedout yet.")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -251,7 +251,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	var executions []*workflow.WorkflowExecution
 
@@ -290,7 +290,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
@@ -345,7 +345,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	// decider logic
 	childComplete := false
@@ -357,7 +357,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	var completedEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
-		s.Logger.Infof("Processing decision task for WorkflowID: %v", *execution.WorkflowId)
+		s.BarkLogger.Infof("Processing decision task for WorkflowID: %v", *execution.WorkflowId)
 
 		// Child Decider Logic
 		if *execution.WorkflowId == childID {
@@ -386,7 +386,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		// Parent Decider Logic
 		if *execution.WorkflowId == parentID {
 			if !childExecutionStarted {
-				s.Logger.Info("Starting child execution.")
+				s.BarkLogger.Info("Starting child execution.")
 				childExecutionStarted = true
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, childData))
@@ -430,21 +430,21 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Make first decision to start child execution
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
-		s.Logger.Warnf("decision: %v", i)
+		s.BarkLogger.Warnf("decision: %v", i)
 		_, err = poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err)
 	}
 
@@ -453,13 +453,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Process Child Execution final decision to complete it
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.ChildWorkflowExecutionCompletedEventAttributes
@@ -470,13 +470,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.Equal(wtChild, *completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
 
-	s.Logger.Info("Parent Workflow Execution History: ")
+	s.BarkLogger.Info("Parent Workflow Execution History: ")
 	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(parentID),
 		RunId:      common.StringPtr(*we.RunId),
 	})
 
-	s.Logger.Info("Child Workflow Execution History: ")
+	s.BarkLogger.Info("Child Workflow Execution History: ")
 	s.printWorkflowHistory(s.domainName,
 		startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution)
 }

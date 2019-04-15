@@ -28,12 +28,14 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cluster"
 	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -54,9 +56,15 @@ type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
 	BootstrapParams struct {
-		Name                string
-		Logger              bark.Logger
-		ThrottledLogger     bark.Logger
+		Name string
+		//Deprecated
+		BarkLogger bark.Logger
+		//Deprecated
+		ThrottledBarkLogger bark.Logger
+		//New logger we are in favor of
+		Logger          log.Logger
+		ThrottledLogger log.Logger
+
 		MetricScope         tally.Scope
 		MembershipFactory   MembershipMonitorFactory
 		RPCFactory          common.RPCFactory
@@ -83,19 +91,25 @@ type (
 
 	// Service contains the objects specific to this service
 	serviceImpl struct {
-		status                 int32
-		sName                  string
-		hostName               string
-		hostInfo               *membership.HostInfo
-		dispatcher             *yarpc.Dispatcher
-		membershipFactory      MembershipMonitorFactory
-		membershipMonitor      membership.Monitor
-		rpcFactory             common.RPCFactory
-		pprofInitializer       common.PProfInitializer
-		clientBean             client.Bean
-		numberOfHistoryShards  int
-		logger                 bark.Logger
-		throttledLogger        bark.Logger
+		status                int32
+		sName                 string
+		hostName              string
+		hostInfo              *membership.HostInfo
+		dispatcher            *yarpc.Dispatcher
+		membershipFactory     MembershipMonitorFactory
+		membershipMonitor     membership.Monitor
+		rpcFactory            common.RPCFactory
+		pprofInitializer      common.PProfInitializer
+		clientBean            client.Bean
+		numberOfHistoryShards int
+		//Deprecated
+		barkLogger bark.Logger
+		//Deprecated
+		throttledBarkLogger bark.Logger
+		//New logger we are in favor of
+		logger          log.Logger
+		throttledLogger log.Logger
+
 		metricsScope           tally.Scope
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		metricsClient          metrics.Client
@@ -106,12 +120,16 @@ type (
 	}
 )
 
+var _ Service = (*serviceImpl)(nil)
+
 // New instantiates a Service Instance
 // TODO: have a better name for Service.
 func New(params *BootstrapParams) Service {
 	sVice := &serviceImpl{
 		status:                common.DaemonStatusInitialized,
 		sName:                 params.Name,
+		barkLogger:            params.BarkLogger,
+		throttledBarkLogger:   params.ThrottledBarkLogger,
 		logger:                params.Logger,
 		throttledLogger:       params.ThrottledLogger,
 		rpcFactory:            params.RPCFactory,
@@ -123,10 +141,10 @@ func New(params *BootstrapParams) Service {
 		metricsClient:         params.MetricsClient,
 		messagingClient:       params.MessagingClient,
 		dispatcherProvider:    params.DispatcherProvider,
-		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger),
 	}
 
-	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
+	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.barkLogger)
 	sVice.dispatcher = sVice.rpcFactory.CreateDispatcher()
 	if sVice.dispatcher == nil {
 		sVice.logger.Fatal("Unable to create yarpc dispatcher")
@@ -134,7 +152,7 @@ func New(params *BootstrapParams) Service {
 
 	// Get the host name and set it on the service.  This is used for emitting metric with a tag for hostname
 	if hostName, err := os.Hostname(); err != nil {
-		sVice.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Error getting hostname")
+		sVice.logger.WithTags(tag.Error(err)).Fatal("Error getting hostname")
 	} else {
 		sVice.hostName = hostName
 	}
@@ -143,7 +161,7 @@ func New(params *BootstrapParams) Service {
 
 // UpdateLoggerWithServiceName tag logging with service name from the top level
 func (params *BootstrapParams) UpdateLoggerWithServiceName(name string) {
-	params.Logger = params.Logger.WithField("Service", name)
+	params.BarkLogger = params.BarkLogger.WithField("Service", name)
 }
 
 // GetHostName returns the name of host running the service
@@ -163,26 +181,26 @@ func (h *serviceImpl) Start() {
 	h.runtimeMetricsReporter.Start()
 
 	if err := h.pprofInitializer.Start(); err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Failed to start pprof")
+		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start pprof")
 	}
 
 	if err := h.dispatcher.Start(); err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Failed to start yarpc dispatcher")
+		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc dispatcher")
 	}
 
 	h.membershipMonitor, err = h.membershipFactory.Create(h.dispatcher)
 	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Membership monitor creation failed")
+		h.logger.WithTags(tag.Error(err)).Fatal("Membership monitor creation failed")
 	}
 
 	err = h.membershipMonitor.Start()
 	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("starting membership monitor failed")
+		h.logger.WithTags(tag.Error(err)).Fatal("starting membership monitor failed")
 	}
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("failed to get host info from membership monitor")
+		h.logger.WithTags(tag.Error(err)).Fatal("failed to get host info from membership monitor")
 	}
 	h.hostInfo = hostInfo
 
@@ -192,12 +210,11 @@ func (h *serviceImpl) Start() {
 		h.clusterMetadata,
 	)
 	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("fail to initialize client bean")
+		h.logger.WithTags(tag.Error(err)).Fatal("fail to initialize client bean")
 	}
 
 	// The service is now started up
 	h.logger.Info("service started")
-
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UTC().UnixNano())
 }
@@ -219,12 +236,20 @@ func (h *serviceImpl) Stop() {
 	h.runtimeMetricsReporter.Stop()
 }
 
-// GetLogger returns the service logger
-func (h *serviceImpl) GetLogger() bark.Logger {
+// GetBarkLogger returns the service logger
+func (h *serviceImpl) GetBarkLogger() bark.Logger {
+	return h.barkLogger
+}
+
+func (h *serviceImpl) GetThrottledBarkLogger() bark.Logger {
+	return h.throttledBarkLogger
+}
+
+func (h *serviceImpl) GetLogger() log.Logger {
 	return h.logger
 }
 
-func (h *serviceImpl) GetThrottledLogger() bark.Logger {
+func (h *serviceImpl) GetThrottledLogger() log.Logger {
 	return h.throttledLogger
 }
 

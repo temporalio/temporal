@@ -75,7 +75,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	// decider logic
 	workflowComplete := false
@@ -135,13 +135,13 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send first signal using RunID
@@ -161,7 +161,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -186,7 +186,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -250,7 +250,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	// decider logic
 	workflowComplete := false
@@ -313,13 +313,13 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send first signal
@@ -342,7 +342,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -358,7 +358,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -393,7 +393,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	foreignRequest := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
@@ -408,7 +408,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -462,7 +462,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
@@ -515,26 +515,26 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		Identity:        identity,
 		DecisionHandler: foreignDtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("foreign PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("foreign PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.Logger.Infof("foreign PollAndProcessActivityTask: %v", err)
+	s.BarkLogger.Infof("foreign PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// in source workflow
@@ -551,11 +551,11 @@ CheckHistoryLoopForSignalSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
+		common.PrettyPrintHistory(history, s.BarkLogger)
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
 		if *signalRequestedEvent.EventType != workflow.EventTypeExternalWorkflowExecutionSignaled {
-			s.Logger.Info("Signal still not sent.")
+			s.BarkLogger.Info("Signal still not sent.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
 		}
@@ -574,7 +574,7 @@ CheckHistoryLoopForSignalSent:
 
 	// process signal in decider for foreign workflow
 	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -611,7 +611,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	foreignRequest := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
@@ -626,7 +626,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -680,7 +680,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
@@ -733,26 +733,26 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		Identity:        identity,
 		DecisionHandler: foreignDtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("foreign PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("foreign PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.Logger.Infof("foreign PollAndProcessActivityTask: %v", err)
+	s.BarkLogger.Infof("foreign PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// in source workflow
@@ -769,11 +769,11 @@ CheckHistoryLoopForSignalSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
+		common.PrettyPrintHistory(history, s.BarkLogger)
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
 		if *signalRequestedEvent.EventType != workflow.EventTypeExternalWorkflowExecutionSignaled {
-			s.Logger.Info("Signal still not sent.")
+			s.BarkLogger.Info("Signal still not sent.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
 		}
@@ -792,7 +792,7 @@ CheckHistoryLoopForSignalSent:
 
 	// process signal in decider for foreign workflow
 	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -828,7 +828,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	}
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -882,18 +882,18 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Start workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	signalSentFailed := false
@@ -909,11 +909,11 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
+		common.PrettyPrintHistory(history, s.BarkLogger)
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
 		if *signalFailedEvent.EventType != workflow.EventTypeSignalExternalWorkflowExecutionFailed {
-			s.Logger.Info("Cancellaton not cancelled yet.")
+			s.BarkLogger.Info("Cancellaton not cancelled yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -956,7 +956,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	}
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -1010,18 +1010,18 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Start workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	signalSentFailed := false
@@ -1037,11 +1037,11 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
+		common.PrettyPrintHistory(history, s.BarkLogger)
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
 		if *signalFailedEvent.EventType != workflow.EventTypeSignalExternalWorkflowExecutionFailed {
-			s.Logger.Info("Cancellaton not cancelled yet.")
+			s.BarkLogger.Info("Cancellaton not cancelled yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -1088,7 +1088,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	// decider logic
 	workflowComplete := false
@@ -1157,13 +1157,13 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send a signal
@@ -1190,7 +1190,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -1226,7 +1226,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -1249,7 +1249,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -1341,7 +1341,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -1389,16 +1389,16 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	// Start workflows, make some progress and complete workflow
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(workflowComplete)
 

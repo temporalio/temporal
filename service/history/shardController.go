@@ -119,7 +119,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 		shardClosedCh:       make(chan int, config.NumberOfShards),
 		shutdownCh:          make(chan struct{}),
 		logger:              logger,
-		throttledLoggger:    svc.GetThrottledLogger(),
+		throttledLoggger:    svc.GetThrottledBarkLogger(),
 		config:              config,
 		metricsClient:       metricsClient,
 	}

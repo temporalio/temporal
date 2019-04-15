@@ -80,14 +80,14 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	var err error
 	s.wfService, err = s.buildServiceClient()
 	if err != nil {
-		s.Logger.Fatalf("Error when build service client: %v", err)
+		s.BarkLogger.Fatalf("Error when build service client: %v", err)
 	}
 	s.wfClient = client.NewClient(s.wfService, s.domainName, nil)
 
 	s.taskList = "client-integration-test-tasklist"
 	s.worker = cworker.New(s.wfService, s.domainName, s.taskList, cworker.Options{})
 	if err := s.worker.Start(); err != nil {
-		s.Logger.Fatalf("Error when start worker: %v", err)
+		s.BarkLogger.Fatalf("Error when start worker: %v", err)
 	}
 }
 
@@ -105,7 +105,7 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Int
 
 	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName))
 	if err != nil {
-		s.Logger.Fatalf("Failed to create transport channel: %v", err)
+		s.BarkLogger.Fatalf("Failed to create transport channel: %v", err)
 	}
 
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{
@@ -115,10 +115,10 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Int
 		},
 	})
 	if dispatcher == nil {
-		s.Logger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
+		s.BarkLogger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
 	}
 	if err := dispatcher.Start(); err != nil {
-		s.Logger.Fatalf("Failed to create outbound transport channel: %v", err)
+		s.BarkLogger.Fatalf("Failed to create outbound transport channel: %v", err)
 	}
 
 	return workflowserviceclient.New(dispatcher.ClientConfig(cadenceFrontendService)), nil
@@ -200,7 +200,7 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 	}
 	worker := cworker.New(s.wfService, s.domainName, tl, opts)
 	if err := worker.Start(); err != nil {
-		s.Logger.Fatalf("Error when start worker with data converter: %v", err)
+		s.BarkLogger.Fatalf("Error when start worker with data converter: %v", err)
 	}
 	return worker
 }
@@ -221,7 +221,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
-		s.Logger.Fatalf("Start workflow with err: %v", err)
+		s.BarkLogger.Fatalf("Start workflow with err: %v", err)
 	}
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
@@ -252,7 +252,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
-		s.Logger.Fatalf("Start workflow with err: %v", err)
+		s.BarkLogger.Fatalf("Start workflow with err: %v", err)
 	}
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
@@ -355,7 +355,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {
-		s.Logger.Fatalf("Start workflow with err: %v", err)
+		s.BarkLogger.Fatalf("Start workflow with err: %v", err)
 	}
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")

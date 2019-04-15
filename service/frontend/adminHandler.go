@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/log"
+
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/admin/adminserviceserver"
@@ -68,7 +70,7 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: numberOfHistoryShards,
 		Service:               sVice,
-		domainCache:           cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
+		domainCache:           cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetBarkLogger()),
 		historyMgr:            historyMgr,
 		historyV2Mgr:          historyV2Mgr,
 	}
@@ -104,7 +106,7 @@ func (adh *AdminHandler) Stop() {
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request *admin.DescribeWorkflowExecutionRequest) (resp *admin.DescribeWorkflowExecutionResponse, retError error) {
-	defer logging.CapturePanic(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 	scope := metrics.AdminDescribeWorkflowExecutionScope
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
@@ -143,7 +145,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 
 // DescribeHistoryHost returns information about the internal states of a history host
 func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *gen.DescribeHistoryHostRequest) (resp *gen.DescribeHistoryHostResponse, retError error) {
-	defer logging.CapturePanic(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 	scope := metrics.AdminDescribeHistoryHostScope
 	if request == nil || (request.ShardIdForHost == nil && request.ExecutionForHost == nil && request.HostAddress == nil) {
 		return nil, adh.error(errRequestNotSet, scope)
@@ -162,7 +164,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *gen.D
 // GetWorkflowExecutionRawHistory - retrieves the history of workflow execution
 func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	ctx context.Context, request *admin.GetWorkflowExecutionRawHistoryRequest) (resp *admin.GetWorkflowExecutionRawHistoryResponse, retError error) {
-	defer logging.CapturePanic(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope := metrics.AdminGetWorkflowExecutionRawHistoryScope
 	sw := adh.startRequestProfile(scope)
@@ -267,7 +269,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		adh.historyMgr,
 		adh.historyV2Mgr,
 		adh.metricsClient,
-		adh.GetLogger(),
+		adh.GetBarkLogger(),
 		true, // this means that we are getting history by batch
 		domainID,
 		execution.GetWorkflowId(),
@@ -340,7 +342,7 @@ func (adh *AdminHandler) startRequestProfile(scope int) metrics.Stopwatch {
 func (adh *AdminHandler) error(err error, scope int) error {
 	switch err.(type) {
 	case *gen.InternalServiceError:
-		logging.LogInternalServiceError(adh.Service.GetLogger(), err)
+		logging.LogInternalServiceError(adh.Service.GetBarkLogger(), err)
 		return err
 	case *gen.BadRequestError:
 		return err
@@ -349,7 +351,7 @@ func (adh *AdminHandler) error(err error, scope int) error {
 	case *gen.EntityNotExistsError:
 		return err
 	default:
-		logging.LogUncategorizedError(adh.Service.GetLogger(), err)
+		logging.LogUncategorizedError(adh.Service.GetBarkLogger(), err)
 		return &gen.InternalServiceError{Message: err.Error()}
 	}
 }

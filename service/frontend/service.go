@@ -110,8 +110,8 @@ type Service struct {
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, params.ESConfig.Enable)
-	params.ThrottledLogger = logging.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger), params.PersistenceConfig.NumHistoryShards, params.ESConfig.Enable)
+	params.ThrottledBarkLogger = logging.NewThrottledLogger(params.BarkLogger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
 		config: config,
@@ -123,7 +123,7 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 func (s *Service) Start() {
 
 	var params = s.params
-	var log = params.Logger
+	var log = params.BarkLogger
 
 	log.Infof("%v starting", common.FrontendServiceName)
 
@@ -208,5 +208,5 @@ func (s *Service) Stop() {
 	case s.stopC <- struct{}{}:
 	default:
 	}
-	s.params.Logger.Infof("%v stopped", common.FrontendServiceName)
+	s.params.BarkLogger.Infof("%v stopped", common.FrontendServiceName)
 }

@@ -28,13 +28,16 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
+	log2 "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/environment"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
@@ -50,7 +53,8 @@ type (
 		testClusterConfig  *TestClusterConfig
 		engine             FrontendClient
 		adminClient        AdminClient
-		Logger             bark.Logger
+		BarkLogger         bark.Logger
+		Logger             log.Logger
 		domainName         string
 		foreignDomainName  string
 		archivalDomainName string
@@ -65,7 +69,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
-		s.Logger.WithField("address", TestFlags.FrontendAddr).Info("Running integration test against specified frontend")
+		s.BarkLogger.WithField("address", TestFlags.FrontendAddr).Info("Running integration test against specified frontend")
 		channel, err := tchannel.NewChannelTransport(tchannel.ServiceName("cadence-frontend"))
 		s.Require().NoError(err)
 		dispatcher := yarpc.NewDispatcher(yarpc.Config{
@@ -75,14 +79,14 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 			},
 		})
 		if err := dispatcher.Start(); err != nil {
-			s.Logger.WithField("error", err).Fatal("Failed to create outbound transport channel")
+			s.BarkLogger.WithField("error", err).Fatal("Failed to create outbound transport channel")
 		}
 
 		s.engine = NewFrontendClient(dispatcher)
 		s.adminClient = NewAdminClient(dispatcher)
 	} else {
-		s.Logger.Info("Running integration test against test cluster")
-		cluster, err := NewCluster(clusterConfig, s.Logger)
+		s.BarkLogger.Info("Running integration test against test cluster")
+		cluster, err := NewCluster(clusterConfig, s.BarkLogger, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()
@@ -108,14 +112,17 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 func (s *IntegrationBase) setupLogger() {
 	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
+		log2.SetOutput(os.Stdout)
 	}
 
-	logger := log.New()
-	formatter := &log.TextFormatter{}
+	logger := log2.New()
+	formatter := &log2.TextFormatter{}
 	formatter.FullTimestamp = true
 	logger.Formatter = formatter
-	s.Logger = bark.NewLoggerFromLogrus(logger)
+	s.BarkLogger = bark.NewLoggerFromLogrus(logger)
+	zapLogger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.Logger = log.NewLogger(zapLogger)
 }
 
 // GetTestClusterConfig return test cluster config
@@ -182,7 +189,7 @@ func (s *IntegrationBase) printWorkflowHistory(domain string, execution *workflo
 	events := s.getHistory(domain, execution)
 	history := &workflow.History{}
 	history.Events = events
-	common.PrettyPrintHistory(history, s.Logger)
+	common.PrettyPrintHistory(history, s.BarkLogger)
 }
 
 func (s *IntegrationBase) getHistory(domain string, execution *workflow.WorkflowExecution) []*workflow.HistoryEvent {

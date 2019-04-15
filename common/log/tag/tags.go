@@ -362,6 +362,11 @@ func loggingCallAt(position string) Tag {
 	return newStringTag(LoggingCallAtKey, position)
 }
 
+// SysStackTrace returns tag for SysStackTrace
+func SysStackTrace(stackTrace string) Tag {
+	return newStringTag("sys-stack-trace", stackTrace)
+}
+
 // Kafka related
 
 // KafkaTopicName returns tag for TopicName

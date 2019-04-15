@@ -18,54 +18,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package service
+package log
 
 import (
-	"github.com/uber/cadence/common/log"
+	"fmt"
+	"runtime/debug"
 
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/membership"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/yarpc"
+	"github.com/uber/cadence/common/log/tag"
 )
 
-type (
-	// Service is the interface which must be implemented by all the services
-	Service interface {
-		// GetHostName returns the name of host running the service
-		GetHostName() string
+var errDefaultPanic = fmt.Errorf("panic object is not error")
 
-		// Start the service
-		Start()
+// CapturePanic is used to capture panic, it will log the panic and also return the error through pointer.
+// If the panic value is not error then a default error is returned
+// We have to use pointer is because in golang: "recover return nil if was not called directly by a deferred function."
+// And we have to set the returned error otherwise our handler will return nil as error which is incorrect
+func CapturePanic(logger Logger, retError *error) {
+	if errPanic := recover(); errPanic != nil {
+		err, ok := errPanic.(error)
+		if !ok {
+			err = errDefaultPanic
+		}
 
-		// Stop stops the service
-		Stop()
+		st := string(debug.Stack())
 
-		//Deprecated
-		GetBarkLogger() bark.Logger
-		//Deprecated
-		GetThrottledBarkLogger() bark.Logger
+		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
 
-		GetLogger() log.Logger
-		GetThrottledLogger() log.Logger
-
-		GetMetricsClient() metrics.Client
-
-		GetClientBean() client.Bean
-
-		GetDispatcher() *yarpc.Dispatcher
-
-		GetMembershipMonitor() membership.Monitor
-
-		GetHostInfo() *membership.HostInfo
-
-		// GetClusterMetadata returns the service cluster metadata
-		GetClusterMetadata() cluster.Metadata
-
-		// GetMessagingClient returns the messaging client against Kafka
-		GetMessagingClient() messaging.Client
+		*retError = err
 	}
-)
+}

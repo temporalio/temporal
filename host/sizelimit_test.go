@@ -24,14 +24,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"strconv"
-	"testing"
-	"time"
 )
 
 type sizeLimitIntegrationSuite struct {
@@ -88,7 +89,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	activityCount := int32(4)
 	activityCounter := int32(0)
@@ -135,23 +136,23 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.Logger,
+		Logger:          s.BarkLogger,
 		T:               s.T(),
 	}
 
 	for i := int32(0); i < activityCount-1; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err)
 
 		err = poller.PollAndProcessActivityTask(false)
-		s.Logger.Infof("PollAndProcessActivityTask: %v", err)
+		s.BarkLogger.Infof("PollAndProcessActivityTask: %v", err)
 		s.Nil(err)
 	}
 
 	// process this decision will trigger history exceed limit error
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.NotNil(err)
 	s.Equal(&workflow.EntityNotExistsError{Message: "Workflow execution already completed."}, err)
 
@@ -190,7 +191,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			isCloseCorrect = true
 			break
 		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
+		s.BarkLogger.Info("Closed WorkflowExecution is not yet visible")
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.True(isCloseCorrect)

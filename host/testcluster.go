@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/messaging"
 	metricsmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/mocks"
@@ -68,12 +69,12 @@ type (
 )
 
 // NewCluster creates and sets up the test cluster
-func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, error) {
+func NewCluster(options *TestClusterConfig, barkLogger bark.Logger, logger log.Logger) (*TestCluster, error) {
 	clusterInfo := options.ClusterInfo
 	clusterMetadata := cluster.GetTestClusterMetadata(clusterInfo.EnableGlobalDomain, options.IsMasterCluster, options.EnableArchival)
 	if !options.IsMasterCluster && options.ClusterInfo.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
-			logger,
+			barkLogger,
 			&metricsmocks.Client{},
 			dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
 			clusterInfo.FailoverVersionIncrement,
@@ -91,8 +92,8 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 	options.Persistence.ClusterMetadata = clusterMetadata
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()
-	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
-	blobstore := setupBlobstore(logger)
+	setupShards(testBase, options.HistoryConfig.NumHistoryShards, barkLogger)
+	blobstore := setupBlobstore(barkLogger)
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
@@ -100,7 +101,7 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 		ClusterMetadata:         clusterMetadata,
 		PersistenceConfig:       pConfig,
 		DispatcherProvider:      client.NewIPYarpcDispatcherProvider(),
-		MessagingClient:         getMessagingClient(options.MessagingClientConfig, logger),
+		MessagingClient:         getMessagingClient(options.MessagingClientConfig, barkLogger),
 		MetadataMgr:             testBase.MetadataProxy,
 		MetadataMgrV2:           testBase.MetadataManagerV2,
 		ShardMgr:                testBase.ShardMgr,
@@ -109,6 +110,7 @@ func NewCluster(options *TestClusterConfig, logger bark.Logger) (*TestCluster, e
 		ExecutionMgrFactory:     testBase.ExecutionMgrFactory,
 		TaskMgr:                 testBase.TaskMgr,
 		VisibilityMgr:           testBase.VisibilityMgr,
+		BarkLogger:              barkLogger,
 		Logger:                  logger,
 		ClusterNo:               options.ClusterNo,
 		EnableWorker:            options.EnableWorker,
