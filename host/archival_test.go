@@ -23,10 +23,12 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/uber/cadence/.gen/go/admin"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
@@ -41,14 +43,14 @@ const (
 func (s *integrationSuite) TestArchival() {
 	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
 
+	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-workflow-id"
 	workflowType := "archival-workflow-type"
 	taskList := "archival-task-list"
 	numActivities := 1
 	numRuns := 1
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, numActivities, numRuns)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns, false)[0]
 
-	domainID := s.getDomainID(s.archivalDomainName)
 	execution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(runID),
@@ -61,14 +63,14 @@ func (s *integrationSuite) TestArchival() {
 func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
 
+	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
 	taskList := "archival-continueAsNew-task-list"
 	numActivities := 1
 	numRuns := 5
-	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, numActivities, numRuns)
+	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns, false)
 
-	domainID := s.getDomainID(s.archivalDomainName)
 	for _, runID := range runIDs {
 		execution := &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -78,6 +80,25 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 		s.True(s.isHistoryDeleted(domainID, execution))
 		s.True(s.isMutableStateDeleted(domainID, execution))
 	}
+}
+
+func (s *integrationSuite) TestArchival_MultiBlob() {
+	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
+
+	domainID := s.getDomainID(s.archivalDomainName)
+	workflowID := "archival-multi-blob-workflow-id"
+	workflowType := "archival-multi-blob-workflow-type"
+	taskList := "archival-multi-blob-task-list"
+	numActivities := 10
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, 1, true)[0]
+
+	execution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}
+	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
+	s.True(s.isHistoryDeleted(domainID, execution))
+	s.True(s.isMutableStateDeleted(domainID, execution))
 }
 
 func (s *integrationSuite) getDomainID(domain string) string {
@@ -123,9 +144,10 @@ func (s *integrationSuite) isHistoryDeleted(domainID string, execution *workflow
 		return false
 	}
 
+	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
-		ShardID: common.IntPtr(s.testCluster.testBase.ShardInfo.ShardID),
+		ShardID: common.IntPtr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)
@@ -154,7 +176,63 @@ func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *wor
 	return false
 }
 
-func (s *integrationSuite) startAndFinishWorkflow(id string, wt string, tl string, domain string, numActivities int, numRuns int) []string {
+func (s *integrationSuite) isMultiBlobHistory(domain, domainID string, execution *workflow.WorkflowExecution) bool {
+	historySize := 0
+	pageSize := 100
+	var err error
+
+	if !s.testClusterConfig.EnableEventsV2 {
+		req := &persistence.GetWorkflowExecutionHistoryRequest{
+			DomainID:     domainID,
+			Execution:    *execution,
+			FirstEventID: common.FirstEventID,
+			NextEventID:  common.EndEventID,
+			PageSize:     pageSize,
+		}
+		resp := &persistence.GetWorkflowExecutionHistoryResponse{}
+		for historySize == 0 || len(resp.NextPageToken) != 0 {
+			resp, err = s.testCluster.testBase.HistoryMgr.GetWorkflowExecutionHistory(req)
+			s.Nil(err)
+			historySize += resp.Size
+			req.NextPageToken = resp.NextPageToken
+		}
+		return historySize > archivalBlobSize
+	}
+
+	wfResp, err := s.adminClient.DescribeWorkflowExecution(createContext(), &admin.DescribeWorkflowExecutionRequest{
+		Domain:    common.StringPtr(domain),
+		Execution: execution,
+	})
+	s.Nil(err)
+	s.NotNil(wfResp)
+	s.NotNil(wfResp.MutableStateInDatabase)
+
+	msStr := wfResp.GetMutableStateInDatabase()
+	ms := persistence.WorkflowMutableState{}
+	err = json.Unmarshal([]byte(msStr), &ms)
+	s.Nil(err)
+	s.NotNil(ms.ExecutionInfo)
+	branchToken := ms.ExecutionInfo.BranchToken
+
+	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, s.testClusterConfig.HistoryConfig.NumHistoryShards)
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken: branchToken,
+		MinEventID:  common.FirstEventID,
+		MaxEventID:  common.EndEventID,
+		PageSize:    pageSize,
+		ShardID:     common.IntPtr(shardID),
+	}
+	var nextPageToken []byte
+	for historySize == 0 || len(nextPageToken) != 0 {
+		_, pageSize, nextPageToken, err = persistence.ReadFullPageV2Events(s.testCluster.testBase.HistoryV2Mgr, req)
+		s.Nil(err)
+		historySize += pageSize
+		req.NextPageToken = nextPageToken
+	}
+	return historySize > archivalBlobSize
+}
+
+func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID string, numActivities, numRuns int, checkMultiBlob bool) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
 	workflowType := &workflow.WorkflowType{
@@ -177,7 +255,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id string, wt string, tl strin
 	we, err := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
 	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
-	var runIDs []string
+	runIDs := make([]string, numRuns)
 
 	workflowComplete := false
 	activityCount := int32(numActivities)
@@ -192,6 +270,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id string, wt string, tl strin
 		startedEventID int64,
 		history *workflow.History,
 	) ([]byte, []*workflow.Decision, error) {
+		runIDs[runCounter-1] = execution.GetRunId()
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -210,7 +289,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id string, wt string, tl strin
 				},
 			}}, nil
 		}
-		runIDs = append(runIDs, execution.GetRunId())
+
 		if runCounter < numRuns {
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
@@ -279,11 +358,20 @@ func (s *integrationSuite) startAndFinishWorkflow(id string, wt string, tl strin
 			s.Nil(err)
 		}
 
+		if run == numRuns-1 && checkMultiBlob {
+			s.True(s.isMultiBlobHistory(domain, domainID, &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(runIDs[run]),
+			}))
+		}
+
 		_, err = poller.PollAndProcessDecisionTask(true, false)
 		s.Nil(err)
 	}
 
 	s.True(workflowComplete)
-	s.Equal(numRuns, len(runIDs))
+	for run := 1; run < numRuns; run++ {
+		s.NotEqual(runIDs[run-1], runIDs[run])
+	}
 	return runIDs
 }
