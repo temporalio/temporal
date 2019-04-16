@@ -1,0 +1,50 @@
+{
+  "order": 0,
+  "index_patterns": [
+    "test-visibility*"
+  ],
+  "settings": {
+    "index": {
+      "number_of_shards": "5",
+      "number_of_replicas": "0"
+    }
+  },
+  "mappings": {
+    "_doc": {
+      "dynamic": "strict",
+      "properties": {
+        "DomainID": {
+          "type": "keyword"
+        },
+        "WorkflowID": {
+          "type": "keyword"
+        },
+        "RunID": {
+          "type": "keyword"
+        },
+        "WorkflowType": {
+          "type": "keyword"
+        },
+        "StartTime": {
+          "type": "long"
+        },
+        "ExecutionTime": {
+          "type": "long"
+        },
+        "CloseTime": {
+          "type": "long"
+        },
+        "CloseStatus": {
+          "type": "integer"
+        },
+        "HistoryLength": {
+          "type": "integer"
+        },
+        "KafkaKey": {
+          "type": "keyword"
+        }
+      }
+    }
+  },
+  "aliases": {}
+}

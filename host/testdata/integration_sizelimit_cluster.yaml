@@ -1,4 +1,3 @@
-enableworker: false
 enableeventsv2: false
 enablearchival: false
 clusterno: 0
@@ -9,3 +8,7 @@ historyconfig:
   numhistoryhosts: 1
   historycountlimiterror: 20
   historycountlimitwarn: 10
+workerconfig:
+  enablearchiver: false
+  enablereplicator: false
+  enableindexer: false

@@ -50,6 +50,13 @@ const (
 	KafkaPort = "KAFKA_PORT"
 	// KafkaDefaultPort Kafka default port
 	KafkaDefaultPort = "9092"
+
+	// ESSeeds env
+	ESSeeds = "ES_SEEDS"
+	// ESPort env
+	ESPort = "ES_PORT"
+	// ESDefaultPort ES default port
+	ESDefaultPort = "9200"
 )
 
 // SetupEnv setup the necessary env
@@ -93,6 +100,20 @@ func SetupEnv() {
 		err := os.Setenv(KafkaPort, KafkaDefaultPort)
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", KafkaPort))
+		}
+	}
+
+	if os.Getenv(ESSeeds) == "" {
+		err := os.Setenv(ESSeeds, Localhost)
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", ESSeeds))
+		}
+	}
+
+	if os.Getenv(ESPort) == "" {
+		err := os.Setenv(ESPort, ESDefaultPort)
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", ESPort))
 		}
 	}
 }
@@ -159,6 +180,28 @@ func GetKafkaPort() int {
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		panic(fmt.Sprintf("error getting env %v", KafkaPort))
+	}
+	return p
+}
+
+// GetESAddress return the kafka address
+func GetESAddress() string {
+	addr := os.Getenv(ESSeeds)
+	if addr == "" {
+		addr = Localhost
+	}
+	return addr
+}
+
+// GetESPort return the Kafka port
+func GetESPort() int {
+	port := os.Getenv(ESPort)
+	if port == "" {
+		port = ESDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Sprintf("error getting env %v", ESPort))
 	}
 	return p
 }

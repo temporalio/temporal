@@ -16,7 +16,10 @@
         rpcName: cadence-frontend
         rpcAddress: 127.0.0.1:8104
   enablearchival: false
-  enableworker: true
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+    enableindexer: false
   enableeventsv2: false
   clusterno: 0
   historyconfig:
@@ -70,7 +73,10 @@
         rpcName: cadence-frontend
         rpcAddress: 127.0.0.1:8104
   enablearchival: false
-  enableworker: true
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+    enableindexer: false
   enableeventsv2: false
   clusterno: 1
   historyconfig:

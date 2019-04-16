@@ -145,6 +145,9 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 	options.EnableEventsV2 = TestFlags.EnableEventsV2
 	options.FrontendAddress = TestFlags.FrontendAddr
+	if options.ESConfig.Enable {
+		options.ESConfig.Indices[common.VisibilityAppName] += uuid.New()
+	}
 	return &options, nil
 }
 

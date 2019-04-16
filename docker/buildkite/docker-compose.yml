@@ -48,6 +48,17 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.5.1
+    ports:
+      - "9200:9200"
+    networks:
+      services-network:
+        aliases:
+          - elasticsearch
+    environment:
+      - discovery.type=single-node
+
   unit-test:
     build:
       context: ../../
@@ -86,12 +97,17 @@ services:
       - "7939:7939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
+      - "ES_SEEDS=elasticsearch"
+      - "KAFKA_SEEDS=kafka"
+      - "TEST_TAG=esintegration"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - cassandra
+      - elasticsearch
+      - kafka
     volumes:
       - ../../:/go/src/github.com/uber/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
@@ -111,13 +127,18 @@ services:
       - "7939:7939"
     environment:
       - "MYSQL_SEEDS=mysql"
+      - "ES_SEEDS=elasticsearch"
+      - "KAFKA_SEEDS=kafka"
       - "PERSISTENCE_TYPE=sql"
+      - "TEST_TAG=esintegration"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
+      - elasticsearch
+      - kafka
     volumes:
       - ../../:/go/src/github.com/uber/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent

@@ -1,0 +1,33 @@
+enableeventsv2: false
+enablearchival: false
+clusterno: 1
+messagingclientconfig:
+  usemock: false
+  kafkaconfig:
+    clusters:
+      test:
+        brokers:
+          - "${KAFKA_SEEDS}:9092"
+    topics:
+      test-visibility-topic:
+        cluster: test
+      test-visibility-topic-dlq:
+        cluster: test
+    applications:
+      visibility:
+        topic: test-visibility-topic
+        dlq-topic: test-visibility-topic-dlq
+historyconfig:
+  numhistoryshards: 4
+  numhistoryhosts: 1
+workerconfig:
+  enablearchiver: false
+  enablereplicator: false
+  enableindexer: true
+esconfig:
+  enable: true
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: test-visibility-
