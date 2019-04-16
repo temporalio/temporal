@@ -21,6 +21,7 @@
 package host
 
 import (
+	"context"
 	"fmt"
 
 	"sync"
@@ -58,6 +59,7 @@ import (
 	"github.com/uber/cadence/service/worker/replicator"
 	cwsc "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 )
 
@@ -355,7 +357,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, c.barkLogger)
-	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.esConfig.Enable)
+	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.esConfig.Enable, true)
 	visibilityMgr := c.visibilityMgr
 	if c.esConfig.Enable {
 		frontendConfig.EnableReadVisibilityFromES = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, true)
@@ -635,7 +637,18 @@ func (c *rpcFactoryImpl) CreateDispatcher() *yarpc.Dispatcher {
 		Outbounds: yarpc.Outbounds{
 			c.serviceName: {Unary: c.ch.NewSingleOutbound(c.hostPort)},
 		},
+		InboundMiddleware: yarpc.InboundMiddleware{
+			Unary: &versionMiddleware{},
+		},
 	})
+}
+
+type versionMiddleware struct {
+}
+
+func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request, resw transport.ResponseWriter, h transport.UnaryHandler) error {
+	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, "1.0.0").With(common.ClientImplHeaderName, "uber-go")
+	return h.Handle(ctx, req, resw)
 }
 
 func (c *rpcFactoryImpl) CreateDispatcherForOutbound(

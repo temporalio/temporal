@@ -79,6 +79,7 @@ var keys = map[Key]string{
 	MaxDecisionStartToCloseTimeout: "frontend.maxDecisionStartToCloseTimeout",
 	DisableListVisibilityByFilter:  "frontend.disableListVisibilityByFilter",
 	FrontendThrottledLogRPS:        "frontend.throttledLogRPS",
+	EnableClientVersionCheck:       "frontend.enableClientVersionCheck",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -262,6 +263,8 @@ const (
 	FrontendThrottledLogRPS
 	// MaxDecisionStartToCloseTimeout is max decision timeout in seconds
 	MaxDecisionStartToCloseTimeout
+	// EnableClientVersionCheck enables client version check for frontend
+	EnableClientVersionCheck
 
 	// key for matching
 

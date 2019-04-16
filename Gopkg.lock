@@ -252,6 +252,14 @@
   revision = "e80d13ce29ede4452c43dea11e79b9bc8a15b478"
 
 [[projects]]
+  digest = "1:b759103c9b4135568253c17d2866064cde398e93764b611caabf5aa8e3059685"
+  name = "github.com/hashicorp/go-version.git"
+  packages = ["."]
+  pruneopts = ""
+  revision = "d40cf49b3a77bba84a7afdbd7f1dc295d114efb1"
+  version = "v1.1.0"
+
+[[projects]]
   branch = "master"
   digest = "1:67bcf41677f33b22aee1b82e9460aa093a96cfe4877445dd19ea950c200a47ab"
   name = "github.com/iancoleman/strcase"
@@ -930,6 +938,7 @@
     "github.com/gocql/gocql",
     "github.com/golang/mock/gomock",
     "github.com/google/uuid",
+    "github.com/hashicorp/go-version.git",
     "github.com/iancoleman/strcase",
     "github.com/jmoiron/sqlx",
     "github.com/olekukonko/tablewriter",

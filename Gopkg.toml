@@ -142,3 +142,7 @@ ignored = ["github.com/uber/cadence/.gen"]
 [[constraint]]
   name = "github.com/robfig/cron"
   version = "1.1.0"
+
+[[constraint]]
+  name = "github.com/hashicorp/go-version.git"
+  version = "1.1.0"

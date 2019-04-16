@@ -263,6 +263,8 @@ func init() {
 			return true
 		case *shared.EntityNotExistsError:
 			return true
+		case *shared.ClientVersionNotSupportedError:
+			return true
 		default:
 			return false
 		}
@@ -309,6 +311,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_StartWorkflowExecution_Result.EntityNotExistError")
 			}
 			return &WorkflowService_StartWorkflowExecution_Result{EntityNotExistError: e}, nil
+		case *shared.ClientVersionNotSupportedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_StartWorkflowExecution_Result.ClientVersionNotSupportedError")
+			}
+			return &WorkflowService_StartWorkflowExecution_Result{ClientVersionNotSupportedError: e}, nil
 		}
 
 		return nil, err
@@ -342,6 +349,10 @@ func init() {
 			err = result.EntityNotExistError
 			return
 		}
+		if result.ClientVersionNotSupportedError != nil {
+			err = result.ClientVersionNotSupportedError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -361,14 +372,15 @@ func init() {
 // Success is set only if the function did not throw an exception.
 type WorkflowService_StartWorkflowExecution_Result struct {
 	// Value returned by StartWorkflowExecution after a successful execution.
-	Success                  *shared.StartWorkflowExecutionResponse       `json:"success,omitempty"`
-	BadRequestError          *shared.BadRequestError                      `json:"badRequestError,omitempty"`
-	InternalServiceError     *shared.InternalServiceError                 `json:"internalServiceError,omitempty"`
-	SessionAlreadyExistError *shared.WorkflowExecutionAlreadyStartedError `json:"sessionAlreadyExistError,omitempty"`
-	ServiceBusyError         *shared.ServiceBusyError                     `json:"serviceBusyError,omitempty"`
-	DomainNotActiveError     *shared.DomainNotActiveError                 `json:"domainNotActiveError,omitempty"`
-	LimitExceededError       *shared.LimitExceededError                   `json:"limitExceededError,omitempty"`
-	EntityNotExistError      *shared.EntityNotExistsError                 `json:"entityNotExistError,omitempty"`
+	Success                        *shared.StartWorkflowExecutionResponse       `json:"success,omitempty"`
+	BadRequestError                *shared.BadRequestError                      `json:"badRequestError,omitempty"`
+	InternalServiceError           *shared.InternalServiceError                 `json:"internalServiceError,omitempty"`
+	SessionAlreadyExistError       *shared.WorkflowExecutionAlreadyStartedError `json:"sessionAlreadyExistError,omitempty"`
+	ServiceBusyError               *shared.ServiceBusyError                     `json:"serviceBusyError,omitempty"`
+	DomainNotActiveError           *shared.DomainNotActiveError                 `json:"domainNotActiveError,omitempty"`
+	LimitExceededError             *shared.LimitExceededError                   `json:"limitExceededError,omitempty"`
+	EntityNotExistError            *shared.EntityNotExistsError                 `json:"entityNotExistError,omitempty"`
+	ClientVersionNotSupportedError *shared.ClientVersionNotSupportedError       `json:"clientVersionNotSupportedError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_StartWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -388,7 +400,7 @@ type WorkflowService_StartWorkflowExecution_Result struct {
 //   }
 func (v *WorkflowService_StartWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [8]wire.Field
+		fields [9]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -456,6 +468,14 @@ func (v *WorkflowService_StartWorkflowExecution_Result) ToWire() (wire.Value, er
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		w, err = v.ClientVersionNotSupportedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 8, Value: w}
 		i++
 	}
 
@@ -552,6 +572,14 @@ func (v *WorkflowService_StartWorkflowExecution_Result) FromWire(w wire.Value) e
 				}
 
 			}
+		case 8:
+			if field.Value.Type() == wire.TStruct {
+				v.ClientVersionNotSupportedError, err = _ClientVersionNotSupportedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -580,6 +608,9 @@ func (v *WorkflowService_StartWorkflowExecution_Result) FromWire(w wire.Value) e
 	if v.EntityNotExistError != nil {
 		count++
 	}
+	if v.ClientVersionNotSupportedError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_StartWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
@@ -594,7 +625,7 @@ func (v *WorkflowService_StartWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [8]string
+	var fields [9]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -626,6 +657,10 @@ func (v *WorkflowService_StartWorkflowExecution_Result) String() string {
 	}
 	if v.EntityNotExistError != nil {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		fields[i] = fmt.Sprintf("ClientVersionNotSupportedError: %v", v.ClientVersionNotSupportedError)
 		i++
 	}
 
@@ -666,6 +701,9 @@ func (v *WorkflowService_StartWorkflowExecution_Result) Equals(rhs *WorkflowServ
 	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
 		return false
 	}
+	if !((v.ClientVersionNotSupportedError == nil && rhs.ClientVersionNotSupportedError == nil) || (v.ClientVersionNotSupportedError != nil && rhs.ClientVersionNotSupportedError != nil && v.ClientVersionNotSupportedError.Equals(rhs.ClientVersionNotSupportedError))) {
+		return false
+	}
 
 	return true
 }
@@ -699,6 +737,9 @@ func (v *WorkflowService_StartWorkflowExecution_Result) MarshalLogObject(enc zap
 	}
 	if v.EntityNotExistError != nil {
 		err = multierr.Append(err, enc.AddObject("entityNotExistError", v.EntityNotExistError))
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		err = multierr.Append(err, enc.AddObject("clientVersionNotSupportedError", v.ClientVersionNotSupportedError))
 	}
 	return err
 }
@@ -821,6 +862,21 @@ func (v *WorkflowService_StartWorkflowExecution_Result) GetEntityNotExistError()
 // IsSetEntityNotExistError returns true if EntityNotExistError is not nil.
 func (v *WorkflowService_StartWorkflowExecution_Result) IsSetEntityNotExistError() bool {
 	return v != nil && v.EntityNotExistError != nil
+}
+
+// GetClientVersionNotSupportedError returns the value of ClientVersionNotSupportedError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_StartWorkflowExecution_Result) GetClientVersionNotSupportedError() (o *shared.ClientVersionNotSupportedError) {
+	if v != nil && v.ClientVersionNotSupportedError != nil {
+		return v.ClientVersionNotSupportedError
+	}
+
+	return
+}
+
+// IsSetClientVersionNotSupportedError returns true if ClientVersionNotSupportedError is not nil.
+func (v *WorkflowService_StartWorkflowExecution_Result) IsSetClientVersionNotSupportedError() bool {
+	return v != nil && v.ClientVersionNotSupportedError != nil
 }
 
 // MethodName returns the name of the Thrift function as specified in

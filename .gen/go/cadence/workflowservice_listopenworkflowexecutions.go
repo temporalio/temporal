@@ -259,6 +259,8 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.ClientVersionNotSupportedError:
+			return true
 		default:
 			return false
 		}
@@ -295,6 +297,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_ListOpenWorkflowExecutions_Result.LimitExceededError")
 			}
 			return &WorkflowService_ListOpenWorkflowExecutions_Result{LimitExceededError: e}, nil
+		case *shared.ClientVersionNotSupportedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_ListOpenWorkflowExecutions_Result.ClientVersionNotSupportedError")
+			}
+			return &WorkflowService_ListOpenWorkflowExecutions_Result{ClientVersionNotSupportedError: e}, nil
 		}
 
 		return nil, err
@@ -320,6 +327,10 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+		if result.ClientVersionNotSupportedError != nil {
+			err = result.ClientVersionNotSupportedError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -339,12 +350,13 @@ func init() {
 // Success is set only if the function did not throw an exception.
 type WorkflowService_ListOpenWorkflowExecutions_Result struct {
 	// Value returned by ListOpenWorkflowExecutions after a successful execution.
-	Success              *shared.ListOpenWorkflowExecutionsResponse `json:"success,omitempty"`
-	BadRequestError      *shared.BadRequestError                    `json:"badRequestError,omitempty"`
-	InternalServiceError *shared.InternalServiceError               `json:"internalServiceError,omitempty"`
-	EntityNotExistError  *shared.EntityNotExistsError               `json:"entityNotExistError,omitempty"`
-	ServiceBusyError     *shared.ServiceBusyError                   `json:"serviceBusyError,omitempty"`
-	LimitExceededError   *shared.LimitExceededError                 `json:"limitExceededError,omitempty"`
+	Success                        *shared.ListOpenWorkflowExecutionsResponse `json:"success,omitempty"`
+	BadRequestError                *shared.BadRequestError                    `json:"badRequestError,omitempty"`
+	InternalServiceError           *shared.InternalServiceError               `json:"internalServiceError,omitempty"`
+	EntityNotExistError            *shared.EntityNotExistsError               `json:"entityNotExistError,omitempty"`
+	ServiceBusyError               *shared.ServiceBusyError                   `json:"serviceBusyError,omitempty"`
+	LimitExceededError             *shared.LimitExceededError                 `json:"limitExceededError,omitempty"`
+	ClientVersionNotSupportedError *shared.ClientVersionNotSupportedError     `json:"clientVersionNotSupportedError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_ListOpenWorkflowExecutions_Result struct into a Thrift-level intermediate
@@ -364,7 +376,7 @@ type WorkflowService_ListOpenWorkflowExecutions_Result struct {
 //   }
 func (v *WorkflowService_ListOpenWorkflowExecutions_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -416,6 +428,14 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) ToWire() (wire.Value
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		w, err = v.ClientVersionNotSupportedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
 
@@ -502,6 +522,14 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) FromWire(w wire.Valu
 				}
 
 			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.ClientVersionNotSupportedError, err = _ClientVersionNotSupportedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -524,6 +552,9 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) FromWire(w wire.Valu
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.ClientVersionNotSupportedError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_ListOpenWorkflowExecutions_Result should have exactly one field: got %v fields", count)
 	}
@@ -538,7 +569,7 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [7]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -562,6 +593,10 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		fields[i] = fmt.Sprintf("ClientVersionNotSupportedError: %v", v.ClientVersionNotSupportedError)
 		i++
 	}
 
@@ -596,6 +631,9 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) Equals(rhs *Workflow
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
+	if !((v.ClientVersionNotSupportedError == nil && rhs.ClientVersionNotSupportedError == nil) || (v.ClientVersionNotSupportedError != nil && rhs.ClientVersionNotSupportedError != nil && v.ClientVersionNotSupportedError.Equals(rhs.ClientVersionNotSupportedError))) {
+		return false
+	}
 
 	return true
 }
@@ -623,6 +661,9 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) MarshalLogObject(enc
 	}
 	if v.LimitExceededError != nil {
 		err = multierr.Append(err, enc.AddObject("limitExceededError", v.LimitExceededError))
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		err = multierr.Append(err, enc.AddObject("clientVersionNotSupportedError", v.ClientVersionNotSupportedError))
 	}
 	return err
 }
@@ -715,6 +756,21 @@ func (v *WorkflowService_ListOpenWorkflowExecutions_Result) GetLimitExceededErro
 // IsSetLimitExceededError returns true if LimitExceededError is not nil.
 func (v *WorkflowService_ListOpenWorkflowExecutions_Result) IsSetLimitExceededError() bool {
 	return v != nil && v.LimitExceededError != nil
+}
+
+// GetClientVersionNotSupportedError returns the value of ClientVersionNotSupportedError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_ListOpenWorkflowExecutions_Result) GetClientVersionNotSupportedError() (o *shared.ClientVersionNotSupportedError) {
+	if v != nil && v.ClientVersionNotSupportedError != nil {
+		return v.ClientVersionNotSupportedError
+	}
+
+	return
+}
+
+// IsSetClientVersionNotSupportedError returns true if ClientVersionNotSupportedError is not nil.
+func (v *WorkflowService_ListOpenWorkflowExecutions_Result) IsSetClientVersionNotSupportedError() bool {
+	return v != nil && v.ClientVersionNotSupportedError != nil
 }
 
 // MethodName returns the name of the Thrift function as specified in

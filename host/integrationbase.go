@@ -77,6 +77,9 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 			Outbounds: yarpc.Outbounds{
 				"cadence-frontend": {Unary: channel.NewSingleOutbound(TestFlags.FrontendAddr)},
 			},
+			InboundMiddleware: yarpc.InboundMiddleware{
+				Unary: &versionMiddleware{},
+			},
 		})
 		if err := dispatcher.Start(); err != nil {
 			s.BarkLogger.WithField("error", err).Fatal("Failed to create outbound transport channel")

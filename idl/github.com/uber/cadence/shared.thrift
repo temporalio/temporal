@@ -77,6 +77,12 @@ exception RetryTaskError {
   5: optional i64 (js.type = "Long") nextEventId
 }
 
+exception ClientVersionNotSupportedError {
+  1: required string featureVersion
+  2: required string clientImpl
+  3: required string supportedVersions
+}
+
 enum WorkflowIdReusePolicy {
   /*
    * allow start a workflow execution using the same workflow ID,

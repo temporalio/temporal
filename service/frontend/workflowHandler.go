@@ -80,6 +80,7 @@ type (
 		config            *Config
 		domainReplicator  DomainReplicator
 		blobstoreClient   blobstore.Client
+		versionChecker    *versionChecker
 		service.Service
 	}
 
@@ -122,6 +123,7 @@ var (
 	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
+	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
 
 	// err for archival
 	errDomainHasNeverBeenEnabledForArchival = &gen.BadRequestError{Message: "Attempted to fetch history from archival, but domain has never been enabled for archival."}
@@ -163,6 +165,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		rateLimiter:      tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
 		domainReplicator: NewDomainReplicator(kafkaProducer, sVice.GetBarkLogger()),
 		blobstoreClient:  blobstoreClient,
+		versionChecker:   &versionChecker{checkVersion: config.EnableClientVersionCheck()},
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -227,6 +230,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	scope := wh.metricsClient.Scope(metrics.FrontendRegisterDomainScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
 
 	if registerRequest == nil {
 		return wh.error(errRequestNotSet, scope)
@@ -357,6 +364,10 @@ func (wh *WorkflowHandler) ListDomains(ctx context.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if listRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
@@ -401,6 +412,10 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if describeRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
@@ -435,6 +450,10 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	scope := wh.metricsClient.Scope(metrics.FrontendUpdateDomainScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if updateRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -679,7 +698,7 @@ func (wh *WorkflowHandler) mergeDomainData(old map[string]string, new map[string
 	return old
 }
 
-// DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
+// DeprecateDomain us used to update status of a registered domain to DEPRECATED. Once the domain is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
 // deprecated domains.
 func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest *gen.DeprecateDomainRequest) (retError error) {
@@ -688,6 +707,10 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 	scope := wh.metricsClient.Scope(metrics.FrontendDeprecateDomainScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
 
 	if deprecateRequest == nil {
 		return wh.error(errRequestNotSet, scope)
@@ -764,6 +787,10 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	scope := wh.metricsClient.Scope(metrics.FrontendPollForActivityTaskScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if pollRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -844,6 +871,10 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	scope := wh.metricsClient.Scope(metrics.FrontendPollForDecisionTaskScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if pollRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -961,6 +992,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if heartbeatRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
@@ -1038,6 +1073,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 	scope := wh.metricsClient.Scope(metrics.FrontendRecordActivityTaskHeartbeatByIDScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if heartbeatRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -1142,6 +1181,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if completeRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -1220,6 +1263,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskCompletedByIDScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
 
 	if completeRequest == nil {
 		return wh.error(errRequestNotSet, scope)
@@ -1326,6 +1373,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if failedRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -1393,6 +1444,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskFailedByIDScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
 
 	if failedRequest == nil {
 		return wh.error(errRequestNotSet, scope)
@@ -1487,6 +1542,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if cancelRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -1566,6 +1625,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskCanceledScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
 
 	if cancelRequest == nil {
 		return wh.error(errRequestNotSet, scope)
@@ -1671,6 +1734,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if completeRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
@@ -1746,6 +1813,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if failedRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -1813,6 +1884,10 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if completeRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -1862,6 +1937,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	scope := wh.metricsClient.Scope(metrics.FrontendStartWorkflowExecutionScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if startRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -1997,6 +2076,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	scope := wh.metricsClient.Scope(metrics.FrontendGetWorkflowExecutionHistoryScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if getRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -2201,6 +2284,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if signalRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -2279,6 +2366,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	scope := wh.metricsClient.Scope(metrics.FrontendSignalWithStartWorkflowExecutionScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if signalWithStartRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -2434,6 +2525,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if terminateRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -2478,6 +2573,10 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
 	scope := wh.metricsClient.Scope(metrics.FrontendResetWorkflowExecutionScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if resetRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -2524,6 +2623,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
 	if cancelRequest == nil {
 		return wh.error(errRequestNotSet, scope)
 	}
@@ -2567,6 +2670,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 	scope := wh.metricsClient.Scope(metrics.FrontendListOpenWorkflowExecutionsScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if listRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -2663,6 +2770,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	scope := wh.metricsClient.Scope(metrics.FrontendListClosedWorkflowExecutionsScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if listRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -2777,6 +2888,10 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if resetRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
@@ -2815,6 +2930,10 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 	scope := wh.metricsClient.Scope(metrics.FrontendQueryWorkflowScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if queryRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -2919,6 +3038,10 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
@@ -2963,6 +3086,10 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.De
 	scope := wh.metricsClient.Scope(metrics.FrontendDescribeTaskListScope)
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
 
 	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -3109,7 +3236,7 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
 		scope.IncCounter(metrics.CadenceFailures)
 		// NOTE: For internal error, we won't return thrift error from cadence-frontend.
 		// Because in uber internal metrics, thrift errors are counted as user errors
-		return fmt.Errorf("Cadence internal error, msg: %v", err.Message)
+		return fmt.Errorf("cadence internal error, msg: %v", err.Message)
 	case *gen.BadRequestError:
 		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
 		return err
@@ -3137,6 +3264,9 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
 	case *gen.LimitExceededError:
 		scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
 		return err
+	case *gen.ClientVersionNotSupportedError:
+		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+		return err
 	case *yarpcerrors.Status:
 		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
 			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
@@ -3146,7 +3276,7 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
 
 	logging.LogUncategorizedError(wh.Service.GetBarkLogger(), err)
 	scope.IncCounter(metrics.CadenceFailures)
-	return fmt.Errorf("Cadence internal uncategorized error, msg: %v", err.Error())
+	return fmt.Errorf("cadence internal uncategorized error, msg: %v", err.Error())
 }
 
 func (wh *WorkflowHandler) validateTaskListType(t *gen.TaskListType, scope metrics.Scope) error {

@@ -1183,7 +1183,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), numHistoryShards, false)
+	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), numHistoryShards, false, false)
 }
 
 func bucketMetadataResponse(owner string, retentionDays int) *blobstore.BucketMetadataResponse {

@@ -1089,6 +1089,7 @@ const (
 	CadenceErrLimitExceededCounter
 	CadenceErrContextTimeoutCounter
 	CadenceErrRetryTaskCounter
+	CadenceErrClientVersionNotSupportedCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -1330,6 +1331,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrLimitExceededCounter:                      {metricName: "cadence_errors_limit_exceeded", oldMetricName: "cadence.errors.limit-exceeded", metricType: Counter},
 		CadenceErrContextTimeoutCounter:                     {metricName: "cadence_errors_context_timeout", oldMetricName: "cadence.errors.context-timeout", metricType: Counter},
 		CadenceErrRetryTaskCounter:                          {metricName: "cadence_errors_retry_task", oldMetricName: "cadence.errors.retry-task", metricType: Counter},
+		CadenceErrClientVersionNotSupportedCounter:          {metricName: "cadence_errors_client_version_not_supported", oldMetricName: "cadence.errors.client-version-not-supported", metricType: Counter},
 		PersistenceRequests:                                 {metricName: "persistence_requests", oldMetricName: "persistence.requests", metricType: Counter},
 		PersistenceFailures:                                 {metricName: "persistence_errors", oldMetricName: "persistence.errors", metricType: Counter},
 		PersistenceLatency:                                  {metricName: "persistence_latency", oldMetricName: "persistence.latency", metricType: Timer},

@@ -31,7 +31,7 @@ import (
 )
 
 type (
-	// DCRedirectionHandlerImpl is simple wrapper over fontend service, doing redirection based on policy
+	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
 	DCRedirectionHandlerImpl struct {
 		currentClusterName string
 		domainCache        cache.DomainCache

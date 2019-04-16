@@ -6080,6 +6080,212 @@ func (v *ChildWorkflowExecutionTimedOutEventAttributes) IsSetStartedEventId() bo
 	return v != nil && v.StartedEventId != nil
 }
 
+type ClientVersionNotSupportedError struct {
+	FeatureVersion    string `json:"featureVersion,required"`
+	ClientImpl        string `json:"clientImpl,required"`
+	SupportedVersions string `json:"supportedVersions,required"`
+}
+
+// ToWire translates a ClientVersionNotSupportedError struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ClientVersionNotSupportedError) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	w, err = wire.NewValueString(v.FeatureVersion), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 1, Value: w}
+	i++
+
+	w, err = wire.NewValueString(v.ClientImpl), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 2, Value: w}
+	i++
+
+	w, err = wire.NewValueString(v.SupportedVersions), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 3, Value: w}
+	i++
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ClientVersionNotSupportedError struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ClientVersionNotSupportedError struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ClientVersionNotSupportedError
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ClientVersionNotSupportedError) FromWire(w wire.Value) error {
+	var err error
+
+	featureVersionIsSet := false
+	clientImplIsSet := false
+	supportedVersionsIsSet := false
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TBinary {
+				v.FeatureVersion, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				featureVersionIsSet = true
+			}
+		case 2:
+			if field.Value.Type() == wire.TBinary {
+				v.ClientImpl, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				clientImplIsSet = true
+			}
+		case 3:
+			if field.Value.Type() == wire.TBinary {
+				v.SupportedVersions, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				supportedVersionsIsSet = true
+			}
+		}
+	}
+
+	if !featureVersionIsSet {
+		return errors.New("field FeatureVersion of ClientVersionNotSupportedError is required")
+	}
+
+	if !clientImplIsSet {
+		return errors.New("field ClientImpl of ClientVersionNotSupportedError is required")
+	}
+
+	if !supportedVersionsIsSet {
+		return errors.New("field SupportedVersions of ClientVersionNotSupportedError is required")
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ClientVersionNotSupportedError
+// struct.
+func (v *ClientVersionNotSupportedError) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	fields[i] = fmt.Sprintf("FeatureVersion: %v", v.FeatureVersion)
+	i++
+	fields[i] = fmt.Sprintf("ClientImpl: %v", v.ClientImpl)
+	i++
+	fields[i] = fmt.Sprintf("SupportedVersions: %v", v.SupportedVersions)
+	i++
+
+	return fmt.Sprintf("ClientVersionNotSupportedError{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ClientVersionNotSupportedError match the
+// provided ClientVersionNotSupportedError.
+//
+// This function performs a deep comparison.
+func (v *ClientVersionNotSupportedError) Equals(rhs *ClientVersionNotSupportedError) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !(v.FeatureVersion == rhs.FeatureVersion) {
+		return false
+	}
+	if !(v.ClientImpl == rhs.ClientImpl) {
+		return false
+	}
+	if !(v.SupportedVersions == rhs.SupportedVersions) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ClientVersionNotSupportedError.
+func (v *ClientVersionNotSupportedError) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	enc.AddString("featureVersion", v.FeatureVersion)
+	enc.AddString("clientImpl", v.ClientImpl)
+	enc.AddString("supportedVersions", v.SupportedVersions)
+	return err
+}
+
+// GetFeatureVersion returns the value of FeatureVersion if it is set or its
+// zero value if it is unset.
+func (v *ClientVersionNotSupportedError) GetFeatureVersion() (o string) {
+	if v != nil {
+		o = v.FeatureVersion
+	}
+	return
+}
+
+// GetClientImpl returns the value of ClientImpl if it is set or its
+// zero value if it is unset.
+func (v *ClientVersionNotSupportedError) GetClientImpl() (o string) {
+	if v != nil {
+		o = v.ClientImpl
+	}
+	return
+}
+
+// GetSupportedVersions returns the value of SupportedVersions if it is set or its
+// zero value if it is unset.
+func (v *ClientVersionNotSupportedError) GetSupportedVersions() (o string) {
+	if v != nil {
+		o = v.SupportedVersions
+	}
+	return
+}
+
+func (v *ClientVersionNotSupportedError) Error() string {
+	return v.String()
+}
+
 type ClusterReplicationConfiguration struct {
 	ClusterName *string `json:"clusterName,omitempty"`
 }
