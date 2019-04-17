@@ -21,9 +21,9 @@
 package archiver
 
 import (
+	"github.com/uber/cadence/common/log"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/workflow"
 )
@@ -43,7 +43,7 @@ type (
 
 	pump struct {
 		ctx           workflow.Context
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 		carryover     []ArchiveRequest
 		timeout       time.Duration
@@ -56,7 +56,7 @@ type (
 // NewPump returns a new Pump
 func NewPump(
 	ctx workflow.Context,
-	logger bark.Logger,
+	logger log.Logger,
 	metricsClient metrics.Client,
 	carryover []ArchiveRequest,
 	timeout time.Duration,

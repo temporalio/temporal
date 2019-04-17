@@ -23,8 +23,6 @@ package log
 import (
 	"sync/atomic"
 
-	"go.uber.org/zap"
-
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -34,7 +32,7 @@ import (
 type throttledLogger struct {
 	rps int32
 	tb  tokenbucket.TokenBucket
-	log *loggerImpl
+	log Logger
 	cfg struct {
 		rps dynamicconfig.IntPropertyFn
 	}
@@ -49,12 +47,20 @@ const skipForThrottleLogger = 6
 // ratelimiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
-func NewThrottledLogger(zapLogger *zap.Logger, rps dynamicconfig.IntPropertyFn) Logger {
-	rate := rps()
-	log := &loggerImpl{
-		zapLogger: zapLogger,
-		skip:      skipForThrottleLogger,
+func NewThrottledLogger(logger Logger, rps dynamicconfig.IntPropertyFn) Logger {
+	var log Logger
+	lg, ok := logger.(*loggerImpl)
+	if ok {
+		log = &loggerImpl{
+			zapLogger: lg.zapLogger,
+			skip:      skipForThrottleLogger,
+		}
+	} else {
+		logger.Warn("ReplayLogger may not emit callat tag correctly because the logger passed in is not loggerImpl")
+		log = logger
 	}
+
+	rate := rps()
 	tb := tokenbucket.New(rate, clock.NewRealTimeSource())
 	tl := &throttledLogger{
 		tb:  tb,
@@ -97,16 +103,10 @@ func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
 func (tl *throttledLogger) WithTags(tags ...tag.Tag) Logger {
-	fields := tl.log.buildFields(tags)
-	zapLogger := tl.log.zapLogger.With(fields...)
-
 	result := &throttledLogger{
 		rps: atomic.LoadInt32(&tl.rps),
 		tb:  tl.tb,
-		log: &loggerImpl{
-			zapLogger: zapLogger,
-			skip:      skipForThrottleLogger,
-		},
+		log: tl.log.WithTags(tags...),
 	}
 	result.cfg.rps = tl.cfg.rps
 	return result

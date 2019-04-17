@@ -125,5 +125,8 @@ func (lg *loggerImpl) Fatal(msg string, tags ...tag.Tag) {
 func (lg *loggerImpl) WithTags(tags ...tag.Tag) Logger {
 	fields := lg.buildFields(tags)
 	zapLogger := lg.zapLogger.With(fields...)
-	return NewLogger(zapLogger)
+	return &loggerImpl{
+		zapLogger: zapLogger,
+		skip:      lg.skip,
+	}
 }

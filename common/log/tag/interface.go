@@ -44,9 +44,21 @@ func newStringTag(key string, value string) Tag {
 	}
 }
 
-func newIntegerTag(key string, value int64) Tag {
+func newInt64(key string, value int64) Tag {
 	return Tag{
 		field: zap.Int64(key, value),
+	}
+}
+
+func newInt(key string, value int) Tag {
+	return Tag{
+		field: zap.Int(key, value),
+	}
+}
+
+func newInt32(key string, value int32) Tag {
+	return Tag{
+		field: zap.Int32(key, value),
 	}
 }
 

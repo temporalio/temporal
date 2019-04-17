@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/uber/cadence/common/log/tag"
 	"math/rand"
 	"time"
 
@@ -34,7 +35,6 @@ import (
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"go.uber.org/cadence"
@@ -64,6 +64,11 @@ var (
 	errContextTimeout                       = errors.New("activity aborted because context timed out")
 )
 
+const (
+	uploadErrorMsg = "Archival upload attempt is giving up, possibly could retry."
+	uploadSkipMsg  = "Archival upload request is being skipped, will not retry."
+)
+
 // uploadHistoryActivity is used to upload a workflow execution history to blobstore.
 // method will retry all retryable operations until context expires.
 // archival will be skipped and no error will be returned if cluster or domain is not figured for archival.
@@ -83,28 +88,28 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 	}()
 
-	logger := tagLoggerWithRequest(container.Logger, request).WithField(logging.TagAttempt, activity.GetInfo(ctx).Attempt)
+	logger := tagLoggerWithRequest(container.Logger, request).WithTags(tag.Attempt(activity.GetInfo(ctx).Attempt))
 	domainCache := container.DomainCache
 	clusterMetadata := container.ClusterMetadata
 	domainCacheEntry, err := getDomainByID(ctx, domainCache, request.DomainID)
 	if err != nil {
-		logging.LogFailArchivalUploadAttempt(logger, err, "could not get domain cache entry", "", "")
+		logger.Error(uploadErrorMsg, tag.UploadFailReason("could not get domain cache entry"))
 		return err
 	}
 	if clusterMetadata.ArchivalConfig().GetArchivalStatus() != cluster.ArchivalEnabled {
-		logging.LogSkipArchivalUpload(logger, "cluster is not enabled for archival")
+		logger.Error(uploadSkipMsg, tag.UploadFailReason("cluster is not enabled for archival"))
 		metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverSkipUploadCount)
 		return nil
 	}
 	if domainCacheEntry.GetConfig().ArchivalStatus != shared.ArchivalStatusEnabled {
-		logging.LogSkipArchivalUpload(logger, "domain is not enabled for archival")
+		logger.Error(uploadSkipMsg, tag.UploadFailReason("domain is not enabled for archival"))
 		metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverSkipUploadCount)
 		return nil
 	}
 	bucket := domainCacheEntry.GetConfig().ArchivalBucket
 	if len(bucket) == 0 {
 		// this should not be able to occur, if domain enables archival bucket should always be set
-		logging.LogFailArchivalUploadAttempt(logger, err, "domain enables archival but does not have a bucket set", "", "")
+		logger.Error(uploadErrorMsg, tag.UploadFailReason("domain enables archival but does not have a bucket set"))
 		return cadence.NewCustomError(errEmptyBucket)
 	}
 	domainName := domainCacheEntry.GetInfo().Name
@@ -118,12 +123,12 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	for pageToken := common.FirstBlobPageToken; !handledLastBlob; pageToken++ {
 		key, err := NewHistoryBlobKey(request.DomainID, request.WorkflowID, request.RunID, pageToken)
 		if err != nil {
-			logging.LogFailArchivalUploadAttempt(logger, err, "could not construct blob key", bucket, "")
+			logger.Error(uploadErrorMsg, tag.UploadFailReason("could not construct blob key"), tag.ArchivalBucket(bucket))
 			return cadence.NewCustomError(errConstructBlob)
 		}
 		tags, err := getTags(ctx, blobstoreClient, bucket, key)
 		if err != nil && err != blobstore.ErrBlobNotExists {
-			logging.LogFailArchivalUploadAttempt(logger, err, "could not get blob tags", bucket, key.String())
+			logger.Error(uploadErrorMsg, tag.UploadFailReason("could not get blob tags"), tag.ArchivalBucket(bucket), tag.ArchivalBlobKey(key.String()))
 			return err
 		}
 		runConstTest := false
@@ -140,7 +145,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 		historyBlob, err := getBlob(ctx, historyBlobReader, pageToken)
 		if err != nil {
-			logging.LogFailArchivalUploadAttempt(logger, err, "could not get history blob from reader", bucket, "")
+			logger.Error(uploadErrorMsg, tag.UploadFailReason("could not get history blob from reader"), tag.ArchivalBucket(bucket))
 			return err
 		}
 		if runConstTest {
@@ -150,13 +155,13 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 		blob, reason, err := constructBlob(historyBlob, container.Config.EnableArchivalCompression(domainName))
 		if err != nil {
-			logging.LogFailArchivalUploadAttempt(logger, err, reason, bucket, key.String())
+			logger.Error(uploadErrorMsg, tag.UploadFailReason(reason), tag.ArchivalBucket(bucket), tag.ArchivalBlobKey(key.String()))
 			return cadence.NewCustomError(errConstructBlob)
 		}
 		if runConstTest {
 			existingBlob, err := downloadBlob(ctx, blobstoreClient, bucket, key)
 			if err != nil {
-				logger.WithError(err).Error("failed to download blob for deterministic construction verification")
+				logger.Error("failed to download blob for deterministic construction verification", tag.Error(err))
 				metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount)
 			} else if !blob.Equal(existingBlob) {
 				logger.Error("deterministic construction check failed")
@@ -165,7 +170,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			continue
 		}
 		if err := uploadBlob(ctx, blobstoreClient, bucket, key, blob); err != nil {
-			logging.LogFailArchivalUploadAttempt(logger, err, "could not upload blob", bucket, key.String())
+			logger.Error(uploadErrorMsg, tag.UploadFailReason("could not upload blob"), tag.ArchivalBucket(bucket), tag.ArchivalBlobKey(key.String()))
 			return err
 		}
 		handledLastBlob = *historyBlob.Header.IsLast
@@ -190,16 +195,16 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			}
 		}
 	}()
-	logger := tagLoggerWithRequest(container.Logger, request).WithField(logging.TagAttempt, activity.GetInfo(ctx).Attempt)
+	logger := tagLoggerWithRequest(container.Logger, request).WithTags(tag.Attempt(activity.GetInfo(ctx).Attempt))
 	if request.EventStoreVersion == persistence.EventStoreVersionV2 {
 		if err := deleteHistoryV2(ctx, container, request); err != nil {
-			logger.WithError(err).Error("failed to delete history from events v2")
+			logger.Error("failed to delete history from events v2", tag.Error(err))
 			return err
 		}
 		return nil
 	}
 	if err := deleteHistoryV1(ctx, container, request); err != nil {
-		logger.WithError(err).Error("failed to delete history from events v1")
+		logger.Error("failed to delete history from events v1", tag.Error(err))
 		return err
 	}
 	return nil
@@ -346,12 +351,12 @@ func deleteHistoryV1(ctx context.Context, container *BootstrapContainer, request
 }
 
 func deleteHistoryV2(ctx context.Context, container *BootstrapContainer, request ArchiveRequest) error {
-	err := persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
+	err := persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.BarkLogger)
 	if err == nil {
 		return nil
 	}
 	op := func() error {
-		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
+		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.BarkLogger)
 	}
 	for err != nil {
 		if !common.IsPersistenceTransientError(err) {

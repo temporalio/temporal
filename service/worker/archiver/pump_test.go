@@ -27,16 +27,16 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
-	"github.com/uber/cadence/common/mocks"
 	"go.uber.org/cadence/testsuite"
 	"go.uber.org/cadence/workflow"
 )
 
 var (
 	pumpTestMetrics *mmocks.Client
-	pumpTestLogger  *mocks.Logger
+	pumpTestLogger  *log.MockLogger
 )
 
 type pumpSuite struct {
@@ -58,7 +58,7 @@ func (s *pumpSuite) SetupSuite() {
 func (s *pumpSuite) SetupTest() {
 	pumpTestMetrics = &mmocks.Client{}
 	pumpTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NewTestStopwatch()).Once()
-	pumpTestLogger = &mocks.Logger{}
+	pumpTestLogger = &log.MockLogger{}
 }
 
 func (s *pumpSuite) TearDownTest() {
@@ -140,7 +140,7 @@ func (s *pumpSuite) TestPumpRun_SignalsAndCarryover() {
 func (s *pumpSuite) TestPumpRun_SignalChannelClosedUnexpectedly() {
 	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
 	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalChannelClosedCount).Once()
-	pumpTestLogger.On("Error", mock.Anything).Once()
+	pumpTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(signalChClosePumpWorkflow, 10, 5)

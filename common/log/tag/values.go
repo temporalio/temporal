@@ -92,6 +92,7 @@ var (
 	ComponentIndexerESProcessor       = component("indexer-es-processor")
 	ComponentESVisibilityManager      = component("es-visibility-manager")
 	ComponentArchiver                 = component("archiver")
+	ComponentWorker                   = component("worker")
 )
 
 // Pre-defined values for TagSysLifecycle

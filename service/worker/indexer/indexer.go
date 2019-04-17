@@ -22,10 +22,10 @@ package indexer
 
 import (
 	"fmt"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -37,7 +37,7 @@ type (
 		config              *Config
 		kafkaClient         messaging.Client
 		esClient            es.Client
-		logger              bark.Logger
+		logger              log.Logger
 		metricsClient       metrics.Client
 		visibilityProcessor *indexProcessor
 		visibilityIndexName string
@@ -59,10 +59,8 @@ const (
 
 // NewIndexer create a new Indexer
 func NewIndexer(config *Config, client messaging.Client, esClient es.Client, esConfig *es.Config,
-	logger bark.Logger, metricsClient metrics.Client) *Indexer {
-	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueIndexerComponent,
-	})
+	logger log.Logger, metricsClient metrics.Client) *Indexer {
+	logger = logger.WithTags(tag.ComponentIndexer)
 
 	return &Indexer{
 		config:              config,

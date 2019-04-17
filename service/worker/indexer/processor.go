@@ -23,13 +23,13 @@ package indexer
 import (
 	"fmt"
 	"github.com/olivere/elastic"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/codec"
 	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"sync"
@@ -47,7 +47,7 @@ type indexProcessor struct {
 	esProcessorName string
 	esIndexName     string
 	config          *Config
-	logger          bark.Logger
+	logger          log.Logger
 	metricsClient   metrics.Client
 	isStarted       int32
 	isStopped       int32
@@ -68,7 +68,7 @@ var (
 )
 
 func newIndexProcessor(appName, consumerName string, kafkaClient messaging.Client, esClient es.Client,
-	esProcessorName, esIndexName string, config *Config, logger bark.Logger, metricsClient metrics.Client) *indexProcessor {
+	esProcessorName, esIndexName string, config *Config, logger log.Logger, metricsClient metrics.Client) *indexProcessor {
 	return &indexProcessor{
 		appName:         appName,
 		consumerName:    consumerName,
@@ -77,12 +77,10 @@ func newIndexProcessor(appName, consumerName string, kafkaClient messaging.Clien
 		esProcessorName: esProcessorName,
 		esIndexName:     esIndexName,
 		config:          config,
-		logger: logger.WithFields(bark.Fields{
-			logging.TagWorkflowComponent: logging.TagValueIndexerProcessorComponent,
-		}),
-		metricsClient: metricsClient,
-		shutdownCh:    make(chan struct{}),
-		msgEncoder:    codec.NewThriftRWEncoder(),
+		logger:          logger.WithTags(tag.ComponentIndexerProcessor),
+		metricsClient:   metricsClient,
+		shutdownCh:      make(chan struct{}),
+		msgEncoder:      codec.NewThriftRWEncoder(),
 	}
 }
 
@@ -91,21 +89,21 @@ func (p *indexProcessor) Start() error {
 		return nil
 	}
 
-	logging.LogIndexProcessorStartingEvent(p.logger)
+	p.logger.Info("", tag.LifeCycleStarting)
 	consumer, err := p.kafkaClient.NewConsumer(p.appName, p.consumerName, p.config.IndexerConcurrency())
 	if err != nil {
-		logging.LogIndexProcessorStartFailedEvent(p.logger, err)
+		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 
 	if err := consumer.Start(); err != nil {
-		logging.LogIndexProcessorStartFailedEvent(p.logger, err)
+		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 
 	esProcessor, err := NewESProcessorAndStart(p.config, p.esClient, p.esProcessorName, p.logger, p.metricsClient)
 	if err != nil {
-		logging.LogIndexProcessorStartFailedEvent(p.logger, err)
+		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 
@@ -114,7 +112,7 @@ func (p *indexProcessor) Start() error {
 	p.shutdownWG.Add(1)
 	go p.processorPump()
 
-	logging.LogIndexProcessorStartedEvent(p.logger)
+	p.logger.Info("", tag.LifeCycleStarted)
 	return nil
 }
 
@@ -123,15 +121,15 @@ func (p *indexProcessor) Stop() {
 		return
 	}
 
-	logging.LogIndexProcessorShuttingDownEvent(p.logger)
-	defer logging.LogIndexProcessorShutDownEvent(p.logger)
+	p.logger.Info("", tag.LifeCycleStopping)
+	defer p.logger.Info("", tag.LifeCycleStopped)
 
 	if atomic.LoadInt32(&p.isStarted) == 1 {
 		close(p.shutdownCh)
 	}
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
-		logging.LogIndexProcessorShutDownTimedoutEvent(p.logger)
+		p.logger.Info("", tag.LifeCycleStopTimedout)
 	}
 }
 
@@ -176,17 +174,11 @@ func (p *indexProcessor) messageProcessLoop(workerWG *sync.WaitGroup, workerID i
 }
 
 func (p *indexProcessor) process(kafkaMsg messaging.Message) error {
-	logger := p.logger.WithFields(bark.Fields{
-		logging.TagPartitionKey: kafkaMsg.Partition(),
-		logging.TagOffset:       kafkaMsg.Offset(),
-		logging.TagAttemptStart: time.Now(),
-	})
+	logger := p.logger.WithTags(tag.KafkaPartition(kafkaMsg.Partition()), tag.KafkaOffset(kafkaMsg.Offset()), tag.AttemptStart(time.Now()))
 
 	indexMsg, err := p.deserialize(kafkaMsg.Value())
 	if err != nil {
-		logger.WithFields(bark.Fields{
-			logging.TagErr: err,
-		}).Error("Failed to deserialize index messages.")
+		logger.Error("Failed to deserialize index messages.", tag.Error(err))
 		p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
 		return err
 	}
@@ -202,7 +194,7 @@ func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
 	return &msg, nil
 }
 
-func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg messaging.Message, logger bark.Logger) error {
+func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg messaging.Message, logger log.Logger) error {
 	docID := indexMsg.GetWorkflowID() + esDocIDDelimiter + indexMsg.GetRunID()
 
 	var keyToKafkaMsg string
@@ -246,9 +238,7 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[s
 	doc := make(map[string]interface{})
 	for k, v := range fields {
 		if !es.IsFieldNameValid(k) {
-			p.logger.WithFields(bark.Fields{
-				logging.TagESField: k,
-			}).Error("Unregistered field.")
+			p.logger.Error("Unregistered field.", tag.ESField(k))
 			p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
 			continue
 		}
@@ -262,7 +252,7 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[s
 			doc[k] = v.GetBoolData()
 		default:
 			// must be bug in code and bad deployment, check data sent from producer
-			p.logger.Fatalf("Unknown field type")
+			p.logger.Fatal("Unknown field type")
 		}
 	}
 	return doc

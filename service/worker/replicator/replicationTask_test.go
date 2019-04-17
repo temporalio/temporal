@@ -22,14 +22,13 @@ package replicator
 
 import (
 	"errors"
-	"os"
+	"github.com/uber/cadence/common/log"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -48,7 +47,7 @@ type (
 	activityReplicationTaskSuite struct {
 		suite.Suite
 		config        *Config
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 
 		mockMsg           *messageMocks.Message
@@ -59,7 +58,7 @@ type (
 	historyReplicationTaskSuite struct {
 		suite.Suite
 		config        *Config
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 		sourceCluster string
 
@@ -80,9 +79,6 @@ func TestHistoryReplicationTaskSuite(t *testing.T) {
 }
 
 func (s *activityReplicationTaskSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *activityReplicationTaskSuite) TearDownSuite() {
@@ -90,9 +86,9 @@ func (s *activityReplicationTaskSuite) TearDownSuite() {
 }
 
 func (s *activityReplicationTaskSuite) SetupTest() {
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	zapLogger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = log.NewLogger(zapLogger)
 	s.config = &Config{
 		ReplicationTaskMaxRetry: dynamicconfig.GetIntPropertyFn(10),
 	}
@@ -110,9 +106,6 @@ func (s *activityReplicationTaskSuite) TearDownTest() {
 }
 
 func (s *historyReplicationTaskSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *historyReplicationTaskSuite) TearDownSuite() {
@@ -120,9 +113,9 @@ func (s *historyReplicationTaskSuite) TearDownSuite() {
 }
 
 func (s *historyReplicationTaskSuite) SetupTest() {
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	zapLogger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = log.NewLogger(zapLogger)
 	s.config = &Config{
 		ReplicatorHistoryBufferRetryCount: dynamicconfig.GetIntPropertyFn(2),
 		ReplicationTaskMaxRetry:           dynamicconfig.GetIntPropertyFn(10),

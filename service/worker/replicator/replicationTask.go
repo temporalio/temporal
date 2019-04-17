@@ -22,10 +22,11 @@ package replicator
 
 import (
 	"context"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -33,7 +34,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/locks"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/xdc"
@@ -47,7 +47,7 @@ type (
 		taskID       int64
 		attempt      int
 		kafkaMsg     messaging.Message
-		logger       bark.Logger
+		logger       log.Logger
 
 		config              *Config
 		historyClient       history.Client
@@ -71,11 +71,17 @@ const (
 	replicationTaskRetryDelay = 500 * time.Microsecond
 )
 
-func newActivityReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger bark.Logger,
+func newActivityReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger,
 	config *Config, historyClient history.Client, metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator) *activityReplicationTask {
 
 	attr := task.SyncActicvityTaskAttributes
+
+	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
+		tag.WorkflowID(attr.GetWorkflowId()),
+		tag.WorkflowRunID(attr.GetRunId()),
+		tag.WorkflowEventID(attr.GetScheduledId()),
+		tag.FailoverVersion(attr.GetVersion()))
 	return &activityReplicationTask{
 		workflowReplicationTask: workflowReplicationTask{
 			metricsScope: metrics.SyncActivityTaskScope,
@@ -83,16 +89,10 @@ func newActivityReplicationTask(task *replicator.ReplicationTask, msg messaging.
 			partitionID: definition.NewWorkflowIdentifier(
 				attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
-			taskID:   attr.GetScheduledId(),
-			attempt:  0,
-			kafkaMsg: msg,
-			logger: logger.WithFields(bark.Fields{
-				logging.TagDomainID:            attr.GetDomainId(),
-				logging.TagWorkflowExecutionID: attr.GetWorkflowId(),
-				logging.TagWorkflowRunID:       attr.GetRunId(),
-				logging.TagEventID:             attr.GetScheduledId(),
-				logging.TagVersion:             attr.GetVersion(),
-			}),
+			taskID:              attr.GetScheduledId(),
+			attempt:             0,
+			kafkaMsg:            msg,
+			logger:              logger,
 			config:              config,
 			historyClient:       historyClient,
 			metricsClient:       metricsClient,
@@ -114,11 +114,17 @@ func newActivityReplicationTask(task *replicator.ReplicationTask, msg messaging.
 	}
 }
 
-func newHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, sourceCluster string, logger bark.Logger,
+func newHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, sourceCluster string, logger log.Logger,
 	config *Config, historyClient history.Client, metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator) *historyReplicationTask {
 
 	attr := task.HistoryTaskAttributes
+	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
+		tag.WorkflowID(attr.GetWorkflowId()),
+		tag.WorkflowRunID(attr.GetRunId()),
+		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
+		tag.WorkflowNextEventID(attr.GetNextEventId()),
+		tag.FailoverVersion(attr.GetVersion()))
 	return &historyReplicationTask{
 		workflowReplicationTask: workflowReplicationTask{
 			metricsScope: metrics.HistoryReplicationTaskScope,
@@ -126,17 +132,10 @@ func newHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.M
 			partitionID: definition.NewWorkflowIdentifier(
 				attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
-			taskID:   attr.GetFirstEventId(),
-			attempt:  0,
-			kafkaMsg: msg,
-			logger: logger.WithFields(bark.Fields{
-				logging.TagDomainID:            attr.GetDomainId(),
-				logging.TagWorkflowExecutionID: attr.GetWorkflowId(),
-				logging.TagWorkflowRunID:       attr.GetRunId(),
-				logging.TagFirstEventID:        attr.GetFirstEventId(),
-				logging.TagNextEventID:         attr.GetNextEventId(),
-				logging.TagVersion:             attr.GetVersion(),
-			}),
+			taskID:              attr.GetFirstEventId(),
+			attempt:             0,
+			kafkaMsg:            msg,
+			logger:              logger,
 			config:              config,
 			historyClient:       historyClient,
 			metricsClient:       metricsClient,
@@ -190,7 +189,7 @@ func (t *activityReplicationTask) HandleErr(err error) error {
 	)
 
 	if resendErr != nil {
-		t.logger.WithField(logging.TagErr, resendErr).Error("error resend history")
+		t.logger.Error("error resend history", tag.Error(resendErr))
 		// should return the replication error, not the resending error
 		return err
 	}
@@ -234,7 +233,7 @@ func (t *historyReplicationTask) HandleErr(err error) error {
 		beginRunID, beginEventID, endRunID, endEventID,
 	)
 	if resendErr != nil {
-		t.logger.WithField(logging.TagErr, resendErr).Error("error resend history")
+		t.logger.Error("error resend history", tag.Error(resendErr))
 		// should return the replication error, not the resending error
 		return err
 	}

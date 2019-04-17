@@ -25,9 +25,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/worker/scanner/executor"
@@ -39,7 +39,7 @@ type (
 		db       p.TaskManager
 		executor executor.Executor
 		metrics  metrics.Client
-		logger   bark.Logger
+		logger   log.Logger
 		stats    stats
 		status   int32
 		stopC    chan struct{}
@@ -100,7 +100,7 @@ var (
 // two conditions
 //  - either all task lists are processed successfully (or)
 //  - Stop() method is called to stop the scavenger
-func NewScavenger(db p.TaskManager, metricsClient metrics.Client, logger bark.Logger) *Scavenger {
+func NewScavenger(db p.TaskManager, metricsClient metrics.Client, logger log.Logger) *Scavenger {
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
 		taskListBatchSize, executorMaxDeferredTasks, metricsClient, metrics.TaskListScavengerScope)
@@ -156,7 +156,7 @@ func (s *Scavenger) run() {
 	for {
 		resp, err := s.listTaskList(taskListBatchSize, pageToken)
 		if err != nil {
-			s.logger.WithFields(bark.Fields{logging.TagErr: err.Error()}).Error("listTaskList error")
+			s.logger.Error("listTaskList error", tag.Error(err))
 			return
 		}
 

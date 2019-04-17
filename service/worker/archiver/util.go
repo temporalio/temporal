@@ -26,15 +26,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"strconv"
 	"strings"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/blob"
-	"github.com/uber/cadence/common/logging"
 )
 
 type (
@@ -140,15 +140,15 @@ func hashesEqual(a []uint64, b []uint64) bool {
 	return true
 }
 
-func tagLoggerWithRequest(logger bark.Logger, request ArchiveRequest) bark.Logger {
-	return logger.WithFields(bark.Fields{
-		logging.TagHistoryShardID:                     request.ShardID,
-		logging.TagArchiveRequestDomainID:             request.DomainID,
-		logging.TagArchiveRequestWorkflowID:           request.WorkflowID,
-		logging.TagArchiveRequestRunID:                request.RunID,
-		logging.TagArchiveRequestEventStoreVersion:    request.EventStoreVersion,
-		logging.TagArchiveRequestBranchToken:          request.BranchToken,
-		logging.TagArchiveRequestNextEventID:          request.NextEventID,
-		logging.TagArchiveRequestCloseFailoverVersion: request.CloseFailoverVersion,
-	})
+func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger {
+	return logger.WithTags(
+		tag.ShardID(request.ShardID),
+		tag.WorkflowDomainID(request.DomainID),
+		tag.WorkflowID(request.WorkflowID),
+		tag.WorkflowRunID(request.RunID),
+		tag.ArchivalRequestEventStoreVersion(request.EventStoreVersion),
+		tag.ArchivalRequestBranchToken(request.BranchToken),
+		tag.ArchivalRequestNextEventID(request.NextEventID),
+		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
+	)
 }

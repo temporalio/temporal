@@ -23,6 +23,8 @@ package archiver
 import (
 	"context"
 	"errors"
+	"github.com/uber/cadence/common/log"
+	"go.uber.org/zap"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -57,7 +59,7 @@ type activitiesSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 
-	logger        bark.Logger
+	logger        log.Logger
 	metricsClient *mmocks.Client
 }
 
@@ -66,7 +68,8 @@ func TestActivitiesSuite(t *testing.T) {
 }
 
 func (s *activitiesSuite) SetupTest() {
-	s.logger = bark.NewNopLogger()
+	zapLogger := zap.NewNop()
+	s.logger = log.NewLogger(zapLogger)
 	s.metricsClient = &mmocks.Client{}
 	s.metricsClient.On("StartTimer", mock.Anything, metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Once()
 }
@@ -793,7 +796,7 @@ func (s *activitiesSuite) archivalConfig(
 		},
 		nil,
 	)
-	return cache.NewDomainCache(mockMetadataMgr, mockClusterMetadata, s.metricsClient, s.logger), mockClusterMetadata
+	return cache.NewDomainCache(mockMetadataMgr, mockClusterMetadata, s.metricsClient, bark.NewNopLogger()), mockClusterMetadata
 }
 
 func getConfig(constCheck bool) *Config {

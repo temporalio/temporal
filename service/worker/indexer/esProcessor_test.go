@@ -26,17 +26,16 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/collection"
 	es "github.com/uber/cadence/common/elasticsearch"
 	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
+	"github.com/uber/cadence/common/log"
 	msgMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/indexer/mocks"
-	"log"
-	"os"
+	"go.uber.org/zap"
 	"sync"
 	"testing"
 	"time"
@@ -62,9 +61,6 @@ func TestESProcessorSuite(t *testing.T) {
 }
 
 func (s *esProcessorSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *esProcessorSuite) SetupTest() {
@@ -77,9 +73,13 @@ func (s *esProcessorSuite) SetupTest() {
 	}
 	s.mockMetricClient = &mmocks.Client{}
 	s.mockBulkProcessor = &mocks.ElasticBulkProcessor{}
+
+	zapLogger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+
 	p := &esProcessorImpl{
 		config:        config,
-		logger:        bark.NewNopLogger(),
+		logger:        log.NewLogger(zapLogger),
 		metricsClient: s.mockMetricClient,
 	}
 	p.mapToKafkaMsg = collection.NewShardedConcurrentTxMap(1024, p.hashFn)
@@ -115,7 +115,7 @@ func (s *esProcessorSuite) TestNewESProcessorAndStart() {
 		s.NotNil(input.AfterFunc)
 		return true
 	})).Return(&elastic.BulkProcessor{}, nil).Once()
-	p, err := NewESProcessorAndStart(config, s.mockESClient, processorName, bark.NewNopLogger(), &mmocks.Client{})
+	p, err := NewESProcessorAndStart(config, s.mockESClient, processorName, s.esProcessor.logger, &mmocks.Client{})
 	s.NoError(err)
 
 	processor, ok := p.(*esProcessorImpl)

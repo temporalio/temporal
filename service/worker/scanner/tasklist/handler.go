@@ -21,12 +21,11 @@
 package tasklist
 
 import (
+	"github.com/uber/cadence/common/log/tag"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/logging"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/worker/scanner/executor"
 )
@@ -114,35 +113,24 @@ func (s *Scavenger) tryDeleteTaskList(key *taskListKey, state *taskListState) {
 	//     do so by updating the rangeID
 	//   - deleteTaskList is a conditional delete where condition is the rangeID
 	if err := s.deleteTaskList(key, state.rangeID); err != nil {
-		s.logger.WithFields(bark.Fields{logging.TagErr: err.Error()}).Error("deleteTaskList error")
+		s.logger.Error("deleteTaskList error", tag.Error(err))
 		return
 	}
 	atomic.AddInt64(&s.stats.tasklist.nDeleted, 1)
-	s.logger.WithFields(bark.Fields{
-		logging.TagDomainID:     key.DomainID,
-		logging.TagTaskListName: key.Name,
-		logging.TagTaskType:     key.TaskType,
-	}).Info("tasklist deleted")
+	s.logger.Info("tasklist deleted", tag.WorkflowDomainID(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType))
 }
 
 func (s *Scavenger) deleteHandlerLog(key *taskListKey, state *taskListState, nProcessed int, nDeleted int, err error) {
 	atomic.AddInt64(&s.stats.task.nDeleted, int64(nDeleted))
 	atomic.AddInt64(&s.stats.task.nProcessed, int64(nProcessed))
 	if err != nil {
-		s.logger.WithFields(bark.Fields{
-			logging.TagDomainID:     key.DomainID,
-			logging.TagTaskListName: key.Name,
-			logging.TagTaskType:     key.TaskType,
-			logging.TagErr:          err.Error(),
-		}).Errorf("scavenger.deleteHandler: processed:%v, deleted:%v", nProcessed, nDeleted)
+		s.logger.Error("scavenger.deleteHandler processed.",
+			tag.Error(err), tag.WorkflowDomainID(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 		return
 	}
 	if nProcessed > 0 {
-		s.logger.WithFields(bark.Fields{
-			logging.TagDomainID:     key.DomainID,
-			logging.TagTaskListName: key.Name,
-			logging.TagTaskType:     key.TaskType,
-		}).Infof("scavenger.deleteHandler: processed:%v, deleted:%v", nProcessed, nDeleted)
+		s.logger.Info("scavenger.deleteHandler processed.",
+			tag.WorkflowDomainID(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
 }
 

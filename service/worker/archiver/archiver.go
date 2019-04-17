@@ -21,10 +21,10 @@
 package archiver
 
 import (
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"time"
 
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/workflow"
@@ -39,7 +39,7 @@ type (
 
 	archiver struct {
 		ctx           workflow.Context
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 		concurrency   int
 		requestCh     workflow.Channel
@@ -50,7 +50,7 @@ type (
 // NewArchiver returns a new Archiver
 func NewArchiver(
 	ctx workflow.Context,
-	logger bark.Logger,
+	logger log.Logger,
 	metricsClient metrics.Client,
 	concurrency int,
 	requestCh workflow.Channel,
@@ -100,7 +100,7 @@ func (a *archiver) Finished() []uint64 {
 	return handledHashes
 }
 
-func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metrics.Client, request ArchiveRequest) {
+func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metrics.Client, request ArchiveRequest) {
 	sw := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleRequestLatency)
 	defer sw.Stop()
 
@@ -118,7 +118,7 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 	actCtx := workflow.WithActivityOptions(ctx, ao)
 	uploadSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
 	if err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, nil); err != nil {
-		logger.WithField(logging.TagErr, err).Error("failed to upload history, moving on to deleting history without archiving")
+		logger.Error("failed to upload history, moving on to deleting history without archiving", tag.Error(err))
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
@@ -143,7 +143,7 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 		return
 	}
 	metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalFailedAllRetriesCount)
-	logger.WithField(logging.TagErr, err).Warn("deleting history though local activity failed, attempting to run as normal activity")
+	logger.Warn("deleting history though local activity failed, attempting to run as normal activity", tag.Error(err))
 	ao = workflow.ActivityOptions{
 		ScheduleToStartTimeout: 10 * time.Minute,
 		StartToCloseTimeout:    5 * time.Minute,
@@ -156,7 +156,7 @@ func handleRequest(ctx workflow.Context, logger bark.Logger, metricsClient metri
 	}
 	actCtx = workflow.WithActivityOptions(ctx, ao)
 	if err := workflow.ExecuteActivity(actCtx, deleteHistoryActivityFnName, request).Get(actCtx, nil); err != nil {
-		logger.WithField(logging.TagErr, err).Error("failed to delete history, this means zombie histories are left")
+		logger.Error("failed to delete history, this means zombie histories are left", tag.Error(err))
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)

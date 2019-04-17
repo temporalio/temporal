@@ -22,7 +22,6 @@ package scanner
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/uber-common/bark"
@@ -30,7 +29,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 	pfactory "github.com/uber/cadence/common/persistence/persistence-factory"
@@ -63,8 +63,10 @@ type (
 		SDKClient workflowserviceclient.Interface
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
+		// Deprecated
 		// Logger is an instance of bark logger
-		Logger bark.Logger
+		BarkLogger bark.Logger
+		Logger     log.Logger
 		// TallyScope is an instance of tally metrics scope
 		TallyScope tally.Scope
 	}
@@ -78,7 +80,8 @@ type (
 		sdkClient     workflowserviceclient.Interface
 		metricsClient metrics.Client
 		tallyScope    tally.Scope
-		logger        bark.Logger
+		barkLogger    bark.Logger
+		logger        log.Logger
 		zapLogger     *zap.Logger
 	}
 
@@ -100,16 +103,17 @@ func New(params *BootstrapParams) *Scanner {
 	cfg.Persistence.SetMaxQPS(cfg.Persistence.DefaultStore, cfg.PersistenceMaxQPS())
 	zapLogger, err := zap.NewProduction()
 	if err != nil {
-		log.Fatalf("failed to initialize zap logger: %v", err)
+		params.Logger.Fatal("failed to initialize zap logger", tag.Error(err))
 	}
 	return &Scanner{
 		context: scannerContext{
 			cfg:           cfg,
 			sdkClient:     params.SDKClient,
 			metricsClient: params.MetricsClient,
-			logger:        params.Logger,
+			barkLogger:    params.BarkLogger,
 			tallyScope:    params.TallyScope,
 			zapLogger:     zapLogger,
+			logger:        params.Logger,
 		},
 	}
 }
@@ -151,7 +155,7 @@ func (s *Scanner) startWorkflow(client cclient.Client) error {
 		if _, ok := err.(*shared.WorkflowExecutionAlreadyStartedError); ok {
 			return nil
 		}
-		s.context.logger.WithFields(bark.Fields{logging.TagErr: err}).Error("error starting scanner workflow")
+		s.context.logger.Error("error starting scanner workflow", tag.Error(err))
 		return err
 	}
 	s.context.logger.Info("Scanner workflow successfully started")
@@ -160,7 +164,7 @@ func (s *Scanner) startWorkflow(client cclient.Client) error {
 
 func (s *Scanner) buildContext() error {
 	cfg := &s.context.cfg
-	pFactory := pfactory.New(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.logger)
+	pFactory := pfactory.New(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.barkLogger)
 	domainDB, err := pFactory.NewMetadataManager(pfactory.MetadataV1V2)
 	if err != nil {
 		return err

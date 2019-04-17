@@ -21,10 +21,11 @@
 package archiver
 
 import (
+	"github.com/uber/cadence/common/log"
+	"go.uber.org/zap"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -34,7 +35,7 @@ import (
 
 var (
 	workflowTestMetrics  *mmocks.Client
-	workflowTestLogger   bark.Logger
+	workflowTestLogger   log.Logger
 	workflowTestArchiver *MockArchiver
 	workflowTestPump     *PumpMock
 	workflowTestConfig   *Config
@@ -55,7 +56,7 @@ func TestWorkflowSuite(t *testing.T) {
 
 func (s *workflowSuite) SetupTest() {
 	workflowTestMetrics = &mmocks.Client{}
-	workflowTestLogger = bark.NewNopLogger()
+	workflowTestLogger = log.NewLogger(zap.NewNop())
 	workflowTestArchiver = &MockArchiver{}
 	workflowTestPump = &PumpMock{}
 	workflowTestConfig = &Config{

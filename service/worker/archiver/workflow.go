@@ -21,8 +21,8 @@
 package archiver
 
 import (
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/workflow"
 )
@@ -38,7 +38,7 @@ func archivalWorkflow(ctx workflow.Context, carryover []ArchiveRequest) error {
 
 func archivalWorkflowHelper(
 	ctx workflow.Context,
-	logger bark.Logger,
+	logger log.Logger,
 	metricsClient metrics.Client,
 	config *Config,
 	archiver Archiver, // enables tests to inject mocks
@@ -50,12 +50,13 @@ func archivalWorkflowHelper(
 	sw := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.CadenceLatency)
 	defer sw.Stop()
 	workflowInfo := workflow.GetInfo(ctx)
-	logger = NewReplayBarkLogger(logger.WithFields(bark.Fields{
-		logging.TagWorkflowExecutionID: workflowInfo.WorkflowExecution.ID,
-		logging.TagWorkflowRunID:       workflowInfo.WorkflowExecution.RunID,
-		logging.TagTaskListName:        workflowInfo.TaskListName,
-		logging.TagWorkflowType:        workflowInfo.WorkflowType.Name,
-	}), ctx, false)
+	logger = logger.WithTags(
+		tag.WorkflowID(workflowInfo.WorkflowExecution.ID),
+		tag.WorkflowRunID(workflowInfo.WorkflowExecution.RunID),
+		tag.WorkflowTaskListName(workflowInfo.TaskListName),
+		tag.WorkflowType(workflowInfo.WorkflowType.Name))
+	logger = log.NewReplayLogger(logger, ctx, false)
+
 	logger.Info("archival system workflow started")
 	var dcResult dynamicConfigResult
 	_ = workflow.SideEffect(

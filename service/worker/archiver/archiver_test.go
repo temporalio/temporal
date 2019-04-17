@@ -29,9 +29,9 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
-	"github.com/uber/cadence/common/mocks"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/testsuite"
@@ -40,7 +40,7 @@ import (
 
 var (
 	archiverTestMetrics *mmocks.Client
-	archiverTestLogger  *mocks.Logger
+	archiverTestLogger  *log.MockLogger
 )
 
 type archiverSuite struct {
@@ -60,9 +60,8 @@ func (s *archiverSuite) SetupSuite() {
 func (s *archiverSuite) SetupTest() {
 	archiverTestMetrics = &mmocks.Client{}
 	archiverTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NewTestStopwatch())
-	archiverTestLogger = &mocks.Logger{}
-	archiverTestLogger.On("WithFields", mock.Anything).Return(archiverTestLogger)
-	archiverTestLogger.On("WithField", mock.Anything, mock.Anything).Return(archiverTestLogger).Maybe()
+	archiverTestLogger = &log.MockLogger{}
+	archiverTestLogger.On("WithTags", mock.Anything).Return(archiverTestLogger)
 }
 
 func (s *archiverSuite) TearDownTest() {
@@ -73,7 +72,7 @@ func (s *archiverSuite) TearDownTest() {
 func (s *archiverSuite) TestHandleRequest_UploadFails_NonRetryableError() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
-	archiverTestLogger.On("Error", mock.Anything).Once()
+	archiverTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(cadence.NewCustomError(errGetDomainByID))
@@ -88,7 +87,7 @@ func (s *archiverSuite) TestHandleRequest_UploadFails_NonRetryableError() {
 func (s *archiverSuite) TestHandleRequest_UploadFails_ExpireRetryTimeout() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
-	archiverTestLogger.On("Error", mock.Anything).Once()
+	archiverTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(workflow.NewTimeoutError(shared.TimeoutTypeStartToClose))
@@ -104,7 +103,7 @@ func (s *archiverSuite) TestHandleRequest_LocalDeleteFails_NonRetryableError() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalFailedAllRetriesCount).Once()
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
-	archiverTestLogger.On("Warn", mock.Anything).Once()
+	archiverTestLogger.On("Warn", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)

@@ -87,9 +87,9 @@ func TestThrottleLogger(t *testing.T) {
 
 	dc := dynamicconfig.NewNopClient()
 	cln := dynamicconfig.NewCollection(dc, bark.NewLoggerFromLogrus(logrus.New()))
-	logger := NewThrottledLogger(zapLogger, cln.GetIntProperty(dynamicconfig.FrontendRPS, 1))
+	logger := NewThrottledLogger(NewLogger(zapLogger), cln.GetIntProperty(dynamicconfig.FrontendRPS, 1))
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
+	logger.WithTags(tag.Error(fmt.Errorf("test error"))).WithTags(tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()
@@ -100,5 +100,5 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
 }

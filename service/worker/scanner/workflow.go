@@ -86,12 +86,12 @@ func TaskListScannerWorkflow(ctx workflow.Context) error {
 func TaskListScavengerActivity(aCtx context.Context) error {
 	ctx := aCtx.Value(scannerContextKey).(scannerContext)
 	scavenger := tasklist.NewScavenger(ctx.taskDB, ctx.metricsClient, ctx.logger)
-	ctx.logger.Info("Starting task list scavenger")
+	ctx.barkLogger.Info("Starting task list scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
 		activity.RecordHeartbeat(aCtx)
 		if aCtx.Err() != nil {
-			ctx.logger.Infof("activity context error, stopping scavenger: %v", aCtx.Err())
+			ctx.barkLogger.Infof("activity context error, stopping scavenger: %v", aCtx.Err())
 			scavenger.Stop()
 			return aCtx.Err()
 		}

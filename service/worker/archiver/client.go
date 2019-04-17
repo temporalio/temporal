@@ -88,7 +88,7 @@ func (c *client) Archive(request *ArchiveRequest) error {
 	}
 	exec, err := c.cadenceClient.SignalWithStartWorkflow(context.Background(), workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
-		tagLoggerWithRequest(c.logger, *request).WithFields(bark.Fields{
+		tagBarkLoggerWithRequest(c.logger, *request).WithFields(bark.Fields{
 			logging.TagErr:                 err,
 			logging.TagWorkflowExecutionID: exec.ID,
 			logging.TagWorkflowRunID:       exec.RunID,
@@ -96,4 +96,17 @@ func (c *client) Archive(request *ArchiveRequest) error {
 		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceFailures)
 	}
 	return err
+}
+
+func tagBarkLoggerWithRequest(logger bark.Logger, request ArchiveRequest) bark.Logger {
+	return logger.WithFields(bark.Fields{
+		logging.TagHistoryShardID:                     request.ShardID,
+		logging.TagArchiveRequestDomainID:             request.DomainID,
+		logging.TagArchiveRequestWorkflowID:           request.WorkflowID,
+		logging.TagArchiveRequestRunID:                request.RunID,
+		logging.TagArchiveRequestEventStoreVersion:    request.EventStoreVersion,
+		logging.TagArchiveRequestBranchToken:          request.BranchToken,
+		logging.TagArchiveRequestNextEventID:          request.NextEventID,
+		logging.TagArchiveRequestCloseFailoverVersion: request.CloseFailoverVersion,
+	})
 }

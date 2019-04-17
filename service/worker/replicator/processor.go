@@ -22,18 +22,18 @@ package replicator
 
 import (
 	"context"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/codec"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/task"
@@ -54,7 +54,7 @@ type (
 		shutdownWG              sync.WaitGroup
 		shutdownCh              chan struct{}
 		config                  *Config
-		logger                  bark.Logger
+		logger                  log.Logger
 		metricsClient           metrics.Client
 		domainReplicator        DomainReplicator
 		historyRereplicator     xdc.HistoryRereplicator
@@ -78,7 +78,7 @@ var (
 )
 
 func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string, client messaging.Client, config *Config,
-	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
+	logger log.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
 	historyRereplicator xdc.HistoryRereplicator, historyClient history.Client,
 	sequentialTaskProcessor task.SequentialTaskProcessor) *replicationTaskProcessor {
 
@@ -107,15 +107,15 @@ func (p *replicationTaskProcessor) Start() error {
 		return nil
 	}
 
-	logging.LogReplicationTaskProcessorStartingEvent(p.logger)
+	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentReplicationTaskProcessor)
 	consumer, err := p.client.NewConsumerWithClusterName(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorMessageConcurrency())
 	if err != nil {
-		logging.LogReplicationTaskProcessorStartFailedEvent(p.logger, err)
+		p.logger.Info("", tag.LifeCycleStartFailed, tag.ComponentReplicationTaskProcessor, tag.Error(err))
 		return err
 	}
 
 	if err := consumer.Start(); err != nil {
-		logging.LogReplicationTaskProcessorStartFailedEvent(p.logger, err)
+		p.logger.Info("", tag.LifeCycleStartFailed, tag.ComponentReplicationTaskProcessor, tag.Error(err))
 		return err
 	}
 
@@ -124,7 +124,7 @@ func (p *replicationTaskProcessor) Start() error {
 	go p.processorPump()
 	p.sequentialTaskProcessor.Start()
 
-	logging.LogReplicationTaskProcessorStartedEvent(p.logger)
+	p.logger.Info("", tag.LifeCycleStarted, tag.ComponentReplicationTaskProcessor)
 	return nil
 }
 
@@ -134,15 +134,15 @@ func (p *replicationTaskProcessor) Stop() {
 	}
 
 	p.sequentialTaskProcessor.Stop()
-	logging.LogReplicationTaskProcessorShuttingDownEvent(p.logger)
-	defer logging.LogReplicationTaskProcessorShutdownEvent(p.logger)
+	p.logger.Info("", tag.LifeCycleStopping, tag.ComponentReplicationTaskProcessor)
+	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentReplicationTaskProcessor)
 
 	if atomic.LoadInt32(&p.isStarted) == 1 {
 		close(p.shutdownCh)
 	}
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
-		logging.LogReplicationTaskProcessorShutdownTimedoutEvent(p.logger)
+		p.logger.Info("", tag.LifeCycleStopTimedout, tag.ComponentReplicationTaskProcessor)
 	}
 }
 
@@ -195,9 +195,7 @@ SubmitLoop:
 		var scope int
 		switch replicationTask.GetTaskType() {
 		case replicator.ReplicationTaskTypeDomain:
-			logger = logger.WithFields(bark.Fields{
-				logging.TagDomainID: replicationTask.DomainTaskAttributes.GetID(),
-			})
+			logger = logger.WithTags(tag.WorkflowDomainID(replicationTask.DomainTaskAttributes.GetID()))
 			scope = metrics.DomainReplicationTaskScope
 			err = p.handleDomainReplicationTask(replicationTask, msg, logger)
 		case replicator.ReplicationTaskTypeSyncShardStatus:
@@ -230,41 +228,31 @@ SubmitLoop:
 	}
 }
 
-func (p *replicationTaskProcessor) initLogger(msg messaging.Message) bark.Logger {
-	return p.logger.WithFields(bark.Fields{
-		logging.TagPartition:    msg.Partition(),
-		logging.TagOffset:       msg.Offset(),
-		logging.TagAttemptStart: time.Now(),
-	})
+func (p *replicationTaskProcessor) initLogger(msg messaging.Message) log.Logger {
+	return p.logger.WithTags(tag.KafkaPartition(msg.Partition()),
+		tag.KafkaOffset(msg.Offset()),
+		tag.AttemptStart(time.Now()))
 }
 
-func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger bark.Logger) {
+func (p *replicationTaskProcessor) ackMsg(msg messaging.Message, logger log.Logger) {
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	if err := msg.Ack(); err != nil {
-		logger.WithFields(bark.Fields{
-			logging.TagErr: err,
-		}).Error("unable to ack")
+		logger.Error("unable to ack", tag.Error(err))
 	}
 }
 
-func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, logger bark.Logger) {
+func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, logger log.Logger) {
 	p.updateFailureMetric(metrics.ReplicatorScope, err)
-	logger.WithFields(bark.Fields{
-		logging.TagErr:        err,
-		logging.TagAttemptEnd: time.Now(),
-	}).Error(ErrDeserializeReplicationTask.Error())
-
+	logger.Error(ErrDeserializeReplicationTask.Error(), tag.Error(err), tag.AttemptEnd(time.Now()))
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	if err = msg.Nack(); err != nil {
-		logger.WithFields(bark.Fields{
-			logging.TagErr: err,
-		}).Error("unable to nack")
+		logger.Error("unable to nack", tag.Error(err))
 	}
 }
 
-func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, logger bark.Logger) (*replicator.ReplicationTask, error) {
+func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, logger log.Logger) (*replicator.ReplicationTask, error) {
 	var replicationTask replicator.ReplicationTask
 	err := p.msgEncoder.Decode(msg.Value(), &replicationTask)
 	if err != nil {
@@ -279,12 +267,12 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	return &replicationTask, nil
 }
 
-func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger bark.Logger) error {
+func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
+	logger.Debug("Received domain replication task")
 	err := p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 	if err != nil {
 		return err
@@ -293,13 +281,13 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.
 	return nil
 }
 
-func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask, msg messaging.Message, logger bark.Logger) error {
+func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
 	attr := task.SyncShardStatusTaskAttributes
-	logger.Debugf("Received sync shard task %v.", attr)
+	logger.Debug("Received sync shard task.")
 
 	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
 		p.ackMsg(msg, logger)
@@ -321,13 +309,13 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 	return nil
 }
 
-func (p *replicationTaskProcessor) handleActivityTask(task *replicator.ReplicationTask, msg messaging.Message, logger bark.Logger) error {
+func (p *replicationTaskProcessor) handleActivityTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	activityReplicationTask := newActivityReplicationTask(task, msg, logger,
 		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
 	return p.sequentialTaskProcessor.Submit(activityReplicationTask)
 }
 
-func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger bark.Logger) error {
+func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	historyReplicationTask := newHistoryReplicationTask(task, msg, p.sourceCluster, logger,
 		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
 	return p.sequentialTaskProcessor.Submit(historyReplicationTask)

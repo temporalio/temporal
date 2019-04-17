@@ -539,6 +539,7 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 		workerConfig.ReplicationCfg,
 		c.messagingClient,
 		c.barkLogger,
+		c.logger,
 		service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
@@ -557,7 +558,8 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     params.PublicClient,
 		MetricsClient:    service.GetMetricsClient(),
-		Logger:           c.barkLogger,
+		BarkLogger:       c.barkLogger,
+		Logger:           c.logger,
 		ClusterMetadata:  service.GetClusterMetadata(),
 		HistoryManager:   c.historyMgr,
 		HistoryV2Manager: c.historyV2Mgr,
@@ -579,7 +581,7 @@ func (c *cadenceImpl) startWorkerIndexer(params *service.BootstrapParams, servic
 		c.messagingClient,
 		c.esClient,
 		c.esConfig,
-		c.barkLogger,
+		c.logger,
 		service.GetMetricsClient())
 	if err := c.indexer.Start(); err != nil {
 		c.indexer.Stop()

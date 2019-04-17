@@ -22,14 +22,15 @@ package archiver
 
 import (
 	"context"
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -55,7 +56,8 @@ type (
 	BootstrapContainer struct {
 		PublicClient      workflowserviceclient.Interface
 		MetricsClient     metrics.Client
-		Logger            bark.Logger
+		Logger            log.Logger
+		BarkLogger        bark.Logger
 		ClusterMetadata   cluster.Metadata
 		HistoryManager    persistence.HistoryManager
 		HistoryV2Manager  persistence.HistoryV2Manager
@@ -91,7 +93,7 @@ const (
 
 // these globals exist as a work around because no primitive exists to pass such objects to workflow code
 var (
-	globalLogger        bark.Logger
+	globalLogger        log.Logger
 	globalMetricsClient metrics.Client
 	globalConfig        *Config
 )
@@ -104,10 +106,7 @@ func init() {
 
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
-	globalLogger = container.Logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueArchiverComponent,
-		logging.TagDomain:            common.SystemDomainName,
-	})
+	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemDomainName))
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)

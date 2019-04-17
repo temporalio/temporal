@@ -21,12 +21,12 @@
 package task
 
 import (
+	"github.com/uber/cadence/common/log"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
 )
 
@@ -39,7 +39,7 @@ type (
 		coroutineSize       int
 		taskBatchSize       int
 		coroutineTaskQueues []chan SequentialTask
-		logger              bark.Logger
+		logger              log.Logger
 	}
 
 	// SequentialTasks slice of SequentialTask
@@ -47,7 +47,7 @@ type (
 )
 
 // NewSequentialTaskProcessor create a new sequential tasks processor
-func NewSequentialTaskProcessor(coroutineSize int, taskBatchSize int, logger bark.Logger) SequentialTaskProcessor {
+func NewSequentialTaskProcessor(coroutineSize int, taskBatchSize int, logger log.Logger) SequentialTaskProcessor {
 
 	coroutineTaskQueues := make([]chan SequentialTask, coroutineSize)
 	for i := 0; i < coroutineSize; i++ {
