@@ -780,7 +780,19 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 			ReplicationState:            replicationState,
 			EventStoreVersion:           msBuilder.GetEventStoreVersion(),
 			BranchToken:                 msBuilder.GetCurrentBranch(),
+			CronSchedule:                executionInfo.CronSchedule,
+			HasRetryPolicy:              executionInfo.HasRetryPolicy,
 		}
+		if createRequest.HasRetryPolicy {
+			createRequest.InitialInterval = executionInfo.InitialInterval
+			createRequest.BackoffCoefficient = executionInfo.BackoffCoefficient
+			createRequest.MaximumInterval = executionInfo.MaximumInterval
+			createRequest.ExpirationTime = executionInfo.ExpirationTime
+			createRequest.MaximumAttempts = executionInfo.MaximumAttempts
+			createRequest.NonRetriableErrors = executionInfo.NonRetriableErrors
+			createRequest.ExpirationSeconds = executionInfo.ExpirationSeconds
+		}
+
 		createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeBrandNew
 		if !isBrandNew {
 			createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeWorkflowIDReuse
