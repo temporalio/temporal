@@ -40,7 +40,7 @@ import (
 	"github.com/uber/cadence/service/worker/replicator"
 	"github.com/uber/cadence/service/worker/scanner"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/cadence/.gen/go/shared"
+	"go.uber.org/cadence/client"
 )
 
 type (
@@ -252,12 +252,10 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 }
 
 func (s *Service) ensureSystemDomainExists(publicClient workflowserviceclient.Interface) {
-	request := &shared.DescribeDomainRequest{
-		Name: common.StringPtr(common.SystemDomainName),
-	}
+	domainClient := client.NewDomainClient(publicClient, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := publicClient.DescribeDomain(ctx, request)
+	_, err := domainClient.Describe(ctx, common.SystemDomainName)
 	if err != nil {
 		s.logger.WithError(err).Fatal("failed to verify that cadence system domain exists")
 	}
