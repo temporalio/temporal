@@ -32,6 +32,7 @@ import (
 var versionSupported = map[string]version.Constraints{
 	"uber-go":   mustNewConstraint("<1.1"),
 	"uber-java": mustNewConstraint("<1.1"),
+	"cli":       mustNewConstraint("<1.1"),
 }
 
 type (
@@ -57,8 +58,9 @@ func (cvc *versionChecker) checkClientVersion(ctx context.Context) error {
 	clientFeatureVersion := call.Header(common.FeatureVersionHeaderName)
 	clientImpl := call.Header(common.ClientImplHeaderName)
 
+	// Not enforcing this until we rollout new CLI
 	if clientFeatureVersion == "" {
-		return errClientVersionNotSet
+		return nil
 	}
 
 	versionSupported, ok := versionSupported[clientImpl]

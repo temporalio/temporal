@@ -21,11 +21,15 @@
 package cli
 
 import (
+	"context"
+
 	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	serverFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 )
@@ -98,10 +102,21 @@ func (b *clientFactory) ensureDispatcher(c *cli.Context) {
 		Outbounds: yarpc.Outbounds{
 			cadenceFrontendService: {Unary: ch.NewSingleOutbound(b.hostPort)},
 		},
+		OutboundMiddleware: yarpc.OutboundMiddleware{
+			Unary: &versionMiddleware{},
+		},
 	})
 
 	if err := b.dispatcher.Start(); err != nil {
 		b.dispatcher.Stop()
 		b.logger.Fatal("Failed to create outbound transport channel: %v", zap.Error(err))
 	}
+}
+
+type versionMiddleware struct {
+}
+
+func (vm *versionMiddleware) Call(ctx context.Context, request *transport.Request, out transport.UnaryOutbound) (*transport.Response, error) {
+	request.Headers = request.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, "1.0.0").With(common.ClientImplHeaderName, "cli")
+	return out.Call(ctx, request)
 }
