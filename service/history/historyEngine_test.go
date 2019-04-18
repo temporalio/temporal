@@ -772,6 +772,22 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	s.Equal(int32(100), di.DecisionTimeout)
 }
 
+func (s *engineSuite) TestValidateSignalRequest() {
+	workflowType := "testType"
+	input := []byte("input")
+	startRequest := &workflow.StartWorkflowExecutionRequest{
+		WorkflowId:                          common.StringPtr("ID"),
+		WorkflowType:                        &workflow.WorkflowType{Name: &workflowType},
+		TaskList:                            &workflow.TaskList{Name: common.StringPtr("taskptr")},
+		Input:                               input,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(10),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr("identity"),
+	}
+	err := validateStartWorkflowExecutionRequest(startRequest, 999)
+	s.Error(err, "startRequest doesn't have request id, it should error out")
+}
+
 func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{

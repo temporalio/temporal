@@ -27,6 +27,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1033,7 +1034,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 		},
 		nil,
 	)
-
+	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		StartRequest: &workflow.StartWorkflowExecutionRequest{
@@ -1044,6 +1045,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
 			Identity:                            common.StringPtr(identity),
+			RequestId:                           common.StringPtr(requestID),
 		},
 	})
 	s.Nil(err)
@@ -1404,6 +1406,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := []byte("test input")
+	requestID := uuid.New()
+
 	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
@@ -1416,6 +1420,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			Identity:                            common.StringPtr(identity),
 			SignalName:                          common.StringPtr(signalName),
 			Input:                               input,
+			RequestId:                           common.StringPtr(requestID),
 		},
 	}
 
@@ -1457,6 +1462,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := []byte("test input")
+	requestID := uuid.New()
 	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
@@ -1469,6 +1475,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			Identity:                            common.StringPtr(identity),
 			SignalName:                          common.StringPtr(signalName),
 			Input:                               input,
+			RequestId:                           common.StringPtr(requestID),
 		},
 	}
 

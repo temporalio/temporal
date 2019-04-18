@@ -22,6 +22,7 @@ package history
 
 import (
 	"context"
+	"github.com/pborman/uuid"
 	"os"
 	"testing"
 
@@ -280,7 +281,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 		},
 		nil,
 	)
-
+	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		StartRequest: &workflow.StartWorkflowExecutionRequest{
@@ -291,6 +292,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
 			Identity:                            common.StringPtr(identity),
+			RequestId:                           common.StringPtr(requestID),
 		},
 	})
 	s.Nil(err)
@@ -369,6 +371,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := []byte("test input")
+	requestID := uuid.New()
 	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
@@ -381,6 +384,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			Identity:                            common.StringPtr(identity),
 			SignalName:                          common.StringPtr(signalName),
 			Input:                               input,
+			RequestId:                           common.StringPtr(requestID),
 		},
 	}
 
