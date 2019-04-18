@@ -34,7 +34,7 @@ import (
 )
 
 type (
-	historySerializerSuite struct {
+	cadenceSerializerSuite struct {
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -43,27 +43,27 @@ type (
 	}
 )
 
-func TestHistoryBuilderSuite(t *testing.T) {
-	s := new(historySerializerSuite)
+func TestCadenceSerializerSuite(t *testing.T) {
+	s := new(cadenceSerializerSuite)
 	suite.Run(t, s)
 }
 
-func (s *historySerializerSuite) SetupTest() {
+func (s *cadenceSerializerSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
-func (s *historySerializerSuite) TestSerializer() {
+func (s *cadenceSerializerSuite) TestSerializer() {
 
-	concurrency := 5
+	concurrency := 1
 	startWG := sync.WaitGroup{}
 	doneWG := sync.WaitGroup{}
 
 	startWG.Add(1)
 	doneWG.Add(concurrency)
 
-	serializer := NewHistorySerializer()
+	serializer := NewPayloadSerializer()
 
 	event0 := &workflow.HistoryEvent{
 		EventId:   common.Int64Ptr(999),
@@ -79,6 +79,11 @@ func (s *historySerializerSuite) TestSerializer() {
 
 	history0 := &workflow.History{Events: []*workflow.HistoryEvent{event0, event0}}
 
+	memoFields := map[string][]byte{
+		"TestField": []byte(`Test binary`),
+	}
+	memo0 := &workflow.Memo{Fields: memoFields}
+
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
@@ -86,7 +91,13 @@ func (s *historySerializerSuite) TestSerializer() {
 			startWG.Wait()
 			defer doneWG.Done()
 
-			_, err := serializer.SerializeEvent(event0, common.EncodingTypeGob)
+			// serialize event
+
+			nilEvent, err := serializer.SerializeEvent(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.Nil(nilEvent)
+
+			_, err = serializer.SerializeEvent(event0, common.EncodingTypeGob)
 			s.NotNil(err)
 			_, ok := err.(*UnknownEncodingTypeError)
 			s.True(ok)
@@ -102,6 +113,12 @@ func (s *historySerializerSuite) TestSerializer() {
 			dEmpty, err := serializer.SerializeEvent(event0, common.EncodingType(""))
 			s.Nil(err)
 			s.NotNil(dEmpty)
+
+			// serialize batch events
+
+			nilEvents, err := serializer.SerializeBatchEvents(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(nilEvents)
 
 			_, err = serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeGob)
 			s.NotNil(err)
@@ -120,32 +137,84 @@ func (s *historySerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(dsEmpty)
 
+			_, err = serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeGob)
+			s.NotNil(err)
+			_, ok = err.(*UnknownEncodingTypeError)
+			s.True(ok)
+
+			// serialize visibility memo
+
+			nilMemo, err := serializer.SerializeVisibilityMemo(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.Nil(nilMemo)
+
+			mJSON, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeJSON)
+			s.Nil(err)
+			s.NotNil(mJSON)
+
+			mThrift, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(mThrift)
+
+			mEmpty, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(mEmpty)
+
+			// deserialize event
+
+			dNilEvent, err := serializer.DeserializeEvent(nilEvent)
+			s.Nil(err)
+			s.Nil(dNilEvent)
+
 			event1, err := serializer.DeserializeEvent(dJSON)
 			s.Nil(err)
-			event0.Equals(event1)
+			s.True(event0.Equals(event1))
 
 			event2, err := serializer.DeserializeEvent(dThrift)
 			s.Nil(err)
-			event0.Equals(event2)
+			s.True(event0.Equals(event2))
 
 			event3, err := serializer.DeserializeEvent(dEmpty)
 			s.Nil(err)
-			event0.Equals(event3)
+			s.True(event0.Equals(event3))
+
+			// deserialize batch events
+
+			dNilEvents, err := serializer.DeserializeBatchEvents(nilEvents)
+			s.Nil(err)
+			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeBatchEvents(dsJSON)
 			history1 := &workflow.History{Events: events}
 			s.Nil(err)
-			history0.Equals(history1)
+			s.True(history0.Equals(history1))
 
 			events, err = serializer.DeserializeBatchEvents(dsThrift)
 			history2 := &workflow.History{Events: events}
 			s.Nil(err)
-			history0.Equals(history2)
+			s.True(history0.Equals(history2))
 
 			events, err = serializer.DeserializeBatchEvents(dsEmpty)
 			history3 := &workflow.History{Events: events}
 			s.Nil(err)
-			history0.Equals(history3)
+			s.True(history0.Equals(history3))
+
+			// deserialize visibility memo
+
+			dNilMemo, err := serializer.DeserializeVisibilityMemo(nilMemo)
+			s.Nil(err)
+			s.Equal(&workflow.Memo{}, dNilMemo)
+
+			memo1, err := serializer.DeserializeVisibilityMemo(mJSON)
+			s.Nil(err)
+			s.True(memo0.Equals(memo1))
+
+			memo2, err := serializer.DeserializeVisibilityMemo(mThrift)
+			s.Nil(err)
+			s.True(memo0.Equals(memo2))
+			memo3, err := serializer.DeserializeVisibilityMemo(mEmpty)
+			s.Nil(err)
+			s.True(memo0.Equals(memo3))
 		}()
 	}
 

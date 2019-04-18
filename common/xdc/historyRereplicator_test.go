@@ -55,7 +55,7 @@ type (
 		mockMetadataMgr     *mocks.MetadataManager
 		mockAdminClient     *mocks.AdminClient
 		mockHistoryClient   *mocks.HistoryClient
-		serializer          persistence.HistorySerializer
+		serializer          persistence.PayloadSerializer
 		logger              bark.Logger
 
 		rereplicator *HistoryRereplicatorImpl
@@ -103,7 +103,7 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	)
 	s.mockAdminClient = &mocks.AdminClient{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
-	s.serializer = persistence.NewHistorySerializer()
+	s.serializer = persistence.NewPayloadSerializer()
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger)
 	s.rereplicator = NewHistoryRereplicator(
@@ -113,7 +113,7 @@ func (s *historyRereplicatorSuite) SetupTest() {
 		func(ctx context.Context, request *history.ReplicateRawEventsRequest) error {
 			return s.mockHistoryClient.ReplicateRawEvents(ctx, request)
 		},
-		persistence.NewHistorySerializer(),
+		persistence.NewPayloadSerializer(),
 		30*time.Second,
 		s.logger,
 	)

@@ -21,8 +21,6 @@
 package history
 
 import (
-	"time"
-
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/indexer"
 	m "github.com/uber/cadence/.gen/go/matching"
@@ -33,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
+	"time"
 )
 
 type (
@@ -52,6 +51,7 @@ type (
 		updateTransferAckLevel updateTransferAckLevel
 		transferQueueShutdown  transferQueueShutdown
 		logger                 bark.Logger
+		serializer             persistence.PayloadSerializer
 	}
 )
 
@@ -72,6 +72,7 @@ func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOp
 		updateTransferAckLevel: updateTransferAckLevel,
 		transferQueueShutdown:  transferQueueShutdown,
 		logger:                 logger,
+		serializer:             persistence.NewPayloadSerializer(),
 	}
 }
 
@@ -142,8 +143,9 @@ func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTask
 }
 
 func (t *transferQueueProcessorBase) recordWorkflowStarted(
-	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano, executionTimeUnixNano int64, workflowTimeout int32, taskID int64) error {
+	domainID string, execution workflow.WorkflowExecution, workflowTypeName string, startTimeUnixNano,
+	executionTimeUnixNano int64, workflowTimeout int32, taskID int64, visibilityMemo *workflow.Memo) error {
+
 	domain := defaultDomainName
 	isSampledEnabled := false
 	wid := execution.GetWorkflowId()
@@ -163,9 +165,26 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 		return nil
 	}
 
+	var memo []byte
+	encoding := t.shard.GetEncoding(domainEntry)
+	memoBlob, err := t.serializer.SerializeVisibilityMemo(visibilityMemo, encoding)
+	if err != nil {
+		t.logger.WithFields(bark.Fields{
+			logging.TagErr:                 err.Error(),
+			logging.TagDomainID:            domainID,
+			logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
+			logging.TagWorkflowRunID:       execution.GetRunId(),
+		}).Error("error serialize visibility memo")
+	}
+	if memoBlob != nil {
+		memo = memoBlob.Data
+		encoding = memoBlob.GetEncoding()
+	}
+
 	// publish to kafka
 	if t.visibilityProducer != nil {
-		msg := getVisibilityMessageForOpenExecution(domainID, execution, workflowTypeName, startTimeUnixNano, executionTimeUnixNano, taskID)
+		msg := getVisibilityMessageForOpenExecution(domainID, execution, workflowTypeName, startTimeUnixNano,
+			executionTimeUnixNano, taskID, memo, encoding)
 		err := t.visibilityProducer.Publish(msg)
 		if err != nil {
 			return err
@@ -180,13 +199,16 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
 		WorkflowTimeout:    int64(workflowTimeout),
+		Memo:               memo,
+		Encoding:           encoding,
 	})
 }
 
 func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
-	historyLength int64, taskID int64) error {
+	historyLength int64, taskID int64, visibilityMemo *workflow.Memo) error {
+
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
 	domain := defaultDomainName
@@ -211,10 +233,27 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		return nil
 	}
 
+	var memo []byte
+	encoding := t.shard.GetEncoding(domainEntry)
+	memoBlob, err := t.serializer.SerializeVisibilityMemo(visibilityMemo, encoding)
+	if err != nil {
+		t.logger.WithFields(bark.Fields{
+			logging.TagErr:                 err.Error(),
+			logging.TagDomainID:            domainID,
+			logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
+			logging.TagWorkflowRunID:       execution.GetRunId(),
+		}).Error("error serialize visibility memo")
+	}
+	if memoBlob != nil {
+		memo = memoBlob.Data
+		encoding = memoBlob.GetEncoding()
+	}
+
 	// publish to kafka
 	if t.visibilityProducer != nil {
 		msg := getVisibilityMessageForCloseExecution(domainID, execution, workflowTypeName,
-			startTimeUnixNano, executionTimeUnixNano, endTimeUnixNano, closeStatus, historyLength, taskID)
+			startTimeUnixNano, executionTimeUnixNano, endTimeUnixNano, closeStatus, historyLength, taskID,
+			memo, encoding)
 		err := t.visibilityProducer.Publish(msg)
 		if err != nil {
 			return err
@@ -232,17 +271,23 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		Status:             closeStatus,
 		HistoryLength:      historyLength,
 		RetentionSeconds:   retentionSeconds,
+		Memo:               memo,
+		Encoding:           encoding,
 	})
 }
 
 func getVisibilityMessageForOpenExecution(domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano, executionTimeUnixNano int64, taskID int64) *indexer.Message {
+	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType) *indexer.Message {
 
 	msgType := indexer.MessageTypeIndex
 	fields := map[string]*indexer.Field{
 		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
 		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
 		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
+	}
+	if len(memo) != 0 {
+		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
 	}
 
 	msg := &indexer.Message{
@@ -251,16 +296,14 @@ func getVisibilityMessageForOpenExecution(domainID string, execution workflow.Wo
 		WorkflowID:  common.StringPtr(execution.GetWorkflowId()),
 		RunID:       common.StringPtr(execution.GetRunId()),
 		Version:     common.Int64Ptr(taskID),
-		IndexAttributes: &indexer.IndexAttributes{
-			Fields: fields,
-		},
+		Fields:      fields,
 	}
 	return msg
 }
 
 func getVisibilityMessageForCloseExecution(domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
-	historyLength int64, taskID int64) *indexer.Message {
+	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType) *indexer.Message {
 
 	msgType := indexer.MessageTypeIndex
 	fields := map[string]*indexer.Field{
@@ -271,6 +314,10 @@ func getVisibilityMessageForCloseExecution(domainID string, execution workflow.W
 		es.CloseStatus:   {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(int64(closeStatus))},
 		es.HistoryLength: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(historyLength)},
 	}
+	if len(memo) != 0 {
+		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
+	}
 
 	msg := &indexer.Message{
 		MessageType: &msgType,
@@ -278,27 +325,31 @@ func getVisibilityMessageForCloseExecution(domainID string, execution workflow.W
 		WorkflowID:  common.StringPtr(execution.GetWorkflowId()),
 		RunID:       common.StringPtr(execution.GetRunId()),
 		Version:     common.Int64Ptr(taskID),
-		IndexAttributes: &indexer.IndexAttributes{
-			Fields: fields,
-		},
+		Fields:      fields,
 	}
 	return msg
 }
 
-func getWorkflowExecutionTimestamp(msBuilder mutableState) time.Time {
+// Argument startEvent is to save additional call of msBuilder.GetStartEvent
+func getWorkflowExecutionTimestamp(msBuilder mutableState, startEvent *workflow.HistoryEvent) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows
 	// or later runs of a workflow that needs retry.
 	executionTimestamp := time.Unix(0, 0)
-	startEvent, ok := msBuilder.GetStartEvent()
-	if !ok {
+	if startEvent == nil {
 		return executionTimestamp
 	}
 
-	executionInfo := msBuilder.GetExecutionInfo()
-	startTimestamp := executionInfo.StartTimestamp
 	if backoffSeconds := startEvent.WorkflowExecutionStartedEventAttributes.GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
+		startTimestamp := msBuilder.GetExecutionInfo().StartTimestamp
 		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
 	}
 	return executionTimestamp
+}
+
+func getVisibilityMemo(startEvent *workflow.HistoryEvent) *workflow.Memo {
+	if startEvent == nil {
+		return nil
+	}
+	return startEvent.WorkflowExecutionStartedEventAttributes.Memo
 }

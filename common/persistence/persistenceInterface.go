@@ -42,8 +42,6 @@ type (
 	TaskStore = TaskManager
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore = MetadataManager
-	// VisibilityStore is the store interface for visibility
-	VisibilityStore = VisibilityManager
 
 	// ExecutionStore is used to manage workflow executions for Persistence layer
 	ExecutionStore interface {
@@ -110,6 +108,23 @@ type (
 		CompleteForkBranch(request *InternalCompleteForkBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
 		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
+	}
+
+	// VisibilityStore is the store interface for visibility
+	VisibilityStore interface {
+		Closeable
+		GetName() string
+		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
+		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
+		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
+		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*InternalGetClosedWorkflowExecutionResponse, error)
+		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 	}
 
 	// DataBlob represents a blob for any binary data.
@@ -462,6 +477,32 @@ type (
 		History []*DataBlob
 		// Pagination token
 		NextPageToken []byte
+	}
+
+	// VisibilityWorkflowExecutionInfo is visibility info for internal response
+	VisibilityWorkflowExecutionInfo struct {
+		WorkflowID    string
+		RunID         string
+		TypeName      string
+		StartTime     time.Time
+		ExecutionTime time.Time
+		CloseTime     time.Time
+		Status        *workflow.WorkflowExecutionCloseStatus
+		HistoryLength int64
+		Memo          *DataBlob
+	}
+
+	// InternalListWorkflowExecutionsResponse is response to ListWorkflowExecutions
+	InternalListWorkflowExecutionsResponse struct {
+		Executions []*VisibilityWorkflowExecutionInfo
+		// Token to read next page if there are more workflow executions beyond page size.
+		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
+		NextPageToken []byte
+	}
+
+	// InternalGetClosedWorkflowExecutionResponse is response to GetWorkflowExecution
+	InternalGetClosedWorkflowExecutionResponse struct {
+		Execution *VisibilityWorkflowExecutionInfo
 	}
 )
 

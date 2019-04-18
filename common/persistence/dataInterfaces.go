@@ -759,8 +759,7 @@ type (
 		ClearBufferedEvents           bool
 		NewBufferedReplicationTask    *BufferedReplicationTask
 		DeleteBufferedReplicationTask *int64
-		//Optional. It is to suggest a binary encoding type to serialize history events
-		Encoding common.EncodingType
+		Encoding                      common.EncodingType // optional binary encoding type
 	}
 
 	// ResetMutableStateRequest is used to reset workflow execution state for a single run
@@ -778,8 +777,7 @@ type (
 		InsertRequestCancelInfos  []*RequestCancelInfo
 		InsertSignalInfos         []*SignalInfo
 		InsertSignalRequestedIDs  []string
-		//Optional. It is to suggest a binary encoding type to serialize history events
-		Encoding common.EncodingType
+		Encoding                  common.EncodingType // optional binary encoding type
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
@@ -816,8 +814,7 @@ type (
 		InsertRequestCancelInfos  []*RequestCancelInfo
 		InsertSignalInfos         []*SignalInfo
 		InsertSignalRequestedIDs  []string
-		//Optional. It is to suggest a binary encoding type to serialize history events
-		Encoding common.EncodingType
+		Encoding                  common.EncodingType // optional binary encoding type
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -999,8 +996,7 @@ type (
 		TransactionID     int64
 		Events            []*workflow.HistoryEvent
 		Overwrite         bool
-		//Optional. It is to suggest a binary encoding type to serialize history events
-		Encoding common.EncodingType
+		Encoding          common.EncodingType // optional binary encoding type
 	}
 
 	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
@@ -1023,7 +1019,7 @@ type (
 	GetWorkflowExecutionHistoryResponse struct {
 		History *workflow.History
 		// Token to read next page if there are more events beyond page size.
-		// Use this to set NextPageToken on GetworkflowExecutionHistoryRequest to read the next page.
+		// Use this to set NextPageToken on GetWorkflowExecutionHistoryRequest to read the next page.
 		NextPageToken []byte
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
@@ -1036,7 +1032,7 @@ type (
 	GetWorkflowExecutionHistoryByBatchResponse struct {
 		History []*workflow.History
 		// Token to read next page if there are more events beyond page size.
-		// Use this to set NextPageToken on GetworkflowExecutionHistoryRequest to read the next page.
+		// Use this to set NextPageToken on GetWorkflowExecutionHistoryRequest to read the next page.
 		NextPageToken []byte
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
@@ -1223,7 +1219,7 @@ type (
 		Events []*workflow.HistoryEvent
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
-		// It is to suggest a binary encoding type to serialize history events
+		// optional binary encoding type
 		Encoding common.EncodingType
 		// The shard to get history node data
 		ShardID *int

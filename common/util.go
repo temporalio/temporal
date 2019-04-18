@@ -40,6 +40,8 @@ import (
 )
 
 const (
+	golandMapReserverNumberOfBytes = 48
+
 	retryPersistenceOperationInitialInterval    = 50 * time.Millisecond
 	retryPersistenceOperationMaxInterval        = 10 * time.Second
 	retryPersistenceOperationExpirationInterval = 30 * time.Second
@@ -419,4 +421,17 @@ func ValidateLongPollContextTimeout(ctx context.Context, handlerName string, log
 		}).Warn("Context timeout is lower than critical value for long poll API.")
 	}
 	return nil
+}
+
+// GetSizeOfMapStringToByteArray get size of map[string][]byte
+func GetSizeOfMapStringToByteArray(input map[string][]byte) int {
+	if input == nil {
+		return 0
+	}
+
+	res := 0
+	for k, v := range input {
+		res += len(k) + len(v)
+	}
+	return res + golandMapReserverNumberOfBytes
 }

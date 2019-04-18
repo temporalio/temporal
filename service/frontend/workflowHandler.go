@@ -2044,8 +2044,9 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 
 	sizeLimitError := wh.config.BlobSizeLimitError(startRequest.GetDomain())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(startRequest.GetDomain())
+	actualSize := len(startRequest.Input) + common.GetSizeOfMapStringToByteArray(startRequest.Memo.GetFields())
 	if err := common.CheckEventBlobSizeLimit(
-		len(startRequest.Input),
+		actualSize,
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
@@ -2485,8 +2486,9 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	); err != nil {
 		return nil, wh.error(err, scope)
 	}
+	actualSize := len(signalWithStartRequest.Input) + common.GetSizeOfMapStringToByteArray(signalWithStartRequest.Memo.GetFields())
 	if err := common.CheckEventBlobSizeLimit(
-		len(signalWithStartRequest.Input),
+		actualSize,
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,

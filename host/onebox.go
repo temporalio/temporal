@@ -25,7 +25,6 @@ import (
 	"fmt"
 
 	"sync"
-	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-common/bark"
@@ -63,8 +62,6 @@ import (
 	"go.uber.org/yarpc/transport/tchannel"
 )
 
-const rpAppNamePrefix string = "cadence"
-const maxRpJoinTimeout = 30 * time.Second
 const archivalBlobSize = 5 * 1024 // 5KB
 
 // Cadence hosts all of cadence services in one process
@@ -367,7 +364,8 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 			ESIndexMaxResultWindow: frontendConfig.ESIndexMaxResultWindow,
 		}
 
-		visibilityFromES := espersistence.NewElasticSearchVisibilityManager(c.esClient, visibilityIndexName, visibilityConfigForES, c.barkLogger)
+		visibilityFromESStore := espersistence.NewElasticSearchVisibilityStore(c.esClient, visibilityIndexName, visibilityConfigForES, c.barkLogger)
+		visibilityFromES := persistence.NewVisibilityManagerImpl(visibilityFromESStore, c.barkLogger)
 		visibilityMgr = persistence.NewVisibilityManagerWrapper(visibilityMgr, visibilityFromES, frontendConfig.EnableReadVisibilityFromES)
 	}
 	c.frontendHandler = frontend.NewWorkflowHandler(

@@ -3225,7 +3225,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 		scheduledEventData, _ := p.FromDataBlob(a.ScheduledEvent)
 		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
 		if a.ScheduledEvent != nil && a.StartedEvent != nil && a.StartedEvent.Encoding != a.ScheduledEvent.Encoding {
-			return p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
@@ -3386,7 +3386,7 @@ func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, chi
 		if c.StartedEvent != nil {
 			startedEventData = c.StartedEvent.Data
 			if string(c.StartedEvent.GetEncoding()) != encoding {
-				return p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", encoding, c.StartedEvent.GetEncoding()))
+				return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", encoding, c.StartedEvent.GetEncoding()))
 			}
 		}
 		startedRunID := emptyRunID
@@ -4162,7 +4162,7 @@ func resetActivityInfoMap(activityInfos []*p.InternalActivityInfo) (map[int64]ma
 	aMap := make(map[int64]map[string]interface{})
 	for _, a := range activityInfos {
 		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return nil, p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 		scheduledEventData, encoding := p.FromDataBlob(a.ScheduledEvent)
 		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
@@ -4227,7 +4227,7 @@ func resetChildExecutionInfoMap(childExecutionInfos []*p.InternalChildExecutionI
 		startedEvent := c.StartedEvent
 		if startedEvent != nil {
 			if startedEvent.Encoding != c.InitiatedEvent.Encoding {
-				return nil, p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, startedEvent.Encoding))
+				return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, startedEvent.Encoding))
 			}
 			cInfo["started_event"] = startedEvent.Data
 		} else {

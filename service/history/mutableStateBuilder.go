@@ -1365,8 +1365,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(d
 	}
 
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, &previousExecutionInfo.RunID)
-	e.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, createRequest.GetRequestId(),
-		event)
+	e.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, createRequest.GetRequestId(), event)
+
 	return event
 }
 
@@ -1387,11 +1387,13 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(execution workflo
 	}
 	e.ReplicateWorkflowExecutionStartedEvent(startRequest.GetDomainUUID(), parentDomainID,
 		execution, request.GetRequestId(), event)
+
 	return event
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID string, parentDomainID *string,
 	execution workflow.WorkflowExecution, requestID string, startEvent *workflow.HistoryEvent) {
+
 	event := startEvent.WorkflowExecutionStartedEventAttributes
 	e.executionInfo.DomainID = domainID
 	e.executionInfo.WorkflowID = execution.GetWorkflowId()
@@ -1437,6 +1439,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 	if event.CronSchedule != nil {
 		e.executionInfo.CronSchedule = event.GetCronSchedule()
 	}
+
 	e.writeEventToCache(startEvent)
 }
 
@@ -1492,11 +1495,11 @@ func (e *mutableStateBuilder) ReplicateTransientDecisionTaskScheduled() *decisio
 	// since the next event ID is assigned at the very end of when
 	// all events are applied for replication.
 	// this is OK
-	// 1. if a failover happen just after this transient decisioon,
+	// 1. if a failover happen just after this transient decision,
 	// AddDecisionTaskStartedEvent will handle the correction of schedule ID
 	// and set the attempt to 0
 	// 2. if no failover happen during the life time of this transient decision
-	// then ReplicateDecisionTaskScheduledEvent will overwrite evenything
+	// then ReplicateDecisionTaskScheduledEvent will overwrite everything
 	// including the decision schedule ID
 	di := &decisionInfo{
 		Version:         e.GetCurrentVersion(),

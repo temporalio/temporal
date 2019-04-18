@@ -68,7 +68,7 @@ type (
 		domainCache          cache.DomainCache
 		adminClient          a.Client
 		historyReplicationFn historyReplicationFn
-		serializer           persistence.HistorySerializer
+		serializer           persistence.PayloadSerializer
 		replicationTimeout   time.Duration
 		logger               bark.Logger
 	}
@@ -114,7 +114,7 @@ func newHistoryRereplicationContext(domainID string, workflowID string,
 
 // NewHistoryRereplicator create a new HistoryRereplicatorImpl
 func NewHistoryRereplicator(targetClusterName string, domainCache cache.DomainCache, adminClient a.Client, historyReplicationFn historyReplicationFn,
-	serializer persistence.HistorySerializer, replicationTimeout time.Duration, logger bark.Logger) *HistoryRereplicatorImpl {
+	serializer persistence.PayloadSerializer, replicationTimeout time.Duration, logger bark.Logger) *HistoryRereplicatorImpl {
 
 	return &HistoryRereplicatorImpl{
 		targetClusterName:    targetClusterName,

@@ -464,7 +464,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		})
 	}
 
-	serializer := persistence.NewHistorySerializer()
+	serializer := persistence.NewPayloadSerializer()
 	convertBlob := func(blobs []*workflow.DataBlob) []*workflow.HistoryEvent {
 		events := []*workflow.HistoryEvent{}
 		for _, blob := range blobs {

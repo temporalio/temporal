@@ -20,7 +20,10 @@
 
 package persistence
 
-import s "github.com/uber/cadence/.gen/go/shared"
+import (
+	s "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+)
 
 // Interfaces for the Visibility Store.
 // This is a secondary store that is eventually consistent with the main
@@ -39,6 +42,8 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64
+		Memo               []byte
+		Encoding           common.EncodingType // optional binary encoding type
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
@@ -54,6 +59,8 @@ type (
 		Status             s.WorkflowExecutionCloseStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
+		Memo               []byte
+		Encoding           common.EncodingType // optional binary encoding type
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain

@@ -82,7 +82,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 				func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
 					return historyService.ReplicateRawEvents(ctx, request)
 				},
-				persistence.NewHistorySerializer(),
+				persistence.NewPayloadSerializer(),
 				historyRereplicationTimeout,
 				logger,
 			)

@@ -23,6 +23,7 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -3092,6 +3093,189 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	s.True(workflowComplete)
 
 	s.printWorkflowHistory(s.domainName, workflowExecution)
+}
+
+type startFunc func() (*workflow.StartWorkflowExecutionResponse, error)
+
+func (s *integrationSuite) TestStartWithMemo() {
+	id := "integration-start-with-memo-test"
+	wt := "integration-start-with-memo-test-type"
+	tl := "integration-start-with-memo-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	memoInfo, _ := json.Marshal(id)
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{
+			"Info": memoInfo,
+		},
+	}
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+		Memo:                                memo,
+	}
+
+	fn := func() (*workflow.StartWorkflowExecutionResponse, error) {
+		return s.engine.StartWorkflowExecution(createContext(), request)
+	}
+	s.startWithMemoHelper(fn, id, taskList, memo)
+}
+
+func (s *integrationSuite) TestSignalWithStartWithMemo() {
+	id := "integration-signal-with-start-with-memo-test"
+	wt := "integration-signal-with-start-with-memo-test-type"
+	tl := "integration-signal-with-start-with-memo-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	memoInfo, _ := json.Marshal(id)
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{
+			"Info": memoInfo,
+		},
+	}
+
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	request := &workflow.SignalWithStartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		SignalName:                          common.StringPtr(signalName),
+		SignalInput:                         signalInput,
+		Identity:                            common.StringPtr(identity),
+		Memo:                                memo,
+	}
+
+	fn := func() (*workflow.StartWorkflowExecutionResponse, error) {
+		return s.engine.SignalWithStartWorkflowExecution(createContext(), request)
+	}
+	s.startWithMemoHelper(fn, id, taskList, memo)
+}
+
+// helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
+func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, taskList *workflow.TaskList, memo *workflow.Memo) {
+	identity := "worker1"
+
+	we, err0 := startFn()
+	s.Nil(err0)
+
+	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		return []byte(strconv.Itoa(1)), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.BarkLogger,
+		T:               s.T(),
+	}
+
+	// verify open visibility
+	var openExecutionInfo *workflow.WorkflowExecutionInfo
+	for i := 0; i < 10; i++ {
+		resp, err1 := s.engine.ListOpenWorkflowExecutions(createContext(), &workflow.ListOpenWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: &workflow.StartTimeFilter{
+				EarliestTime: common.Int64Ptr(0),
+				LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+			},
+			ExecutionFilter: &workflow.WorkflowExecutionFilter{
+				WorkflowId: common.StringPtr(id),
+			},
+		})
+		s.Nil(err1)
+		if len(resp.Executions) == 1 {
+			openExecutionInfo = resp.Executions[0]
+			break
+		}
+		s.Logger.Info("Open WorkflowExecution is not yet visible")
+		time.Sleep(100 * time.Millisecond)
+	}
+	s.NotNil(openExecutionInfo)
+	s.Equal(memo, openExecutionInfo.Memo)
+
+	// make progress of workflow
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// verify history
+	execution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      we.RunId,
+	}
+	historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain:    common.StringPtr(s.domainName),
+		Execution: execution,
+	})
+	s.Nil(historyErr)
+	history := historyResponse.History
+	firstEvent := history.Events[0]
+	s.Equal(workflow.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType())
+	startdEventAttributes := firstEvent.WorkflowExecutionStartedEventAttributes
+	s.Equal(memo, startdEventAttributes.Memo)
+
+	// verify closed visibility
+	var closdExecutionInfo *workflow.WorkflowExecutionInfo
+	for i := 0; i < 10; i++ {
+		resp, err1 := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: &workflow.StartTimeFilter{
+				EarliestTime: common.Int64Ptr(0),
+				LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+			},
+			ExecutionFilter: &workflow.WorkflowExecutionFilter{
+				WorkflowId: common.StringPtr(id),
+			},
+		})
+		s.Nil(err1)
+		if len(resp.Executions) == 1 {
+			closdExecutionInfo = resp.Executions[0]
+			break
+		}
+		s.Logger.Info("Closed WorkflowExecution is not yet visible")
+		time.Sleep(100 * time.Millisecond)
+	}
+	s.NotNil(closdExecutionInfo)
+	s.Equal(memo, closdExecutionInfo.Memo)
 }
 
 func (s *integrationSuite) sendSignal(domainName string, execution *workflow.WorkflowExecution, signalName string,

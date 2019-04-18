@@ -25,6 +25,7 @@ package indexer
 
 import (
 	bytes "bytes"
+	base64 "encoding/base64"
 	json "encoding/json"
 	fmt "fmt"
 	multierr "go.uber.org/multierr"
@@ -40,6 +41,7 @@ type Field struct {
 	StringData *string    `json:"stringData,omitempty"`
 	IntData    *int64     `json:"intData,omitempty"`
 	BoolData   *bool      `json:"boolData,omitempty"`
+	BinaryData []byte     `json:"binaryData,omitempty"`
 }
 
 // ToWire translates a Field struct into a Thrift-level intermediate
@@ -59,7 +61,7 @@ type Field struct {
 //   }
 func (v *Field) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -95,6 +97,14 @@ func (v *Field) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.BinaryData != nil {
+		w, err = wire.NewValueBinary(v.BinaryData), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -169,6 +179,14 @@ func (v *Field) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				v.BinaryData, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -182,7 +200,7 @@ func (v *Field) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Type != nil {
 		fields[i] = fmt.Sprintf("Type: %v", *(v.Type))
@@ -198,6 +216,10 @@ func (v *Field) String() string {
 	}
 	if v.BoolData != nil {
 		fields[i] = fmt.Sprintf("BoolData: %v", *(v.BoolData))
+		i++
+	}
+	if v.BinaryData != nil {
+		fields[i] = fmt.Sprintf("BinaryData: %v", v.BinaryData)
 		i++
 	}
 
@@ -266,6 +288,9 @@ func (v *Field) Equals(rhs *Field) bool {
 	if !_Bool_EqualsPtr(v.BoolData, rhs.BoolData) {
 		return false
 	}
+	if !((v.BinaryData == nil && rhs.BinaryData == nil) || (v.BinaryData != nil && rhs.BinaryData != nil && bytes.Equal(v.BinaryData, rhs.BinaryData))) {
+		return false
+	}
 
 	return true
 }
@@ -287,6 +312,9 @@ func (v *Field) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	}
 	if v.BoolData != nil {
 		enc.AddBool("boolData", *v.BoolData)
+	}
+	if v.BinaryData != nil {
+		enc.AddString("binaryData", base64.StdEncoding.EncodeToString(v.BinaryData))
 	}
 	return err
 }
@@ -351,12 +379,28 @@ func (v *Field) IsSetBoolData() bool {
 	return v != nil && v.BoolData != nil
 }
 
+// GetBinaryData returns the value of BinaryData if it is set or its
+// zero value if it is unset.
+func (v *Field) GetBinaryData() (o []byte) {
+	if v != nil && v.BinaryData != nil {
+		return v.BinaryData
+	}
+
+	return
+}
+
+// IsSetBinaryData returns true if BinaryData is not nil.
+func (v *Field) IsSetBinaryData() bool {
+	return v != nil && v.BinaryData != nil
+}
+
 type FieldType int32
 
 const (
 	FieldTypeString FieldType = 0
 	FieldTypeInt    FieldType = 1
 	FieldTypeBool   FieldType = 2
+	FieldTypeBinary FieldType = 3
 )
 
 // FieldType_Values returns all recognized values of FieldType.
@@ -365,6 +409,7 @@ func FieldType_Values() []FieldType {
 		FieldTypeString,
 		FieldTypeInt,
 		FieldTypeBool,
+		FieldTypeBinary,
 	}
 }
 
@@ -383,6 +428,9 @@ func (v *FieldType) UnmarshalText(value []byte) error {
 		return nil
 	case "Bool":
 		*v = FieldTypeBool
+		return nil
+	case "Binary":
+		*v = FieldTypeBinary
 		return nil
 	default:
 		val, err := strconv.ParseInt(s, 10, 32)
@@ -408,6 +456,8 @@ func (v FieldType) MarshalText() ([]byte, error) {
 		return []byte("Int"), nil
 	case 2:
 		return []byte("Bool"), nil
+	case 3:
+		return []byte("Binary"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -425,6 +475,8 @@ func (v FieldType) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 		enc.AddString("name", "Int")
 	case 2:
 		enc.AddString("name", "Bool")
+	case 3:
+		enc.AddString("name", "Binary")
 	}
 	return nil
 }
@@ -471,6 +523,8 @@ func (v FieldType) String() string {
 		return "Int"
 	case 2:
 		return "Bool"
+	case 3:
+		return "Binary"
 	}
 	return fmt.Sprintf("FieldType(%d)", w)
 }
@@ -495,6 +549,8 @@ func (v FieldType) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"Int\""), nil
 	case 2:
 		return ([]byte)("\"Bool\""), nil
+	case 3:
+		return ([]byte)("\"Binary\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -535,8 +591,13 @@ func (v *FieldType) UnmarshalJSON(text []byte) error {
 	}
 }
 
-type IndexAttributes struct {
-	Fields map[string]*Field `json:"fields,omitempty"`
+type Message struct {
+	MessageType *MessageType      `json:"messageType,omitempty"`
+	DomainID    *string           `json:"domainID,omitempty"`
+	WorkflowID  *string           `json:"workflowID,omitempty"`
+	RunID       *string           `json:"runID,omitempty"`
+	Version     *int64            `json:"version,omitempty"`
+	Fields      map[string]*Field `json:"fields,omitempty"`
 }
 
 type _Map_String_Field_MapItemList map[string]*Field
@@ -576,209 +637,6 @@ func (_Map_String_Field_MapItemList) ValueType() wire.Type {
 }
 
 func (_Map_String_Field_MapItemList) Close() {}
-
-// ToWire translates a IndexAttributes struct into a Thrift-level intermediate
-// representation. This intermediate representation may be serialized
-// into bytes using a ThriftRW protocol implementation.
-//
-// An error is returned if the struct or any of its fields failed to
-// validate.
-//
-//   x, err := v.ToWire()
-//   if err != nil {
-//     return err
-//   }
-//
-//   if err := binaryProtocol.Encode(x, writer); err != nil {
-//     return err
-//   }
-func (v *IndexAttributes) ToWire() (wire.Value, error) {
-	var (
-		fields [1]wire.Field
-		i      int = 0
-		w      wire.Value
-		err    error
-	)
-
-	if v.Fields != nil {
-		w, err = wire.NewValueMap(_Map_String_Field_MapItemList(v.Fields)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 10, Value: w}
-		i++
-	}
-
-	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _Field_Read(w wire.Value) (*Field, error) {
-	var v Field
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _Map_String_Field_Read(m wire.MapItemList) (map[string]*Field, error) {
-	if m.KeyType() != wire.TBinary {
-		return nil, nil
-	}
-
-	if m.ValueType() != wire.TStruct {
-		return nil, nil
-	}
-
-	o := make(map[string]*Field, m.Size())
-	err := m.ForEach(func(x wire.MapItem) error {
-		k, err := x.Key.GetString(), error(nil)
-		if err != nil {
-			return err
-		}
-
-		v, err := _Field_Read(x.Value)
-		if err != nil {
-			return err
-		}
-
-		o[k] = v
-		return nil
-	})
-	m.Close()
-	return o, err
-}
-
-// FromWire deserializes a IndexAttributes struct from its Thrift-level
-// representation. The Thrift-level representation may be obtained
-// from a ThriftRW protocol implementation.
-//
-// An error is returned if we were unable to build a IndexAttributes struct
-// from the provided intermediate representation.
-//
-//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
-//   if err != nil {
-//     return nil, err
-//   }
-//
-//   var v IndexAttributes
-//   if err := v.FromWire(x); err != nil {
-//     return nil, err
-//   }
-//   return &v, nil
-func (v *IndexAttributes) FromWire(w wire.Value) error {
-	var err error
-
-	for _, field := range w.GetStruct().Fields {
-		switch field.ID {
-		case 10:
-			if field.Value.Type() == wire.TMap {
-				v.Fields, err = _Map_String_Field_Read(field.Value.GetMap())
-				if err != nil {
-					return err
-				}
-
-			}
-		}
-	}
-
-	return nil
-}
-
-// String returns a readable string representation of a IndexAttributes
-// struct.
-func (v *IndexAttributes) String() string {
-	if v == nil {
-		return "<nil>"
-	}
-
-	var fields [1]string
-	i := 0
-	if v.Fields != nil {
-		fields[i] = fmt.Sprintf("Fields: %v", v.Fields)
-		i++
-	}
-
-	return fmt.Sprintf("IndexAttributes{%v}", strings.Join(fields[:i], ", "))
-}
-
-func _Map_String_Field_Equals(lhs, rhs map[string]*Field) bool {
-	if len(lhs) != len(rhs) {
-		return false
-	}
-
-	for lk, lv := range lhs {
-		rv, ok := rhs[lk]
-		if !ok {
-			return false
-		}
-		if !lv.Equals(rv) {
-			return false
-		}
-	}
-	return true
-}
-
-// Equals returns true if all the fields of this IndexAttributes match the
-// provided IndexAttributes.
-//
-// This function performs a deep comparison.
-func (v *IndexAttributes) Equals(rhs *IndexAttributes) bool {
-	if v == nil {
-		return rhs == nil
-	} else if rhs == nil {
-		return false
-	}
-	if !((v.Fields == nil && rhs.Fields == nil) || (v.Fields != nil && rhs.Fields != nil && _Map_String_Field_Equals(v.Fields, rhs.Fields))) {
-		return false
-	}
-
-	return true
-}
-
-type _Map_String_Field_Zapper map[string]*Field
-
-// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
-// fast logging of _Map_String_Field_Zapper.
-func (m _Map_String_Field_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
-	for k, v := range m {
-		err = multierr.Append(err, enc.AddObject((string)(k), v))
-	}
-	return err
-}
-
-// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
-// fast logging of IndexAttributes.
-func (v *IndexAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
-	if v == nil {
-		return nil
-	}
-	if v.Fields != nil {
-		err = multierr.Append(err, enc.AddObject("fields", (_Map_String_Field_Zapper)(v.Fields)))
-	}
-	return err
-}
-
-// GetFields returns the value of Fields if it is set or its
-// zero value if it is unset.
-func (v *IndexAttributes) GetFields() (o map[string]*Field) {
-	if v != nil && v.Fields != nil {
-		return v.Fields
-	}
-
-	return
-}
-
-// IsSetFields returns true if Fields is not nil.
-func (v *IndexAttributes) IsSetFields() bool {
-	return v != nil && v.Fields != nil
-}
-
-type Message struct {
-	MessageType     *MessageType     `json:"messageType,omitempty"`
-	DomainID        *string          `json:"domainID,omitempty"`
-	WorkflowID      *string          `json:"workflowID,omitempty"`
-	RunID           *string          `json:"runID,omitempty"`
-	Version         *int64           `json:"version,omitempty"`
-	IndexAttributes *IndexAttributes `json:"indexAttributes,omitempty"`
-}
 
 // ToWire translates a Message struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -843,8 +701,8 @@ func (v *Message) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
-	if v.IndexAttributes != nil {
-		w, err = v.IndexAttributes.ToWire()
+	if v.Fields != nil {
+		w, err = wire.NewValueMap(_Map_String_Field_MapItemList(v.Fields)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -861,10 +719,38 @@ func _MessageType_Read(w wire.Value) (MessageType, error) {
 	return v, err
 }
 
-func _IndexAttributes_Read(w wire.Value) (*IndexAttributes, error) {
-	var v IndexAttributes
+func _Field_Read(w wire.Value) (*Field, error) {
+	var v Field
 	err := v.FromWire(w)
 	return &v, err
+}
+
+func _Map_String_Field_Read(m wire.MapItemList) (map[string]*Field, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make(map[string]*Field, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := _Field_Read(x.Value)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
 }
 
 // FromWire deserializes a Message struct from its Thrift-level
@@ -940,8 +826,8 @@ func (v *Message) FromWire(w wire.Value) error {
 
 			}
 		case 60:
-			if field.Value.Type() == wire.TStruct {
-				v.IndexAttributes, err = _IndexAttributes_Read(field.Value)
+			if field.Value.Type() == wire.TMap {
+				v.Fields, err = _Map_String_Field_Read(field.Value.GetMap())
 				if err != nil {
 					return err
 				}
@@ -982,8 +868,8 @@ func (v *Message) String() string {
 		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
 		i++
 	}
-	if v.IndexAttributes != nil {
-		fields[i] = fmt.Sprintf("IndexAttributes: %v", v.IndexAttributes)
+	if v.Fields != nil {
+		fields[i] = fmt.Sprintf("Fields: %v", v.Fields)
 		i++
 	}
 
@@ -998,6 +884,23 @@ func _MessageType_EqualsPtr(lhs, rhs *MessageType) bool {
 		return x.Equals(y)
 	}
 	return lhs == nil && rhs == nil
+}
+
+func _Map_String_Field_Equals(lhs, rhs map[string]*Field) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+	return true
 }
 
 // Equals returns true if all the fields of this Message match the
@@ -1025,11 +928,22 @@ func (v *Message) Equals(rhs *Message) bool {
 	if !_I64_EqualsPtr(v.Version, rhs.Version) {
 		return false
 	}
-	if !((v.IndexAttributes == nil && rhs.IndexAttributes == nil) || (v.IndexAttributes != nil && rhs.IndexAttributes != nil && v.IndexAttributes.Equals(rhs.IndexAttributes))) {
+	if !((v.Fields == nil && rhs.Fields == nil) || (v.Fields != nil && rhs.Fields != nil && _Map_String_Field_Equals(v.Fields, rhs.Fields))) {
 		return false
 	}
 
 	return true
+}
+
+type _Map_String_Field_Zapper map[string]*Field
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of _Map_String_Field_Zapper.
+func (m _Map_String_Field_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	for k, v := range m {
+		err = multierr.Append(err, enc.AddObject((string)(k), v))
+	}
+	return err
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
@@ -1053,8 +967,8 @@ func (v *Message) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	if v.Version != nil {
 		enc.AddInt64("version", *v.Version)
 	}
-	if v.IndexAttributes != nil {
-		err = multierr.Append(err, enc.AddObject("indexAttributes", v.IndexAttributes))
+	if v.Fields != nil {
+		err = multierr.Append(err, enc.AddObject("fields", (_Map_String_Field_Zapper)(v.Fields)))
 	}
 	return err
 }
@@ -1134,19 +1048,19 @@ func (v *Message) IsSetVersion() bool {
 	return v != nil && v.Version != nil
 }
 
-// GetIndexAttributes returns the value of IndexAttributes if it is set or its
+// GetFields returns the value of Fields if it is set or its
 // zero value if it is unset.
-func (v *Message) GetIndexAttributes() (o *IndexAttributes) {
-	if v != nil && v.IndexAttributes != nil {
-		return v.IndexAttributes
+func (v *Message) GetFields() (o map[string]*Field) {
+	if v != nil && v.Fields != nil {
+		return v.Fields
 	}
 
 	return
 }
 
-// IsSetIndexAttributes returns true if IndexAttributes is not nil.
-func (v *Message) IsSetIndexAttributes() bool {
-	return v != nil && v.IndexAttributes != nil
+// IsSetFields returns true if Fields is not nil.
+func (v *Message) IsSetFields() bool {
+	return v != nil && v.Fields != nil
 }
 
 type MessageType int32

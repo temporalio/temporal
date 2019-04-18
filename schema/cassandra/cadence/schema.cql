@@ -62,7 +62,7 @@ CREATE TYPE workflow_execution (
   expiration_time                  timestamp, -- retry expiration time
   max_attempts                     int,    -- max number of attempts including initial non-retry attempt
   non_retriable_errors             list<text>,
-  event_store_version              int, -- to indicates which version of events persistence is using
+  event_store_version              int, -- indicates which version of events persistence is using
   signal_count                     int,
   branch_token                     blob,
   history_size                     bigint,
@@ -117,9 +117,9 @@ CREATE TYPE replication_task (
   version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
   last_replication_info      map<text, frozen<replication_info>>, -- Used by replication task to snapshot replication information when the transaction was applied
   scheduled_id               bigint, -- Used by ReplicationTask to sync activity info
-  event_store_version        int, -- indiciates which version of event store to query
+  event_store_version        int, -- indicates which version of event store to query
   branch_token               blob, -- if eventV2, then query with this token
-  new_run_event_store_version        int, -- indiciates which version of event store to query for new run(continueAsNew)
+  new_run_event_store_version        int, -- indicates which version of event store to query for new run(continueAsNew)
   new_run_branch_token               blob, -- if eventV2, then query with this token for new run(continueAsNew)
   reset_workflow             boolean, -- whether the task is for resetWorkflowExecution
 );
@@ -268,8 +268,8 @@ CREATE TYPE buffered_replication_task_info (
   version         bigint,
   history         frozen<serialized_event_batch>,
   new_run_history frozen<serialized_event_batch>,
-  event_store_version                int, -- indiciates which version of event store to query
-  new_run_event_store_version        int, -- indiciates which version of event store to query for new run(continueAsNew)
+  event_store_version                int, -- indicates which version of event store to query
+  new_run_event_store_version        int, -- indicates which version of event store to query for new run(continueAsNew)
 );
 
 -- for history v2 events

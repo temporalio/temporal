@@ -266,14 +266,16 @@ func (f *factoryImpl) NewExecutionManager(shardID int) (p.ExecutionManager, erro
 // NewVisibilityManager returns a new visibility manager
 func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	ds := f.datastores[storeTypeVisibility]
-	result, err := ds.factory.NewVisibilityStore()
+	store, err := ds.factory.NewVisibilityStore()
 	if err != nil {
 		return nil, err
 	}
 	visConfig := f.config.VisibilityConfig
 	if visConfig != nil && visConfig.EnableReadFromClosedExecutionV2() && f.isCassandra() {
-		result, err = cassandra.NewVisibilityPersistenceV2(result, f.getCassandraConfig(), f.logger)
+		store, err = cassandra.NewVisibilityPersistenceV2(store, f.getCassandraConfig(), f.logger)
 	}
+
+	result := p.NewVisibilityManagerImpl(store, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -283,6 +285,7 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	if f.metricsClient != nil {
 		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
+
 	return result, nil
 }
 

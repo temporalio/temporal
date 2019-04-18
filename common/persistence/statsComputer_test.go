@@ -40,7 +40,7 @@ type (
 )
 
 func TestStatsComputerSuite(t *testing.T) {
-	s := new(historySerializerSuite)
+	s := new(statsComputerSuite)
 	suite.Run(t, s)
 }
 

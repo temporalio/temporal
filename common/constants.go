@@ -64,6 +64,7 @@ const (
 	EncodingTypeThriftRW              = "thriftrw"
 	EncodingTypeGob                   = "gob"
 	EncodingTypeUnknown               = "unknow"
+	EncodingTypeEmpty                 = ""
 )
 
 // NoRetryBackoff is used to represent backoff when no retry is needed

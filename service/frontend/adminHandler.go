@@ -301,7 +301,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	adh.metricsClient.RecordTimer(scope, metrics.HistorySize, time.Duration(size))
 	domainScope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
-	serializer := persistence.NewHistorySerializer()
+	serializer := persistence.NewPayloadSerializer()
 	blobs := []*gen.DataBlob{}
 	for _, historyBatch := range historyBatches {
 		blob, err := serializer.SerializeBatchEvents(historyBatch.Events, common.EncodingTypeThriftRW)

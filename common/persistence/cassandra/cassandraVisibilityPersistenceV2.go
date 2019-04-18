@@ -31,14 +31,14 @@ import (
 )
 
 const (
-	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition IN (?) ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? `
 
-	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -46,7 +46,7 @@ const (
 		`AND close_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -54,7 +54,7 @@ const (
 		`AND close_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length ` +
+	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -67,12 +67,12 @@ type (
 	cassandraVisibilityPersistenceV2 struct {
 		cassandraStore
 		lowConslevel gocql.Consistency
-		persistence  p.VisibilityManager
+		persistence  p.VisibilityStore
 	}
 )
 
 // NewVisibilityPersistenceV2 create a wrapper of cassandra visibilityPersistence, with all list closed executions using v2 table
-func NewVisibilityPersistenceV2(persistence p.VisibilityManager, cfg *config.Cassandra, logger bark.Logger) (p.VisibilityManager, error) {
+func NewVisibilityPersistenceV2(persistence p.VisibilityStore, cfg *config.Cassandra, logger bark.Logger) (p.VisibilityStore, error) {
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
 	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -115,27 +115,27 @@ func (v *cassandraVisibilityPersistenceV2) RecordWorkflowExecutionClosed(
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListOpenWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	return v.persistence.ListOpenWorkflowExecutions(request)
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListOpenWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	return v.persistence.ListOpenWorkflowExecutionsByType(request)
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListOpenWorkflowExecutionsByWorkflowID(
-	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	return v.persistence.ListOpenWorkflowExecutionsByWorkflowID(request)
 }
 
 func (v *cassandraVisibilityPersistenceV2) GetClosedWorkflowExecution(
-	request *p.GetClosedWorkflowExecutionRequest) (*p.GetClosedWorkflowExecutionResponse, error) {
+	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 	return v.persistence.GetClosedWorkflowExecution(request)
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsV2,
 		request.DomainUUID,
 		domainPartition,
@@ -149,8 +149,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 		}
 	}
 
-	response := &p.ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -175,7 +175,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByTypeV2,
 		request.DomainUUID,
 		domainPartition,
@@ -190,8 +190,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 		}
 	}
 
-	response := &p.ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -216,7 +216,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflowID(
-	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByIDV2,
 		request.DomainUUID,
 		domainPartition,
@@ -231,8 +231,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflo
 		}
 	}
 
-	response := &p.ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -257,7 +257,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflo
 }
 
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByStatus(
-	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.ListWorkflowExecutionsResponse, error) {
+	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatusV2,
 		request.DomainUUID,
 		domainPartition,
@@ -272,8 +272,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByStatus(
 		}
 	}
 
-	response := &p.ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)

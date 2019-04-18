@@ -229,7 +229,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg mess
 }
 
 func (p *indexProcessor) generateESDoc(msg *indexer.Message, keyToKafkaMsg string) map[string]interface{} {
-	doc := p.dumpFieldsToMap(msg.IndexAttributes.Fields)
+	doc := p.dumpFieldsToMap(msg.Fields)
 	fulfillDoc(doc, msg, keyToKafkaMsg)
 	return doc
 }
@@ -250,6 +250,8 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[s
 			doc[k] = v.GetIntData()
 		case indexer.FieldTypeBool:
 			doc[k] = v.GetBoolData()
+		case indexer.FieldTypeBinary:
+			doc[k] = v.GetBinaryData()
 		default:
 			// must be bug in code and bad deployment, check data sent from producer
 			p.logger.Fatal("Unknown field type")

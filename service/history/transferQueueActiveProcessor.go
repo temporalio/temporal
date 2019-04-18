@@ -410,13 +410,20 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	workflowCloseTimestamp := wfCloseTime
 	workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 	workflowHistoryLength := msBuilder.GetNextEventID() - 1
-	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder).UnixNano()
+
+	startEvent, ok := msBuilder.GetStartEvent()
+	if !ok && replyToParentWorkflow {
+		return &workflow.InternalServiceError{Message: "Unable to get workflow start event."}
+	}
+	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
+	visibilityMemo := getVisibilityMemo(startEvent)
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
-		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(),
+		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp.UnixNano(),
+		workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(), visibilityMemo,
 	)
 	if err != nil {
 		return err
@@ -865,12 +872,14 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	workflowTimeout := executionInfo.WorkflowTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp.UnixNano()
-	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder).UnixNano()
+	startEvent, _ := msBuilder.GetStartEvent()
+	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
+	visibilityMemo := getVisibilityMemo(startEvent)
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp, workflowTimeout, task.GetTaskID())
+	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(), workflowTimeout, task.GetTaskID(), visibilityMemo)
 }
 
 func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *persistence.TransferTaskInfo,

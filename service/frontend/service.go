@@ -158,7 +158,8 @@ func (s *Service) Start() {
 			ESIndexMaxResultWindow: s.config.ESIndexMaxResultWindow,
 		}
 
-		visibilityFromES = elasticsearch.NewElasticSearchVisibilityManager(params.ESClient, visibilityIndexName, visibilityConfigForES, log)
+		visibilityFromESStore := elasticsearch.NewElasticSearchVisibilityStore(params.ESClient, visibilityIndexName, visibilityConfigForES, log)
+		visibilityFromES := persistence.NewVisibilityManagerImpl(visibilityFromESStore, log)
 		// wrap with rate limiter
 		esRateLimiter := tokenbucket.New(s.config.PersistenceMaxQPS(), clock.NewRealTimeSource())
 		visibilityFromES = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)

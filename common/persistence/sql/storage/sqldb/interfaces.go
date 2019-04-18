@@ -606,6 +606,8 @@ type (
 		CloseStatus      *int32
 		CloseTime        *time.Time
 		HistoryLength    *int64
+		Memo             []byte
+		Encoding         string
 	}
 
 	// VisibilityFilter contains the column names within domain table that

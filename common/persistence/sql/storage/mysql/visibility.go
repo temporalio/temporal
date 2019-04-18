@@ -30,12 +30,12 @@ import (
 
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT IGNORE INTO executions_visibility (` +
-		`domain_id, workflow_id, run_id, start_time, execution_time, workflow_type_name) ` +
-		`VALUES (?, ?, ?, ?, ?, ?)`
+		`domain_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
-		`domain_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, close_status, history_length) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		`domain_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, close_status, history_length, memo, encoding) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND domain_id = ?
@@ -45,7 +45,7 @@ const (
          ORDER BY start_time DESC, run_id
          LIMIT ?`
 
-	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name`
+	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE close_status IS NULL `
 
 	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, close_status, history_length
@@ -65,7 +65,7 @@ const (
 
 	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND close_status = ?` + templateConditions
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, close_status, history_length
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, close_status, history_length 
 		 FROM executions_visibility
 		 WHERE domain_id = ? AND close_status IS NOT NULL
 		 AND run_id = ?`
@@ -85,7 +85,9 @@ func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error
 		row.RunID,
 		row.StartTime,
 		row.ExecutionTime,
-		row.WorkflowTypeName)
+		row.WorkflowTypeName,
+		row.Memo,
+		row.Encoding)
 }
 
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
@@ -103,7 +105,9 @@ func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, erro
 			row.WorkflowTypeName,
 			closeTime,
 			*row.CloseStatus,
-			*row.HistoryLength)
+			*row.HistoryLength,
+			row.Memo,
+			row.Encoding)
 	default:
 		return nil, errCloseParams
 	}
