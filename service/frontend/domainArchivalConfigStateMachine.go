@@ -73,36 +73,6 @@ func neverEnabledState() *archivalState {
 	}
 }
 
-func (wh *WorkflowHandler) toArchivalRegisterEvent(request *shared.RegisterDomainRequest, defaultBucket string) (*archivalEvent, error) {
-	event := &archivalEvent{
-		defaultBucket: defaultBucket,
-		bucket:        request.GetArchivalBucketName(),
-		status:        request.ArchivalStatus,
-	}
-	if err := event.validate(); err != nil {
-		return nil, err
-	}
-	return event, nil
-}
-
-func (wh *WorkflowHandler) toArchivalUpdateEvent(request *shared.UpdateDomainRequest, defaultBucket string) (*archivalEvent, error) {
-	event := &archivalEvent{
-		defaultBucket: defaultBucket,
-	}
-	if request.Configuration != nil {
-		cfg := request.GetConfiguration()
-		if cfg.ArchivalBucketOwner != nil || cfg.ArchivalRetentionPeriodInDays != nil {
-			return nil, errDisallowedBucketMetadata
-		}
-		event.bucket = cfg.GetArchivalBucketName()
-		event.status = cfg.ArchivalStatus
-	}
-	if err := event.validate(); err != nil {
-		return nil, err
-	}
-	return event, nil
-}
-
 func (e *archivalEvent) validate() error {
 	if len(e.defaultBucket) == 0 {
 		return errInvalidEvent

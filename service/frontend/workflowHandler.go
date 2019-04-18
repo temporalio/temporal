@@ -23,7 +23,6 @@ package frontend
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -36,7 +35,6 @@ import (
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
-	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
@@ -78,9 +76,9 @@ type (
 		startWG           sync.WaitGroup
 		rateLimiter       tokenbucket.TokenBucket
 		config            *Config
-		domainReplicator  DomainReplicator
 		blobstoreClient   blobstore.Client
 		versionChecker    *versionChecker
+		domainHandler     *domainHandlerImpl
 		service.Service
 	}
 
@@ -154,18 +152,25 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
 	blobstoreClient blobstore.Client) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		Service:          sVice,
-		config:           config,
-		metadataMgr:      metadataMgr,
-		historyMgr:       historyMgr,
-		historyV2Mgr:     historyV2Mgr,
-		visibilityMgr:    visibilityMgr,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		domainCache:      cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetBarkLogger()),
-		rateLimiter:      tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
-		domainReplicator: NewDomainReplicator(kafkaProducer, sVice.GetBarkLogger()),
-		blobstoreClient:  blobstoreClient,
-		versionChecker:   &versionChecker{checkVersion: config.EnableClientVersionCheck()},
+		Service:         sVice,
+		config:          config,
+		metadataMgr:     metadataMgr,
+		historyMgr:      historyMgr,
+		historyV2Mgr:    historyV2Mgr,
+		visibilityMgr:   visibilityMgr,
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetBarkLogger()),
+		rateLimiter:     tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
+		blobstoreClient: blobstoreClient,
+		versionChecker:  &versionChecker{checkVersion: config.EnableClientVersionCheck()},
+		domainHandler: newDomainHandler(
+			config,
+			sVice.GetLogger(),
+			metadataMgr,
+			sVice.GetClusterMetadata(),
+			blobstoreClient,
+			NewDomainReplicator(kafkaProducer, sVice.GetBarkLogger()),
+		),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -208,19 +213,6 @@ func (wh *WorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, er
 	return hs, nil
 }
 
-func (wh *WorkflowHandler) checkPermission(securityToken *string, scope metrics.Scope) error {
-	if wh.config.EnableAdminProtection() {
-		if securityToken == nil {
-			return wh.error(errNoPermission, scope)
-		}
-		requiredToken := wh.config.AdminOperationToken()
-		if *securityToken != requiredToken {
-			return wh.error(errNoPermission, scope)
-		}
-	}
-	return nil
-}
-
 // RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level
 // entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Domain
 // acts as a sandbox and provides isolation for all resources within the domain.  All resources belongs to exactly one
@@ -235,124 +227,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(err, scope)
 	}
 
-	if registerRequest == nil {
-		return wh.error(errRequestNotSet, scope)
-	}
-
-	if err := wh.checkPermission(registerRequest.SecurityToken, scope); err != nil {
-		return err
-	}
-
-	clusterMetadata := wh.GetClusterMetadata()
-	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
-		return wh.error(errNotMasterCluster, scope)
-	}
-	if !clusterMetadata.IsGlobalDomainEnabled() {
-		registerRequest.ActiveClusterName = nil
-		registerRequest.Clusters = nil
-	}
-
-	if registerRequest.GetName() == "" {
-		return wh.error(errDomainNotSet, scope)
-	}
-
-	// first check if the name is already registered as the local domain
-	_, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: registerRequest.GetName()})
-	if err != nil {
-		if _, ok := err.(*gen.EntityNotExistsError); !ok {
-			return wh.error(err, scope)
-		}
-		// entity not exists, we can proceed to create the domain
-	} else {
-		// domain already exists, cannot proceed
-		return wh.error(&gen.DomainAlreadyExistsError{Message: "Domain already exists."}, scope)
-	}
-
-	activeClusterName := clusterMetadata.GetCurrentClusterName()
-	// input validation on cluster names
-	if registerRequest.ActiveClusterName != nil {
-		activeClusterName = registerRequest.GetActiveClusterName()
-		if err := wh.validateClusterName(activeClusterName); err != nil {
-			return wh.error(err, scope)
-		}
-	}
-	clusters := []*persistence.ClusterReplicationConfig{}
-	for _, cluster := range registerRequest.Clusters {
-		clusterName := cluster.GetClusterName()
-		if err := wh.validateClusterName(clusterName); err != nil {
-			return wh.error(err, scope)
-		}
-		clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
-	}
-	clusters = persistence.GetOrUseDefaultClusters(activeClusterName, clusters)
-
-	// validate active cluster is also specified in all clusters
-	activeClusterInClusters := false
-	for _, cluster := range clusters {
-		if cluster.ClusterName == activeClusterName {
-			activeClusterInClusters = true
-			break
-		}
-	}
-	if !activeClusterInClusters {
-		return wh.error(errActiveClusterNotInClusters, scope)
-	}
-
-	currentArchivalState := neverEnabledState()
-	nextArchivalState := currentArchivalState
-	archivalClusterConfig := clusterMetadata.ArchivalConfig()
-	if archivalClusterConfig.ConfiguredForArchival() {
-		archivalEvent, err := wh.toArchivalRegisterEvent(registerRequest, archivalClusterConfig.GetDefaultBucket())
-		if err != nil {
-			return wh.error(err, scope)
-		}
-		nextArchivalState, _, err = currentArchivalState.getNextState(ctx, wh.blobstoreClient, archivalEvent)
-		if err != nil {
-			return wh.error(err, scope)
-		}
-	}
-
-	domainRequest := &persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
-			ID:          uuid.New(),
-			Name:        registerRequest.GetName(),
-			Status:      persistence.DomainStatusRegistered,
-			OwnerEmail:  registerRequest.GetOwnerEmail(),
-			Description: registerRequest.GetDescription(),
-			Data:        registerRequest.Data,
-		},
-		Config: &persistence.DomainConfig{
-			Retention:      registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric:     registerRequest.GetEmitMetric(),
-			ArchivalBucket: nextArchivalState.bucket,
-			ArchivalStatus: nextArchivalState.status,
-		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: activeClusterName,
-			Clusters:          clusters,
-		},
-		IsGlobalDomain:  clusterMetadata.IsGlobalDomainEnabled(),
-		FailoverVersion: clusterMetadata.GetNextFailoverVersion(activeClusterName, 0),
-	}
-
-	domainResponse, err := wh.metadataMgr.CreateDomain(domainRequest)
+	err := wh.domainHandler.registerDomain(ctx, registerRequest, scope)
 	if err != nil {
 		return wh.error(err, scope)
 	}
-
-	if domainRequest.IsGlobalDomain {
-		err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationCreate,
-			domainRequest.Info, domainRequest.Config, domainRequest.ReplicationConfig, 0,
-			domainRequest.FailoverVersion, domainRequest.IsGlobalDomain)
-		if err != nil {
-			return wh.error(err, scope)
-		}
-	}
-
-	// TODO: Log through logging framework.  We need to have good auditing of domain CRUD
-	wh.GetBarkLogger().Debugf("Register domain succeeded for name: %v, Id: %v", registerRequest.GetName(), domainResponse.ID)
-
 	return nil
 }
 
@@ -368,40 +246,11 @@ func (wh *WorkflowHandler) ListDomains(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	if listRequest == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	pageSize := 100
-	if listRequest.GetPageSize() != 0 {
-		pageSize = int(listRequest.GetPageSize())
-	}
-
-	resp, err := wh.metadataMgr.ListDomains(&persistence.ListDomainsRequest{
-		PageSize:      pageSize,
-		NextPageToken: listRequest.NextPageToken,
-	})
-
+	resp, err := wh.domainHandler.listDomains(ctx, listRequest, scope)
 	if err != nil {
-		return nil, wh.error(err, scope)
+		return resp, wh.error(err, scope)
 	}
-
-	domains := []*gen.DescribeDomainResponse{}
-	for _, d := range resp.Domains {
-		desc := &gen.DescribeDomainResponse{
-			IsGlobalDomain:  common.BoolPtr(d.IsGlobalDomain),
-			FailoverVersion: common.Int64Ptr(d.FailoverVersion),
-		}
-		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = wh.createDomainResponse(ctx, d.Info, d.Config, d.ReplicationConfig)
-		domains = append(domains, desc)
-	}
-
-	response = &gen.ListDomainsResponse{
-		Domains:       domains,
-		NextPageToken: resp.NextPageToken,
-	}
-
-	return response, nil
+	return resp, err
 }
 
 // DescribeDomain returns the information and configuration for a registered domain.
@@ -416,30 +265,11 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	if describeRequest == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if describeRequest.GetName() == "" && describeRequest.GetUUID() == "" {
-		return nil, wh.error(errDomainNotSet, scope)
-	}
-
-	// TODO, we should migrate the non global domain to new table, see #773
-	req := &persistence.GetDomainRequest{
-		Name: describeRequest.GetName(),
-		ID:   describeRequest.GetUUID(),
-	}
-	resp, err := wh.metadataMgr.GetDomain(req)
+	resp, err := wh.domainHandler.describeDomain(ctx, describeRequest, scope)
 	if err != nil {
-		return nil, wh.error(err, scope)
+		return resp, wh.error(err, scope)
 	}
-
-	response = &gen.DescribeDomainResponse{
-		IsGlobalDomain:  common.BoolPtr(resp.IsGlobalDomain),
-		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
-	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = wh.createDomainResponse(ctx, resp.Info, resp.Config, resp.ReplicationConfig)
-	return response, nil
+	return resp, err
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
@@ -455,247 +285,11 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	if updateRequest == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	// don't require permission for failover request
-	if !isFailoverRequest(updateRequest) {
-		if err := wh.checkPermission(updateRequest.SecurityToken, scope); err != nil {
-			return nil, err
-		}
-	}
-
-	clusterMetadata := wh.GetClusterMetadata()
-	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-	if !clusterMetadata.IsGlobalDomainEnabled() {
-		updateRequest.ReplicationConfiguration = nil
-	}
-
-	if updateRequest.GetName() == "" {
-		return nil, wh.error(errDomainNotSet, scope)
-	}
-
-	// must get the metadata (notificationVersion) first
-	// this version can be regarded as the lock on the v2 domain table
-	// and since we do not know which table will return the domain afterwards
-	// this call has to be made
-	metadata, err := wh.metadataMgr.GetMetadata()
+	resp, err := wh.domainHandler.updateDomain(ctx, updateRequest, scope)
 	if err != nil {
-		return nil, wh.error(err, scope)
+		return resp, wh.error(err, scope)
 	}
-	notificationVersion := metadata.NotificationVersion
-	getResponse, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: updateRequest.GetName()})
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	info := getResponse.Info
-	config := getResponse.Config
-	replicationConfig := getResponse.ReplicationConfig
-	configVersion := getResponse.ConfigVersion
-	failoverVersion := getResponse.FailoverVersion
-	failoverNotificationVersion := getResponse.FailoverNotificationVersion
-
-	currentArchivalState := &archivalState{
-		bucket: config.ArchivalBucket,
-		status: config.ArchivalStatus,
-	}
-	nextArchivalState := currentArchivalState
-	archivalConfigChanged := false
-	archivalClusterConfig := clusterMetadata.ArchivalConfig()
-	if archivalClusterConfig.ConfiguredForArchival() {
-		archivalEvent, err := wh.toArchivalUpdateEvent(updateRequest, archivalClusterConfig.GetDefaultBucket())
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-		nextArchivalState, archivalConfigChanged, err = currentArchivalState.getNextState(ctx, wh.blobstoreClient, archivalEvent)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-	}
-
-	// whether active cluster is changed
-	activeClusterChanged := false
-	// whether anything other than active cluster is changed
-	configurationChanged := false
-
-	validateReplicationConfig := func(existingDomain *persistence.GetDomainResponse,
-		updatedActiveClusterName *string, updatedClusters []*gen.ClusterReplicationConfiguration) error {
-
-		if len(updatedClusters) != 0 {
-			configurationChanged = true
-			clusters := []*persistence.ClusterReplicationConfig{}
-			// this is used to prove that target cluster names is a superset of existing cluster names
-			targetClustersNames := make(map[string]bool)
-			for _, cluster := range updatedClusters {
-				clusterName := cluster.GetClusterName()
-				if err := wh.validateClusterName(clusterName); err != nil {
-					return err
-				}
-				clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
-				targetClustersNames[clusterName] = true
-			}
-
-			// NOTE: this is to validate that target cluster cannot change
-			// For future adding new cluster and backfill workflow remove this logic
-			// -- START
-			existingClustersNames := make(map[string]bool)
-			for _, cluster := range existingDomain.ReplicationConfig.Clusters {
-				existingClustersNames[cluster.ClusterName] = true
-			}
-			if len(existingClustersNames) != len(targetClustersNames) {
-				return errCannotModifyClustersFromDomain
-			}
-			for clusterName := range existingClustersNames {
-				if _, ok := targetClustersNames[clusterName]; !ok {
-					return errCannotModifyClustersFromDomain
-				}
-			}
-			// -- END
-
-			// validate that updated clusters is a superset of existing clusters
-			for _, cluster := range replicationConfig.Clusters {
-				if _, ok := targetClustersNames[cluster.ClusterName]; !ok {
-					return errCannotModifyClustersFromDomain
-				}
-			}
-			replicationConfig.Clusters = clusters
-			// for local domain, the clusters should be 1 and only 1, being the current cluster
-			if len(replicationConfig.Clusters) > 1 && !existingDomain.IsGlobalDomain {
-				return errCannotAddClusterToLocalDomain
-			}
-		}
-
-		if updatedActiveClusterName != nil {
-			activeClusterChanged = true
-			replicationConfig.ActiveClusterName = *updatedActiveClusterName
-		}
-
-		// validate active cluster is also specified in all clusters
-		activeClusterInClusters := false
-	CheckActiveClusterNameInClusters:
-		for _, cluster := range replicationConfig.Clusters {
-			if cluster.ClusterName == replicationConfig.ActiveClusterName {
-				activeClusterInClusters = true
-				break CheckActiveClusterNameInClusters
-			}
-		}
-		if !activeClusterInClusters {
-			return errActiveClusterNotInClusters
-		}
-
-		return nil
-	}
-
-	if updateRequest.UpdatedInfo != nil {
-		updatedInfo := updateRequest.UpdatedInfo
-		if updatedInfo.Description != nil {
-			configurationChanged = true
-			info.Description = updatedInfo.GetDescription()
-		}
-		if updatedInfo.OwnerEmail != nil {
-			configurationChanged = true
-			info.OwnerEmail = updatedInfo.GetOwnerEmail()
-		}
-		if updatedInfo.Data != nil {
-			configurationChanged = true
-			info.Data = wh.mergeDomainData(info.Data, updatedInfo.Data)
-		}
-	}
-	if updateRequest.Configuration != nil {
-		updatedConfig := updateRequest.Configuration
-		if updatedConfig.EmitMetric != nil {
-			configurationChanged = true
-			config.EmitMetric = updatedConfig.GetEmitMetric()
-		}
-		if updatedConfig.WorkflowExecutionRetentionPeriodInDays != nil {
-			configurationChanged = true
-			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
-		}
-		if archivalConfigChanged {
-			configurationChanged = true
-			config.ArchivalBucket = nextArchivalState.bucket
-			config.ArchivalStatus = nextArchivalState.status
-		}
-	}
-	if updateRequest.ReplicationConfiguration != nil {
-		updateReplicationConfig := updateRequest.ReplicationConfiguration
-		if err := validateReplicationConfig(getResponse,
-			updateReplicationConfig.ActiveClusterName, updateReplicationConfig.Clusters); err != nil {
-			return nil, wh.error(err, scope)
-		}
-	}
-
-	if configurationChanged && activeClusterChanged {
-		return nil, wh.error(errCannotDoDomainFailoverAndUpdate, scope)
-	} else if configurationChanged || activeClusterChanged {
-		if configurationChanged && getResponse.IsGlobalDomain && !clusterMetadata.IsMasterCluster() {
-			return nil, wh.error(errNotMasterCluster, scope)
-		}
-
-		// set the versions
-		if configurationChanged {
-			configVersion++
-		}
-		if activeClusterChanged {
-			failoverVersion = clusterMetadata.GetNextFailoverVersion(replicationConfig.ActiveClusterName, failoverVersion)
-			failoverNotificationVersion = notificationVersion
-		}
-
-		updateReq := &persistence.UpdateDomainRequest{
-			Info:                        info,
-			Config:                      config,
-			ReplicationConfig:           replicationConfig,
-			ConfigVersion:               configVersion,
-			FailoverVersion:             failoverVersion,
-			FailoverNotificationVersion: failoverNotificationVersion,
-		}
-
-		switch getResponse.TableVersion {
-		case persistence.DomainTableVersionV1:
-			updateReq.NotificationVersion = getResponse.NotificationVersion
-			updateReq.TableVersion = persistence.DomainTableVersionV1
-		case persistence.DomainTableVersionV2:
-			updateReq.NotificationVersion = notificationVersion
-			updateReq.TableVersion = persistence.DomainTableVersionV2
-		default:
-			return nil, wh.error(errors.New("domain table version is not set"), scope)
-		}
-		err = wh.metadataMgr.UpdateDomain(updateReq)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-
-		if getResponse.IsGlobalDomain {
-			err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
-				info, config, replicationConfig, configVersion, failoverVersion, getResponse.IsGlobalDomain)
-			if err != nil {
-				return nil, wh.error(err, scope)
-			}
-		}
-	} else if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
-		// although there is no attr updated, just prevent customer to use the non master cluster
-		// for update domain, ever (except if customer want to do a domain failover)
-		return nil, wh.error(errNotMasterCluster, scope)
-	}
-
-	response := &gen.UpdateDomainResponse{
-		IsGlobalDomain:  common.BoolPtr(getResponse.IsGlobalDomain),
-		FailoverVersion: common.Int64Ptr(failoverVersion),
-	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = wh.createDomainResponse(ctx, info, config, replicationConfig)
-	return response, nil
-}
-
-func (wh *WorkflowHandler) mergeDomainData(old map[string]string, new map[string]string) map[string]string {
-	if old == nil {
-		old = map[string]string{}
-	}
-	for k, v := range new {
-		old[k] = v
-	}
-	return old
+	return resp, err
 }
 
 // DeprecateDomain us used to update status of a registered domain to DEPRECATED. Once the domain is deprecated
@@ -712,68 +306,11 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return wh.error(err, scope)
 	}
 
-	if deprecateRequest == nil {
-		return wh.error(errRequestNotSet, scope)
-	}
-
-	if err := wh.checkPermission(deprecateRequest.SecurityToken, scope); err != nil {
-		return err
-	}
-
-	clusterMetadata := wh.GetClusterMetadata()
-	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
-		return wh.error(errNotMasterCluster, scope)
-	}
-
-	if deprecateRequest.GetName() == "" {
-		return wh.error(errDomainNotSet, scope)
-	}
-
-	// must get the metadata (notificationVersion) first
-	// this version can be regarded as the lock on the v2 domain table
-	// and since we do not know which table will return the domain afterwards
-	// this call has to be made
-	metadata, err := wh.metadataMgr.GetMetadata()
+	err := wh.domainHandler.deprecateDomain(ctx, deprecateRequest, scope)
 	if err != nil {
 		return wh.error(err, scope)
 	}
-	notificationVersion := metadata.NotificationVersion
-	getResponse, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: deprecateRequest.GetName()})
-	if err != nil {
-		return wh.error(err, scope)
-	}
-
-	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
-	getResponse.Info.Status = persistence.DomainStatusDeprecated
-	updateReq := &persistence.UpdateDomainRequest{
-		Info:              getResponse.Info,
-		Config:            getResponse.Config,
-		ReplicationConfig: getResponse.ReplicationConfig,
-		ConfigVersion:     getResponse.ConfigVersion,
-		FailoverVersion:   getResponse.FailoverVersion,
-	}
-
-	switch getResponse.TableVersion {
-	case persistence.DomainTableVersionV1:
-		updateReq.NotificationVersion = getResponse.NotificationVersion
-		updateReq.TableVersion = persistence.DomainTableVersionV1
-	case persistence.DomainTableVersionV2:
-		updateReq.FailoverNotificationVersion = getResponse.FailoverNotificationVersion
-		updateReq.NotificationVersion = notificationVersion
-		updateReq.TableVersion = persistence.DomainTableVersionV2
-	default:
-		return wh.error(errors.New("domain table version is not set"), scope)
-	}
-	err = wh.metadataMgr.UpdateDomain(updateReq)
-	if err != nil {
-		return wh.error(err, scope)
-	}
-
-	if err != nil {
-		return wh.error(errDomainNotSet, scope)
-	}
-	return nil
+	return err
 }
 
 // PollForActivityTask - Poll for an activity task.
@@ -3335,51 +2872,6 @@ func getDomainStatus(info *persistence.DomainInfo) *gen.DomainStatus {
 	return nil
 }
 
-func (wh *WorkflowHandler) createDomainResponse(
-	ctx context.Context,
-	info *persistence.DomainInfo,
-	config *persistence.DomainConfig,
-	replicationConfig *persistence.DomainReplicationConfig,
-) (*gen.DomainInfo, *gen.DomainConfiguration, *gen.DomainReplicationConfiguration) {
-
-	infoResult := &gen.DomainInfo{
-		Name:        common.StringPtr(info.Name),
-		Status:      getDomainStatus(info),
-		Description: common.StringPtr(info.Description),
-		OwnerEmail:  common.StringPtr(info.OwnerEmail),
-		Data:        info.Data,
-		UUID:        common.StringPtr(info.ID),
-	}
-
-	configResult := &gen.DomainConfiguration{
-		EmitMetric:                             common.BoolPtr(config.EmitMetric),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
-		ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
-		ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
-	}
-	if wh.GetClusterMetadata().ArchivalConfig().ConfiguredForArchival() && config.ArchivalBucket != "" {
-		metadata, err := wh.blobstoreClient.BucketMetadata(ctx, config.ArchivalBucket)
-		if err == nil {
-			configResult.ArchivalRetentionPeriodInDays = common.Int32Ptr(int32(metadata.RetentionDays))
-			configResult.ArchivalBucketOwner = common.StringPtr(metadata.Owner)
-		}
-	}
-
-	clusters := []*gen.ClusterReplicationConfiguration{}
-	for _, cluster := range replicationConfig.Clusters {
-		clusters = append(clusters, &gen.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(cluster.ClusterName),
-		})
-	}
-
-	replicationConfigResult := &gen.DomainReplicationConfiguration{
-		ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),
-		Clusters:          clusters,
-	}
-
-	return infoResult, configResult, replicationConfigResult
-}
-
 func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	ctx context.Context,
 	scope metrics.Scope,
@@ -3509,15 +3001,6 @@ func createServiceBusyError() *gen.ServiceBusyError {
 
 func isFailoverRequest(updateRequest *gen.UpdateDomainRequest) bool {
 	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.ActiveClusterName != nil
-}
-
-func (wh *WorkflowHandler) validateClusterName(clusterName string) error {
-	clusterMetadata := wh.GetClusterMetadata()
-	if _, ok := clusterMetadata.GetAllClusterFailoverVersions()[clusterName]; !ok {
-		errMsg := "Invalid cluster name: %s"
-		return &gen.BadRequestError{Message: fmt.Sprintf(errMsg, clusterName)}
-	}
-	return nil
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *gen.GetWorkflowExecutionHistoryRequest, domainID string) bool {
