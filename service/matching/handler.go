@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/health"
 	m "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceserver"
@@ -105,7 +106,7 @@ func (h *Handler) Health(ctx context.Context) (*health.HealthStatus, error) {
 }
 
 // startRequestProfile initiates recording of request metrics
-func (h *Handler) startRequestProfile(api string, scope int) metrics.Stopwatch {
+func (h *Handler) startRequestProfile(api string, scope int) tally.Stopwatch {
 	h.startWG.Wait()
 	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)

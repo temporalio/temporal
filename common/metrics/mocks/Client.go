@@ -22,6 +22,7 @@ package mocks
 
 import (
 	mock "github.com/stretchr/testify/mock"
+	tally "github.com/uber-go/tally"
 	metrics "github.com/uber/cadence/common/metrics"
 
 	time "time"
@@ -48,14 +49,14 @@ func (_m *Client) RecordTimer(scope int, timer int, d time.Duration) {
 }
 
 // StartTimer provides a mock function with given fields: scope, timer
-func (_m *Client) StartTimer(scope int, timer int) metrics.Stopwatch {
+func (_m *Client) StartTimer(scope int, timer int) tally.Stopwatch {
 	ret := _m.Called(scope, timer)
 
-	var r0 metrics.Stopwatch
-	if rf, ok := ret.Get(0).(func(int, int) metrics.Stopwatch); ok {
+	var r0 tally.Stopwatch
+	if rf, ok := ret.Get(0).(func(int, int) tally.Stopwatch); ok {
 		r0 = rf(scope, timer)
 	} else {
-		r0 = ret.Get(0).(metrics.Stopwatch)
+		r0 = ret.Get(0).(tally.Stopwatch)
 	}
 
 	return r0

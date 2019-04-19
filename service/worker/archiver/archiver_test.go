@@ -26,9 +26,11 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
@@ -59,7 +61,7 @@ func (s *archiverSuite) SetupSuite() {
 
 func (s *archiverSuite) SetupTest() {
 	archiverTestMetrics = &mmocks.Client{}
-	archiverTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NewTestStopwatch())
+	archiverTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{}))
 	archiverTestLogger = &log.MockLogger{}
 	archiverTestLogger.On("WithTags", mock.Anything).Return(archiverTestLogger)
 }
