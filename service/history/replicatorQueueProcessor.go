@@ -24,12 +24,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -47,7 +47,7 @@ type (
 		replicator            messaging.Producer
 		metricsClient         metrics.Client
 		options               *QueueProcessorOptions
-		logger                bark.Logger
+		logger                log.Logger
 		*queueProcessorBase
 		queueAckMgr
 
@@ -62,7 +62,7 @@ var (
 )
 
 func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache, replicator messaging.Producer,
-	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, logger bark.Logger) queueProcessor {
+	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, logger log.Logger) queueProcessor {
 
 	currentClusterNamer := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -80,9 +80,7 @@ func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache,
 		MetricScope:                        metrics.ReplicatorQueueProcessorScope,
 	}
 
-	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueReplicatorQueueComponent,
-	})
+	logger = logger.WithTags(tag.ComponentReplicatorQueue)
 
 	replicationTaskFilter := func(qTask queueTaskInfo) (bool, error) {
 		return true, nil
@@ -227,7 +225,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 // GenerateReplicationTask generate replication task
 func GenerateReplicationTask(targetClusters []string, task *persistence.ReplicationTaskInfo,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	metricsClient metrics.Client, logger bark.Logger, history *shared.History, shardID *int,
+	metricsClient metrics.Client, logger log.Logger, history *shared.History, shardID *int,
 ) (*replicator.ReplicationTask, error) {
 	var err error
 	if history == nil {
@@ -322,7 +320,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 
 // GetAllHistory return history
 func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	metricsClient metrics.Client, logger bark.Logger, byBatch bool,
+	metricsClient metrics.Client, logger log.Logger, byBatch bool,
 	domainID string, workflowID string, runID string, firstEventID int64,
 	nextEventID int64, eventStoreVersion int32, branchToken []byte, shardID *int) (*shared.History, []*shared.History, error) {
 
@@ -358,12 +356,11 @@ func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persisten
 		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
 	}
 	if historySize > common.GetHistoryWarnSizeLimit {
-		logger.WithFields(bark.Fields{
-			logging.TagWorkflowExecutionID: workflowID,
-			logging.TagWorkflowRunID:       runID,
-			logging.TagDomainID:            domainID,
-			logging.TagSize:                historySize,
-		}).Warn("GetHistory size threshold breached")
+		logger.Warn("GetHistory size threshold breached",
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowSize(int64(historySize)))
 	}
 
 	history := &shared.History{
@@ -374,7 +371,7 @@ func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persisten
 
 // PaginateHistory return paged history
 func PaginateHistory(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	metricsClient metrics.Client, logger bark.Logger, byBatch bool,
+	metricsClient metrics.Client, logger log.Logger, byBatch bool,
 	domainID, workflowID, runID string, firstEventID,
 	nextEventID int64, tokenIn []byte, eventStoreVersion int32, branchToken []byte, pageSize int, shardID *int) ([]*shared.HistoryEvent, []*shared.History, []byte, int, error) {
 

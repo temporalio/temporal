@@ -24,10 +24,10 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
-	"github.com/uber-common/bark"
 	uberKafkaClient "github.com/uber-go/kafka-client"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/zap"
 )
@@ -38,14 +38,14 @@ type (
 		config        *KafkaConfig
 		client        uberKafkaClient.Client
 		metricsClient metrics.Client
-		logger        bark.Logger
+		logger        log.Logger
 	}
 )
 
 var _ Client = (*kafkaClient)(nil)
 
 // NewKafkaClient is used to create an instance of KafkaClient
-func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.Logger, logger bark.Logger, metricScope tally.Scope,
+func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.Logger, logger log.Logger, metricScope tally.Scope,
 	checkCluster, checkApp bool) Client {
 	kc.Validate(checkCluster, checkApp)
 

@@ -22,10 +22,10 @@ package history
 
 import (
 	"context"
+	"github.com/uber/cadence/common/log"
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
@@ -105,15 +105,15 @@ func (_m *mockWorkflowExecutionContext) getExecution() *workflow.WorkflowExecuti
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) getLogger() bark.Logger {
+func (_m *mockWorkflowExecutionContext) getLogger() log.Logger {
 	ret := _m.Called()
 
-	var r0 bark.Logger
-	if rf, ok := ret.Get(0).(func() bark.Logger); ok {
+	var r0 log.Logger
+	if rf, ok := ret.Get(0).(func() log.Logger); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(bark.Logger)
+			r0 = ret.Get(0).(log.Logger)
 		}
 	}
 

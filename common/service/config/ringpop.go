@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery"
@@ -66,13 +66,13 @@ var CadenceServices = []string{
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
 	config      *Ringpop
-	logger      bark.Logger
+	logger      log.Logger
 	serviceName string
 }
 
 // NewFactory builds a ringpop factory conforming
 // to the underlying configuration
-func (rpConfig *Ringpop) NewFactory(logger bark.Logger, serviceName string) (*RingpopFactory, error) {
+func (rpConfig *Ringpop) NewFactory(logger log.Logger, serviceName string) (*RingpopFactory, error) {
 	return newRingpopFactory(rpConfig, logger, serviceName)
 }
 
@@ -128,7 +128,7 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 	return nil
 }
 
-func newRingpopFactory(rpConfig *Ringpop, logger bark.Logger, serviceName string) (*RingpopFactory, error) {
+func newRingpopFactory(rpConfig *Ringpop, logger log.Logger, serviceName string) (*RingpopFactory, error) {
 	if err := rpConfig.validate(); err != nil {
 		return nil, err
 	}

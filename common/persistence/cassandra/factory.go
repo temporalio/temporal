@@ -24,7 +24,7 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -35,18 +35,18 @@ type (
 		sync.RWMutex
 		cfg              config.Cassandra
 		clusterName      string
-		logger           bark.Logger
+		logger           log.Logger
 		execStoreFactory *executionStoreFactory
 	}
 	executionStoreFactory struct {
 		session *gocql.Session
-		logger  bark.Logger
+		logger  log.Logger
 	}
 )
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores that are backed by cassandra
-func NewFactory(cfg config.Cassandra, clusterName string, logger bark.Logger) *Factory {
+func NewFactory(cfg config.Cassandra, clusterName string, logger log.Logger) *Factory {
 	return &Factory{
 		cfg:         cfg,
 		clusterName: clusterName,
@@ -134,7 +134,7 @@ func (f *Factory) executionStoreFactory() (*executionStoreFactory, error) {
 }
 
 // newExecutionStoreFactory is used to create an instance of ExecutionStoreFactory implementation
-func newExecutionStoreFactory(cfg config.Cassandra, logger bark.Logger) (*executionStoreFactory, error) {
+func newExecutionStoreFactory(cfg config.Cassandra, logger log.Logger) (*executionStoreFactory, error) {
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
 	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion

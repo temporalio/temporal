@@ -23,8 +23,9 @@ package cassandra
 import (
 	"errors"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -35,13 +36,13 @@ type (
 	metadataManagerProxy struct {
 		metadataMgr   p.MetadataStore
 		metadataMgrV2 p.MetadataStore
-		logger        bark.Logger
+		logger        log.Logger
 	}
 )
 
 // newMetadataManagerProxy is used for merging the functionality the v1 and v2 MetadataManager
 func newMetadataManagerProxy(cfg config.Cassandra,
-	currentClusterName string, logger bark.Logger) (p.MetadataStore, error) {
+	currentClusterName string, logger log.Logger) (p.MetadataStore, error) {
 	metadataMgr, err := newMetadataPersistence(cfg, currentClusterName, logger)
 	if err != nil {
 		return nil, err
@@ -112,11 +113,11 @@ func (m *metadataManagerProxy) UpdateDomain(request *p.UpdateDomainRequest) erro
 func (m *metadataManagerProxy) DeleteDomain(request *p.DeleteDomainRequest) error {
 	err := m.metadataMgr.DeleteDomain(request)
 	if err != nil {
-		m.logger.Warnf("Error deleting domain from V1 table: %v", err)
+		m.logger.Warn("Error deleting domain from V1 table", tag.Error(err))
 	}
 	err = m.metadataMgrV2.DeleteDomain(request)
 	if err != nil {
-		m.logger.Warnf("Error deleting domain from V2 table: %v", err)
+		m.logger.Warn("Error deleting domain from V2 table", tag.Error(err))
 	}
 	return nil
 }
@@ -124,11 +125,11 @@ func (m *metadataManagerProxy) DeleteDomain(request *p.DeleteDomainRequest) erro
 func (m *metadataManagerProxy) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	err := m.metadataMgr.DeleteDomainByName(request)
 	if err != nil {
-		m.logger.Warnf("Error deleting domain by name from V1 table: %v", err)
+		m.logger.Warn("Error deleting domain by name from V1 table", tag.Error(err))
 	}
 	err = m.metadataMgrV2.DeleteDomainByName(request)
 	if err != nil {
-		m.logger.Warnf("Error deleting domain by name from V2 table: %v", err)
+		m.logger.Warn("Error deleting domain by name from V2 table", tag.Error(err))
 	}
 	return nil
 }

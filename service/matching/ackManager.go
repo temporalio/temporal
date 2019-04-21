@@ -23,7 +23,8 @@ package matching
 import (
 	"sync"
 
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/atomic"
 )
 
@@ -34,10 +35,10 @@ type ackManager struct {
 	readLevel        int64          // Maximum TaskID inserted into outstandingTasks
 	ackLevel         int64          // Maximum TaskID below which all tasks are acked
 	backlogCounter   atomic.Int64
-	logger           bark.Logger
+	logger           log.Logger
 }
 
-func newAckManager(logger bark.Logger) ackManager {
+func newAckManager(logger log.Logger) ackManager {
 	return ackManager{logger: logger, outstandingTasks: make(map[int64]bool), readLevel: -1, ackLevel: -1}
 }
 
@@ -46,12 +47,13 @@ func (m *ackManager) addTask(taskID int64) {
 	m.Lock()
 	defer m.Unlock()
 	if m.readLevel >= taskID {
-		m.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", taskID,
-			m.readLevel)
+		m.logger.Fatal("Next task ID is less than current read level.",
+			tag.TaskID(taskID),
+			tag.ReadLevel(m.readLevel))
 	}
 	m.readLevel = taskID
 	if _, ok := m.outstandingTasks[taskID]; ok {
-		m.logger.Fatalf("Already present in outstanding tasks: taskID=%v", taskID)
+		m.logger.Fatal("Already present in outstanding tasks", tag.TaskID(taskID))
 	}
 	m.outstandingTasks[taskID] = false // true is for acked
 	m.backlogCounter.Inc()

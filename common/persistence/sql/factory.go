@@ -23,7 +23,7 @@ package sql
 import (
 	"sync"
 
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
@@ -36,18 +36,18 @@ type (
 		sync.RWMutex
 		cfg              config.SQL
 		clusterName      string
-		logger           bark.Logger
+		logger           log.Logger
 		execStoreFactory *executionStoreFactory
 	}
 	executionStoreFactory struct {
 		db     sqldb.Interface
-		logger bark.Logger
+		logger log.Logger
 	}
 )
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores backed by any kind of SQL store
-func NewFactory(cfg config.SQL, clusterName string, logger bark.Logger) *Factory {
+func NewFactory(cfg config.SQL, clusterName string, logger log.Logger) *Factory {
 	return &Factory{cfg: cfg, clusterName: clusterName, logger: logger}
 }
 
@@ -127,7 +127,7 @@ func (f *Factory) newExecutionStoreFactory() (*executionStoreFactory, error) {
 	return f.execStoreFactory, err
 }
 
-func newExecutionStoreFactory(cfg config.SQL, logger bark.Logger) (*executionStoreFactory, error) {
+func newExecutionStoreFactory(cfg config.SQL, logger log.Logger) (*executionStoreFactory, error) {
 	db, err := storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err

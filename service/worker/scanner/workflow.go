@@ -24,12 +24,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/service/worker/scanner/tasklist"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
 	cclient "go.uber.org/cadence/client"
 	"go.uber.org/cadence/workflow"
-
-	"github.com/uber/cadence/service/worker/scanner/tasklist"
 )
 
 type contextKey int
@@ -86,12 +86,12 @@ func TaskListScannerWorkflow(ctx workflow.Context) error {
 func TaskListScavengerActivity(aCtx context.Context) error {
 	ctx := aCtx.Value(scannerContextKey).(scannerContext)
 	scavenger := tasklist.NewScavenger(ctx.taskDB, ctx.metricsClient, ctx.logger)
-	ctx.barkLogger.Info("Starting task list scavenger")
+	ctx.logger.Info("Starting task list scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
 		activity.RecordHeartbeat(aCtx)
 		if aCtx.Err() != nil {
-			ctx.barkLogger.Infof("activity context error, stopping scavenger: %v", aCtx.Err())
+			ctx.logger.Info("activity context error, stopping scavenger", tag.Error(aCtx.Err()))
 			scavenger.Stop()
 			return aCtx.Err()
 		}

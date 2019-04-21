@@ -21,13 +21,11 @@
 package persistencetests
 
 import (
+	"fmt"
+	"math/rand"
 	"os"
 	"testing"
-
-	"math/rand"
 	"time"
-
-	"fmt"
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"

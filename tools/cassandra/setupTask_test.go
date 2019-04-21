@@ -30,10 +30,11 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
 )
 
@@ -45,7 +46,7 @@ type (
 		keyspace string
 		session  *gocql.Session
 		client   CQLClient
-		log      bark.Logger
+		log      log.Logger
 	}
 )
 
@@ -58,7 +59,9 @@ func (s *SetupSchemaTestSuite) SetupTest() {
 }
 
 func (s *SetupSchemaTestSuite) SetupSuite() {
-	s.log = bark.NewLoggerFromLogrus(log.New())
+	var err error
+	s.log, err = loggerimpl.NewDevelopment()
+	s.Require().NoError(err)
 	s.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	s.keyspace = fmt.Sprintf("setup_schema_test_%v", s.rand.Int63())
 	os.Setenv("CASSANDRA_HOST", environment.GetCassandraAddress())
@@ -69,7 +72,7 @@ func (s *SetupSchemaTestSuite) SetupSuite() {
 
 	err = client.CreateKeyspace(s.keyspace, 1)
 	if err != nil {
-		log.Fatalf("error creating keyspace, err=%v", err)
+		s.log.Fatal("error creating keyspace, ", tag.Error(err))
 	}
 
 	s.client = client

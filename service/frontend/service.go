@@ -24,7 +24,8 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -112,8 +113,8 @@ type Service struct {
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger), params.PersistenceConfig.NumHistoryShards, params.ESConfig.Enable, true)
-	params.ThrottledBarkLogger = logging.NewThrottledLogger(params.BarkLogger, config.ThrottledLogRPS)
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, params.ESConfig.Enable, true)
+	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
 		config: config,
@@ -125,9 +126,9 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 func (s *Service) Start() {
 
 	var params = s.params
-	var log = params.BarkLogger
+	var log = params.Logger
 
-	log.Infof("%v starting", common.FrontendServiceName)
+	log.Info("starting", tag.Service(common.FrontendServiceName))
 
 	base := service.New(params)
 
@@ -143,12 +144,12 @@ func (s *Service) Start() {
 
 	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
 	if err != nil {
-		log.Fatalf("failed to create metadata manager: %v", err)
+		log.Fatal("failed to create metadata manager", tag.Error(err))
 	}
 
 	visibilityFromDB, err := pFactory.NewVisibilityManager()
 	if err != nil {
-		log.Fatalf("failed to create visibility manager: %v", err)
+		log.Fatal("failed to create visibility manager", tag.Error(err))
 	}
 	var visibilityFromES persistence.VisibilityManager
 	if s.config.EnableVisibilityToKafka() {
@@ -172,11 +173,11 @@ func (s *Service) Start() {
 
 	history, err := pFactory.NewHistoryManager()
 	if err != nil {
-		log.Fatalf("Creating history manager persistence failed: %v", err)
+		log.Fatal("Creating history manager persistence failed", tag.Error(err))
 	}
 	historyV2, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
-		log.Fatalf("Creating historyV2 manager persistence failed: %v", err)
+		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}
 
 	// TODO when global domain is enabled, uncomment the line below and remove the line after
@@ -184,7 +185,7 @@ func (s *Service) Start() {
 	if base.GetClusterMetadata().IsGlobalDomainEnabled() {
 		kafkaProducer, err = base.GetMessagingClient().NewProducerWithClusterName(base.GetClusterMetadata().GetCurrentClusterName())
 		if err != nil {
-			log.Fatalf("Creating kafka producer failed: %v", err)
+			log.Fatal("Creating kafka producer failed", tag.Error(err))
 		}
 	} else {
 		kafkaProducer = &mocks.KafkaProducer{}
@@ -198,7 +199,7 @@ func (s *Service) Start() {
 	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, metadata, history, historyV2)
 	adminHandler.Start()
 
-	log.Infof("%v started", common.FrontendServiceName)
+	log.Info("started", tag.Service(common.FrontendServiceName))
 
 	<-s.stopC
 
@@ -211,5 +212,5 @@ func (s *Service) Stop() {
 	case s.stopC <- struct{}{}:
 	default:
 	}
-	s.params.BarkLogger.Infof("%v stopped", common.FrontendServiceName)
+	s.params.Logger.Info("stopped", tag.Service(common.FrontendServiceName))
 }

@@ -22,21 +22,18 @@ package history
 
 import (
 	"errors"
-	"os"
 	"sync"
 	"testing"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
-
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -51,7 +48,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		logger              bark.Logger
+		logger              log.Logger
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
@@ -69,9 +66,7 @@ func TestHistoryCacheSuite(t *testing.T) {
 }
 
 func (s *historyCacheSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
+
 }
 
 func (s *historyCacheSuite) TearDownSuite() {
@@ -79,7 +74,7 @@ func (s *historyCacheSuite) TearDownSuite() {
 }
 
 func (s *historyCacheSuite) SetupTest() {
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
@@ -88,7 +83,7 @@ func (s *historyCacheSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},

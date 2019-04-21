@@ -21,13 +21,11 @@
 package history
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
@@ -35,6 +33,9 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
@@ -74,7 +75,7 @@ type (
 		eventsCache            eventsCache
 
 		config                    *Config
-		logger                    bark.Logger
+		logger                    log.Logger
 		metricsClient             metrics.Client
 		standbyClusterCurrentTime map[string]time.Time
 		timerMaxReadLevelMap      map[string]time.Time
@@ -92,7 +93,7 @@ var _ ShardContext = (*TestShardContext)(nil)
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, executionMgr persistence.ExecutionManager,
 	metadataMgr persistence.MetadataManager, metadataMgrV2 persistence.MetadataManager, clusterMetadata cluster.Metadata,
-	clientBean client.Bean, config *Config, logger bark.Logger) *TestShardContext {
+	clientBean client.Bean, config *Config, logger log.Logger) *TestShardContext {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, metricsClient, logger)
 
@@ -115,7 +116,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 
 	shardCtx := &TestShardContext{
 		shardID:                   0,
-		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, clientBean, logger),
+		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, clientBean),
 		shardInfo:                 shardInfo,
 		transferSequenceNumber:    transferSequenceNumber,
 		historyMgr:                historyMgr,
@@ -378,8 +379,8 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 		if ts.Before(s.timerMaxReadLevelMap[clusterName]) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.WithField("Cluster", clusterName).Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
-				time.Now(), ts, s.timerMaxReadLevelMap[clusterName])
+			s.logger.Warn(fmt.Sprintf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
+				time.Now(), ts, s.timerMaxReadLevelMap[clusterName]), tag.ClusterName(clusterName))
 			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[clusterName].Add(time.Millisecond))
 		}
 		seqID, err := s.GetNextTransferTaskID()
@@ -388,8 +389,8 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 		}
 		task.SetTaskID(seqID)
 		visibilityTs := task.GetVisibilityTimestamp()
-		s.logger.Infof("%v: TestShardContext: Assigning timer (timestamp: %v, seq: %v)",
-			time.Now().UTC(), visibilityTs, task.GetTaskID())
+		s.logger.Info(fmt.Sprintf("%v: TestShardContext: Assigning timer (timestamp: %v, seq: %v)",
+			time.Now().UTC(), visibilityTs, task.GetTaskID()))
 	}
 	resp, err := s.executionMgr.UpdateWorkflowExecution(request)
 	return resp, err
@@ -450,12 +451,12 @@ func (s *TestShardContext) GetConfig() *Config {
 }
 
 // GetLogger test implementation
-func (s *TestShardContext) GetLogger() bark.Logger {
+func (s *TestShardContext) GetLogger() log.Logger {
 	return s.logger
 }
 
 // GetThrottledLogger returns a throttled logger
-func (s *TestShardContext) GetThrottledLogger() bark.Logger {
+func (s *TestShardContext) GetThrottledLogger() log.Logger {
 	return s.logger
 }
 
@@ -528,7 +529,7 @@ func NewDynamicConfigForEventsV2Test() *Config {
 func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
-	log := bark.NewLoggerFromLogrus(log.New())
+	log := loggerimpl.NewDevelopmentForTest(s.Suite)
 	config := NewDynamicConfigForTest()
 	clusterMetadata := cluster.GetTestClusterMetadata(false, false, false)
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,

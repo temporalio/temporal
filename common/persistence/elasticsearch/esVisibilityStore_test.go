@@ -24,20 +24,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"testing"
+
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
 	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"strings"
-	"testing"
 )
 
 type ESVisibilitySuite struct {
@@ -93,7 +94,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	config := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
 	}
-	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, config, bark.NewNopLogger())
+	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, config, loggerimpl.NewNopLogger())
 	s.visibilityStore = mgr.(*esVisibilityStore)
 }
 

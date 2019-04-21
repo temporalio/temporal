@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 type sizeLimitIntegrationSuite struct {
@@ -89,7 +90,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	activityCount := int32(4)
 	activityCounter := int32(0)
@@ -136,23 +137,23 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
 	for i := int32(0); i < activityCount-1; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(err)
 
 		err = poller.PollAndProcessActivityTask(false)
-		s.BarkLogger.Infof("PollAndProcessActivityTask: %v", err)
+		s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 		s.Nil(err)
 	}
 
 	// process this decision will trigger history exceed limit error
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NotNil(err)
 	s.Equal(&workflow.EntityNotExistsError{Message: "Workflow execution already completed."}, err)
 
@@ -191,7 +192,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			isCloseCorrect = true
 			break
 		}
-		s.BarkLogger.Info("Closed WorkflowExecution is not yet visible")
+		s.Logger.Info("Closed WorkflowExecution is not yet visible")
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.True(isCloseCorrect)

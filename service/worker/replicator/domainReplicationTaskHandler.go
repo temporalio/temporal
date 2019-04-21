@@ -22,10 +22,10 @@ package replicator
 
 import (
 	"errors"
-	"github.com/uber/cadence/common/log"
 
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 )
 

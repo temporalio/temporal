@@ -30,23 +30,20 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
-
 	"time"
-
-	"strconv"
-
-	"runtime"
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/cassandra"
@@ -469,14 +466,14 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 		maxID = maxRereplicateEventID
 	}
 
-	histV1 := cassandra.NewHistoryPersistenceFromSession(session, bark.NewNopLogger())
-	historyMgr := persistence.NewHistoryManagerImpl(histV1, bark.NewNopLogger())
+	histV1 := cassandra.NewHistoryPersistenceFromSession(session, loggerimpl.NewNopLogger())
+	historyMgr := persistence.NewHistoryManagerImpl(histV1, loggerimpl.NewNopLogger())
 
-	histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, bark.NewNopLogger())
-	historyV2Mgr := persistence.NewHistoryV2ManagerImpl(histV2, bark.NewNopLogger())
+	histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
+	historyV2Mgr := persistence.NewHistoryV2ManagerImpl(histV2, loggerimpl.NewNopLogger())
 
-	exeM := cassandra.NewWorkflowExecutionPersistenceFromSession(session, shardID, bark.NewNopLogger())
-	exeMgr := persistence.NewExecutionManagerImpl(exeM, bark.NewNopLogger())
+	exeM := cassandra.NewWorkflowExecutionPersistenceFromSession(session, shardID, loggerimpl.NewNopLogger())
+	exeMgr := persistence.NewExecutionManagerImpl(exeM, loggerimpl.NewNopLogger())
 
 	for {
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
@@ -510,7 +507,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 			BranchToken:         exeInfo.GetCurrentBranch(),
 		}
 
-		_, historyBatches, err := history.GetAllHistory(historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), true,
+		_, historyBatches, err := history.GetAllHistory(historyMgr, historyV2Mgr, nil, loggerimpl.NewNopLogger(), true,
 			domainID, wid, rid, minID, maxID, exeInfo.EventStoreVersion, exeInfo.GetCurrentBranch(), common.IntPtr(shardID))
 
 		if err != nil {
@@ -543,7 +540,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 			taskTemplate.Version = firstEvent.GetVersion()
 			taskTemplate.FirstEventID = firstEvent.GetEventId()
 			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
-			task, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), batch, common.IntPtr(shardID))
+			task, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, loggerimpl.NewNopLogger(), batch, common.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
 			}
@@ -658,7 +655,7 @@ func newKafkaProducer(c *cli.Context) messaging.Producer {
 	if err != nil {
 		ErrorAndExit("", err)
 	}
-	logger := bark.NewNopLogger()
+	logger := loggerimpl.NewNopLogger()
 
 	producer := messaging.NewKafkaProducer(destTopic, sproducer, logger)
 	return producer

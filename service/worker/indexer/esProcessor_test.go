@@ -29,7 +29,7 @@ import (
 	"github.com/uber/cadence/common/collection"
 	es "github.com/uber/cadence/common/elasticsearch"
 	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
-	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	msgMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
@@ -79,7 +79,7 @@ func (s *esProcessorSuite) SetupTest() {
 
 	p := &esProcessorImpl{
 		config:        config,
-		logger:        log.NewLogger(zapLogger),
+		logger:        loggerimpl.NewLogger(zapLogger),
 		metricsClient: s.mockMetricClient,
 	}
 	p.mapToKafkaMsg = collection.NewShardedConcurrentTxMap(1024, p.hashFn)

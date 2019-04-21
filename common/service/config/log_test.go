@@ -21,9 +21,9 @@
 package config
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -43,12 +43,12 @@ func (s *LogSuite) SetupTest() {
 }
 
 func (s *LogSuite) TestParseLogLevel() {
-	s.Equal(logrus.DebugLevel, parseLogrusLevel("debug"))
-	s.Equal(logrus.InfoLevel, parseLogrusLevel("info"))
-	s.Equal(logrus.WarnLevel, parseLogrusLevel("warn"))
-	s.Equal(logrus.ErrorLevel, parseLogrusLevel("error"))
-	s.Equal(logrus.FatalLevel, parseLogrusLevel("fatal"))
-	s.Equal(logrus.InfoLevel, parseLogrusLevel("unknown"))
+	s.Equal(zap.DebugLevel, parseZapLevel("debug"))
+	s.Equal(zap.InfoLevel, parseZapLevel("info"))
+	s.Equal(zap.WarnLevel, parseZapLevel("warn"))
+	s.Equal(zap.ErrorLevel, parseZapLevel("error"))
+	s.Equal(zap.FatalLevel, parseZapLevel("fatal"))
+	s.Equal(zap.InfoLevel, parseZapLevel("unknown"))
 }
 
 func (s *LogSuite) TestNewLogger() {
@@ -63,7 +63,7 @@ func (s *LogSuite) TestNewLogger() {
 		OutputFile: dir + "/test.log",
 	}
 
-	log := config.NewBarkLogger()
+	log := config.NewZapLogger()
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)

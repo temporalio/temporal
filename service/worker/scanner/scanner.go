@@ -24,7 +24,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -63,10 +62,7 @@ type (
 		SDKClient workflowserviceclient.Interface
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
-		// Deprecated
-		// Logger is an instance of bark logger
-		BarkLogger bark.Logger
-		Logger     log.Logger
+		Logger        log.Logger
 		// TallyScope is an instance of tally metrics scope
 		TallyScope tally.Scope
 	}
@@ -80,7 +76,6 @@ type (
 		sdkClient     workflowserviceclient.Interface
 		metricsClient metrics.Client
 		tallyScope    tally.Scope
-		barkLogger    bark.Logger
 		logger        log.Logger
 		zapLogger     *zap.Logger
 	}
@@ -110,7 +105,6 @@ func New(params *BootstrapParams) *Scanner {
 			cfg:           cfg,
 			sdkClient:     params.SDKClient,
 			metricsClient: params.MetricsClient,
-			barkLogger:    params.BarkLogger,
 			tallyScope:    params.TallyScope,
 			zapLogger:     zapLogger,
 			logger:        params.Logger,
@@ -164,7 +158,7 @@ func (s *Scanner) startWorkflow(client cclient.Client) error {
 
 func (s *Scanner) buildContext() error {
 	cfg := &s.context.cfg
-	pFactory := pfactory.New(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.barkLogger)
+	pFactory := pfactory.New(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.logger)
 	domainDB, err := pFactory.NewMetadataManager(pfactory.MetadataV1V2)
 	if err != nil {
 		return err

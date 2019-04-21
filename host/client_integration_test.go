@@ -33,13 +33,13 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/cadence/activity"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
+	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/client"
 	"go.uber.org/cadence/encoded"
 	cworker "go.uber.org/cadence/worker"
@@ -80,14 +80,14 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	var err error
 	s.wfService, err = s.buildServiceClient()
 	if err != nil {
-		s.BarkLogger.Fatalf("Error when build service client: %v", err)
+		s.Logger.Fatal("Error when build service client", tag.Error(err))
 	}
 	s.wfClient = client.NewClient(s.wfService, s.domainName, nil)
 
 	s.taskList = "client-integration-test-tasklist"
 	s.worker = cworker.New(s.wfService, s.domainName, s.taskList, cworker.Options{})
 	if err := s.worker.Start(); err != nil {
-		s.BarkLogger.Fatalf("Error when start worker: %v", err)
+		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
 }
 
@@ -105,7 +105,7 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Int
 
 	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName))
 	if err != nil {
-		s.BarkLogger.Fatalf("Failed to create transport channel: %v", err)
+		s.Logger.Fatal("Failed to create transport channel", tag.Error(err))
 	}
 
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{
@@ -115,10 +115,10 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Int
 		},
 	})
 	if dispatcher == nil {
-		s.BarkLogger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
+		s.Logger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
 	}
 	if err := dispatcher.Start(); err != nil {
-		s.BarkLogger.Fatalf("Failed to create outbound transport channel: %v", err)
+		s.Logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
 	}
 
 	return workflowserviceclient.New(dispatcher.ClientConfig(cadenceFrontendService)), nil
@@ -200,7 +200,7 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 	}
 	worker := cworker.New(s.wfService, s.domainName, tl, opts)
 	if err := worker.Start(); err != nil {
-		s.BarkLogger.Fatalf("Error when start worker with data converter: %v", err)
+		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
 	}
 	return worker
 }
@@ -221,7 +221,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
-		s.BarkLogger.Fatalf("Start workflow with err: %v", err)
+		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
@@ -252,7 +252,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
-		s.BarkLogger.Fatalf("Start workflow with err: %v", err)
+		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
@@ -355,7 +355,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {
-		s.BarkLogger.Fatalf("Start workflow with err: %v", err)
+		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")

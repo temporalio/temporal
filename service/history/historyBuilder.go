@@ -21,11 +21,11 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 type (
@@ -33,23 +33,23 @@ type (
 		transientHistory []*workflow.HistoryEvent
 		history          []*workflow.HistoryEvent
 		msBuilder        mutableState
-		logger           bark.Logger
+		logger           log.Logger
 	}
 )
 
-func newHistoryBuilder(msBuilder mutableState, logger bark.Logger) *historyBuilder {
+func newHistoryBuilder(msBuilder mutableState, logger log.Logger) *historyBuilder {
 	return &historyBuilder{
 		transientHistory: []*workflow.HistoryEvent{},
 		history:          []*workflow.HistoryEvent{},
 		msBuilder:        msBuilder,
-		logger:           logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
+		logger:           logger.WithTags(tag.ComponentHistoryBuilder),
 	}
 }
 
-func newHistoryBuilderFromEvents(history []*workflow.HistoryEvent, logger bark.Logger) *historyBuilder {
+func newHistoryBuilderFromEvents(history []*workflow.HistoryEvent, logger log.Logger) *historyBuilder {
 	return &historyBuilder{
 		history: history,
-		logger:  logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
+		logger:  logger.WithTags(tag.ComponentHistoryBuilder),
 	}
 }
 

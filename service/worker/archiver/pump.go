@@ -21,9 +21,9 @@
 package archiver
 
 import (
-	"github.com/uber/cadence/common/log"
 	"time"
 
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/workflow"
 )

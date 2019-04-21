@@ -23,12 +23,10 @@ package persistence
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/uber/cadence/common/logging"
-
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 type (
@@ -37,7 +35,7 @@ type (
 	historyManagerImpl struct {
 		serializer  PayloadSerializer
 		persistence HistoryStore
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	// historyToken is used to serialize/deserialize pagination token for GetWorkflowExecutionHistory
@@ -51,7 +49,7 @@ type (
 var _ HistoryManager = (*historyManagerImpl)(nil)
 
 //NewHistoryManagerImpl returns new HistoryManager
-func NewHistoryManagerImpl(persistence HistoryStore, logger bark.Logger) HistoryManager {
+func NewHistoryManagerImpl(persistence HistoryStore, logger log.Logger) HistoryManager {
 	return &historyManagerImpl{
 		serializer:  NewPayloadSerializer(),
 		persistence: persistence,
@@ -164,12 +162,8 @@ func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExe
 				// However, for getting history from remote cluster, there is scenario that we have to read from middle without knowing the firstEventID.
 				// In that case we don't validate history continuousness for the first page
 				// TODO: in this case, some events returned can be invalid(stale). application layer need to make sure it won't make any problems to XDC
-				logger := m.logger.WithFields(bark.Fields{
-					logging.TagWorkflowExecutionID: request.Execution.GetWorkflowId(),
-					logging.TagWorkflowRunID:       request.Execution.GetRunId(),
-					logging.TagDomainID:            request.DomainID,
-				})
-				logger.Error("Unexpected event batch")
+				m.logger.Error("Unexpected event batch",
+					tag.WorkflowID(request.Execution.GetWorkflowId()), tag.WorkflowRunID(request.Execution.GetRunId()), tag.WorkflowDomainID(request.DomainID))
 				return nil, nil, nil, 0, 0, fmt.Errorf("corrupted history event batch")
 			}
 			token.LastEventID = historyBatch[0].GetEventId() - 1

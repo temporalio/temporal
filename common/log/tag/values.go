@@ -78,6 +78,7 @@ var (
 	ComponentEventsCache              = component("events-cache")
 	ComponentTransferQueue            = component("transfer-queue-processor")
 	ComponentTimerQueue               = component("timer-queue-processor")
+	ComponentTimerBuilder             = component("timer-builder")
 	ComponentReplicatorQueue          = component("replicator-queue-processor")
 	ComponentShardController          = component("shard-controller")
 	ComponentShard                    = component("shard")
@@ -93,6 +94,7 @@ var (
 	ComponentESVisibilityManager      = component("es-visibility-manager")
 	ComponentArchiver                 = component("archiver")
 	ComponentWorker                   = component("worker")
+	ComponentServiceResolver          = component("service-resolver")
 )
 
 // Pre-defined values for TagSysLifecycle

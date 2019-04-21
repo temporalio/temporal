@@ -21,21 +21,21 @@
 package history
 
 import (
-	"os"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -49,7 +49,7 @@ type (
 		engineImpl     *historyEngineImpl
 		matchingClient matching.Client
 		shardClosedCh  chan int
-		logger         bark.Logger
+		logger         log.Logger
 
 		mockMetadataMgr     *mocks.MetadataManager
 		mockVisibilityMgr   *mocks.VisibilityManager
@@ -65,13 +65,8 @@ func TestTimerQueueProcessorSuite(t *testing.T) {
 }
 
 func (s *timerQueueProcessorSuite) SetupTest() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 
 	s.SetupWorkflowStore()
 	s.SetupDomains()
@@ -126,8 +121,8 @@ func (s *timerQueueProcessorSuite) updateTimerSeqNumbers(timerTasks []persistenc
 		if ts.Before(s.engineImpl.shard.GetTimerMaxReadLevel(cluster)) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
-				time.Now(), ts, s.engineImpl.shard.GetTimerMaxReadLevel(cluster))
+			s.logger.Warn(fmt.Sprintf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
+				time.Now(), ts, s.engineImpl.shard.GetTimerMaxReadLevel(cluster)))
 			task.SetVisibilityTimestamp(s.engineImpl.shard.GetTimerMaxReadLevel(cluster).Add(time.Millisecond))
 		}
 		taskID, err := s.ShardContext.GetNextTransferTaskID()
@@ -136,8 +131,8 @@ func (s *timerQueueProcessorSuite) updateTimerSeqNumbers(timerTasks []persistenc
 		}
 		task.SetTaskID(taskID)
 		ts = task.GetVisibilityTimestamp()
-		s.logger.Infof("%v: TestTimerQueueProcessorSuite: Assigning timer: %s",
-			time.Now().UTC(), TimerSequenceID{VisibilityTimestamp: ts, TaskID: task.GetTaskID()})
+		s.logger.Info(fmt.Sprintf("%v: TestTimerQueueProcessorSuite: Assigning timer: %s",
+			time.Now().UTC(), TimerSequenceID{VisibilityTimestamp: ts, TaskID: task.GetTaskID()}))
 	}
 }
 

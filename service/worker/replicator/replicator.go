@@ -23,9 +23,6 @@ package replicator
 import (
 	"context"
 	"fmt"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
@@ -35,6 +32,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -54,7 +53,6 @@ type (
 		config            *Config
 		client            messaging.Client
 		processors        []*replicationTaskProcessor
-		barkLogger        bark.Logger
 		logger            log.Logger
 		metricsClient     metrics.Client
 		historySerializer persistence.PayloadSerializer
@@ -78,7 +76,7 @@ const (
 // NewReplicator creates a new replicator for processing replication tasks
 func NewReplicator(clusterMetadata cluster.Metadata, metadataManagerV2 persistence.MetadataManager,
 	domainCache cache.DomainCache, clientBean client.Bean, config *Config,
-	client messaging.Client, barkLogger bark.Logger, logger log.Logger, metricsClient metrics.Client) *Replicator {
+	client messaging.Client, logger log.Logger, metricsClient metrics.Client) *Replicator {
 
 	logger = logger.WithTags(tag.ComponentReplicator)
 	return &Replicator{
@@ -89,7 +87,6 @@ func NewReplicator(clusterMetadata cluster.Metadata, metadataManagerV2 persisten
 		historyClient:     clientBean.GetHistoryClient(),
 		config:            config,
 		client:            client,
-		barkLogger:        barkLogger,
 		logger:            logger,
 		metricsClient:     metricsClient,
 		historySerializer: persistence.NewPayloadSerializer(),
@@ -122,7 +119,7 @@ func (r *Replicator) Start() error {
 				},
 				r.historySerializer,
 				replicationTimeout,
-				r.barkLogger,
+				r.logger,
 			)
 			r.processors = append(r.processors, newReplicationTaskProcessor(
 				currentClusterName, cluster, consumerName, r.client,

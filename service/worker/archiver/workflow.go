@@ -22,6 +22,7 @@ package archiver
 
 import (
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/workflow"
@@ -55,7 +56,7 @@ func archivalWorkflowHelper(
 		tag.WorkflowRunID(workflowInfo.WorkflowExecution.RunID),
 		tag.WorkflowTaskListName(workflowInfo.TaskListName),
 		tag.WorkflowType(workflowInfo.WorkflowType.Name))
-	logger = log.NewReplayLogger(logger, ctx, false)
+	logger = loggerimpl.NewReplayLogger(logger, ctx, false)
 
 	logger.Info("archival system workflow started")
 	var dcResult dynamicConfigResult

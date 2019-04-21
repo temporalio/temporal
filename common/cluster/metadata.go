@@ -22,10 +22,9 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -58,7 +57,7 @@ type (
 	}
 
 	metadataImpl struct {
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 		// EnableGlobalDomain whether the global domain is enabled,
 		// this attr should be discarded when cross DC is made public
@@ -88,7 +87,7 @@ type (
 
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
-	logger bark.Logger,
+	logger log.Logger,
 	metricsClient metrics.Client,
 	enableGlobalDomain dynamicconfig.BoolPropertyFn,
 	failoverVersionIncrement int64,
@@ -237,10 +236,10 @@ func (metadata *metadataImpl) GetAllClientAddress() map[string]config.Address {
 func (metadata *metadataImpl) ArchivalConfig() (retCfg *ArchivalConfig) {
 	status, err := getArchivalStatus(metadata.archivalStatus())
 	if err != nil {
-		metadata.logger.WithFields(bark.Fields{
-			logging.TagClusterArchivalStatus: metadata.archivalStatus(),
-			logging.TagErr:                   err,
-		}).Error("error getting archival config, invalid archival status in dynamic config")
+		metadata.logger.Error("error getting archival config, invalid archival status in dynamic config",
+			tag.ArchivalClusterArchivalStatus(metadata.archivalStatus),
+			tag.Error(err))
+
 		metadata.metricsClient.IncCounter(metrics.ClusterMetadataArchivalConfigScope, metrics.ArchivalConfigFailures)
 	}
 	return NewArchivalConfig(status, metadata.defaultBucket, metadata.enableReadFromArchival())

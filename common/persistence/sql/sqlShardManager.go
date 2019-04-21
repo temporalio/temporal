@@ -25,9 +25,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
@@ -40,7 +39,7 @@ type sqlShardManager struct {
 }
 
 // newShardPersistence creates an instance of ShardManager
-func newShardPersistence(cfg config.SQL, currentClusterName string, log bark.Logger) (persistence.ShardManager, error) {
+func newShardPersistence(cfg config.SQL, currentClusterName string, log log.Logger) (persistence.ShardManager, error) {
 	var db, err = storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err

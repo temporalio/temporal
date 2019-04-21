@@ -26,10 +26,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"go.uber.org/yarpc"
@@ -61,7 +62,7 @@ type (
 		DecisionHandler                     decisionTaskHandler
 		ActivityHandler                     activityTaskHandler
 		QueryHandler                        queryHandler
-		Logger                              bark.Logger
+		Logger                              log.Logger
 		T                                   *testing.T
 	}
 )
@@ -136,7 +137,7 @@ Loop:
 
 			events = history.Events
 			if events == nil || len(events) == 0 {
-				p.Logger.Fatalf("History Events are empty: %v", events)
+				p.Logger.Fatal("History Events are empty")
 			}
 
 			nextPageToken := response.NextPageToken
@@ -206,7 +207,7 @@ Loop:
 		executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
 			common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
 		if err != nil {
-			p.Logger.Infof("Failing Decision. Decision handler failed with error: %v", err)
+			p.Logger.Info("Failing Decision. Decision handler failed with error", tag.Error(err))
 			return isQueryTask, nil, p.Engine.RespondDecisionTaskFailed(createContext(), &workflow.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Cause:     common.DecisionTaskFailedCausePtr(workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure),
@@ -215,7 +216,7 @@ Loop:
 			})
 		}
 
-		p.Logger.Infof("Completing Decision.  Decisions: %v", decisions)
+		p.Logger.Info("Completing Decision.  Decisions", tag.Value(decisions))
 		if !respondStickyTaskList {
 			// non sticky tasklist
 			newTask, err := p.Engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
@@ -270,7 +271,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTas
 
 	events = history.Events
 	if events == nil || len(events) == 0 {
-		p.Logger.Fatalf("History Events are empty: %v", events)
+		p.Logger.Fatal("History Events are empty")
 	}
 
 	nextPageToken := response.NextPageToken
@@ -292,7 +293,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTas
 	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
 		common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
 	if err != nil {
-		p.Logger.Infof("Failing Decision. Decision handler failed with error: %v", err)
+		p.Logger.Info("Failing Decision. Decision handler failed with error: %v", tag.Error(err))
 		return nil, p.Engine.RespondDecisionTaskFailed(createContext(), &workflow.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
 			Cause:     common.DecisionTaskFailedCausePtr(workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure),
@@ -301,7 +302,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTas
 		})
 	}
 
-	p.Logger.Infof("Completing Decision.  Decisions: %v", decisions)
+	p.Logger.Info("Completing Decision.  Decisions: %v", tag.Value(decisions))
 
 	// sticky tasklist
 	newTask, err := p.Engine.RespondDecisionTaskCompleted(
@@ -354,7 +355,7 @@ retry:
 			p.Logger.Info("Dropping Activity task: ")
 			return nil
 		}
-		p.Logger.Debugf("Received Activity task: %v", response)
+		p.Logger.Debug("Received Activity task", tag.Value(response))
 
 		result, cancel, err2 := p.ActivityHandler(response.WorkflowExecution, response.ActivityType, *response.ActivityId,
 			response.Input, response.TaskToken)
@@ -418,7 +419,7 @@ retry:
 			p.Logger.Info("Dropping Activity task: ")
 			return nil
 		}
-		p.Logger.Debugf("Received Activity task: %v", response)
+		p.Logger.Debug("Received Activity task: %v", tag.Value(response))
 
 		result, cancel, err2 := p.ActivityHandler(response.WorkflowExecution, response.ActivityType, *response.ActivityId,
 			response.Input, response.TaskToken)

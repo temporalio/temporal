@@ -26,14 +26,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
-	"github.com/uber-common/bark"
+	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/cassandra"
 	pfactory "github.com/uber/cadence/common/persistence/persistence-factory"
@@ -76,6 +76,7 @@ type (
 		ReplicationReadLevel  int64
 		DefaultTestCluster    PersistenceTestCluster
 		VisibilityTestCluster PersistenceTestCluster
+		logger                log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -136,11 +137,17 @@ func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) T
 		metadata = cluster.GetTestClusterMetadata(false, false, false)
 	}
 	options.ClusterMetadata = metadata
-	return TestBase{
+	base := TestBase{
 		DefaultTestCluster:    testCluster,
 		VisibilityTestCluster: testCluster,
 		ClusterMetadata:       metadata,
 	}
+	logger, err := loggerimpl.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	base.logger = logger
+	return base
 }
 
 // Config returns the persistence configuration for this test
@@ -160,7 +167,6 @@ func (s *TestBase) Setup() {
 	var err error
 	shardID := 10
 	clusterName := s.ClusterMetadata.GetCurrentClusterName()
-	log := bark.NewLoggerFromLogrus(log.New())
 
 	s.DefaultTestCluster.SetupTestDatabase()
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
@@ -168,7 +174,7 @@ func (s *TestBase) Setup() {
 	}
 
 	cfg := s.DefaultTestCluster.Config()
-	factory := pfactory.New(&cfg, clusterName, nil, log)
+	factory := pfactory.New(&cfg, clusterName, nil, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -198,7 +204,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = pfactory.New(&vCfg, clusterName, nil, log)
+		visibilityFactory = pfactory.New(&vCfg, clusterName, nil, s.logger)
 	}
 	// SQL currently doesn't have support for visibility manager
 	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()
@@ -225,7 +231,7 @@ func (s *TestBase) Setup() {
 
 func (s *TestBase) fatalOnError(msg string, err error) {
 	if err != nil {
-		log.Fatalf("%v:%v", msg, err)
+		s.logger.Fatal(msg, tag.Error(err))
 	}
 }
 
@@ -1172,41 +1178,39 @@ func (s *TestBase) ClearTasks() {
 
 // ClearTransferQueue completes all tasks in transfer queue
 func (s *TestBase) ClearTransferQueue() {
-	log.Infof("Clearing transfer tasks (RangeID: %v, ReadLevel: %v)",
-		s.ShardInfo.RangeID, s.GetTransferReadLevel())
+	s.logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetTransferReadLevel()))
 	tasks, err := s.GetTransferTasks(100, true)
 	if err != nil {
-		log.Fatalf("Error during cleanup: %v", err)
+		s.logger.Fatal("Error during cleanup", tag.Error(err))
 	}
 
 	counter := 0
 	for _, t := range tasks {
-		log.Infof("Deleting transfer task with ID: %v", t.TaskID)
+		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.TaskID))
 		s.CompleteTransferTask(t.TaskID)
 		counter++
 	}
 
-	log.Infof("Deleted '%v' transfer tasks.", counter)
+	s.logger.Info("Deleted transfer tasks.", tag.Counter(counter))
 	atomic.StoreInt64(&s.ReadLevel, 0)
 }
 
 // ClearReplicationQueue completes all tasks in replication queue
 func (s *TestBase) ClearReplicationQueue() {
-	log.Infof("Clearing replication tasks (RangeID: %v, ReadLevel: %v)",
-		s.ShardInfo.RangeID, s.GetReplicationReadLevel())
+	s.logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetReplicationReadLevel()))
 	tasks, err := s.GetReplicationTasks(100, true)
 	if err != nil {
-		log.Fatalf("Error during cleanup: %v", err)
+		s.logger.Fatal("Error during cleanup", tag.Error(err))
 	}
 
 	counter := 0
 	for _, t := range tasks {
-		log.Infof("Deleting replication task with ID: %v", t.TaskID)
+		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.TaskID))
 		s.CompleteReplicationTask(t.TaskID)
 		counter++
 	}
 
-	log.Infof("Deleted '%v' replication tasks.", counter)
+	s.logger.Info("Deleted replication tasks.", tag.Counter(counter))
 	atomic.StoreInt64(&s.ReplicationReadLevel, 0)
 }
 
@@ -1224,11 +1228,11 @@ func (s *TestBase) EqualTimes(t1, t2 time.Time) {
 	s.EqualTimesWithPrecision(t1, t2, TimePrecision)
 }
 
-func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
+func (s *TestBase) validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 	currentTime := time.Now()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
 	if diff > expectedDuration {
-		log.Infof("Current time: %v, Application time: %v, Differenrce: %v", currentTime, t, diff)
+		s.logger.Info("Check Current time, Application time, Differenrce", tag.Timestamp(t), tag.CursorTimestamp(currentTime), tag.Number(int64(diff)))
 		return false
 	}
 	return true

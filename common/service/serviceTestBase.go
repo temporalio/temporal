@@ -24,15 +24,12 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/zap"
 
-	"github.com/uber-common/bark"
-
-	"github.com/uber/cadence/common/logging"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/yarpc"
 )
 
@@ -46,9 +43,8 @@ type (
 		clientBean        client.Bean
 		membershipMonitor membership.Monitor
 
-		metrics    metrics.Client
-		barkLogger bark.Logger
-		logger     log.Logger
+		metrics metrics.Client
+		logger  log.Logger
 	}
 )
 
@@ -64,13 +60,13 @@ var (
 
 // NewTestService is the new service instance created for testing
 func NewTestService(clusterMetadata cluster.Metadata, messagingClient messaging.Client, metrics metrics.Client,
-	clientBean client.Bean, barkLogger bark.Logger) Service {
+	clientBean client.Bean) Service {
 
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
-	logger := log.NewLogger(zapLogger)
+	logger := loggerimpl.NewLogger(zapLogger)
 
 	return &serviceTestBase{
 		hostInfo:        testHostInfo,
@@ -78,7 +74,6 @@ func NewTestService(clusterMetadata cluster.Metadata, messagingClient messaging.
 		messagingClient: messagingClient,
 		metrics:         metrics,
 		clientBean:      clientBean,
-		barkLogger:      barkLogger,
 		logger:          logger,
 	}
 }
@@ -94,15 +89,6 @@ func (s *serviceTestBase) Start() {
 
 // Stop stops the service
 func (s *serviceTestBase) Stop() {
-}
-
-// GetBarkLogger returns the logger for service
-func (s *serviceTestBase) GetBarkLogger() bark.Logger {
-	return s.barkLogger
-}
-
-func (s *serviceTestBase) GetThrottledBarkLogger() bark.Logger {
-	return logging.NewThrottledLogger(s.barkLogger, func(opts ...dynamicconfig.FilterOption) int { return 10 })
 }
 
 func (s *serviceTestBase) GetLogger() log.Logger {

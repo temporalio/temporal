@@ -21,11 +21,11 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -41,7 +41,7 @@ type (
 		executionManager   persistence.ExecutionManager
 		cache              *historyCache
 		transferTaskFilter queueTaskFilter
-		logger             bark.Logger
+		logger             log.Logger
 		metricsClient      metrics.Client
 		*transferQueueProcessorBase
 		*queueProcessorBase
@@ -53,7 +53,7 @@ type (
 func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer,
 	matchingClient matching.Client, taskAllocator taskAllocator, historyRereplicator xdc.HistoryRereplicator,
-	logger bark.Logger) *transferQueueStandbyProcessorImpl {
+	logger log.Logger) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorStartDelay,
@@ -67,9 +67,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 		MaxRetryCount:                      config.TransferTaskMaxRetryCount,
 		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
 	}
-	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowCluster: clusterName,
-	})
+	logger = logger.WithTags(tag.ClusterName(clusterName))
 
 	transferTaskFilter := func(qTask queueTaskInfo) (bool, error) {
 		task, ok := qTask.(*persistence.TransferTaskInfo)
@@ -529,13 +527,12 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(transferTask 
 		transferTask.RunID, common.EndEventID, // use common.EndEventID since we do not know where is the end
 	)
 	if err != nil {
-		t.logger.WithFields(bark.Fields{
-			logging.TagDomainID:            transferTask.DomainID,
-			logging.TagWorkflowExecutionID: transferTask.WorkflowID,
-			logging.TagWorkflowRunID:       transferTask.RunID,
-			logging.TagNextEventID:         nextEventID,
-			logging.TagSourceCluster:       t.clusterName,
-		}).Error("Error re-replicating history from remote.")
+		t.logger.Error("Error re-replicating history from remote.",
+			tag.WorkflowID(transferTask.WorkflowID),
+			tag.WorkflowRunID(transferTask.RunID),
+			tag.WorkflowDomainID(transferTask.DomainID),
+			tag.WorkflowNextEventID(nextEventID),
+			tag.SourceCluster(t.clusterName))
 	}
 	return err
 }

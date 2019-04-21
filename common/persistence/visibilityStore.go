@@ -21,24 +21,24 @@
 package persistence
 
 import (
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 type (
 	visibilityManagerImpl struct {
 		serializer  PayloadSerializer
 		persistence VisibilityStore
-		logger      bark.Logger
+		logger      log.Logger
 	}
 )
 
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
 // NewVisibilityManagerImpl returns new VisibilityManager
-func NewVisibilityManagerImpl(persistence VisibilityStore, logger bark.Logger) VisibilityManager {
+func NewVisibilityManagerImpl(persistence VisibilityStore, logger log.Logger) VisibilityManager {
 	return &visibilityManagerImpl{
 		serializer:  NewPayloadSerializer(),
 		persistence: persistence,
@@ -163,11 +163,10 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 
 	memo, err := v.serializer.DeserializeVisibilityMemo(execution.Memo)
 	if err != nil {
-		v.logger.WithFields(bark.Fields{
-			logging.TagErr:                 err.Error(),
-			logging.TagWorkflowExecutionID: execution.WorkflowID,
-			logging.TagWorkflowRunID:       execution.RunID,
-		}).Error("failed to deserialize memo")
+		v.logger.Error("failed to deserialize memo",
+			tag.WorkflowID(execution.WorkflowID),
+			tag.WorkflowRunID(execution.RunID),
+			tag.Error(err))
 	}
 
 	convertedExecution := &shared.WorkflowExecutionInfo{

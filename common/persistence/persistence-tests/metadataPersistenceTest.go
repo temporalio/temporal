@@ -21,14 +21,13 @@
 package persistencetests
 
 import (
-	"os"
-	"testing"
-
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"

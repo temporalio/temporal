@@ -28,11 +28,11 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pkg/errors"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -45,7 +45,7 @@ type (
 	esVisibilityStore struct {
 		esClient es.Client
 		index    string
-		logger   bark.Logger
+		logger   log.Logger
 		config   *config.VisibilityConfig
 	}
 
@@ -80,11 +80,11 @@ var (
 )
 
 // NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
-func NewElasticSearchVisibilityStore(esClient es.Client, index string, config *config.VisibilityConfig, logger bark.Logger) p.VisibilityStore {
+func NewElasticSearchVisibilityStore(esClient es.Client, index string, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
 	return &esVisibilityStore{
 		esClient: esClient,
 		index:    index,
-		logger:   logger.WithField(logging.TagWorkflowComponent, logging.TagValueESVisibilityManager),
+		logger:   logger.WithTags(tag.ComponentESVisibilityManager),
 		config:   config,
 	}
 }
@@ -407,10 +407,8 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	var source *visibilityRecord
 	err := json.Unmarshal(*hit.Source, &source)
 	if err != nil { // log and skip error
-		v.logger.WithFields(bark.Fields{
-			"error": err.Error(),
-			"docID": hit.Id,
-		}).Error("unable to unmarshal search hit source")
+		v.logger.Error("unable to unmarshal search hit source",
+			tag.Error(err), tag.ESDocID(hit.Id))
 		return nil
 	}
 

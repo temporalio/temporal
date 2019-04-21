@@ -21,28 +21,28 @@
 package cache
 
 import (
-	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"go.uber.org/zap"
 )
 
 type (
 	domainCacheSuite struct {
 		suite.Suite
 
-		logger          bark.Logger
+		logger          log.Logger
 		clusterMetadata *mocks.ClusterMetadata
 		metadataMgr     *mocks.MetadataManager
 		domainCache     *domainCache
@@ -55,10 +55,6 @@ func TestDomainCacheSuite(t *testing.T) {
 }
 
 func (s *domainCacheSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
-
 }
 
 func (s *domainCacheSuite) TearDownSuite() {
@@ -66,9 +62,9 @@ func (s *domainCacheSuite) TearDownSuite() {
 }
 
 func (s *domainCacheSuite) SetupTest() {
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	zapLogger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.clusterMetadata = &mocks.ClusterMetadata{}
 	s.metadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)

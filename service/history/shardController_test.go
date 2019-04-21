@@ -21,23 +21,21 @@
 package history
 
 import (
-	"fmt"
-	"testing"
-
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
-
 	"errors"
-
+	"fmt"
 	"sync"
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -65,7 +63,7 @@ type (
 		mockService             service.Service
 		domainCache             cache.DomainCache
 		config                  *Config
-		logger                  bark.Logger
+		logger                  log.Logger
 		metricsClient           metrics.Client
 	}
 )
@@ -76,7 +74,7 @@ func TestShardControllerSuite(t *testing.T) {
 }
 
 func (s *shardControllerSuite) SetupTest() {
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.config = NewDynamicConfigForTest()
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.hostInfo = membership.NewHostInfo("shardController-host-test", nil)
@@ -91,7 +89,7 @@ func (s *shardControllerSuite) SetupTest() {
 	s.mockClusterMetadata = &mmocks.ClusterMetadata{}
 	s.mockMessagingClient = mmocks.NewMockMessagingClient(s.mockMessaging, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, s.logger)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
 	s.domainCache = cache.NewDomainCache(s.mockMetadaraMgr, s.mockClusterMetadata, s.metricsClient, s.logger)
 	s.controller = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
 		s.mockHistoryMgr, s.mockHistoryV2Mgr, s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
@@ -416,7 +414,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 				for shardID := 0; shardID < 2; shardID++ {
 					_, err := s.controller.getEngineForShard(shardID)
 					if err != nil {
-						s.logger.Errorf("ShardLost: %v", err)
+						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
 					}
 					time.Sleep(20 * time.Millisecond)
@@ -496,7 +494,7 @@ func (s *shardControllerSuite) TestRingUpdated() {
 				for shardID := 0; shardID < 2; shardID++ {
 					_, err := s.controller.getEngineForShard(shardID)
 					if err != nil {
-						s.logger.Errorf("ShardLost: %v", err)
+						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
 					}
 					time.Sleep(20 * time.Millisecond)
@@ -551,7 +549,7 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 				for shardID := 0; shardID < numShards; shardID++ {
 					_, err := s.controller.getEngineForShard(shardID)
 					if err != nil {
-						s.logger.Errorf("ShardLost: %v", err)
+						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
 					}
 					time.Sleep(20 * time.Millisecond)

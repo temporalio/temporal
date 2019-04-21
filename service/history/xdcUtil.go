@@ -21,9 +21,10 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
+	"fmt"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -31,45 +32,41 @@ import (
 var (
 	standbyTaskPostActionNoOp = func() error { return nil }
 
-	standbyTrensferTaskPostActionTaskDiscarded = func(nextEventID *int64, transferTask *persistence.TransferTaskInfo, logger bark.Logger) error {
+	standbyTrensferTaskPostActionTaskDiscarded = func(nextEventID *int64, transferTask *persistence.TransferTaskInfo, logger log.Logger) error {
 		if nextEventID == nil {
 			return nil
 		}
-		logger.WithFields(bark.Fields{
-			logging.TagDomainID:            transferTask.DomainID,
-			logging.TagWorkflowExecutionID: transferTask.WorkflowID,
-			logging.TagWorkflowRunID:       transferTask.RunID,
-			logging.TagTaskID:              transferTask.GetTaskID(),
-			logging.TagTaskType:            transferTask.GetTaskType(),
-			logging.TagVersion:             transferTask.GetVersion(),
-			logging.TagTimestamp:           transferTask.VisibilityTimestamp,
-			logging.TagEventID:             transferTask.ScheduleID,
-		}).Error("Discarding standby transfer task due to task being pending for too long.")
+		logger.Error("Discarding standby transfer task due to task being pending for too long.",
+			tag.WorkflowID(transferTask.WorkflowID),
+			tag.WorkflowRunID(transferTask.RunID),
+			tag.WorkflowDomainID(transferTask.DomainID),
+			tag.TaskID(transferTask.TaskID),
+			tag.TaskType(transferTask.TaskType),
+			tag.FailoverVersion(transferTask.GetVersion()),
+			tag.Timestamp(transferTask.VisibilityTimestamp),
+			tag.WorkflowEventID(transferTask.ScheduleID))
 		return ErrTaskDiscarded
 	}
 
-	standbyTimerTaskPostActionTaskDiscarded = func(nextEventID *int64, timerTask *persistence.TimerTaskInfo, logger bark.Logger) error {
+	standbyTimerTaskPostActionTaskDiscarded = func(nextEventID *int64, timerTask *persistence.TimerTaskInfo, logger log.Logger) error {
 		if nextEventID == nil {
 			return nil
 		}
-		logger.WithFields(bark.Fields{
-			logging.TagDomainID:            timerTask.DomainID,
-			logging.TagWorkflowExecutionID: timerTask.WorkflowID,
-			logging.TagWorkflowRunID:       timerTask.RunID,
-			logging.TagTaskID:              timerTask.GetTaskID(),
-			logging.TagTaskType:            timerTask.GetTaskType(),
-			logging.TagVersion:             timerTask.GetVersion(),
-			logging.TagTimeoutType:         timerTask.TimeoutType,
-			logging.TagTimestamp:           timerTask.VisibilityTimestamp,
-			logging.TagEventID:             timerTask.EventID,
-			logging.TagAttempt:             timerTask.ScheduleAttempt,
-		}).Error("Discarding standby timer task due to task being pending for too long.")
+		logger.Error("Discarding standby timer task due to task being pending for too long.",
+			tag.WorkflowID(timerTask.WorkflowID),
+			tag.WorkflowRunID(timerTask.RunID),
+			tag.WorkflowDomainID(timerTask.DomainID),
+			tag.TaskID(timerTask.TaskID),
+			tag.TaskType(timerTask.TaskType),
+			tag.FailoverVersion(timerTask.GetVersion()),
+			tag.Timestamp(timerTask.VisibilityTimestamp),
+			tag.WorkflowEventID(timerTask.EventID))
 		return ErrTaskDiscarded
 	}
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
-func verifyTaskVersion(shard ShardContext, logger bark.Logger, domainID string, version int64, taskVersion int64, task interface{}) (bool, error) {
+func verifyTaskVersion(shard ShardContext, logger log.Logger, domainID string, version int64, taskVersion int64, task interface{}) (bool, error) {
 	if !shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {
 		return true, nil
 	}
@@ -77,23 +74,23 @@ func verifyTaskVersion(shard ShardContext, logger bark.Logger, domainID string, 
 	// the first return value is whether this task is valid for further processing
 	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
-		logger.Debugf("Cannot find domainID: %v, err: %v.", domainID, task)
+		logger.Debug(fmt.Sprintf("Cannot find domainID: %v, err: %v.", domainID, task))
 		return false, err
 	}
 	if !domainEntry.IsGlobalDomain() {
-		logger.Debugf("DomainID: %v is not active, task: %v version check pass", domainID, task)
+		logger.Debug(fmt.Sprintf("DomainID: %v is not active, task: %v version check pass", domainID, task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debugf("DomainID: %v is active, task: %v version != target version: %v.", domainID, task, version)
+		logger.Debug(fmt.Sprintf("DomainID: %v is active, task: %v version != target version: %v.", domainID, task, version))
 		return false, nil
 	}
-	logger.Debugf("DomainID: %v is active, task: %v version == target version: %v.", domainID, task, version)
+	logger.Debug(fmt.Sprintf("DomainID: %v is active, task: %v version == target version: %v.", domainID, task, version))
 	return true, nil
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTransferTask(context workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
+func loadMutableStateForTransferTask(context workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger log.Logger) (mutableState, error) {
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
@@ -113,7 +110,7 @@ func loadMutableStateForTransferTask(context workflowExecutionContext, transferT
 
 	if transferTask.ScheduleID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
-		logger.Debugf("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v.", transferTask.ScheduleID, msBuilder.GetNextEventID())
+		logger.Debug(fmt.Sprintf("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v.", transferTask.ScheduleID, msBuilder.GetNextEventID()))
 		context.clear()
 
 		msBuilder, err = context.loadWorkflowExecution()
@@ -122,7 +119,9 @@ func loadMutableStateForTransferTask(context workflowExecutionContext, transferT
 		}
 		// after refresh, still mutable state's next event ID <= task ID
 		if transferTask.ScheduleID >= msBuilder.GetNextEventID() {
-			logger.Infof("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.", transferTask.ScheduleID, msBuilder.GetNextEventID())
+			logger.Info("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.",
+				tag.WorkflowScheduleID(transferTask.ScheduleID),
+				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
 			return nil, nil
 		}
 	}
@@ -131,7 +130,7 @@ func loadMutableStateForTransferTask(context workflowExecutionContext, transferT
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
+func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger log.Logger) (mutableState, error) {
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
@@ -151,7 +150,7 @@ func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *p
 
 	if timerTask.EventID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-		logger.Debugf("Timer Task Processor: task event ID: %v >= MS NextEventID: %v.", timerTask.EventID, msBuilder.GetNextEventID())
+		logger.Debug(fmt.Sprintf("Timer Task Processor: task event ID: %v >= MS NextEventID: %v.", timerTask.EventID, msBuilder.GetNextEventID()))
 		context.clear()
 
 		msBuilder, err = context.loadWorkflowExecution()
@@ -160,7 +159,9 @@ func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *p
 		}
 		// after refresh, still mutable state's next event ID <= task ID
 		if timerTask.EventID >= msBuilder.GetNextEventID() {
-			logger.Infof("Timer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.", timerTask.EventID, msBuilder.GetNextEventID())
+			logger.Info("Timer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.",
+				tag.WorkflowEventID(timerTask.EventID),
+				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
 			return nil, nil
 		}
 	}

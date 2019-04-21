@@ -24,7 +24,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 )
@@ -34,16 +35,16 @@ type RPCFactory struct {
 	config      *RPC
 	serviceName string
 	ch          *tchannel.ChannelTransport
-	logger      bark.Logger
+	logger      log.Logger
 }
 
 // NewFactory builds a new RPCFactory
 // conforming to the underlying configuration
-func (cfg *RPC) NewFactory(sName string, logger bark.Logger) *RPCFactory {
+func (cfg *RPC) NewFactory(sName string, logger log.Logger) *RPCFactory {
 	return newRPCFactory(cfg, sName, logger)
 }
 
-func newRPCFactory(cfg *RPC, sName string, logger bark.Logger) *RPCFactory {
+func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger}
 	return factory
 }
@@ -57,10 +58,9 @@ func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
 		tchannel.ServiceName(d.serviceName),
 		tchannel.ListenAddr(hostAddress))
 	if err != nil {
-		d.logger.WithField("error", err).Fatal("Failed to create transport channel")
+		d.logger.Fatal("Failed to create transport channel", tag.Error(err))
 	}
-	d.logger.Infof("Created RPC dispatcher for '%v' and listening at '%v'",
-		d.serviceName, hostAddress)
+	d.logger.Info("Created RPC dispatcher and listening", tag.Service(d.serviceName), tag.Address(hostAddress))
 	return yarpc.NewDispatcher(yarpc.Config{
 		Name:     d.serviceName,
 		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
@@ -71,8 +71,7 @@ func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
 func (d *RPCFactory) CreateDispatcherForOutbound(
 	callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	// Setup dispatcher(outbound) for onebox
-	d.logger.Infof("Created RPC dispatcher outbound for service '%v' for host '%v'",
-		serviceName, hostName)
+	d.logger.Info("Created RPC dispatcher outbound for service '%v' for host '%v'", tag.Service(d.serviceName), tag.Address(hostName))
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{
 		Name: callerName,
 		Outbounds: yarpc.Outbounds{
@@ -80,14 +79,14 @@ func (d *RPCFactory) CreateDispatcherForOutbound(
 		},
 	})
 	if err := dispatcher.Start(); err != nil {
-		d.logger.WithField("error", err).Fatal("Failed to create outbound transport channel")
+		d.logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
 	}
 	return dispatcher
 }
 
 func (d *RPCFactory) getListenIP() net.IP {
 	if d.config.BindOnLocalHost && len(d.config.BindOnIP) > 0 {
-		d.logger.Fatalf("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
+		d.logger.Fatal("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
 	}
 
 	if d.config.BindOnLocalHost {
@@ -99,11 +98,11 @@ func (d *RPCFactory) getListenIP() net.IP {
 		if ip != nil && ip.To4() != nil {
 			return ip.To4()
 		}
-		d.logger.Fatalf("ListenIP failed, unable to parse bindOnIP value %q or it is not IPv4 address", d.config.BindOnIP)
+		d.logger.Fatal("ListenIP failed, unable to parse bindOnIP value %q or it is not IPv4 address", tag.Address(d.config.BindOnIP))
 	}
 	ip, err := ListenIP()
 	if err != nil {
-		d.logger.Fatalf("ListenIP failed, err=%v", err)
+		d.logger.Fatal("ListenIP failed, err=%v", tag.Error(err))
 	}
 	return ip
 }

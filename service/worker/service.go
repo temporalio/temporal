@@ -25,13 +25,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
@@ -56,7 +55,6 @@ type (
 		params        *service.BootstrapParams
 		config        *Config
 		logger        log.Logger
-		barkLogger    bark.Logger
 		metricsClient metrics.Client
 	}
 
@@ -74,7 +72,7 @@ type (
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.WorkerServiceName)
 	config := NewConfig(params)
-	params.ThrottledBarkLogger = logging.NewThrottledLogger(params.BarkLogger, config.ThrottledLogRPS)
+	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
 		config: config,
@@ -84,7 +82,7 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 
 // NewConfig builds the new Config for cadence-worker service
 func NewConfig(params *service.BootstrapParams) *Config {
-	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger)
+	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 	return &Config{
 		ReplicationCfg: &replicator.Config{
 			PersistenceMaxQPS:                 dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
@@ -122,14 +120,13 @@ func NewConfig(params *service.BootstrapParams) *Config {
 func (s *Service) Start() {
 	base := service.New(s.params)
 	base.Start()
-	s.barkLogger = base.GetBarkLogger()
 	s.logger = base.GetLogger()
 	s.metricsClient = base.GetMetricsClient()
 	s.logger.Info("service starting", tag.ComponentWorker)
 
 	pConfig := s.params.PersistenceConfig
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
-	pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.barkLogger)
+	pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
 
 	if base.GetClusterMetadata().IsGlobalDomainEnabled() {
 		s.startReplicator(base, pFactory)
@@ -167,7 +164,6 @@ func (s *Service) startScanner(base service.Service) {
 		Config:        *s.config.ScannerCfg,
 		SDKClient:     s.params.PublicClient,
 		MetricsClient: s.metricsClient,
-		BarkLogger:    s.barkLogger,
 		Logger:        s.logger,
 		TallyScope:    s.params.MetricScope,
 	}
@@ -182,7 +178,7 @@ func (s *Service) startReplicator(base service.Service, pFactory persistencefact
 	if err != nil {
 		s.logger.Fatal("failed to start replicator, could not create MetadataManager", tag.Error(err))
 	}
-	domainCache := cache.NewDomainCache(metadataV2Mgr, base.GetClusterMetadata(), s.metricsClient, s.barkLogger)
+	domainCache := cache.NewDomainCache(metadataV2Mgr, base.GetClusterMetadata(), s.metricsClient, s.logger)
 	domainCache.Start()
 
 	replicator := replicator.NewReplicator(
@@ -192,7 +188,6 @@ func (s *Service) startReplicator(base service.Service, pFactory persistencefact
 		base.GetClientBean(),
 		s.config.ReplicationCfg,
 		base.GetMessagingClient(),
-		s.barkLogger,
 		s.logger,
 		s.metricsClient)
 	if err := replicator.Start(); err != nil {
@@ -231,7 +226,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 	if err != nil {
 		s.logger.Fatal("failed to start archiver, could not create MetadataManager", tag.Error(err))
 	}
-	domainCache := cache.NewDomainCache(metadataMgr, s.params.ClusterMetadata, s.metricsClient, s.barkLogger)
+	domainCache := cache.NewDomainCache(metadataMgr, s.params.ClusterMetadata, s.metricsClient, s.logger)
 	domainCache.Start()
 
 	blobstoreClient := blobstore.NewRetryableClient(
@@ -243,7 +238,6 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 		PublicClient:     publicClient,
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
-		BarkLogger:       s.barkLogger,
 		ClusterMetadata:  base.GetClusterMetadata(),
 		HistoryManager:   historyManager,
 		HistoryV2Manager: historyV2Manager,

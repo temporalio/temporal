@@ -24,16 +24,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/log"
-	"go.uber.org/zap"
-
-	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/testsuite"
 	"go.uber.org/cadence/workflow"
+	"go.uber.org/zap"
 )
 
 var (
@@ -59,7 +59,7 @@ func TestWorkflowSuite(t *testing.T) {
 
 func (s *workflowSuite) SetupTest() {
 	workflowTestMetrics = &mmocks.Client{}
-	workflowTestLogger = log.NewLogger(zap.NewNop())
+	workflowTestLogger = loggerimpl.NewLogger(zap.NewNop())
 	workflowTestArchiver = &MockArchiver{}
 	workflowTestPump = &PumpMock{}
 	workflowTestConfig = &Config{

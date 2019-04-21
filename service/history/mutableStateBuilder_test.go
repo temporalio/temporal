@@ -21,18 +21,16 @@
 package history
 
 import (
-	"os"
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence"
-
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -41,7 +39,7 @@ type (
 		msBuilder       *mutableStateBuilder
 		mockShard       *shardContextImpl
 		mockEventsCache *MockEventsCache
-		logger          bark.Logger
+		logger          log.Logger
 	}
 )
 
@@ -51,9 +49,6 @@ func TestMutableStateSuite(t *testing.T) {
 }
 
 func (s *mutableStateSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
 }
 
@@ -62,7 +57,7 @@ func (s *mutableStateSuite) TearDownSuite() {
 }
 
 func (s *mutableStateSuite) SetupTest() {
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockShard = &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,

@@ -26,13 +26,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -78,8 +78,8 @@ type (
 		NotifyNewHistoryEvent(event *historyEventNotification) error
 		GetConfig() *Config
 		GetEventsCache() eventsCache
-		GetLogger() bark.Logger
-		GetThrottledLogger() bark.Logger
+		GetLogger() log.Logger
+		GetThrottledLogger() log.Logger
 		GetMetricsClient() metrics.Client
 		GetTimeSource() clock.TimeSource
 		SetCurrentTime(cluster string, currentTime time.Time)
@@ -104,8 +104,8 @@ type (
 		closeCh          chan<- int
 		isClosed         bool
 		config           *Config
-		logger           bark.Logger
-		throttledLogger  bark.Logger
+		logger           log.Logger
+		throttledLogger  log.Logger
 		metricsClient    metrics.Client
 
 		sync.RWMutex
@@ -388,7 +388,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 		if err != nil {
 			return nil, err
 		}
-		s.logger.Debugf("Assigning transfer task ID: %v", id)
+		s.logger.Debug(fmt.Sprintf("Assigning transfer task ID: %v", id))
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
@@ -398,7 +398,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 		if err != nil {
 			return nil, err
 		}
-		s.logger.Debugf("Assigning replication task ID: %v", id)
+		s.logger.Debug(fmt.Sprintf("Assigning replication task ID: %v", id))
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
@@ -482,7 +482,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		if err != nil {
 			return nil, err
 		}
-		s.logger.Debugf("Assigning transfer task ID: %v", id)
+		s.logger.Debug(fmt.Sprintf("Assigning transfer task ID: %v", id))
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
@@ -492,7 +492,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		if err != nil {
 			return nil, err
 		}
-		s.logger.Debugf("Assigning replication task ID: %v", id)
+		s.logger.Debug(fmt.Sprintf("Assigning replication task ID: %v", id))
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
@@ -503,7 +503,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 			if err != nil {
 				return nil, err
 			}
-			s.logger.Debugf("Assigning transfer task ID: %v", id)
+			s.logger.Debug(fmt.Sprintf("Assigning transfer task ID: %v", id))
 			task.SetTaskID(id)
 			transferMaxReadLevel = id
 		}
@@ -513,7 +513,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 			if err != nil {
 				return nil, err
 			}
-			s.logger.Debugf("Assigning replication task ID: %v", id)
+			s.logger.Debug(fmt.Sprintf("Assigning replication task ID: %v", id))
 			task.SetTaskID(id)
 			transferMaxReadLevel = id
 		}
@@ -581,7 +581,7 @@ func (s *shardContextImpl) allocateTransferIDsLocked(tasks []persistence.Task, t
 		if err != nil {
 			return err
 		}
-		s.logger.Debugf("Assigning task ID: %v", id)
+		s.logger.Debug(fmt.Sprintf("Assigning task ID: %v", id))
 		task.SetTaskID(id)
 		*transferMaxReadLevel = id
 	}
@@ -749,12 +749,11 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 			s.metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(entry.GetInfo().Name)).RecordTimer(metrics.HistorySize, time.Duration(size))
 		}
 		if size >= historySizeLogThreshold {
-			s.throttledLogger.WithFields(bark.Fields{
-				logging.TagDomainID:            domainID,
-				logging.TagWorkflowExecutionID: execution.WorkflowId,
-				logging.TagWorkflowRunID:       execution.RunId,
-				logging.TagHistorySizeBytes:    size,
-			}).Warn("history size threshold breached")
+			s.throttledLogger.Warn("history size threshold breached",
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
 	resp, err0 := s.historyV2Mgr.AppendHistoryNodes(request)
@@ -781,12 +780,11 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 			s.metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(domainEntry.GetInfo().Name)).RecordTimer(metrics.HistorySize, time.Duration(size))
 		}
 		if size >= historySizeLogThreshold {
-			s.throttledLogger.WithFields(bark.Fields{
-				logging.TagDomainID:            request.DomainID,
-				logging.TagWorkflowExecutionID: request.Execution.WorkflowId,
-				logging.TagWorkflowRunID:       request.Execution.RunId,
-				logging.TagHistorySizeBytes:    size,
-			}).Warn("history size threshold breached")
+			s.throttledLogger.Warn("history size threshold breached",
+				tag.WorkflowID(request.Execution.GetWorkflowId()),
+				tag.WorkflowRunID(request.Execution.GetRunId()),
+				tag.WorkflowDomainID(request.DomainID),
+				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
 
@@ -828,11 +826,11 @@ func (s *shardContextImpl) GetEventsCache() eventsCache {
 	return s.eventsCache
 }
 
-func (s *shardContextImpl) GetLogger() bark.Logger {
+func (s *shardContextImpl) GetLogger() log.Logger {
 	return s.logger
 }
 
-func (s *shardContextImpl) GetThrottledLogger() bark.Logger {
+func (s *shardContextImpl) GetThrottledLogger() log.Logger {
 	return s.throttledLogger
 }
 
@@ -899,8 +897,11 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 			s.closeShard()
 		} else {
 			// Failure in updating shard to grab new RangeID
-			logging.LogPersistantStoreErrorEvent(s.logger, logging.TagValueStoreOperationUpdateShard, err,
-				fmt.Sprintf("{PreviousRangeID: %v, NewRangeID: %v}", s.shardInfo.RangeID, updatedShardInfo.RangeID))
+			s.logger.Error("Persistent store operation failure",
+				tag.StoreOperationUpdateShard,
+				tag.Error(err),
+				tag.ShardRangeID(updatedShardInfo.RangeID),
+				tag.PreviousShardRangeID(s.shardInfo.RangeID))
 		}
 		return err
 	}
@@ -912,15 +913,17 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
 	s.shardInfo = updatedShardInfo
 
-	logging.LogShardRangeUpdatedEvent(s.logger, s.shardInfo.ShardID, s.shardInfo.RangeID, s.transferSequenceNumber,
-		s.maxTransferSequenceNumber)
-
+	s.logger.Info("Range updated for shardID",
+		tag.ShardID(s.shardInfo.ShardID),
+		tag.ShardRangeID(s.shardInfo.RangeID),
+		tag.Number(s.transferSequenceNumber),
+		tag.NextNumber(s.maxTransferSequenceNumber))
 	return nil
 }
 
 func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 	if rl > s.transferMaxReadLevel {
-		s.logger.Debugf("Updating MaxReadLevel: %v", rl)
+		s.logger.Debug(fmt.Sprintf("Updating MaxReadLevel: %v", rl))
 		s.transferMaxReadLevel = rl
 	}
 }
@@ -989,12 +992,11 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnTransferLevelDiff < transferLag ||
 			logWarnTimerLevelDiff < timerLag) {
 
-		logger := s.logger.WithFields(bark.Fields{
-			logging.TagHistoryShardTime:           s.standbyClusterCurrentTime,
-			logging.TagHistoryShardReplicationAck: s.shardInfo.ReplicationAckLevel,
-			logging.TagHistoryShardTransferAcks:   s.shardInfo.ClusterTransferAckLevel,
-			logging.TagHistoryShardTimerAcks:      s.shardInfo.ClusterTimerAckLevel,
-		})
+		logger := s.logger.WithTags(
+			tag.ShardTime(s.standbyClusterCurrentTime),
+			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
+			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
+			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
 
 		logger.Warn("Shard ack levels diff exceeds warn threshold.")
 	}
@@ -1028,13 +1030,12 @@ func (s *shardContextImpl) allocateTimerIDsLocked(domainEntry *cache.DomainCache
 		if ts.Before(readCursorTS) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.WithFields(bark.Fields{
-				logging.TagWorkflowEventID:     logging.ShardAllocateTimerBeforeRead,
-				logging.TagDomainID:            domainID,
-				logging.TagWorkflowExecutionID: workflowID,
-				logging.TagTimestamp:           ts,
-				logging.TagCursorTimestamp:     readCursorTS,
-			}).Warn("New timer generated is less than read level")
+			s.logger.Warn("New timer generated is less than read level",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(workflowID),
+				tag.Timestamp(ts),
+				tag.CursorTimestamp(readCursorTS),
+				tag.ValueShardAllocateTimerBeforeRead)
 			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
 		}
 
@@ -1044,8 +1045,8 @@ func (s *shardContextImpl) allocateTimerIDsLocked(domainEntry *cache.DomainCache
 		}
 		task.SetTaskID(seqNum)
 		visibilityTs := task.GetVisibilityTimestamp()
-		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
-			visibilityTs, task.GetTaskID(), s.shardInfo.TimerAckLevel)
+		s.logger.Debug(fmt.Sprintf("Assigning new timer (timestamp: %v, seq: %v)) ackLeveL: %v",
+			visibilityTs, task.GetTaskID(), s.shardInfo.TimerAckLevel))
 	}
 	return nil
 }
@@ -1118,10 +1119,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 	err := backoff.Retry(getShard, retryPolicy, retryPredicate)
 	if err != nil {
-		shardItem.logger.WithFields(bark.Fields{
-			logging.TagHistoryShardID: shardItem.shardID,
-			logging.TagErr:            err,
-		}).Error("Fail to acquire shard.")
+		shardItem.logger.Error("Fail to acquire shard.", tag.ShardID(shardItem.shardID), tag.Error(err))
 		return nil, err
 	}
 

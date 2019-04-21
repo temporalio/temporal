@@ -21,45 +21,17 @@
 package config
 
 import (
-	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/sirupsen/logrus"
-	"github.com/uber-common/bark"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const fileMode = os.FileMode(0644)
-
-// NewBarkLogger builds and returns a new bark
-// logger for this logging configuration
-func (cfg *Logger) NewBarkLogger() bark.Logger {
-
-	logger := logrus.New()
-	logger.Out = ioutil.Discard
-	logger.Level = parseLogrusLevel(cfg.Level)
-	logger.Formatter = getFormatter()
-
-	if cfg.Stdout {
-		logger.Out = os.Stdout
-	}
-
-	if len(cfg.OutputFile) > 0 {
-		outFile := createLogFile(cfg.OutputFile)
-		logger.Out = outFile
-		if cfg.Stdout {
-			logger.Out = io.MultiWriter(os.Stdout, outFile)
-		}
-	}
-
-	return bark.NewLoggerFromLogrus(logger)
-}
 
 // NewZapLogger builds and returns a new zap
 // logger for this logging configuration
@@ -117,25 +89,6 @@ func createLogFile(path string) *os.File {
 		log.Fatalf("error creating log file %v, err=%v", path, err)
 	}
 	return file
-}
-
-// parseLogrusLevel converts the string log
-// level into a logrus level
-func parseLogrusLevel(level string) logrus.Level {
-	switch strings.ToLower(level) {
-	case "debug":
-		return logrus.DebugLevel
-	case "info":
-		return logrus.InfoLevel
-	case "warn":
-		return logrus.WarnLevel
-	case "error":
-		return logrus.ErrorLevel
-	case "fatal":
-		return logrus.FatalLevel
-	default:
-		return logrus.InfoLevel
-	}
 }
 
 func parseZapLevel(level string) zapcore.Level {

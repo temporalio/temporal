@@ -26,7 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/client"
@@ -56,12 +55,7 @@ type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
 	BootstrapParams struct {
-		Name string
-		//Deprecated
-		BarkLogger bark.Logger
-		//Deprecated
-		ThrottledBarkLogger bark.Logger
-		//New logger we are in favor of
+		Name            string
 		Logger          log.Logger
 		ThrottledLogger log.Logger
 
@@ -102,10 +96,6 @@ type (
 		pprofInitializer      common.PProfInitializer
 		clientBean            client.Bean
 		numberOfHistoryShards int
-		//Deprecated
-		barkLogger bark.Logger
-		//Deprecated
-		throttledBarkLogger bark.Logger
 		//New logger we are in favor of
 		logger          log.Logger
 		throttledLogger log.Logger
@@ -128,8 +118,6 @@ func New(params *BootstrapParams) Service {
 	sVice := &serviceImpl{
 		status:                common.DaemonStatusInitialized,
 		sName:                 params.Name,
-		barkLogger:            params.BarkLogger,
-		throttledBarkLogger:   params.ThrottledBarkLogger,
 		logger:                params.Logger,
 		throttledLogger:       params.ThrottledLogger,
 		rpcFactory:            params.RPCFactory,
@@ -141,10 +129,10 @@ func New(params *BootstrapParams) Service {
 		metricsClient:         params.MetricsClient,
 		messagingClient:       params.MessagingClient,
 		dispatcherProvider:    params.DispatcherProvider,
-		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger),
+		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 	}
 
-	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.barkLogger)
+	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger())
 	sVice.dispatcher = sVice.rpcFactory.CreateDispatcher()
 	if sVice.dispatcher == nil {
 		sVice.logger.Fatal("Unable to create yarpc dispatcher")
@@ -161,7 +149,8 @@ func New(params *BootstrapParams) Service {
 
 // UpdateLoggerWithServiceName tag logging with service name from the top level
 func (params *BootstrapParams) UpdateLoggerWithServiceName(name string) {
-	params.BarkLogger = params.BarkLogger.WithField("Service", name)
+	params.Logger = params.Logger.WithTags(tag.Service(name))
+	params.ThrottledLogger = params.ThrottledLogger.WithTags(tag.Service(name))
 }
 
 // GetHostName returns the name of host running the service
@@ -236,15 +225,6 @@ func (h *serviceImpl) Stop() {
 	h.runtimeMetricsReporter.Stop()
 }
 
-// GetBarkLogger returns the service logger
-func (h *serviceImpl) GetBarkLogger() bark.Logger {
-	return h.barkLogger
-}
-
-func (h *serviceImpl) GetThrottledBarkLogger() bark.Logger {
-	return h.throttledBarkLogger
-}
-
 func (h *serviceImpl) GetLogger() log.Logger {
 	return h.logger
 }
@@ -284,7 +264,7 @@ func (h *serviceImpl) GetMessagingClient() messaging.Client {
 }
 
 // GetMetricsServiceIdx returns the metrics name
-func GetMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.ServiceIdx {
+func GetMetricsServiceIdx(serviceName string, logger log.Logger) metrics.ServiceIdx {
 	switch serviceName {
 	case common.FrontendServiceName:
 		return metrics.Frontend
@@ -295,7 +275,7 @@ func GetMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.Servic
 	case common.WorkerServiceName:
 		return metrics.Worker
 	default:
-		logger.Fatalf("Unknown service name '%v' for metrics!", serviceName)
+		logger.Fatal("Unknown service name '%v' for metrics!", tag.Service(serviceName))
 	}
 
 	// this should never happen!

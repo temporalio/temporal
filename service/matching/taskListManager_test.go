@@ -27,19 +27,17 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/time/rate"
-
-	"github.com/uber/cadence/common/mocks"
-
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"golang.org/x/time/rate"
 )
 
 const _minBurst = 10000
@@ -90,7 +88,10 @@ func createTestTaskListManager() *taskListManagerImpl {
 }
 
 func createTestTaskListManagerWithConfig(cfg *Config) *taskListManagerImpl {
-	logger := bark.NewLoggerFromLogrus(log.New())
+	logger, err := loggerimpl.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
 	tm := newTestTaskManager(logger)
 	mockDomainCache := &cache.DomainCacheMock{}
 	mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.CreateDomainCacheEntry("domainName"), nil)
@@ -103,7 +104,7 @@ func createTestTaskListManagerWithConfig(cfg *Config) *taskListManagerImpl {
 	tlKind := common.TaskListKindPtr(workflow.TaskListKindNormal)
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
 	if err != nil {
-		logger.Fatalf("error when createTestTaskListManager: %v", err)
+		logger.Fatal("error when createTestTaskListManager", tag.Error(err))
 	}
 	return tlMgr.(*taskListManagerImpl)
 }

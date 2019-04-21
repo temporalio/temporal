@@ -23,13 +23,12 @@ package cassandra
 import (
 	"fmt"
 	"sort"
-
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -64,12 +63,12 @@ type (
 )
 
 // NewHistoryV2PersistenceFromSession returns new HistoryV2Store
-func NewHistoryV2PersistenceFromSession(session *gocql.Session, logger bark.Logger) p.HistoryV2Store {
+func NewHistoryV2PersistenceFromSession(session *gocql.Session, logger log.Logger) p.HistoryV2Store {
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
 }
 
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
-func newHistoryV2Persistence(cfg config.Cassandra, logger bark.Logger) (p.HistoryV2Store,
+func newHistoryV2Persistence(cfg config.Cassandra, logger log.Logger) (p.HistoryV2Store,
 	error) {
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
 	cluster.Keyspace = cfg.Keyspace

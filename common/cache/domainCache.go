@@ -29,12 +29,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -90,7 +91,7 @@ type (
 		clusterMetadata cluster.Metadata
 		timeSource      clock.TimeSource
 		metricsClient   metrics.Client
-		logger          bark.Logger
+		logger          log.Logger
 
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int]PrepareCallbackFn
@@ -117,7 +118,7 @@ type (
 )
 
 // NewDomainCache creates a new instance of cache for holding onto domain information to reduce the load on persistence
-func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, metricsClient metrics.Client, logger bark.Logger) DomainCache {
+func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, metricsClient metrics.Client, logger log.Logger) DomainCache {
 	cache := &domainCache{
 		status:           domainCacheInitialized,
 		shutdownChan:     make(chan struct{}),
@@ -289,7 +290,7 @@ func (c *domainCache) refreshLoop() {
 			timer.Reset(DomainCacheRefreshInterval)
 			err := c.refreshDomains()
 			if err != nil {
-				c.logger.Errorf("Error refreshing domain cache: %v", err)
+				c.logger.Error("Error refreshing domain cache", tag.Error(err))
 			}
 		}
 	}

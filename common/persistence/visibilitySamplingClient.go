@@ -23,10 +23,10 @@ package persistence
 import (
 	"sync"
 
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/tokenbucket"
@@ -46,13 +46,13 @@ type visibilitySamplingClient struct {
 	persistence           VisibilityManager
 	config                *config.VisibilityConfig
 	metricClient          metrics.Client
-	logger                bark.Logger
+	logger                log.Logger
 }
 
 var _ VisibilityManager = (*visibilitySamplingClient)(nil)
 
 // NewVisibilitySamplingClient creates a client to manage visibility with sampling
-func NewVisibilitySamplingClient(persistence VisibilityManager, config *config.VisibilityConfig, metricClient metrics.Client, logger bark.Logger) VisibilityManager {
+func NewVisibilitySamplingClient(persistence VisibilityManager, config *config.VisibilityConfig, metricClient metrics.Client, logger log.Logger) VisibilityManager {
 	return &visibilitySamplingClient{
 		persistence:           persistence,
 		rateLimitersForOpen:   newDomainToBucketMap(),
@@ -103,7 +103,12 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 		return p.persistence.RecordWorkflowExecutionStarted(request)
 	}
 
-	logging.LogOpenWorkflowSampled(p.logger, domain, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), request.WorkflowTypeName)
+	p.logger.Info("Request for open workflow is sampled",
+		tag.WorkflowDomainID(domain),
+		tag.WorkflowType(request.Execution.GetWorkflowId()),
+		tag.WorkflowID(request.Execution.GetRunId()),
+		tag.WorkflowRunID(request.WorkflowTypeName),
+	)
 	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter)
 	return nil
 }
@@ -117,7 +122,12 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 		return p.persistence.RecordWorkflowExecutionClosed(request)
 	}
 
-	logging.LogClosedWorkflowSampled(p.logger, domain, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), request.WorkflowTypeName)
+	p.logger.Info("Request for closed workflow is sampled",
+		tag.WorkflowDomainID(domain),
+		tag.WorkflowType(request.Execution.GetWorkflowId()),
+		tag.WorkflowID(request.Execution.GetRunId()),
+		tag.WorkflowRunID(request.WorkflowTypeName),
+	)
 	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter)
 	return nil
 }

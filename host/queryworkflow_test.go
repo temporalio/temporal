@@ -29,6 +29,7 @@ import (
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {
@@ -66,7 +67,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -127,7 +128,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		DecisionHandler:                     dtHandler,
 		ActivityHandler:                     atHandler,
 		QueryHandler:                        queryHandler,
-		Logger:                              s.BarkLogger,
+		Logger:                              s.Logger,
 		T:                                   s.T(),
 		StickyTaskList:                      stickyTaskList,
 		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
@@ -135,7 +136,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -163,7 +164,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -181,7 +182,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -229,7 +230,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -290,7 +291,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		DecisionHandler:                     dtHandler,
 		ActivityHandler:                     atHandler,
 		QueryHandler:                        queryHandler,
-		Logger:                              s.BarkLogger,
+		Logger:                              s.Logger,
 		T:                                   s.T(),
 		StickyTaskList:                      stickyTaskList,
 		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
@@ -298,7 +299,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -328,7 +329,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		// here we poll on normal tasklist, to simulate a worker crash and restart
 		// on the server side, server will first try the sticky tasklist and then the normal tasklist
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -373,7 +374,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -434,13 +435,13 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
 		QueryHandler:    queryHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -468,7 +469,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -485,7 +486,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -582,7 +583,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		QueryHandler:    queryHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 

@@ -32,6 +32,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -254,7 +255,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 	}
 	we, err := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 	runIDs := make([]string, numRuns)
 
 	workflowComplete := false
@@ -341,20 +342,20 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
 			_, err := poller.PollAndProcessDecisionTask(false, false)
-			s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 			s.Nil(err)
 			if i%2 == 0 {
 				err = poller.PollAndProcessActivityTask(false)
 			} else { // just for testing respondActivityTaskCompleteByID
 				err = poller.PollAndProcessActivityTaskWithID(false)
 			}
-			s.BarkLogger.Infof("PollAndProcessActivityTask: %v", err)
+			s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 			s.Nil(err)
 		}
 

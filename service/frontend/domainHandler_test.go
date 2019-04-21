@@ -27,7 +27,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/mocks"
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -63,7 +63,7 @@ func (s *domainHandlerSuite) TearDownSuite() {
 }
 
 func (s *domainHandlerSuite) SetupTest() {
-	logger := bark.NewNopLogger()
+	logger := loggerimpl.NewNopLogger()
 	s.config = NewConfig(dc.NewCollection(dc.NewNopClient(), logger), numHistoryShards, false, false)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}

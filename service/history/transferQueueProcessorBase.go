@@ -21,17 +21,18 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
+	"time"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
-	"time"
 )
 
 type (
@@ -50,8 +51,8 @@ type (
 		maxReadAckLevel        maxReadAckLevel
 		updateTransferAckLevel updateTransferAckLevel
 		transferQueueShutdown  transferQueueShutdown
-		logger                 bark.Logger
 		serializer             persistence.PayloadSerializer
+		logger                 log.Logger
 	}
 )
 
@@ -60,7 +61,7 @@ const defaultDomainName = "defaultDomainName"
 func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
 	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer, matchingClient matching.Client,
 	maxReadAckLevel maxReadAckLevel, updateTransferAckLevel updateTransferAckLevel,
-	transferQueueShutdown transferQueueShutdown, logger bark.Logger) *transferQueueProcessorBase {
+	transferQueueShutdown transferQueueShutdown, logger log.Logger) *transferQueueProcessorBase {
 	return &transferQueueProcessorBase{
 		shard:                  shard,
 		options:                options,
@@ -105,7 +106,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 
 func (t *transferQueueProcessorBase) pushActivity(task *persistence.TransferTaskInfo, activityScheduleToStartTimeout int32) error {
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
-		t.logger.WithField(logging.TagTaskType, task.GetTaskType()).Fatal("Cannot process non activity task")
+		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
 	err := t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
@@ -125,7 +126,7 @@ func (t *transferQueueProcessorBase) pushActivity(task *persistence.TransferTask
 
 func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTaskInfo, tasklist *workflow.TaskList, decisionScheduleToStartTimeout int32) error {
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
-		t.logger.WithField(logging.TagTaskType, task.GetTaskType()).Fatal("Cannot process non decision task")
+		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 
 	err := t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
@@ -169,12 +170,11 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	encoding := t.shard.GetEncoding(domainEntry)
 	memoBlob, err := t.serializer.SerializeVisibilityMemo(visibilityMemo, encoding)
 	if err != nil {
-		t.logger.WithFields(bark.Fields{
-			logging.TagErr:                 err.Error(),
-			logging.TagDomainID:            domainID,
-			logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-			logging.TagWorkflowRunID:       execution.GetRunId(),
-		}).Error("error serialize visibility memo")
+		t.logger.Error("error serialize visibility memo",
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
 	}
 	if memoBlob != nil {
 		memo = memoBlob.Data
@@ -237,12 +237,11 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	encoding := t.shard.GetEncoding(domainEntry)
 	memoBlob, err := t.serializer.SerializeVisibilityMemo(visibilityMemo, encoding)
 	if err != nil {
-		t.logger.WithFields(bark.Fields{
-			logging.TagErr:                 err.Error(),
-			logging.TagDomainID:            domainID,
-			logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-			logging.TagWorkflowRunID:       execution.GetRunId(),
-		}).Error("error serialize visibility memo")
+		t.logger.Error("error serialize visibility memo",
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
 	}
 	if memoBlob != nil {
 		memo = memoBlob.Data

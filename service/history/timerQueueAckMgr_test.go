@@ -21,19 +21,18 @@
 package history
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -57,7 +56,7 @@ type (
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockClientBean      *client.MockClientBean
 		metricsClient       metrics.Client
-		logger              bark.Logger
+		logger              log.Logger
 		clusterName         string
 		timerQueueAckMgr    *timerQueueAckMgrImpl
 	}
@@ -76,7 +75,7 @@ type (
 		mockClusterMetadata      *mocks.ClusterMetadata
 		mockClientBean           *client.MockClientBean
 		metricsClient            metrics.Client
-		logger                   bark.Logger
+		logger                   log.Logger
 		domainID                 string
 		timerQueueFailoverAckMgr *timerQueueAckMgrImpl
 		minLevel                 time.Time
@@ -95,9 +94,6 @@ func TestTimerQueueFailoverAckMgrSuite(t *testing.T) {
 }
 
 func (s *timerQueueAckMgrSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
 }
 
@@ -110,13 +106,13 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.mockShardMgr = &mocks.ShardManager{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, s.logger)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
 		shardInfo: copyShardInfo(&persistence.ShardInfo{
@@ -545,9 +541,6 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 
 // Tests for failover ack manager
 func (s *timerQueueFailoverAckMgrSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
 }
 
@@ -560,13 +553,13 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.mockShardMgr = &mocks.ShardManager{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, s.logger)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
 		shardInfo: copyShardInfo(&persistence.ShardInfo{

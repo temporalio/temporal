@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
@@ -54,7 +54,7 @@ type (
 
 	client struct {
 		metricsClient metrics.Client
-		logger        bark.Logger
+		logger        log.Logger
 		cadenceClient cclient.Client
 		numWorkflows  dynamicconfig.IntPropertyFn
 	}
@@ -63,7 +63,7 @@ type (
 // NewClient creates a new Client
 func NewClient(
 	metricsClient metrics.Client,
-	logger bark.Logger,
+	logger log.Logger,
 	publicClient workflowserviceclient.Interface,
 	numWorkflows dynamicconfig.IntPropertyFn,
 ) Client {
@@ -88,25 +88,11 @@ func (c *client) Archive(request *ArchiveRequest) error {
 	}
 	exec, err := c.cadenceClient.SignalWithStartWorkflow(context.Background(), workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
-		tagBarkLoggerWithRequest(c.logger, *request).WithFields(bark.Fields{
-			logging.TagErr:                 err,
-			logging.TagWorkflowExecutionID: exec.ID,
-			logging.TagWorkflowRunID:       exec.RunID,
-		}).Error("failed to SignalWithStartWorkflow to archival system workflow")
+		tagLoggerWithRequest(c.logger, *request).WithTags(tag.Error(err),
+			tag.WorkflowID(exec.ID),
+			tag.WorkflowRunID(exec.RunID),
+		).Error("failed to SignalWithStartWorkflow to archival system workflow")
 		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceFailures)
 	}
 	return err
-}
-
-func tagBarkLoggerWithRequest(logger bark.Logger, request ArchiveRequest) bark.Logger {
-	return logger.WithFields(bark.Fields{
-		logging.TagHistoryShardID:                     request.ShardID,
-		logging.TagArchiveRequestDomainID:             request.DomainID,
-		logging.TagArchiveRequestWorkflowID:           request.WorkflowID,
-		logging.TagArchiveRequestRunID:                request.RunID,
-		logging.TagArchiveRequestEventStoreVersion:    request.EventStoreVersion,
-		logging.TagArchiveRequestBranchToken:          request.BranchToken,
-		logging.TagArchiveRequestNextEventID:          request.NextEventID,
-		logging.TagArchiveRequestCloseFailoverVersion: request.CloseFailoverVersion,
-	})
 }

@@ -21,11 +21,11 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -40,12 +40,12 @@ type (
 		context         workflowExecutionContext
 		historyMgr      persistence.HistoryManager
 		historyV2Mgr    persistence.HistoryV2Manager
-		logger          bark.Logger
+		logger          log.Logger
 	}
 )
 
 func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	logger bark.Logger) *conflictResolverImpl {
+	logger log.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{
 		shard:           shard,
@@ -133,7 +133,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
 	resetMutableStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
 
-	r.logger.WithField(logging.TagResetNextEventID, resetMutableStateBuilder.GetNextEventID()).Info("All events applied for execution.")
+	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
 	msBuilder, err := r.context.resetMutableState(prevRunID, resetMutableStateBuilder)
 	if err != nil {
 		r.logError("Conflict resolution err reset workflow.", err)
@@ -174,7 +174,5 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 }
 
 func (r *conflictResolverImpl) logError(msg string, err error) {
-	r.logger.WithFields(bark.Fields{
-		logging.TagErr: err,
-	}).Error(msg)
+	r.logger.Error(msg, tag.Error(err))
 }

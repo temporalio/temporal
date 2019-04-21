@@ -21,15 +21,12 @@
 package sql
 
 import (
+	"database/sql"
 	"fmt"
 
-	"github.com/uber/cadence/common"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
-
-	"database/sql"
-
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 

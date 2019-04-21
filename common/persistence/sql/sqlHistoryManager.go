@@ -21,14 +21,13 @@
 package sql
 
 import (
+	"database/sql"
 	"fmt"
 
-	"database/sql"
-
 	"github.com/go-sql-driver/mysql"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
@@ -41,7 +40,7 @@ type sqlHistoryManager struct {
 }
 
 // newHistoryPersistence creates an instance of HistoryManager
-func newHistoryPersistence(cfg config.SQL, logger bark.Logger) (p.HistoryStore, error) {
+func newHistoryPersistence(cfg config.SQL, logger log.Logger) (p.HistoryStore, error) {
 	var db, err = storage.NewSQLDB(&cfg)
 	if err != nil {
 		return nil, err

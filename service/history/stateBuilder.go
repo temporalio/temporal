@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -32,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/errors"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -52,7 +52,7 @@ type (
 		clusterMetadata cluster.Metadata
 		msBuilder       mutableState
 		domainCache     cache.DomainCache
-		logger          bark.Logger
+		logger          log.Logger
 
 		transferTasks       []persistence.Task
 		timerTasks          []persistence.Task
@@ -68,7 +68,7 @@ const (
 
 var _ stateBuilder = (*stateBuilderImpl)(nil)
 
-func newStateBuilder(shard ShardContext, msBuilder mutableState, logger bark.Logger) *stateBuilderImpl {
+func newStateBuilder(shard ShardContext, msBuilder mutableState, logger log.Logger) *stateBuilderImpl {
 
 	return &stateBuilderImpl{
 		shard:           shard,

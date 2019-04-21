@@ -23,20 +23,18 @@ package host
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/pborman/uuid"
-	log2 "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"go.uber.org/zap"
@@ -50,7 +48,6 @@ type (
 		suite.Suite
 
 		testCluster       *TestCluster
-		barkLogger        bark.Logger
 		logger            log.Logger
 		engine            FrontendClient
 		ClusterMetadata   cluster.Metadata
@@ -65,18 +62,9 @@ func TestIntegrationCrossDCSuite(t *testing.T) {
 }
 
 func (s *integrationCrossDCSuite) SetupSuite() {
-	if testing.Verbose() {
-		log2.SetOutput(os.Stdout)
-	}
-
-	logger := log2.New()
-	formatter := &log2.TextFormatter{}
-	formatter.FullTimestamp = true
-	logger.Formatter = formatter
-	s.barkLogger = bark.NewLoggerFromLogrus(logger)
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
-	s.logger = log.NewLogger(zapLogger)
+	s.logger = loggerimpl.NewLogger(zapLogger)
 }
 
 func (s *integrationCrossDCSuite) TearDownSuite() {
@@ -113,7 +101,7 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 			NumHistoryHosts:  1,
 			NumHistoryShards: 1,
 		},
-	}, s.barkLogger, s.logger)
+	}, s.logger)
 	s.Require().NoError(err)
 	s.testCluster = c
 	s.engine = c.GetFrontendClient()

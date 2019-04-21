@@ -22,15 +22,12 @@ package frontend
 
 import (
 	"context"
-	"os"
 	"reflect"
 	"testing"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -38,6 +35,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -49,7 +48,7 @@ import (
 type (
 	dcRedirectionHandlerSuite struct {
 		suite.Suite
-		logger                 bark.Logger
+		logger                 log.Logger
 		currentClusterName     string
 		alternativeClusterName string
 		config                 *Config
@@ -74,9 +73,6 @@ func TestDCRedirectionHandlerSuite(t *testing.T) {
 }
 
 func (s *dcRedirectionHandlerSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *dcRedirectionHandlerSuite) TearDownSuite() {
@@ -84,9 +80,9 @@ func (s *dcRedirectionHandlerSuite) TearDownSuite() {
 }
 
 func (s *dcRedirectionHandlerSuite) SetupTest() {
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	var err error
+	s.logger, err = loggerimpl.NewDevelopment()
+	s.Require().NoError(err)
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), 0, false, false)
@@ -102,7 +98,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClientBean.On("GetHistoryClient").Return(s.mockHistoryClient)
 	s.mockRemoteFrontendClient = &mocks.FrontendClient{}
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
-	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.logger)
+	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
 	s.frontendHandler = NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, nil)
 	s.frontendHandler.metricsClient = metricsClient
 	s.frontendHandler.history = s.mockHistoryClient

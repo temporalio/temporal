@@ -22,12 +22,12 @@ package history
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -35,7 +35,8 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -66,7 +67,7 @@ type (
 		shutdownCh         chan struct{}
 		tasksCh            chan *persistence.TimerTaskInfo
 		config             *Config
-		logger             bark.Logger
+		logger             log.Logger
 		metricsClient      metrics.Client
 		timerFiredCount    uint64
 		timerProcessor     timerProcessor
@@ -94,11 +95,9 @@ type (
 func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *historyEngineImpl,
 	timerQueueAckMgr timerQueueAckMgr, timerGate TimerGate, maxPollRPS dynamicconfig.IntPropertyFn,
 	startDelay dynamicconfig.DurationPropertyFn, visibilityProducer messaging.Producer,
-	logger bark.Logger) *timerQueueProcessorBase {
+	logger log.Logger) *timerQueueProcessorBase {
 
-	log := logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
-	})
+	log := logger.WithTags(tag.ComponentTimerQueue)
 
 	workerNotificationChans := []chan struct{}{}
 	numOfWorker := shard.GetConfig().TimerTaskWorkerCount()
@@ -182,7 +181,7 @@ RetryProcessor:
 		default:
 			err := t.internalProcessor()
 			if err != nil {
-				t.logger.Error("processor pump failed with error: ", err)
+				t.logger.Error("processor pump failed with error", tag.Error(err))
 			}
 		}
 	}
@@ -414,7 +413,7 @@ func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan stru
 		attempt++
 		if attempt >= t.config.TimerTaskMaxRetryCount() {
 			t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-			logging.LogCriticalErrorEvent(logger, "Critical error processing timer task, retrying.", err)
+			logger.Error("Critical error processing timer task, retrying.", tag.Error(err), tag.OperationCritical)
 		}
 	}
 
@@ -463,7 +462,7 @@ FilterLoop:
 	}
 }
 
-func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo, shouldProcessTask bool, logger bark.Logger) (int, error) {
+func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo, shouldProcessTask bool, logger log.Logger) (int, error) {
 	select {
 	case <-notificationChan:
 	default:
@@ -480,7 +479,7 @@ func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct
 }
 
 func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time,
-	notificationChan <-chan struct{}, err error, logger bark.Logger) error {
+	notificationChan <-chan struct{}, err error, logger log.Logger) error {
 
 	if err == nil {
 		return nil
@@ -515,17 +514,17 @@ func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time
 	t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 
 	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-		logging.LogTaskProcessingFailedEvent(logger, "More than 2 workflow are running.", err)
+		logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
 	if _, ok := err.(*workflow.LimitExceededError); ok {
 		t.metricsClient.IncCounter(scope, metrics.TaskLimitExceededCounter)
-		logging.LogTaskProcessingFailedEvent(logger, "Task encounter limit exceeded error.", err)
+		logger.Error("Task encounter limit exceeded error.", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return err
 	}
 
-	logging.LogTaskProcessingFailedEvent(logger, "Fail to process task", err)
+	logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
 }
 
@@ -543,18 +542,16 @@ func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, s
 	atomic.AddUint64(&t.timerFiredCount, 1)
 }
 
-func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo) bark.Logger {
-	logger := t.logger.WithFields(bark.Fields{
-		logging.TagHistoryShardID:      t.shard.GetShardID(),
-		logging.TagTaskID:              task.GetTaskID(),
-		logging.TagTaskType:            task.GetTaskType(),
-		logging.TagVersion:             task.GetVersion(),
-		logging.TagTimeoutType:         task.TimeoutType,
-		logging.TagDomainID:            task.DomainID,
-		logging.TagWorkflowExecutionID: task.WorkflowID,
-		logging.TagWorkflowRunID:       task.RunID,
-	})
-	logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo) log.Logger {
+	logger := t.logger.WithTags(
+		tag.WorkflowID(task.RunID),
+		tag.WorkflowRunID(task.WorkflowID),
+		tag.WorkflowDomainID(task.DomainID),
+		tag.ShardID(t.shard.GetShardID()),
+		tag.TaskID(task.GetTaskID()),
+		tag.FailoverVersion(task.GetVersion()),
+		tag.TaskType(task.GetTaskType()))
+	logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
 	return logger
 }
 
@@ -651,15 +648,14 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 
 	// send signal before deleting mutable state to make sure archival is idempotent
 	if err := t.historyService.archivalClient.Archive(req); err != nil {
-		t.logger.WithFields(bark.Fields{
-			logging.TagHistoryShardID:      t.shard.GetShardID(),
-			logging.TagTaskID:              task.GetTaskID(),
-			logging.TagTaskType:            task.GetTaskType(),
-			logging.TagDomainID:            task.DomainID,
-			logging.TagWorkflowExecutionID: task.WorkflowID,
-			logging.TagWorkflowRunID:       task.RunID,
-			logging.TagErr:                 err,
-		}).Error("failed to initiate archival")
+		t.logger.Error("failed to initiate archival", tag.Error(err),
+			tag.WorkflowID(task.RunID),
+			tag.WorkflowRunID(task.WorkflowID),
+			tag.WorkflowDomainID(task.DomainID),
+			tag.ShardID(t.shard.GetShardID()),
+			tag.TaskID(task.GetTaskID()),
+			tag.FailoverVersion(task.GetVersion()),
+			tag.TaskType(task.GetTaskType()))
 		return err
 	}
 	err := t.deleteWorkflowExecution(task)
@@ -691,14 +687,13 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op := func() error {
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			logger := t.logger.WithFields(bark.Fields{
-				logging.TagHistoryShardID:      t.shard.GetShardID(),
-				logging.TagTaskID:              task.GetTaskID(),
-				logging.TagTaskType:            task.GetTaskType(),
-				logging.TagDomainID:            task.DomainID,
-				logging.TagWorkflowExecutionID: task.WorkflowID,
-				logging.TagWorkflowRunID:       task.RunID,
-			})
+			logger := t.logger.WithTags(tag.WorkflowID(task.RunID),
+				tag.WorkflowRunID(task.WorkflowID),
+				tag.WorkflowDomainID(task.DomainID),
+				tag.ShardID(t.shard.GetShardID()),
+				tag.TaskID(task.GetTaskID()),
+				tag.FailoverVersion(task.GetVersion()),
+				tag.TaskType(task.GetTaskType()))
 			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, msBuilder.GetCurrentBranch(), common.IntPtr(t.shard.GetShardID()), logger)
 		}
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(

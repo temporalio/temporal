@@ -26,13 +26,12 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	ce "github.com/uber/cadence/common/errors"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -132,11 +131,10 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(ctx context.Context, resetR
 	// dedup by requestID
 	if currMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestId() {
 		response.RunId = currExecution.RunId
-		w.eng.logger.WithFields(bark.Fields{
-			logging.TagDomainID:            domainID,
-			logging.TagWorkflowExecutionID: currExecution.GetWorkflowId(),
-			logging.TagWorkflowRunID:       currExecution.GetRunId(),
-		}).Info("Duplicated reset request")
+		w.eng.logger.Info("Duplicated reset request",
+			tag.WorkflowID(currExecution.GetWorkflowId()),
+			tag.WorkflowRunID(currExecution.GetRunId()),
+			tag.WorkflowDomainID(domainID))
 		return
 	}
 

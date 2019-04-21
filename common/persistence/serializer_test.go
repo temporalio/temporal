@@ -25,10 +25,11 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 )
@@ -39,7 +40,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		logger bark.Logger
+		logger log.Logger
 	}
 )
 
@@ -49,7 +50,9 @@ func TestCadenceSerializerSuite(t *testing.T) {
 }
 
 func (s *cadenceSerializerSuite) SetupTest() {
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	var err error
+	s.logger, err = loggerimpl.NewDevelopment()
+	s.Require().NoError(err)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }

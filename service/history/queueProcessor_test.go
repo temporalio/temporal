@@ -22,19 +22,17 @@ package history
 
 import (
 	"errors"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
-
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
-	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -46,7 +44,7 @@ import (
 type (
 	queueProcessorSuite struct {
 		clusterName         string
-		logger              bark.Logger
+		logger              log.Logger
 		mockService         service.Service
 		mockShard           ShardContext
 		mockMetadataMgr     *mocks.MetadataManager
@@ -70,9 +68,6 @@ func TestQueueProcessorSuite(t *testing.T) {
 }
 
 func (s *queueProcessorSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
 }
 
@@ -84,15 +79,13 @@ func (s *queueProcessorSuite) SetupTest() {
 	shardID := 0
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.clusterName = cluster.TestAlternativeClusterName
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockProcessor = &MockProcessor{}
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.logger)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},

@@ -25,8 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/log"
 )
 
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
@@ -35,12 +35,12 @@ type RuntimeMetricsReporter struct {
 	reportInterval time.Duration
 	started        int32
 	quit           chan struct{}
-	logger         bark.Logger
+	logger         log.Logger
 	lastNumGC      uint32
 }
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
-func NewRuntimeMetricsReporter(scope tally.Scope, reportInterval time.Duration, logger bark.Logger) *RuntimeMetricsReporter {
+func NewRuntimeMetricsReporter(scope tally.Scope, reportInterval time.Duration, logger log.Logger) *RuntimeMetricsReporter {
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 	rReporter := &RuntimeMetricsReporter{

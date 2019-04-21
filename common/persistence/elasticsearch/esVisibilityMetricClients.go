@@ -21,9 +21,9 @@
 package elasticsearch
 
 import (
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 )
@@ -31,13 +31,13 @@ import (
 type visibilityMetricsClient struct {
 	metricClient metrics.Client
 	persistence  p.VisibilityManager
-	logger       bark.Logger
+	logger       log.Logger
 }
 
 var _ p.VisibilityManager = (*visibilityMetricsClient)(nil)
 
 // NewVisibilityMetricsClient wrap visibility client with metrics
-func NewVisibilityMetricsClient(persistence p.VisibilityManager, metricClient metrics.Client, logger bark.Logger) p.VisibilityManager {
+func NewVisibilityMetricsClient(persistence p.VisibilityManager, metricClient metrics.Client, logger log.Logger) p.VisibilityManager {
 	return &visibilityMetricsClient{
 		persistence:  persistence,
 		metricClient: metricClient,
@@ -202,10 +202,7 @@ func (p *visibilityMetricsClient) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
 	default:
-		p.logger.WithFields(bark.Fields{
-			logging.TagScope: scope,
-			logging.TagErr:   err,
-		}).Error("Operation failed with internal error.")
+		p.logger.Error("Operation failed with internal error.", tag.MetricScope(scope), tag.Error(err))
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
 	}
 }

@@ -22,13 +22,13 @@ package matching
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
-	"github.com/uber/cadence/common/persistence"
-
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 )
 
 var epochStartTime = time.Unix(0, 0)
@@ -42,9 +42,9 @@ deliverBufferTasksLoop:
 				c.logger.Info("Tasklist manager context is cancelled, shutting down")
 				break deliverBufferTasksLoop
 			}
-			c.logger.Debugf(
+			c.logger.Debug(fmt.Sprintf(
 				"Unable to add buffer task, rate limit failed, domainId: %s, tasklist: %s, error: %s",
-				c.taskListID.domainID, c.taskListID.taskListName, err.Error(),
+				c.taskListID.domainID, c.taskListID.taskListName, err.Error()),
 			)
 			c.domainScope.IncCounter(metrics.BufferThrottleCounter)
 			// This is to prevent busy looping when throttling is set to 0
@@ -114,8 +114,9 @@ getTasksPumpLoop:
 						// This indicates the task list may have moved to another host.
 						c.Stop()
 					} else {
-						logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err,
-							"Persist AckLevel failed")
+						c.logger.Error("Persistent store operation failure",
+							tag.StoreOperationUpdateTaskList,
+							tag.Error(err))
 					}
 					// keep going as saving ack is not critical
 				}

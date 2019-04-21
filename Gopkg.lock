@@ -951,7 +951,6 @@
     "github.com/stretchr/testify/mock",
     "github.com/stretchr/testify/require",
     "github.com/stretchr/testify/suite",
-    "github.com/uber-common/bark",
     "github.com/uber-go/kafka-client",
     "github.com/uber-go/kafka-client/kafka",
     "github.com/uber-go/tally",

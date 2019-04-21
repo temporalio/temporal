@@ -27,10 +27,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -56,7 +56,7 @@ type (
 		visibilityProducer     messaging.Producer
 		historyService         *historyEngineImpl
 		ackLevel               TimerSequenceID
-		logger                 bark.Logger
+		logger                 log.Logger
 		matchingClient         matching.Client
 		isStarted              int32
 		isStopped              int32
@@ -66,11 +66,9 @@ type (
 	}
 )
 
-func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, visibilityProducer messaging.Producer, logger bark.Logger) timerQueueProcessor {
+func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, visibilityProducer messaging.Producer, logger log.Logger) timerQueueProcessor {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
-	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
-	})
+	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
@@ -165,7 +163,10 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) 
 	}
 	// the ack manager is exclusive, so just add a cassandra min precision
 	maxLevel := t.activeTimerProcessor.timerQueueAckMgr.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
-	t.logger.Infof("Timer Failover Triggered: %v, min level: %v, max level: %v.\n", domainIDs, minLevel, maxLevel)
+	t.logger.Info("Timer Failover Triggered",
+		tag.WorkflowDomainIDs(domainIDs),
+		tag.MinLevel(int64(minLevel.Nanosecond())),
+		tag.MaxLevel(int64(maxLevel.Nanosecond())))
 	// we should consider make the failover idempotent
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainIDs,
 		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.taskAllocator, t.visibilityProducer, t.logger)
@@ -214,7 +215,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 			for attempt := 0; attempt < t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
 				err := t.completeTimers()
 				if err != nil {
-					t.logger.Infof("Failed to complete timers: %v.", err)
+					t.logger.Info("Failed to complete timers.", tag.Error(err))
 					backoff := time.Duration(attempt * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {
@@ -245,7 +246,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		}
 	}
 
-	t.logger.Debugf("Start completing timer task from: %v, to %v.", lowerAckLevel, upperAckLevel)
+	t.logger.Debug(fmt.Sprintf("Start completing timer task from: %v, to %v.", lowerAckLevel, upperAckLevel))
 	if !compareTimerIDLess(&lowerAckLevel, &upperAckLevel) {
 		return nil
 	}

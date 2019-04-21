@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package log
+package loggerimpl
 
 import (
 	"bytes"
@@ -29,13 +29,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/uber-common/bark"
-	"go.uber.org/zap"
-
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"go.uber.org/zap"
 )
 
 func TestDefaultLogger(t *testing.T) {
@@ -86,7 +83,7 @@ func TestThrottleLogger(t *testing.T) {
 	zapLogger = zap.NewExample()
 
 	dc := dynamicconfig.NewNopClient()
-	cln := dynamicconfig.NewCollection(dc, bark.NewLoggerFromLogrus(logrus.New()))
+	cln := dynamicconfig.NewCollection(dc, NewNopLogger())
 	logger := NewThrottledLogger(NewLogger(zapLogger), cln.GetIntProperty(dynamicconfig.FrontendRPS, 1))
 	preCaller := caller(1)
 	logger.WithTags(tag.Error(fmt.Errorf("test error"))).WithTags(tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)

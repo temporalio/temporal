@@ -24,7 +24,8 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
@@ -244,11 +245,11 @@ type Service struct {
 // NewService builds a new cadence-history service
 func NewService(params *service.BootstrapParams) common.Daemon {
 	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger),
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
 		params.ESConfig.Enable,
 		params.PersistenceConfig.DefaultStoreType())
-	params.ThrottledBarkLogger = logging.NewThrottledLogger(params.BarkLogger, config.ThrottledLogRPS)
+	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),
@@ -260,10 +261,10 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 func (s *Service) Start() {
 
 	var params = s.params
-	var log = params.BarkLogger
+	var log = params.Logger
 
-	log.Infof("elastic search config: %v", params.ESConfig)
-	log.Infof("%v starting", common.HistoryServiceName)
+	log.Info("elastic search config", tag.ESConfig(params.ESConfig))
+	log.Info("starting", tag.Service(common.HistoryServiceName))
 
 	base := service.New(params)
 
@@ -282,33 +283,33 @@ func (s *Service) Start() {
 
 	shardMgr, err := pFactory.NewShardManager()
 	if err != nil {
-		log.Fatalf("failed to create shard manager: %v", err)
+		log.Fatal("failed to create shard manager", tag.Error(err))
 	}
 
 	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
 	if err != nil {
-		log.Fatalf("failed to create metadata manager: %v", err)
+		log.Fatal("failed to create metadata manager", tag.Error(err))
 	}
 
 	visibility, err := pFactory.NewVisibilityManager()
 	if err != nil {
-		log.Fatalf("failed to create visibility manager: %v", err)
+		log.Fatal("failed to create visibility manager", tag.Error(err))
 	}
 
 	history, err := pFactory.NewHistoryManager()
 	if err != nil {
-		log.Fatalf("Creating history manager persistence failed: %v", err)
+		log.Fatal("Creating history manager persistence failed", tag.Error(err))
 	}
 
 	historyV2, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
-		log.Fatalf("Creating historyV2 manager persistence failed: %v", err)
+		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}
 
 	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, params.PublicClient)
 	handler.Start()
 
-	log.Infof("%v started", common.HistoryServiceName)
+	log.Info("started", tag.Service(common.HistoryServiceName))
 
 	<-s.stopC
 	base.Stop()
@@ -320,5 +321,5 @@ func (s *Service) Stop() {
 	case s.stopC <- struct{}{}:
 	default:
 	}
-	s.params.BarkLogger.Infof("%v stopped", common.HistoryServiceName)
+	s.params.Logger.Info("stopped", tag.Service(common.HistoryServiceName))
 }

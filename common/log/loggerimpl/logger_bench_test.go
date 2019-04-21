@@ -17,15 +17,14 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package log
+package loggerimpl
 
 import (
 	"testing"
 
+	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/uber/cadence/common/log/tag"
 )
 
 /**

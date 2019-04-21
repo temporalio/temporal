@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -35,7 +34,8 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/locks"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -51,7 +51,7 @@ type (
 		continueAsNewWorkflowExecution(context []byte, newStateBuilder mutableState, transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
 		getDomainID() string
 		getExecution() *workflow.WorkflowExecution
-		getLogger() bark.Logger
+		getLogger() log.Logger
 		loadWorkflowExecution() (mutableState, error)
 		lock(context.Context) error
 		appendFirstBatchHistoryForContinueAsNew(newStateBuilder mutableState, transactionID int64) error
@@ -74,7 +74,7 @@ type (
 		shard             ShardContext
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
-		logger            bark.Logger
+		logger            log.Logger
 		metricsClient     metrics.Client
 
 		locker                locks.Mutex
@@ -97,13 +97,12 @@ func newWorkflowExecutionContext(
 	execution workflow.WorkflowExecution,
 	shard ShardContext,
 	executionManager persistence.ExecutionManager,
-	logger bark.Logger,
+	logger log.Logger,
 ) *workflowExecutionContextImpl {
-	lg := logger.WithFields(bark.Fields{
-		logging.TagDomainID:            domainID,
-		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-		logging.TagWorkflowRunID:       execution.GetRunId(),
-	})
+	lg := logger.WithTags(
+		tag.WorkflowID(domainID),
+		tag.WorkflowRunID(execution.GetWorkflowId()),
+		tag.WorkflowDomainID(execution.GetRunId()))
 
 	return &workflowExecutionContextImpl{
 		domainID:          domainID,
@@ -133,7 +132,7 @@ func (c *workflowExecutionContextImpl) getExecution() *workflow.WorkflowExecutio
 	return &c.workflowExecution
 }
 
-func (c *workflowExecutionContextImpl) getLogger() bark.Logger {
+func (c *workflowExecutionContextImpl) getLogger() log.Logger {
 	return c.logger
 }
 
@@ -160,7 +159,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 	})
 	if err != nil {
 		if common.IsPersistenceTransientError(err) {
-			logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationGetWorkflowExecution, err, "")
+			c.logger.Error("Persistent store operation failure",
+				tag.StoreOperationGetWorkflowExecution,
+				tag.Error(err))
 		}
 		return err
 	}
@@ -388,9 +389,9 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewRun(transfe
 	}
 
 	if !c.createReplicationTask {
-		c.logger.Debugf("Skipping replication task creation: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
+		c.logger.Debug(fmt.Sprintf("Skipping replication task creation: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
 			c.domainID, c.workflowExecution.GetWorkflowId(), c.workflowExecution.GetRunId(),
-			c.msBuilder.GetExecutionInfo().LastFirstEventID, c.msBuilder.GetExecutionInfo().NextEventID)
+			c.msBuilder.GetExecutionInfo().LastFirstEventID, c.msBuilder.GetExecutionInfo().NextEventID))
 	}
 
 	now := time.Now()
@@ -441,14 +442,15 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	hasNewActiveHistoryEvents := len(activeHistoryBuilder.history) > 0
 
 	if hasNewStandbyHistoryEvents && hasNewActiveHistoryEvents {
-		c.logger.WithFields(bark.Fields{
-			logging.TagDomainID:            executionInfo.DomainID,
-			logging.TagWorkflowExecutionID: executionInfo.WorkflowID,
-			logging.TagWorkflowRunID:       executionInfo.RunID,
-			logging.TagFirstEventID:        executionInfo.LastFirstEventID,
-			logging.TagNextEventID:         executionInfo.NextEventID,
-			logging.TagReplicationState:    c.msBuilder.GetReplicationState(),
-		}).Fatal("Both standby and active history builder has events.")
+		c.logger.Fatal("Both standby and active history builder has events.",
+			tag.WorkflowID(executionInfo.WorkflowID),
+			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowFirstEventID(executionInfo.LastFirstEventID),
+			tag.WorkflowNextEventID(executionInfo.NextEventID),
+			tag.ReplicationState(c.msBuilder.GetReplicationState()),
+		)
+
 	}
 
 	// Replication state should only be updated after the UpdateSession is closed.  IDs for certain events are only
@@ -528,13 +530,12 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 
 		if historySize > sizeLimitWarn || historyCount > countLimitWarn {
 			// emit warning
-			c.logger.WithFields(bark.Fields{
-				logging.TagDomainID:            executionInfo.DomainID,
-				logging.TagWorkflowExecutionID: executionInfo.WorkflowID,
-				logging.TagWorkflowRunID:       executionInfo.RunID,
-				logging.TagHistorySize:         historySize,
-				logging.TagEventCount:          historyCount,
-			}).Warn("history size exceeds limit.")
+			c.logger.Warn("history size exceeds limit.",
+				tag.WorkflowID(executionInfo.WorkflowID),
+				tag.WorkflowRunID(executionInfo.RunID),
+				tag.WorkflowDomainID(executionInfo.DomainID),
+				tag.WorkflowHistorySize(historySize),
+				tag.WorkflowEventCount(historyCount))
 
 			sizeLimitError := config.HistorySizeLimitError(executionInfo.DomainID)
 			countLimitError := config.HistoryCountLimitError(executionInfo.DomainID)
@@ -669,8 +670,9 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 			return ErrConflict
 		}
 
-		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateWorkflowExecution, err1,
-			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
+		c.logger.Error("Persistent store operation failure",
+			tag.StoreOperationUpdateWorkflowExecution,
+			tag.Error(err), tag.Number(c.updateCondition))
 		return err1
 	}
 
@@ -740,8 +742,10 @@ func (c *workflowExecutionContextImpl) appendHistoryEvents(history []*workflow.H
 			return historySize, ErrConflict
 		}
 
-		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateWorkflowExecution, err,
-			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
+		c.logger.Error("Persistent store operation failure",
+			tag.StoreOperationUpdateWorkflowExecution,
+			tag.Error(err),
+			tag.Number(c.updateCondition))
 		return historySize, err
 	}
 
@@ -1128,11 +1132,10 @@ func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(input
 		return nil
 
 	default:
-		c.logger.WithFields(bark.Fields{
-			logging.TagDomainID:            c.domainID,
-			logging.TagWorkflowExecutionID: c.workflowExecution.GetWorkflowId(),
-			logging.TagWorkflowRunID:       c.workflowExecution.GetRunId(),
-		}).Error("encounter case where events appears after workflow finish.")
+		c.logger.Error("encounter case where events appears after workflow finish.",
+			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
+			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
+			tag.WorkflowDomainID(c.domainID))
 
 		return ErrEventsAterWorkflowFinish
 	}

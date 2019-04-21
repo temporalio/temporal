@@ -22,23 +22,19 @@ package history
 
 import (
 	"errors"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence"
-	"os"
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
-	"github.com/uber-go/tally"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
-
-	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -47,7 +43,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		logger bark.Logger
+		logger log.Logger
 
 		mockEventsMgr   *mocks.HistoryManager
 		mockEventsV2Mgr *mocks.HistoryV2Manager
@@ -62,9 +58,7 @@ func TestEventsCacheSuite(t *testing.T) {
 }
 
 func (s *eventsCacheSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
+
 }
 
 func (s *eventsCacheSuite) TearDownSuite() {
@@ -72,7 +66,7 @@ func (s *eventsCacheSuite) TearDownSuite() {
 }
 
 func (s *eventsCacheSuite) SetupTest() {
-	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.mockEventsMgr = &mocks.HistoryManager{}

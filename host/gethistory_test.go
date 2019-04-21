@@ -26,12 +26,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/common/persistence"
-
 	"github.com/pborman/uuid"
+	"github.com/uber/cadence/.gen/go/admin"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/persistence"
 )
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -63,7 +63,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -114,7 +114,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -152,7 +152,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", errDecision1)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -164,11 +164,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", errActivity)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", errDecision2)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -231,7 +231,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -282,7 +282,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -320,7 +320,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", errDecision1)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -332,11 +332,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", errActivity)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", errDecision2)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -394,7 +394,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		RunId:      common.StringPtr(we.GetRunId()),
 	}
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -445,7 +445,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -638,7 +638,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 		RunId:      common.StringPtr(we.GetRunId()),
 	}
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -689,7 +689,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 

@@ -23,16 +23,13 @@ package history
 import (
 	ctx "context"
 	"errors"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -42,6 +39,8 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -57,7 +56,7 @@ const (
 type (
 	historyReplicatorSuite struct {
 		suite.Suite
-		logger              bark.Logger
+		logger              log.Logger
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryMgr      *mocks.HistoryManager
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
@@ -83,9 +82,6 @@ func TestHistoryReplicatorSuite(t *testing.T) {
 }
 
 func (s *historyReplicatorSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
 }
 
@@ -94,9 +90,7 @@ func (s *historyReplicatorSuite) TearDownSuite() {
 }
 
 func (s *historyReplicatorSuite) SetupTest() {
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
@@ -107,7 +101,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, s.logger)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -1310,7 +1304,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
-	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger bark.Logger) conflictResolver {
+	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger log.Logger) conflictResolver {
 		return mockConflictResolver
 	}
 	msBuilderMid := &mockMutableState{}
@@ -1371,7 +1365,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
-	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger bark.Logger) conflictResolver {
+	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger log.Logger) conflictResolver {
 		return mockConflictResolver
 	}
 	msBuilderMid := &mockMutableState{}
@@ -1460,7 +1454,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
-	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger bark.Logger) conflictResolver {
+	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger log.Logger) conflictResolver {
 		return mockConflictResolver
 	}
 	msBuilderMid := &mockMutableState{}
@@ -1611,7 +1605,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
-	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger bark.Logger) conflictResolver {
+	s.historyReplicator.getNewConflictResolver = func(context workflowExecutionContext, logger log.Logger) conflictResolver {
 		return mockConflictResolver
 	}
 	msBuilderMid := &mockMutableState{}

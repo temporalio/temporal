@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
@@ -558,7 +557,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(p.WorkflowStateCreated, info.State)
 	s.Equal(createReq.NextEventID, info.NextEventID)
 	s.Equal(createReq.LastProcessedEvent, info.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info.LastUpdatedTimestamp, time.Hour))
 	s.Equal(createReq.DecisionVersion, info.DecisionVersion)
 	s.Equal(createReq.DecisionScheduleID, info.DecisionScheduleID)
 	s.Equal(createReq.DecisionStartedID, info.DecisionStartedID)
@@ -616,7 +615,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(1), info0.LastFirstEventID)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info0.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info0.LastUpdatedTimestamp, time.Hour))
 	s.Equal(int64(0), info0.DecisionVersion)
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info0.DecisionStartedID)
@@ -673,7 +672,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(3), info1.LastFirstEventID)
 	s.Equal(int64(5), info1.NextEventID)
 	s.Equal(int64(2), info1.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info1.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info1.LastUpdatedTimestamp, time.Hour))
 	s.Equal(int64(666), info1.DecisionVersion)
 	s.Equal(int64(2), info1.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info1.DecisionStartedID)
@@ -718,7 +717,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(p.WorkflowStateCreated, info2.State)
 	s.Equal(int64(5), info2.NextEventID)
 	s.Equal(int64(2), info2.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info2.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info2.LastUpdatedTimestamp, time.Hour))
 	s.Equal(int64(666), info2.DecisionVersion)
 	s.Equal(int64(2), info2.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info2.DecisionStartedID)
@@ -757,7 +756,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(p.WorkflowStateCreated, info3.State)
 	s.Equal(int64(5), info3.NextEventID)
 	s.Equal(int64(2), info3.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info3.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info3.LastUpdatedTimestamp, time.Hour))
 	s.Equal(int64(666), info3.DecisionVersion)
 	s.Equal(int64(2), info3.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info3.DecisionStartedID)
@@ -797,7 +796,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(p.WorkflowStateCreated, info4.State)
 	s.Equal(int64(5), info4.NextEventID)
 	s.Equal(int64(2), info4.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info4.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info4.LastUpdatedTimestamp, time.Hour))
 	s.Equal(int64(666), info4.DecisionVersion)
 	s.Equal(int64(2), info4.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info4.DecisionStartedID)
@@ -843,7 +842,7 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	s.Equal(p.WorkflowStateCreated, info0.State)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info0.LastUpdatedTimestamp, time.Hour))
+	s.Equal(true, s.validateTimeRange(info0.LastUpdatedTimestamp, time.Hour))
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info0.DecisionStartedID)
 	s.Equal(int32(1), info0.DecisionTimeout)

@@ -22,10 +22,8 @@ package dynamicconfig
 
 import (
 	"errors"
+	"github.com/uber/cadence/common/log"
 	"time"
-
-	"github.com/sirupsen/logrus"
-	"github.com/uber-common/bark"
 )
 
 // Client allows fetching values from a dynamic configuration system NOTE: This does not have async
@@ -93,5 +91,5 @@ func NewNopClient() Client {
 
 // NewNopCollection creates a new nop collection
 func NewNopCollection() *Collection {
-	return NewCollection(&nopClient{}, bark.NewLoggerFromLogrus(logrus.New()))
+	return NewCollection(&nopClient{}, log.NewNoop())
 }

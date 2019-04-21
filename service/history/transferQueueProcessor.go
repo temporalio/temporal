@@ -27,11 +27,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -58,7 +58,7 @@ type (
 		matchingClient        matching.Client
 		historyClient         history.Client
 		ackLevel              int64
-		logger                bark.Logger
+		logger                log.Logger
 		isStarted             int32
 		isStopped             int32
 		shutdownChan          chan struct{}
@@ -69,10 +69,8 @@ type (
 
 func newTransferQueueProcessor(shard ShardContext, historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer,
-	matchingClient matching.Client, historyClient history.Client, logger bark.Logger) *transferQueueProcessorImpl {
-	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueTransferQueueComponent,
-	})
+	matchingClient matching.Client, historyClient history.Client, logger log.Logger) *transferQueueProcessorImpl {
+	logger = logger.WithTags(tag.ComponentTransferQueue)
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	taskAllocator := newTaskAllocator(shard)
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
@@ -177,7 +175,10 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{
 
 	// the ack manager is exclusive, so add 1
 	maxLevel := t.activeTaskProcessor.getQueueReadLevel() + 1
-	t.logger.Infof("Transfer Failover Triggered: %v, min level: %v, max level: %v.\n", domainIDs, minLevel, maxLevel)
+	t.logger.Info("Transfer Failover Triggered",
+		tag.WorkflowDomainIDs(domainIDs),
+		tag.MinLevel(minLevel),
+		tag.MaxLevel(maxLevel))
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard, t.historyService, t.visibilityMgr, t.visibilityProducer, t.matchingClient, t.historyClient,
 		domainIDs, standbyClusterName, minLevel, maxLevel, t.taskAllocator, t.logger,
@@ -216,7 +217,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 			for attempt := 0; attempt < t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
 				err := t.completeTransfer()
 				if err != nil {
-					t.logger.Infof("Failed to complete transfer task: %v.", err)
+					t.logger.Info("Failed to complete transfer task", tag.Error(err))
 					backoff := time.Duration(attempt * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {
@@ -247,7 +248,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		}
 	}
 
-	t.logger.Debugf("Start completing transfer task from: %v, to %v.", lowerAckLevel, upperAckLevel)
+	t.logger.Debug(fmt.Sprintf("Start completing transfer task from: %v, to %v.", lowerAckLevel, upperAckLevel))
 	if lowerAckLevel >= upperAckLevel {
 		return nil
 	}

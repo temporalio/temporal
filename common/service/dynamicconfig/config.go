@@ -21,16 +21,16 @@
 package dynamicconfig
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
-	"fmt"
-
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 // NewCollection creates a new collection
-func NewCollection(client Client, logger bark.Logger) *Collection {
+func NewCollection(client Client, logger log.Logger) *Collection {
 	return &Collection{client, logger, &sync.Map{}}
 }
 
@@ -39,14 +39,14 @@ func NewCollection(client Client, logger bark.Logger) *Collection {
 // code
 type Collection struct {
 	client Client
-	logger bark.Logger
+	logger log.Logger
 	keys   *sync.Map
 }
 
 func (c *Collection) logNoValue(key Key, err error) {
 	_, loaded := c.keys.LoadOrStore(key, struct{}{})
 	if !loaded {
-		c.logger.Debugf("Failed to fetch key: %s from dynamic config with err: %s", key.String(), err.Error())
+		c.logger.Debug("Failed to fetch key: %s from dynamic config with err: %s", tag.Key(key.String()), tag.Error(err))
 	}
 }
 
@@ -54,11 +54,8 @@ func (c *Collection) logValue(key Key, value, defaultValue interface{}) {
 	k := fmt.Sprintf("%s-%s", key.String(), value)
 	_, loaded := c.keys.LoadOrStore(k, struct{}{})
 	if !loaded {
-		c.logger.WithFields(bark.Fields{
-			"configName":       key.String(),
-			"configVal":        fmt.Sprintf("%v", value),
-			"configDefaultVal": fmt.Sprintf("%v", defaultValue),
-		}).Info("Get dynamic config")
+		c.logger.Info("Get dynamic config",
+			tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
 	}
 }
 

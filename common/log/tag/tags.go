@@ -22,8 +22,6 @@ package tag
 
 import (
 	"time"
-
-	"github.com/uber/cadence/common/persistence"
 )
 
 // All logging tags are defined in this file.
@@ -92,9 +90,24 @@ func WorkflowType(wfType string) Tag {
 	return newStringTag("wf-type", wfType)
 }
 
+// WorkflowState returns tag for WorkflowState
+func WorkflowState(s int) Tag {
+	return newInt("wf-state", s)
+}
+
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) Tag {
 	return newStringTag("wf-run-id", runID)
+}
+
+// WorkflowActivityID returns tag for WorkflowActivityID
+func WorkflowActivityID(id string) Tag {
+	return newStringTag("wf-activity-id", id)
+}
+
+// WorkflowTimerID returns tag for WorkflowTimerID
+func WorkflowTimerID(id string) Tag {
+	return newStringTag("wf-timer-id", id)
 }
 
 // WorkflowBeginningRunID returns tag for WorkflowBeginningRunID
@@ -105,6 +118,11 @@ func WorkflowBeginningRunID(beginningRunID string) Tag {
 // WorkflowEndingRunID returns tag for WorkflowEndingRunID
 func WorkflowEndingRunID(endingRunID string) Tag {
 	return newStringTag("wf-ending-run-id", endingRunID)
+}
+
+// WorkflowDecisionTimeoutSeconds returns tag for WorkflowDecisionTimeoutSeconds
+func WorkflowDecisionTimeoutSeconds(s int32) Tag {
+	return newInt32("wf-decision-timeout", s)
 }
 
 // domain related
@@ -120,7 +138,7 @@ func WorkflowDomainName(domainName string) Tag {
 }
 
 // WorkflowDomainIDs returns tag for WorkflowDomainIDs
-func WorkflowDomainIDs(domainIDs []string) Tag {
+func WorkflowDomainIDs(domainIDs interface{}) Tag {
 	return newObjectTag("wf-domain-ids", domainIDs)
 }
 
@@ -134,6 +152,16 @@ func WorkflowEventID(eventID int64) Tag {
 // WorkflowScheduleID returns tag for WorkflowScheduleID
 func WorkflowScheduleID(scheduleID int64) Tag {
 	return newInt64("wf-schedule-id", scheduleID)
+}
+
+// WorkflowStartedID returns tag for WorkflowStartedID
+func WorkflowStartedID(id int64) Tag {
+	return newInt64("wf-started-id", id)
+}
+
+// WorkflowInitiatedID returns tag for WorkflowInitiatedID
+func WorkflowInitiatedID(id int64) Tag {
+	return newInt64("wf-initiated-id", id)
 }
 
 // WorkflowFirstEventID returns tag for WorkflowFirstEventID
@@ -180,14 +208,19 @@ func WorkflowDecisionType(decisionType int64) Tag {
 	return newInt64("wf-decision-type", decisionType)
 }
 
+// WorkflowQueryType returns tag for WorkflowQueryType
+func WorkflowQueryType(qt string) Tag {
+	return newStringTag("wf-query-type", qt)
+}
+
 // WorkflowDecisionFailCause returns tag for WorkflowDecisionFailCause
 func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
 	return newInt64("wf-decision-fail-cause", decisionFailCause)
 }
 
 // WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType int64) Tag {
-	return newInt64("wf-task-list-type", taskListType)
+func WorkflowTaskListType(taskListType int) Tag {
+	return newInt("wf-task-list-type", taskListType)
 }
 
 // WorkflowTaskListName returns tag for WorkflowTaskListName
@@ -203,23 +236,23 @@ func WorkflowSize(workflowSize int64) Tag {
 }
 
 // WorkflowSignalCount returns tag for SignalCount
-func WorkflowSignalCount(signalCount int64) Tag {
-	return newInt64("wf-signal-count", signalCount)
+func WorkflowSignalCount(signalCount int32) Tag {
+	return newInt32("wf-signal-count", signalCount)
 }
 
 // WorkflowHistorySize returns tag for HistorySize
-func WorkflowHistorySize(historySize int64) Tag {
-	return newInt64("wf-history-size", historySize)
+func WorkflowHistorySize(historySize int) Tag {
+	return newInt("wf-history-size", historySize)
 }
 
 // WorkflowHistorySizeBytes returns tag for HistorySizeBytes
-func WorkflowHistorySizeBytes(historySizeBytes int64) Tag {
-	return newInt64("wf-history-size-bytes", historySizeBytes)
+func WorkflowHistorySizeBytes(historySizeBytes int) Tag {
+	return newInt("wf-history-size-bytes", historySizeBytes)
 }
 
 // WorkflowEventCount returns tag for EventCount
-func WorkflowEventCount(eventCount int64) Tag {
-	return newInt64("wf-event-count", eventCount)
+func WorkflowEventCount(eventCount int) Tag {
+	return newInt("wf-event-count", eventCount)
 }
 
 ///////////////////  System tags defined here:  ///////////////////
@@ -257,19 +290,89 @@ func shardupdate(shardupdate string) Tag {
 
 // general
 
+// Service returns tag for Service
+func Service(sv string) Tag {
+	return newStringTag("service", sv)
+}
+
+// Addresses returns tag for Addresses
+func Addresses(ads []string) Tag {
+	return newObjectTag("addresses", ads)
+}
+
+// ListenerName returns tag for ListenerName
+func ListenerName(name string) Tag {
+	return newStringTag("listener-name", name)
+}
+
+// Address return tag for Address
+func Address(ad string) Tag {
+	return newStringTag("address", ad)
+}
+
+// Key returns tag for Key
+func Key(k string) Tag {
+	return newStringTag("key", k)
+}
+
+// Name returns tag for Name
+func Name(k string) Tag {
+	return newStringTag("name", k)
+}
+
+// Value returns tag for Key
+func Value(v interface{}) Tag {
+	return newObjectTag("value", v)
+}
+
+// DefaultValue returns tag for Key
+func DefaultValue(v interface{}) Tag {
+	return newObjectTag("default-value", v)
+}
+
+// Port returns tag for Port
+func Port(p int) Tag {
+	return newInt("port", p)
+}
+
 // CursorTimestamp returns tag for CursorTimestamp
 func CursorTimestamp(timestamp time.Time) Tag {
 	return newTimeTag("cursor-timestamp", timestamp)
 }
 
 // MetricScope returns tag for MetricScope
-func MetricScope(metricScope int64) Tag {
-	return newInt64("metric-scope", metricScope)
+func MetricScope(metricScope int) Tag {
+	return newInt("metric-scope", metricScope)
 }
 
 // StoreType returns tag for StoreType
 func StoreType(storeType string) Tag {
 	return newPredefinedStringTag("store-type", storeType)
+}
+
+// DetailInfo returns tag for DetailInfo
+func DetailInfo(i string) Tag {
+	return newStringTag("detail-info", i)
+}
+
+// Counter returns tag for Counter
+func Counter(c int) Tag {
+	return newInt("counter", c)
+}
+
+// Number returns tag for Number
+func Number(n int64) Tag {
+	return newInt64("number", n)
+}
+
+// NextNumber returns tag for NextNumber
+func NextNumber(n int64) Tag {
+	return newInt64("next-number", n)
+}
+
+// Bool returns tag for Bool
+func Bool(b bool) Tag {
+	return newBoolTag("bool", b)
 }
 
 // history engine shard
@@ -280,8 +383,8 @@ func ShardID(shardID int) Tag {
 }
 
 // ShardTime returns tag for ShardTime
-func ShardTime(shardTime time.Time) Tag {
-	return newTimeTag("shard-time", shardTime)
+func ShardTime(shardTime interface{}) Tag {
+	return newObjectTag("shard-time", shardTime)
 }
 
 // ShardReplicationAck returns tag for ShardReplicationAck
@@ -289,14 +392,39 @@ func ShardReplicationAck(shardReplicationAck int64) Tag {
 	return newInt64("shard-replication-ack", shardReplicationAck)
 }
 
+// PreviousShardRangeID returns tag for PreviousShardRangeID
+func PreviousShardRangeID(id int64) Tag {
+	return newInt64("previous-shard-range-id", id)
+}
+
+// ShardRangeID returns tag for ShardRangeID
+func ShardRangeID(id int64) Tag {
+	return newInt64("shard-range-id", id)
+}
+
+// ReadLevel returns tag for ReadLevel
+func ReadLevel(lv int64) Tag {
+	return newInt64("read-level", lv)
+}
+
+// MinLevel returns tag for MinLevel
+func MinLevel(lv int64) Tag {
+	return newInt64("min-level", lv)
+}
+
+// MaxLevel returns tag for MaxLevel
+func MaxLevel(lv int64) Tag {
+	return newInt64("max-level", lv)
+}
+
 // ShardTransferAcks returns tag for ShardTransferAcks
-func ShardTransferAcks(shardTransferAcks int64) Tag {
-	return newInt64("shard-transfer-acks", shardTransferAcks)
+func ShardTransferAcks(shardTransferAcks interface{}) Tag {
+	return newObjectTag("shard-transfer-acks", shardTransferAcks)
 }
 
 // ShardTimerAcks returns tag for ShardTimerAcks
-func ShardTimerAcks(shardTimerAcks int64) Tag {
-	return newInt64("shard-timer-acks", shardTimerAcks)
+func ShardTimerAcks(shardTimerAcks interface{}) Tag {
+	return newObjectTag("shard-timer-acks", shardTimerAcks)
 }
 
 // task queue processor
@@ -322,8 +450,8 @@ func NumberDeleted(n int) Tag {
 }
 
 // TimerTaskStatus returns tag for TimerTaskStatus
-func TimerTaskStatus(timerTaskStatus int64) Tag {
-	return newInt64("timer-task-status", timerTaskStatus)
+func TimerTaskStatus(timerTaskStatus int32) Tag {
+	return newInt32("timer-task-status", timerTaskStatus)
 }
 
 // retry
@@ -365,9 +493,19 @@ func ESKey(ESKey string) Tag {
 	return newStringTag("es-mapping-key", ESKey)
 }
 
+// ESConfig returns tag for ESConfig
+func ESConfig(c interface{}) Tag {
+	return newObjectTag("es-config", c)
+}
+
 // ESField returns tag for ESField
 func ESField(ESField string) Tag {
 	return newStringTag("es-field", ESField)
+}
+
+// ESDocID returns tag for ESDocID
+func ESDocID(id string) Tag {
+	return newStringTag("es-doc-id", id)
 }
 
 // LoggingCallAtKey is reserved tag
@@ -409,6 +547,11 @@ func KafkaOffset(offset int64) Tag {
 	return newInt64("kafka-offset", offset)
 }
 
+// TokenLastEventID returns tag for TokenLastEventID
+func TokenLastEventID(id int64) Tag {
+	return newInt64("token-last-event-id", id)
+}
+
 ///////////////////  XDC tags defined here: xdc- ///////////////////
 
 // SourceCluster returns tag for SourceCluster
@@ -442,13 +585,28 @@ func IncomingVersion(incomingVersion int64) Tag {
 }
 
 // ReplicationInfo returns tag for ReplicationInfo
-func ReplicationInfo(replicationInfo *persistence.ReplicationInfo) Tag {
+func ReplicationInfo(replicationInfo interface{}) Tag {
 	return newObjectTag("xdc-replication-info", replicationInfo)
 }
 
 // ReplicationState returns tag for ReplicationState
-func ReplicationState(replicationState *persistence.ReplicationState) Tag {
+func ReplicationState(replicationState interface{}) Tag {
 	return newObjectTag("xdc-replication-state", replicationState)
+}
+
+// FirstEventVersion returns tag for FirstEventVersion
+func FirstEventVersion(version int64) Tag {
+	return newInt64("xdc-first-event-version", version)
+}
+
+// LastEventVersion returns tag for LastEventVersion
+func LastEventVersion(version int64) Tag {
+	return newInt64("xdc-last-event-version", version)
+}
+
+// TokenLastEventVersion returns tag for TokenLastEventVersion
+func TokenLastEventVersion(version int64) Tag {
+	return newInt64("xdc-token-last-event-version", version)
 }
 
 ///////////////////  Archival tags defined here: archival- ///////////////////

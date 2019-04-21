@@ -21,18 +21,17 @@
 package replicator
 
 import (
-	"github.com/uber/cadence/common/log"
-	"go.uber.org/zap"
 	"testing"
-
-	"github.com/uber/cadence/common/persistence/persistence-tests"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
+	"go.uber.org/zap"
 )
 
 type (
@@ -60,7 +59,7 @@ func (s *domainReplicatorSuite) SetupTest() {
 	s.TestBase.Setup()
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
-	logger := log.NewLogger(zapLogger)
+	logger := loggerimpl.NewLogger(zapLogger)
 	s.domainReplicator = NewDomainReplicator(
 		s.MetadataManagerV2,
 		logger,

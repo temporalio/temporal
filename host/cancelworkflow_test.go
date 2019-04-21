@@ -29,6 +29,7 @@ import (
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
@@ -59,7 +60,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -105,16 +106,16 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.BarkLogger.Infof("PollAndProcessActivityTask: %v", err)
+	s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 	s.Nil(err)
 
 	err = s.engine.RequestCancelWorkflowExecution(createContext(), &workflow.RequestCancelWorkflowExecutionRequest{
@@ -137,7 +138,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.IsType(&workflow.CancellationAlreadyRequestedError{}, err)
 
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	executionCancelled := false
@@ -152,11 +153,11 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.BarkLogger)
+		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionCanceled {
-			s.BarkLogger.Warnf("Execution not cancelled yet.")
+			s.Logger.Warn("Execution not cancelled yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -195,7 +196,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	foreignRequest := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
@@ -210,7 +211,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
 	s.Nil(err0)
-	s.BarkLogger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+	s.Logger.Info("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", tag.WorkflowDomainName(s.foreignDomainName), tag.WorkflowRunID(*we2.RunId))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -258,7 +259,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -301,26 +302,26 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		Identity:        identity,
 		DecisionHandler: foreignDtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("foreign PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.BarkLogger.Infof("foreign PollAndProcessActivityTask: %v", err)
+	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.Nil(err)
 
 	// Cancel the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	cancellationSent := false
@@ -336,11 +337,11 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.BarkLogger)
+		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if *lastEvent.EventType != workflow.EventTypeExternalWorkflowExecutionCancelRequested {
-			s.BarkLogger.Info("Cancellation still not sent.")
+			s.Logger.Info("Cancellation still not sent.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -358,7 +359,7 @@ CheckHistoryLoopForCancelSent:
 
 	// Accept cancellation.
 	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("foreign PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	executionCancelled := false
@@ -373,11 +374,11 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.BarkLogger)
+		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionCanceled {
-			s.BarkLogger.Warnf("Execution not cancelled yet.")
+			s.Logger.Warn("Execution not cancelled yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -431,7 +432,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	}
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -479,18 +480,18 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
 	// Start workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	// Cancel the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.BarkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	cancellationSentFailed := false
@@ -506,11 +507,11 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.BarkLogger)
+		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if *lastEvent.EventType != workflow.EventTypeRequestCancelExternalWorkflowExecutionFailed {
-			s.BarkLogger.Info("Cancellaton not cancelled yet.")
+			s.Logger.Info("Cancellaton not cancelled yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}

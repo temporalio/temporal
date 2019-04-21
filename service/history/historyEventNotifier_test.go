@@ -21,12 +21,10 @@
 package history
 
 import (
-	"os"
 	"sync"
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	gen "github.com/uber/cadence/.gen/go/shared"
@@ -48,9 +46,6 @@ func TestHistoryEventNotifierSuite(t *testing.T) {
 }
 
 func (s *historyEventNotifierSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 
 }
 

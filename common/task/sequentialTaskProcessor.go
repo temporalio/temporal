@@ -21,13 +21,13 @@
 package task
 
 import (
-	"github.com/uber/cadence/common/log"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
 )
 
 type (

@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common"
-
 	"github.com/dgryski/go-farm"
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/events"
 	"github.com/uber/ringpop-go/hashring"
@@ -49,7 +49,7 @@ type ringpopServiceResolver struct {
 	rp         *ringpop.Ringpop
 	shutdownCh chan struct{}
 	shutdownWG sync.WaitGroup
-	logger     bark.Logger
+	logger     log.Logger
 
 	ringLock sync.RWMutex
 	ring     *hashring.HashRing
@@ -60,11 +60,11 @@ type ringpopServiceResolver struct {
 
 var _ ServiceResolver = (*ringpopServiceResolver)(nil)
 
-func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger bark.Logger) *ringpopServiceResolver {
+func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger log.Logger) *ringpopServiceResolver {
 	return &ringpopServiceResolver{
 		service:    service,
 		rp:         rp,
-		logger:     logger.WithFields(bark.Fields{"component": "ServiceResolver", RoleKey: service}),
+		logger:     logger.WithTags(tag.ComponentServiceResolver, tag.Service(service)),
 		ring:       hashring.New(farm.Fingerprint32, replicaPoints),
 		listeners:  make(map[string]chan<- *ChangedEvent),
 		shutdownCh: make(chan struct{}),
@@ -180,7 +180,7 @@ func (r *ringpopServiceResolver) refresh() {
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
 	if err != nil {
 		// This will happen when service stop and destroy ringpop while there are go-routines pending to call this.
-		r.logger.Warnf("Error during ringpop refresh.  Error: %v", err)
+		r.logger.Warn("Error during ringpop refresh.", tag.Error(err))
 		return
 	}
 
@@ -189,7 +189,7 @@ func (r *ringpopServiceResolver) refresh() {
 		r.ring.AddMembers(host)
 	}
 
-	r.logger.Debugf("Current reachable members: %v", addrs)
+	r.logger.Debug("Current reachable members", tag.Addresses(addrs))
 }
 
 func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {
@@ -213,7 +213,7 @@ func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {
 		select {
 		case ch <- event:
 		default:
-			r.logger.WithFields(bark.Fields{`listenerName`: name}).Error("Failed to send listener notification, channel full")
+			r.logger.Error("Failed to send listener notification, channel full", tag.ListenerName(name))
 		}
 	}
 }

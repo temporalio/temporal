@@ -36,15 +36,15 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	log2 "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/host"
 	"go.uber.org/zap"
@@ -59,7 +59,6 @@ type (
 		suite.Suite
 		cluster1       *host.TestCluster
 		cluster2       *host.TestCluster
-		barkLogger     bark.Logger
 		logger         log.Logger
 		enableEventsV2 bool
 	}
@@ -93,20 +92,10 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	if testing.Verbose() {
-		log2.SetOutput(os.Stdout)
-	}
-
-	logger := log2.New()
-	formatter := &log2.TextFormatter{}
-	formatter.FullTimestamp = true
-	logger.Formatter = formatter
-	s.barkLogger = bark.NewLoggerFromLogrus(logger)
-
 	zapLogger, err := zap.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
-	s.logger = log.NewLogger(zapLogger)
+	s.logger = loggerimpl.NewLogger(zapLogger)
 
 	fileName := defaultTestClustersConfig
 	if host.TestFlags.TestClusterConfigFile != "" {
@@ -121,11 +110,11 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	var clusterConfigs []*host.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
-	c, err := host.NewCluster(clusterConfigs[0], s.barkLogger.WithField("Cluster", clusterName[0]), s.logger)
+	c, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = host.NewCluster(clusterConfigs[1], s.barkLogger.WithField("Cluster", clusterName[1]), s.logger)
+	c, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterName[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 }
@@ -274,7 +263,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NotNil(we.GetRunId())
 	rid := we.GetRunId()
 
-	s.barkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowComplete := false
 	activityName := "activity_type1"
@@ -336,7 +325,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
 		QueryHandler:    queryHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -348,13 +337,13 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
 		QueryHandler:    queryHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -382,7 +371,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.barkLogger.Infof("PollAndProcessQueryTask: %v", err)
+		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -402,7 +391,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.barkLogger.Infof("PollAndProcessQueryTask: %v", err)
+		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -460,7 +449,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -480,7 +469,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -496,12 +485,12 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make process in cluster 2
 	err = poller2.PollAndProcessActivityTask(false)
-	s.barkLogger.Infof("PollAndProcessActivityTask 2: %v", err)
+	s.logger.Info("PollAndProcessActivityTask 2", tag.Error(err))
 	s.Nil(err)
 
 	s.False(workflowComplete)
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask 2: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
 	s.Nil(err)
 	s.True(workflowComplete)
 
@@ -570,7 +559,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	s.barkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	firstDecisionMade := false
 	secondDecisionMade := false
@@ -604,7 +593,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		StickyScheduleToStartTimeoutSeconds: stickyTaskTimeout,
 		Identity:                            identity1,
 		DecisionHandler:                     dtHandler,
-		Logger:                              s.barkLogger,
+		Logger:                              s.logger,
 		T:                                   s.T(),
 	}
 
@@ -616,12 +605,12 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		StickyScheduleToStartTimeoutSeconds: stickyTaskTimeout,
 		Identity:                            identity2,
 		DecisionHandler:                     dtHandler,
-		Logger:                              s.barkLogger,
+		Logger:                              s.logger,
 		T:                                   s.T(),
 	}
 
 	_, err = poller1.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(firstDecisionMade)
 
@@ -657,7 +646,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	_, err = poller2.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(secondDecisionMade)
 
@@ -687,7 +676,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	s.Equal(int64(10), updateResp.GetFailoverVersion())
 
 	_, err = poller1.PollAndProcessDecisionTask(true, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(workflowCompleted)
 }
@@ -741,7 +730,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	we, err := client1.StartWorkflowExecution(createContext(), startReq)
 	s.Nil(err)
 	s.NotNil(we.GetRunId())
-	s.barkLogger.Infof("StartWorkflowExecution in cluster 1: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowCompleteTimes := 0
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -763,7 +752,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -774,13 +763,13 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: nil,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.Equal(1, workflowCompleteTimes)
 
@@ -820,10 +809,10 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
 	s.Nil(err)
 	s.NotNil(we.GetRunId())
-	s.barkLogger.Infof("StartWorkflowExecution in cluster 2: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution in cluster 2: ", tag.WorkflowRunID(we.GetRunId()))
 
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask 2: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
 	s.Nil(err)
 	s.Equal(2, workflowCompleteTimes)
 }
@@ -919,13 +908,13 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
 	// update domain to fail over
@@ -974,7 +963,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTerminated {
-			s.barkLogger.Warnf("Execution not terminated yet.")
+			s.logger.Warn("Execution not terminated yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -1098,7 +1087,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1108,14 +1097,14 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
 	// make some progress in cluster 1 and did some continueAsNew
 	for i := 0; i < 3; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(err, strconv.Itoa(i))
 	}
 
@@ -1138,7 +1127,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// finish the rest in cluster 2
 	for i := 0; i < 2; i++ {
 		_, err := poller2.PollAndProcessDecisionTask(false, false)
-		s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(err, strconv.Itoa(i))
 	}
 
@@ -1194,7 +1183,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	s.barkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	eventSignaled := false
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -1222,7 +1211,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1232,7 +1221,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1254,7 +1243,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Process signal in cluster 1
 	s.False(eventSignaled)
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(eventSignaled)
 
@@ -1311,7 +1300,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Process signal in cluster 2
 	eventSignaled = false
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.barkLogger.Infof("PollAndProcessDecisionTask 2: %v", err)
+	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
 	s.Nil(err)
 	s.True(eventSignaled)
 
@@ -1381,7 +1370,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	s.barkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	timerCreated := false
 	timerFired := false
@@ -1449,7 +1438,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1459,7 +1448,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1544,7 +1533,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	s.barkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activitySent := false
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -1610,7 +1599,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler1,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1621,7 +1610,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler2,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1685,7 +1674,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	})
 	s.Nil(err)
 	history := historyResponse.History
-	common.PrettyPrintHistory(history, s.barkLogger)
+	common.PrettyPrintHistory(history, s.logger)
 
 	activityRetryFound := false
 	for _, event := range history.Events {
@@ -1750,7 +1739,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	s.barkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	decisionFailed := false
 	workflowFinished := false
@@ -1776,7 +1765,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1786,7 +1775,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1881,7 +1870,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 
@@ -1990,7 +1979,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
-		Logger:          s.barkLogger,
+		Logger:          s.logger,
 		T:               s.T(),
 	}
 

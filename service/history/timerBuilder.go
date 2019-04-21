@@ -26,11 +26,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	w "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -70,7 +70,7 @@ type (
 		pendingActivityTimers  map[int64]*persistence.ActivityInfo
 		isLoadedActivityTimers bool
 		config                 *Config
-		logger                 bark.Logger
+		logger                 log.Logger
 		localSeqNumGen         SequenceNumberGenerator // This one used to order in-memory list.
 		timeSource             clock.TimeSource
 	}
@@ -120,14 +120,14 @@ func (l *localSeqNumGenerator) NextSeq() int64 {
 }
 
 // newTimerBuilder creates a timer builder.
-func newTimerBuilder(config *Config, logger bark.Logger, timeSource clock.TimeSource) *timerBuilder {
+func newTimerBuilder(config *Config, logger log.Logger, timeSource clock.TimeSource) *timerBuilder {
 	return &timerBuilder{
 		userTimers:            timers{},
 		pendingUserTimers:     make(map[string]*persistence.TimerInfo),
 		activityTimers:        timers{},
 		pendingActivityTimers: make(map[int64]*persistence.ActivityInfo),
 		config:                config,
-		logger:                logger.WithField(logging.TagWorkflowComponent, "timer-builder"),
+		logger:                logger.WithTags(tag.ComponentTimerBuilder),
 		localSeqNumGen:        &localSeqNumGenerator{counter: 1},
 		timeSource:            timeSource,
 	}
@@ -138,8 +138,8 @@ func (tb *timerBuilder) AddStartToCloseDecisionTimoutTask(scheduleID, scheduleAt
 	startToCloseTimeout int32) *persistence.DecisionTimeoutTask {
 	timeOutTask := tb.createDecisionTimeoutTask(startToCloseTimeout, scheduleID, scheduleAttempt,
 		w.TimeoutTypeStartToClose)
-	tb.logger.Debugf("Adding Decision Timeout: with timeout: %v sec, EventID: %v",
-		startToCloseTimeout, timeOutTask.EventID)
+	tb.logger.Debug(fmt.Sprintf("Adding Decision Timeout: with timeout: %v sec, EventID: %v",
+		startToCloseTimeout, timeOutTask.EventID))
 	return timeOutTask
 }
 
@@ -148,8 +148,8 @@ func (tb *timerBuilder) AddScheduleToStartDecisionTimoutTask(scheduleID, schedul
 	scheduleToStartTimeout int32) *persistence.DecisionTimeoutTask {
 	timeOutTask := tb.createDecisionTimeoutTask(scheduleToStartTimeout, scheduleID, scheduleAttempt,
 		w.TimeoutTypeScheduleToStart)
-	tb.logger.Debugf("Adding Decision ScheduleToStartTimeout: with timeout: %v sec, EventID: %v",
-		scheduleToStartTimeout, timeOutTask.EventID)
+	tb.logger.Debug(fmt.Sprintf("Adding Decision ScheduleToStartTimeout: with timeout: %v sec, EventID: %v",
+		scheduleToStartTimeout, timeOutTask.EventID))
 	return timeOutTask
 }
 
@@ -174,8 +174,8 @@ func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
 	}
 
 	timeOutTask := tb.createActivityTimeoutTask(fireTimeout, timeoutType, scheduleID, baseTime)
-	tb.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, TimeoutType: %v, EventID: %v",
-		time.Now(), fireTimeout, timeoutType.String(), timeOutTask.EventID)
+	tb.logger.Debug(fmt.Sprintf("%s: Adding Activity Timeout: with timeout: %v sec, TimeoutType: %v, EventID: %v",
+		time.Now(), fireTimeout, timeoutType.String(), timeOutTask.EventID))
 	return timeOutTask
 }
 
@@ -190,7 +190,7 @@ func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder mutabl
 		TimerID:         ti.TimerID,
 		TaskCreated:     ti.TaskID == TimerTaskStatusCreated}
 	tb.insertTimer(timer)
-	tb.logger.Debugf("Added User Timeout for timer ID: %s", ti.TimerID)
+	tb.logger.Debug(fmt.Sprintf("Added User Timeout for timer ID: %s", ti.TimerID))
 }
 
 // GetUserTimerTaskIfNeeded - if we need create a timer task for the user timers
@@ -251,8 +251,8 @@ func (tb *timerBuilder) GetActivityTimerTaskIfNeeded(msBuilder mutableState) per
 		}
 		msBuilder.UpdateActivity(ai)
 
-		tb.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
-			time.Now(), td.TimeoutSec, at.VisibilityTimestamp, td.TimeoutType.String(), at.EventID)
+		tb.logger.Debug(fmt.Sprintf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
+			time.Now(), td.TimeoutSec, at.VisibilityTimestamp, td.TimeoutType.String(), at.EventID))
 	}
 	return timerTask
 }

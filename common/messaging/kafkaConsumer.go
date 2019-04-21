@@ -21,8 +21,8 @@
 package messaging
 
 import (
-	"github.com/uber-common/bark"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
+	"github.com/uber/cadence/common/log"
 )
 
 const rcvBufferSize = 2 * 1024
@@ -31,7 +31,7 @@ type (
 	// a wrapper of uberKafka.Consumer to let the compiler happy
 	kafkaConsumer struct {
 		uConsumer uberKafka.Consumer
-		logger    bark.Logger
+		logger    log.Logger
 		msgC      chan Message
 		doneC     chan struct{}
 	}
@@ -39,7 +39,7 @@ type (
 
 var _ Consumer = (*kafkaConsumer)(nil)
 
-func newKafkaConsumer(uConsumer uberKafka.Consumer, logger bark.Logger) Consumer {
+func newKafkaConsumer(uConsumer uberKafka.Consumer, logger log.Logger) Consumer {
 	return &kafkaConsumer{
 		uConsumer: uConsumer,
 		logger:    logger,

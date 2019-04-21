@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/uber/cadence/common/log/tag"
 	"math/rand"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"go.uber.org/cadence"
@@ -351,12 +351,12 @@ func deleteHistoryV1(ctx context.Context, container *BootstrapContainer, request
 }
 
 func deleteHistoryV2(ctx context.Context, container *BootstrapContainer, request ArchiveRequest) error {
-	err := persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.BarkLogger)
+	err := persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
 	if err == nil {
 		return nil
 	}
 	op := func() error {
-		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.BarkLogger)
+		return persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
 	}
 	for err != nil {
 		if !common.IsPersistenceTransientError(err) {

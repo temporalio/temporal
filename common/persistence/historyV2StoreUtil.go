@@ -22,9 +22,10 @@ package persistence
 
 import (
 	"fmt"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"time"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 )
 
@@ -62,7 +63,7 @@ that zombie history segments can remain under some rare failure cases. Consider 
 Under this rare case the section of parent history which was assumed to be common to child will be a zombie history section.
 
 */
-func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryV2Manager, branchToken []byte, shardID *int, logger bark.Logger) error {
+func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryV2Manager, branchToken []byte, shardID *int, logger log.Logger) error {
 	err := historyV2Mgr.DeleteHistoryBranch(&DeleteHistoryBranchRequest{
 		BranchToken: branchToken,
 		ShardID:     shardID,
@@ -89,7 +90,7 @@ func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryV2Manager, branchToken
 	if len(resp.ForkingInProgressBranches) > 0 {
 		logInfo := ""
 		defer func() {
-			logger.Warnf("seeing incomplete forking branches when deleting branch, details: %v", logInfo)
+			logger.Warn("seeing incomplete forking branches when deleting branch", tag.DetailInfo(logInfo))
 		}()
 		for _, br := range resp.ForkingInProgressBranches {
 			if time.Now().After(br.ForkTime.Add(time.Minute)) {

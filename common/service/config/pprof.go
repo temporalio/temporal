@@ -22,19 +22,19 @@ package config
 
 import (
 	"fmt"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"net/http"
 	"sync/atomic"
 	// DO NOT REMOVE THE LINE BELOW
 	_ "net/http/pprof"
-
-	"github.com/uber-common/bark"
 )
 
 type (
 	// PProfInitializerImpl initialize the pprof based on config
 	PProfInitializerImpl struct {
 		PProf  *PProf
-		Logger bark.Logger
+		Logger log.Logger
 	}
 )
 
@@ -48,7 +48,7 @@ const (
 var pprofStatus = pprofNotInitialized
 
 // NewInitializer create a new instance of PProf Initializer
-func (cfg *PProf) NewInitializer(logger bark.Logger) *PProfInitializerImpl {
+func (cfg *PProf) NewInitializer(logger log.Logger) *PProfInitializerImpl {
 	return &PProfInitializerImpl{
 		PProf:  cfg,
 		Logger: logger,
@@ -65,7 +65,7 @@ func (initializer *PProfInitializerImpl) Start() error {
 
 	if atomic.CompareAndSwapInt32(&pprofStatus, pprofNotInitialized, pprofInitialized) {
 		go func() {
-			initializer.Logger.Infof("PProf listen on %d", port)
+			initializer.Logger.Info("PProf listen on ", tag.Port(port))
 			http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
 		}()
 	}

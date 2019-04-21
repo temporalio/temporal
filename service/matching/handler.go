@@ -78,11 +78,11 @@ func (h *Handler) Start() error {
 	h.Service.GetDispatcher().Register(matchingserviceserver.New(h))
 	h.Service.Start()
 
-	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetBarkLogger())
+	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
 	h.domainCache.Start()
 	h.metricsClient = h.Service.GetMetricsClient()
 	h.engine = NewEngine(
-		h.taskPersistence, h.GetClientBean().GetHistoryClient(), h.config, h.Service.GetBarkLogger(), h.Service.GetMetricsClient(), h.domainCache,
+		h.taskPersistence, h.GetClientBean().GetHistoryClient(), h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
 	)
 	h.startWG.Done()
 	return nil
@@ -165,7 +165,7 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", h.Service.GetBarkLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", h.Service.GetLogger()); err != nil {
 		return nil, h.handleErr(err, scope)
 	}
 
@@ -186,7 +186,7 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", h.Service.GetBarkLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", h.Service.GetLogger()); err != nil {
 		return nil, h.handleErr(err, scope)
 	}
 

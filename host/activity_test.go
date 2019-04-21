@@ -32,6 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/service/matching"
 )
 
@@ -63,7 +64,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -91,7 +92,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 			}}, nil
 		}
 
-		s.BarkLogger.Info("Completing Workflow.")
+		s.Logger.Info("Completing Workflow.")
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
@@ -108,7 +109,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		for i := 0; i < 10; i++ {
-			s.BarkLogger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 			_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
 				TaskToken: taskToken, Details: []byte("details")})
 			s.Nil(err)
@@ -125,7 +126,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -135,7 +136,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
-	s.BarkLogger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 
 	s.False(workflowComplete)
 	_, err = poller.PollAndProcessDecisionTask(true, false)
@@ -172,7 +173,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -206,7 +207,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		}
 
 		workflowComplete = true
-		s.BarkLogger.Info("Completing Workflow.")
+		s.Logger.Info("Completing Workflow.")
 		return nil, []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
@@ -224,7 +225,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 		var err error
 		if activityExecutedCount == 0 {
-			s.BarkLogger.Infof("Heartbeating for activity: %s", activityID)
+			s.Logger.Info("Heartbeating for activity:", tag.WorkflowActivityID(activityID))
 			_, err = s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
 				TaskToken: taskToken, Details: heartbeatDetails})
 			s.Nil(err)
@@ -246,7 +247,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -338,7 +339,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -409,7 +410,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		}
 
 		if activityAFailed != nil && activityBTimeout != nil {
-			s.BarkLogger.Info("Completing Workflow.")
+			s.Logger.Info("Completing Workflow.")
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -444,7 +445,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -457,11 +458,11 @@ func (s *integrationSuite) TestActivityRetry() {
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
-	s.BarkLogger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 	for i := 0; i < 3; i++ {
 		s.False(workflowComplete)
 
-		s.BarkLogger.Infof("Processing decision task: %v", i)
+		s.Logger.Info("Processing decision task:", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTaskWithoutRetry(false, false)
 		if err != nil {
 			s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
@@ -512,7 +513,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -521,7 +522,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 
-		s.BarkLogger.Infof("Calling DecisionTask Handler: %d, %d.", activityCounter, activityCount)
+		s.Logger.Info("Calling DecisionTask Handler: %d, %d.", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
 		if activityCounter < activityCount {
 			activityCounter++
@@ -570,7 +571,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -579,7 +580,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	err = poller.PollAndProcessActivityTask(false)
 
-	s.BarkLogger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 
 	s.False(workflowComplete)
 	_, err = poller.PollAndProcessDecisionTask(true, false)
@@ -615,7 +616,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -729,7 +730,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		}
 
 		if failWorkflow {
-			s.BarkLogger.Errorf("Failing workflow.")
+			s.Logger.Error("Failing workflow.")
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
@@ -740,7 +741,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		}
 
 		if activityATimedout && activityBTimedout && activityCTimedout && activityDTimedout {
-			s.BarkLogger.Info("Completing Workflow.")
+			s.Logger.Info("Completing Workflow.")
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -762,24 +763,24 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		case "ScheduleToStart":
 			s.Fail("Activity A not expected to be started.")
 		case "ScheduleClose":
-			s.BarkLogger.Infof("Sleeping activityB for 6 seconds.")
+			s.Logger.Info("Sleeping activityB for 6 seconds.")
 			time.Sleep(7 * time.Second)
 		case "StartToClose":
-			s.BarkLogger.Infof("Sleeping activityC for 6 seconds.")
+			s.Logger.Info("Sleeping activityC for 6 seconds.")
 			time.Sleep(8 * time.Second)
 		case "Heartbeat":
-			s.BarkLogger.Info("Starting hearbeat activity.")
+			s.Logger.Info("Starting hearbeat activity.")
 			go func() {
 				for i := 0; i < 6; i++ {
-					s.BarkLogger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
+					s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 					_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
 						TaskToken: taskToken, Details: []byte(string(i))})
 					s.Nil(err)
 					time.Sleep(1 * time.Second)
 				}
-				s.BarkLogger.Info("End Heartbeating.")
+				s.Logger.Info("End Heartbeating.")
 			}()
-			s.BarkLogger.Info("Sleeping hearbeat activity.")
+			s.Logger.Info("Sleeping hearbeat activity.")
 			time.Sleep(10 * time.Second)
 		}
 
@@ -793,7 +794,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -803,13 +804,13 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	for i := 0; i < 3; i++ {
 		go func() {
 			err = poller.PollAndProcessActivityTask(false)
-			s.BarkLogger.Infof("Activity Processing Completed.  Error: %v", err)
+			s.Logger.Info("Activity Processing Completed.  Error", tag.Error(err))
 		}()
 	}
 
-	s.BarkLogger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 	for i := 0; i < 10; i++ {
-		s.BarkLogger.Infof("Processing decision task: %v", i)
+		s.Logger.Info("Processing decision task: %v", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTask(false, false)
 		s.Nil(err, "Poll for decision task failed.")
 
@@ -853,7 +854,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -925,7 +926,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		}
 
 		if failWorkflow {
-			s.BarkLogger.Errorf("Failing workflow. Reason: %v", failReason)
+			s.Logger.Error("Failing workflow. Reason: %v", tag.Value(failReason))
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
@@ -936,7 +937,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		}
 
 		if activitiesTimedout == activityCount {
-			s.BarkLogger.Info("Completing Workflow.")
+			s.Logger.Info("Completing Workflow.")
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -951,24 +952,24 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		s.BarkLogger.Infof("Starting heartbeat activity. ID: %v", activityID)
+		s.Logger.Info("Starting heartbeat activity. ID", tag.WorkflowActivityID(activityID))
 		for i := 0; i < 10; i++ {
 			if !workflowComplete {
-				s.BarkLogger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
+				s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 				_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: []byte(strconv.Itoa(i))})
 				if err != nil {
-					s.BarkLogger.Errorf("Activity heartbeat failed.  ID: %v, Progress: %v, Error: %v", activityID, i, err)
+					s.Logger.Error("Activity heartbeat failed", tag.WorkflowActivityID(activityID), tag.Counter(i), tag.Error(err))
 				}
 
 				secondsToSleep := rand.Intn(3)
-				s.BarkLogger.Infof("Activity ID '%v' sleeping for: %v seconds", activityID, secondsToSleep)
+				s.Logger.Info("Activity ID '%v' sleeping for: %v seconds", tag.WorkflowActivityID(activityID), tag.Number(int64(secondsToSleep)))
 				time.Sleep(time.Duration(secondsToSleep) * time.Second)
 			}
 		}
-		s.BarkLogger.Infof("End Heartbeating. ID: %v", activityID)
+		s.Logger.Info("End Heartbeating.", tag.WorkflowActivityID(activityID))
 
-		s.BarkLogger.Infof("Sleeping activity before completion. ID: %v", activityID)
+		s.Logger.Info("Sleeping activity before completion", tag.WorkflowActivityID(activityID))
 		time.Sleep(7 * time.Second)
 
 		return []byte("Activity Result."), false, nil
@@ -981,7 +982,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -991,13 +992,13 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	for i := 0; i < activityCount; i++ {
 		go func() {
 			err := poller.PollAndProcessActivityTask(false)
-			s.BarkLogger.Infof("Activity Processing Completed.  Error: %v", err)
+			s.Logger.Info("Activity Processing Completed.", tag.Error(err))
 		}()
 	}
 
-	s.BarkLogger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 	for i := 0; i < 10; i++ {
-		s.BarkLogger.Infof("Processing decision task: %v", i)
+		s.Logger.Info("Processing decision task", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTask(false, false)
 		s.Nil(err, "Poll for decision task failed.")
 
@@ -1015,7 +1016,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	s.Equal(activityCount, activitiesTimedout)
 	s.Equal(activityCount, len(lastHeartbeatMap))
 	for aID, lastHeartbeat := range lastHeartbeatMap {
-		s.BarkLogger.Infof("Last heartbeat for activity with scheduleID '%v': %v", aID, lastHeartbeat)
+		s.Logger.Info("Last heartbeat for activity with scheduleID", tag.Counter(int(aID)), tag.Number(int64(lastHeartbeat)))
 		s.Equal(9, lastHeartbeat)
 	}
 }
@@ -1048,7 +1049,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
 
 	activityCounter := int32(0)
 	scheduleActivity := true
@@ -1085,7 +1086,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 			}}, nil
 		}
 
-		s.BarkLogger.Info("Completing Workflow.")
+		s.Logger.Info("Completing Workflow.")
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -1101,7 +1102,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
-			s.BarkLogger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 			response, err := s.engine.RecordActivityTaskHeartbeat(createContext(),
 				&workflow.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: []byte("details")})
@@ -1122,7 +1123,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 
@@ -1132,7 +1133,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	cancelCh := make(chan struct{})
 
 	go func() {
-		s.BarkLogger.Info("Trying to cancel the task in a different thread.")
+		s.Logger.Info("Trying to cancel the task in a different thread.")
 		scheduleActivity = false
 		requestCancellation = true
 		_, err := poller.PollAndProcessDecisionTask(false, false)
@@ -1144,7 +1145,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	<-cancelCh
-	s.BarkLogger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 }
 
 func (s *integrationSuite) TestActivityCancellationNotStarted() {
@@ -1175,7 +1176,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.BarkLogger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+	s.Logger.Info("StartWorkflowExecutionn", tag.WorkflowRunID(we.GetRunId()))
 
 	activityCounter := int32(0)
 	scheduleActivity := true
@@ -1187,7 +1188,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			s.BarkLogger.Info("Scheduling activity.")
+			s.Logger.Info("Scheduling activity.")
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
@@ -1204,7 +1205,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		}
 
 		if requestCancellation {
-			s.BarkLogger.Info("Requesting cancellation.")
+			s.Logger.Info("Requesting cancellation.")
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRequestCancelActivityTask),
 				RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
@@ -1213,7 +1214,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			}}, nil
 		}
 
-		s.BarkLogger.Info("Completing Workflow.")
+		s.Logger.Info("Completing Workflow.")
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
@@ -1236,7 +1237,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		Identity:        identity,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler,
-		Logger:          s.BarkLogger,
+		Logger:          s.Logger,
 		T:               s.T(),
 	}
 

@@ -23,17 +23,17 @@ package tasklist
 import (
 	"errors"
 	"fmt"
-	"github.com/uber/cadence/common/log"
-	"go.uber.org/zap"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
+	"go.uber.org/zap"
 )
 
 type (
@@ -60,7 +60,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	if err != nil {
 		s.Require().NoError(err)
 	}
-	logger := log.NewLogger(zapLogger)
+	logger := loggerimpl.NewLogger(zapLogger)
 	s.scvgr = NewScavenger(s.taskMgr, metrics.NewClient(tally.NoopScope, metrics.Worker), logger)
 	maxTasksPerJob = 4
 	nWorkers = 4

@@ -21,13 +21,11 @@
 package matching
 
 import (
-	"fmt"
 	"sync"
-
 	"sync/atomic"
 
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -41,7 +39,7 @@ type (
 		rangeID      int64
 		ackLevel     int64
 		store        persistence.TaskManager
-		logger       bark.Logger
+		logger       log.Logger
 	}
 	taskListState struct {
 		rangeID  int64
@@ -59,7 +57,7 @@ type (
 // - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, domainID string, name string, taskType int, kind int, logger bark.Logger) *taskListDB {
+func newTaskListDB(store persistence.TaskManager, domainID string, name string, taskType int, kind int, logger log.Logger) *taskListDB {
 	return &taskListDB{
 		domainID:     domainID,
 		taskListName: name,
@@ -157,9 +155,12 @@ func (db *taskListDB) CompleteTask(taskID int64) error {
 		TaskID: taskID,
 	})
 	if err != nil {
-		logging.LogPersistantStoreErrorEvent(db.logger, logging.TagValueStoreOperationCompleteTask, err,
-			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
-				taskID, db.taskType, db.taskListName))
+		db.logger.Error("Persistent store operation failure",
+			tag.StoreOperationCompleteTask,
+			tag.Error(err),
+			tag.TaskID(taskID),
+			tag.TaskType(db.taskType),
+			tag.WorkflowTaskListName(db.taskListName))
 	}
 	return err
 }
@@ -176,9 +177,12 @@ func (db *taskListDB) CompleteTasksLessThan(taskID int64, limit int) (int, error
 		Limit:        limit,
 	})
 	if err != nil {
-		logging.LogPersistantStoreErrorEvent(db.logger, logging.TagValueStoreOperationCompleteTasksLessThan, err,
-			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
-				taskID, db.taskType, db.taskListName))
+		db.logger.Error("Persistent store operation failure",
+			tag.StoreOperationCompleteTasksLessThan,
+			tag.Error(err),
+			tag.TaskID(taskID),
+			tag.TaskType(db.taskType),
+			tag.WorkflowTaskListName(db.taskListName))
 	}
 	return n, err
 }

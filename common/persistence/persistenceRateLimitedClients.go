@@ -21,8 +21,8 @@
 package persistence
 
 import (
-	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/tokenbucket"
 )
 
@@ -37,43 +37,43 @@ type (
 	shardRateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence ShardManager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	workflowExecutionRateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence ExecutionManager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	taskRateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence TaskManager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	historyRateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence HistoryManager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	historyV2RateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence HistoryV2Manager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	metadataRateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence MetadataManager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 
 	visibilityRateLimitedPersistenceClient struct {
 		rateLimiter tokenbucket.TokenBucket
 		persistence VisibilityManager
-		logger      bark.Logger
+		logger      log.Logger
 	}
 )
 
@@ -86,7 +86,7 @@ var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
-func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) ShardManager {
+func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) ShardManager {
 	return &shardRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -95,7 +95,7 @@ func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter 
 }
 
 // NewWorkflowExecutionPersistenceRateLimitedClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) ExecutionManager {
+func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) ExecutionManager {
 	return &workflowExecutionRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -104,7 +104,7 @@ func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManag
 }
 
 // NewTaskPersistenceRateLimitedClient creates a client to manage tasks
-func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) TaskManager {
+func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) TaskManager {
 	return &taskRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -113,7 +113,7 @@ func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter to
 }
 
 // NewHistoryPersistenceRateLimitedClient creates a HistoryManager client to manage workflow execution history
-func NewHistoryPersistenceRateLimitedClient(persistence HistoryManager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) HistoryManager {
+func NewHistoryPersistenceRateLimitedClient(persistence HistoryManager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) HistoryManager {
 	return &historyRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -122,7 +122,7 @@ func NewHistoryPersistenceRateLimitedClient(persistence HistoryManager, rateLimi
 }
 
 // NewHistoryV2PersistenceRateLimitedClient creates a HistoryManager client to manage workflow execution history
-func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryV2Manager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) HistoryV2Manager {
+func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryV2Manager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) HistoryV2Manager {
 	return &historyV2RateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -131,7 +131,7 @@ func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryV2Manager, rate
 }
 
 // NewMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) MetadataManager {
+func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) MetadataManager {
 	return &metadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -140,7 +140,7 @@ func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLi
 }
 
 // NewVisibilityPersistenceRateLimitedClient creates a client to manage visibility
-func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, rateLimiter tokenbucket.TokenBucket, logger bark.Logger) VisibilityManager {
+func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, rateLimiter tokenbucket.TokenBucket, logger log.Logger) VisibilityManager {
 	return &visibilityRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,

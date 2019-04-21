@@ -21,16 +21,12 @@
 package persistencetests
 
 import (
-	"os"
-	"testing"
-
-	"time"
-
-	"sync/atomic"
-
-	"sync"
-
 	"math/rand"
+	"os"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"

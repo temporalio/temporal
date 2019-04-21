@@ -28,14 +28,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -104,7 +104,7 @@ type (
 	taskListManagerImpl struct {
 		domainCache   cache.DomainCache
 		taskListID    *taskListID
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 		domainScope   metrics.Scope // domain tagged metric scope
 		engine        *matchingEngineImpl
@@ -254,10 +254,8 @@ func newTaskListManagerWithRateLimiter(
 		cancelCtx:               ctx,
 		cancelFunc:              cancel,
 		taskListID:              taskList,
-		logger: e.logger.WithFields(bark.Fields{
-			logging.TagTaskListType: taskList.taskType,
-			logging.TagTaskListName: taskList.taskListName,
-		}),
+		logger: e.logger.WithTags(tag.WorkflowTaskListName(taskList.taskListName),
+			tag.WorkflowTaskListType(taskList.taskType)),
 		domainScope:         domainTaggedMetricScope(e.domainCache, taskList.domainID, e.metricsClient, metrics.MatchingTaskListMgrScope),
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
@@ -306,7 +304,7 @@ func (c *taskListManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
 	c.engine.removeTaskListManager(c.taskListID)
-	logging.LogTaskListUnloadedEvent(c.logger)
+	c.logger.Info("", tag.LifeCycleStopped)
 }
 
 func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error) {
@@ -614,7 +612,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 
 	var retryCount int64
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, func(err error) bool {
-		c.logger.Debugf("Retry executeWithRetry as task list range has changed. retryCount=%v, errType=%T", retryCount, err)
+		c.logger.Debug(fmt.Sprintf("Retry executeWithRetry as task list range has changed. retryCount=%v, errType=%T", retryCount, err))
 		if _, ok := err.(*persistence.ConditionFailedError); ok {
 			return false
 		}
@@ -623,7 +621,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
 		c.domainScope.IncCounter(metrics.ConditionFailedErrorCounter)
-		c.logger.Debugf("Stopping task list due to persistence condition failure. Err: %v", err)
+		c.logger.Debug(fmt.Sprintf("Stopping task list due to persistence condition failure. Err: %v", err))
 		c.Stop()
 	}
 	return
@@ -675,8 +673,8 @@ func (c *taskContext) RecordActivityTaskStartedWithRetry(ctx context.Context,
 // If poll received task from persistence then task is deleted from it if no error was reported.
 func (c *taskContext) completeTask(err error) {
 	tlMgr := c.tlMgr
-	tlMgr.logger.Debugf("completeTask task taskList=%v, taskID=%v, err=%v",
-		tlMgr.taskListID.taskListName, c.info.TaskID, err)
+	tlMgr.logger.Debug(fmt.Sprintf("completeTask task taskList=%v, taskID=%v, err=%v",
+		tlMgr.taskListID.taskListName, c.info.TaskID, err))
 	if c.syncResponseCh != nil {
 		// It is OK to succeed task creation as it was already completed
 		c.syncResponseCh <- &syncMatchResponse{
@@ -700,9 +698,11 @@ func (c *taskContext) completeTask(err error) {
 			// OK, we also failed to write to persistence.
 			// This should only happen in very extreme cases where persistence is completely down.
 			// We still can't lose the old task so we just unload the entire task list
-			logging.LogPersistantStoreErrorEvent(tlMgr.logger, logging.TagValueStoreOperationStopTaskList, err,
-				fmt.Sprintf("task writer failed to write task. Unloading TaskList{taskType: %v, taskList: %v}",
-					tlMgr.taskListID.taskType, tlMgr.taskListID.taskListName))
+			tlMgr.logger.Error("Persistent store operation failure",
+				tag.StoreOperationStopTaskList,
+				tag.Error(err),
+				tag.WorkflowTaskListName(tlMgr.taskListID.taskListName),
+				tag.WorkflowTaskListType(tlMgr.taskListID.taskType))
 			tlMgr.Stop()
 			return
 		}

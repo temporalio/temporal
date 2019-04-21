@@ -29,7 +29,7 @@ import (
 	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
-	cadenceLog "github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service"
@@ -103,31 +103,30 @@ func (s *server) startService() common.Daemon {
 
 	params := service.BootstrapParams{}
 	params.Name = "cadence-" + s.name
-	params.BarkLogger = s.cfg.Log.NewBarkLogger()
-	params.Logger = cadenceLog.NewLogger(s.cfg.Log.NewZapLogger())
+	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
 
-	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.BarkLogger, params.Name)
+	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name)
 	if err != nil {
 		log.Fatalf("error creating ringpop factory: %v", err)
 	}
 
 	params.DynamicConfig = dynamicconfig.NewNopClient()
-	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.BarkLogger)
+	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope()
-	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.BarkLogger)
-	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.BarkLogger)
+	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
+	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 	enableGlobalDomain := dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, s.cfg.ClustersInfo.EnableGlobalDomain)
 	archivalStatus := dc.GetStringProperty(dynamicconfig.ArchivalStatus, s.cfg.Archival.Status)
 	enableReadFromArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromArchival, s.cfg.Archival.EnableReadFromArchival)
 
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
 
-	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.BarkLogger))
+	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 	params.ClusterMetadata = cluster.NewMetadata(
-		params.BarkLogger,
+		params.Logger,
 		params.MetricsClient,
 		enableGlobalDomain,
 		s.cfg.ClustersInfo.FailoverVersionIncrement,
@@ -143,9 +142,9 @@ func (s *server) startService() common.Daemon {
 	params.ESConfig = &s.cfg.ElasticSearch
 	params.ESConfig.Enable = dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)() // force override with dynamic config
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.BarkLogger, params.MetricScope, true, params.ESConfig.Enable)
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, params.ESConfig.Enable)
 	} else if params.ESConfig.Enable {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.BarkLogger, params.MetricScope, false, params.ESConfig.Enable)
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, params.ESConfig.Enable)
 	} else {
 		params.MessagingClient = nil
 	}

@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	hc "github.com/uber/cadence/client/history"
@@ -40,7 +39,8 @@ import (
 	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/definition"
 	ce "github.com/uber/cadence/common/errors"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -74,8 +74,8 @@ type (
 		tokenSerializer      common.TaskTokenSerializer
 		historyCache         *historyCache
 		metricsClient        metrics.Client
-		logger               bark.Logger
-		throttledLogger      bark.Logger
+		logger               log.Logger
+		throttledLogger      log.Logger
 		config               *Config
 		archivalClient       archiver.Client
 		resetor              workflowResetor
@@ -161,20 +161,16 @@ func NewEngineWithShardContext(
 	historyV2Manager := shard.GetHistoryV2Manager()
 	historyCache := newHistoryCache(shard)
 	historyEngImpl := &historyEngineImpl{
-		currentClusterName: currentClusterName,
-		shard:              shard,
-		historyMgr:         historyManager,
-		historyV2Mgr:       historyV2Manager,
-		executionManager:   executionManager,
-		visibilityMgr:      visibilityMgr,
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		historyCache:       historyCache,
-		logger: logger.WithFields(bark.Fields{
-			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
-		}),
-		throttledLogger: shard.GetThrottledLogger().WithFields(bark.Fields{
-			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
-		}),
+		currentClusterName:   currentClusterName,
+		shard:                shard,
+		historyMgr:           historyManager,
+		historyV2Mgr:         historyV2Manager,
+		executionManager:     executionManager,
+		visibilityMgr:        visibilityMgr,
+		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		historyCache:         historyCache,
+		logger:               logger.WithTags(tag.ComponentMatchingEngine),
+		throttledLogger:      shard.GetThrottledLogger().WithTags(tag.ComponentMatchingEngine),
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
@@ -203,8 +199,8 @@ func NewEngineWithShardContext(
 // Make sure all the components are loaded lazily so start can return immediately.  This is important because
 // ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {
-	logging.LogHistoryEngineStartingEvent(e.logger)
-	defer logging.LogHistoryEngineStartedEvent(e.logger)
+	e.logger.Info("", tag.LifeCycleStarting)
+	defer e.logger.Info("", tag.LifeCycleStarted)
 
 	e.registerDomainFailoverCallback()
 
@@ -217,8 +213,8 @@ func (e *historyEngineImpl) Start() {
 
 // Stop the service.
 func (e *historyEngineImpl) Stop() {
-	logging.LogHistoryEngineShuttingDownEvent(e.logger)
-	defer logging.LogHistoryEngineShutdownEvent(e.logger)
+	e.logger.Info("", tag.LifeCycleStopping)
+	defer e.logger.Info("", tag.LifeCycleStopped)
 
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
@@ -290,9 +286,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 			}
 
 			if len(failoverDomainIDs) > 0 {
-				e.logger.WithFields(bark.Fields{
-					logging.TagDomainIDs: failoverDomainIDs,
-				}).Info("Domain Failover Start.")
+				e.logger.Info("Domain Failover Start.", tag.WorkflowDomainIDs(failoverDomainIDs))
 
 				e.txProcessor.FailoverDomain(failoverDomainIDs)
 				e.timerProcessor.FailoverDomain(failoverDomainIDs)
@@ -967,8 +961,7 @@ Update_History_Loop:
 		if !isRunning {
 			// Looks like DecisionTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
-			logging.LogDuplicateTaskEvent(context.getLogger(), persistence.TransferTaskTypeDecisionTask, common.Int64Default(request.TaskId), requestID,
-				scheduleID, common.EmptyEventID, isRunning)
+			context.getLogger().Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
 
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
@@ -981,9 +974,7 @@ Update_History_Loop:
 
 			// Looks like DecisionTask already started as a result of another call.
 			// It is OK to drop the task at this point.
-			logging.LogDuplicateTaskEvent(context.getLogger(), persistence.TaskListTypeDecision, common.Int64Default(request.TaskId), requestID,
-				scheduleID, di.StartedID, isRunning)
-
+			context.getLogger().Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskListTypeDecision))
 			return nil, &h.EventAlreadyStartedError{Message: "Decision task already started."}
 		}
 
@@ -1062,9 +1053,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 			if !isRunning {
 				// Looks like ActivityTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				logging.LogDuplicateTaskEvent(e.logger, persistence.TransferTaskTypeActivityTask,
-					common.Int64Default(request.TaskId), requestID, scheduleID, common.EmptyEventID, isRunning)
-
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
 				return nil, ErrActivityTaskNotFound
 			}
 
@@ -1085,9 +1074,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				logging.LogDuplicateTaskEvent(e.logger, persistence.TransferTaskTypeActivityTask,
-					common.Int64Default(request.TaskId), requestID, scheduleID, ai.StartedID, isRunning)
-
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
 				return nil, &h.EventAlreadyStartedError{Message: "Activity task already started."}
 			}
 
@@ -1123,7 +1110,7 @@ type decisionBlobSizeChecker struct {
 	workflowID     string
 	runID          string
 	metricsClient  metrics.Client
-	logger         bark.Logger
+	logger         log.Logger
 	msBuilder      mutableState
 	completedID    int64
 }
@@ -1348,7 +1335,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.MultipleCompletionDecisionsCounter)
-					logging.LogMultipleCompletionDecisionsEvent(e.logger, *d.DecisionType)
+					e.logger.Warn("Multiple completion decisions", tag.WorkflowDecisionType(int64(*d.DecisionType)), tag.ErrorTypeMultipleCompletionDecisions)
 					continue Process_Decision_Loop
 				}
 				attributes := d.CompleteWorkflowExecutionDecisionAttributes
@@ -1414,7 +1401,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.MultipleCompletionDecisionsCounter)
-					logging.LogMultipleCompletionDecisionsEvent(e.logger, *d.DecisionType)
+					e.logger.Warn("Multiple completion decisions", tag.WorkflowDecisionType(int64(*d.DecisionType)), tag.ErrorTypeMultipleCompletionDecisions)
 					continue Process_Decision_Loop
 				}
 
@@ -1492,7 +1479,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.MultipleCompletionDecisionsCounter)
-					logging.LogMultipleCompletionDecisionsEvent(e.logger, *d.DecisionType)
+					e.logger.Warn("Multiple completion decisions", tag.WorkflowDecisionType(int64(*d.DecisionType)), tag.ErrorTypeMultipleCompletionDecisions)
 					continue Process_Decision_Loop
 				}
 				attributes := d.CancelWorkflowExecutionDecisionAttributes
@@ -1690,7 +1677,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.MultipleCompletionDecisionsCounter)
-					logging.LogMultipleCompletionDecisionsEvent(e.logger, *d.DecisionType)
+					e.logger.Warn("Multiple completion decisions", tag.WorkflowDecisionType(int64(*d.DecisionType)), tag.ErrorTypeMultipleCompletionDecisions)
 					continue Process_Decision_Loop
 				}
 				attributes := d.ContinueAsNewWorkflowExecutionDecisionAttributes
@@ -1775,7 +1762,10 @@ Update_History_Loop:
 
 		if failDecision {
 			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
-			logging.LogDecisionFailedEvent(e.logger, domainID, token.WorkflowID, token.RunID, failCause)
+			e.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failCause)),
+				tag.WorkflowID(token.WorkflowID),
+				tag.WorkflowRunID(token.RunID),
+				tag.WorkflowDomainID(domainID))
 			var err1 error
 			msBuilder, err1 = e.failDecision(context, scheduleID, startedID, failCause, []byte(failMessage), request)
 			if err1 != nil {
@@ -2156,15 +2146,15 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(ctx context.Context,
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
 				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
-				e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, Exist: %v", scheduleID, ai,
-					isRunning)
+				e.logger.Debug(fmt.Sprintf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, Exist: %v", scheduleID, ai,
+					isRunning))
 				return nil, ErrActivityTaskNotFound
 			}
 
 			cancelRequested = ai.CancelRequested
 
-			e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
-				scheduleID, ai, cancelRequested)
+			e.logger.Debug(fmt.Sprintf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
+				scheduleID, ai, cancelRequested))
 
 			// Save progress and last HB reported time.
 			msBuilder.UpdateActivityProgress(ai, request)
@@ -2260,12 +2250,10 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 			executionInfo := msBuilder.GetExecutionInfo()
 			maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
-				e.logger.WithFields(bark.Fields{
-					logging.TagDomainID:            domainID,
-					logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-					logging.TagWorkflowRunID:       execution.GetRunId(),
-					logging.TagSignalCount:         executionInfo.SignalCount,
-				}).Info("Execution limit reached for maximum signals")
+				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.WorkflowDomainID(domainID))
 				return nil, ErrSignalsLimitExceeded
 			}
 
@@ -2334,12 +2322,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 			executionInfo := msBuilder.GetExecutionInfo()
 			maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
-				e.logger.WithFields(bark.Fields{
-					logging.TagDomainID:            domainID,
-					logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-					logging.TagWorkflowRunID:       execution.GetRunId(),
-					logging.TagSignalCount:         executionInfo.SignalCount,
-				}).Info("Execution limit reached for maximum signals")
+				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.WorkflowDomainID(domainID))
 				return nil, ErrSignalsLimitExceeded
 			}
 
@@ -2920,10 +2906,7 @@ func (e *historyEngineImpl) failDecision(context workflowExecutionContext, sched
 }
 
 func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *timerBuilder {
-	log := e.logger.WithFields(bark.Fields{
-		logging.TagWorkflowExecutionID: we.WorkflowId,
-		logging.TagWorkflowRunID:       we.RunId,
-	})
+	log := e.logger.WithTags(tag.WorkflowID(we.GetWorkflowId()), tag.WorkflowRunID(we.GetRunId()))
 	return newTimerBuilder(e.shard.GetConfig(), log, clock.NewRealTimeSource())
 }
 
@@ -3367,7 +3350,7 @@ func getStartRequest(domainID string,
 	return startRequest
 }
 
-func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, eventStoreVersion int32, branchToken []byte, logger bark.Logger, domainID, workflowID, runID string, shardID *int) (*workflow.HistoryEvent, error) {
+func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, eventStoreVersion int32, branchToken []byte, logger log.Logger, domainID, workflowID, runID string, shardID *int) (*workflow.HistoryEvent, error) {
 	var events []*workflow.HistoryEvent
 	if eventStoreVersion == persistence.EventStoreVersionV2 {
 		response, err := historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
@@ -3379,9 +3362,7 @@ func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, historyV2Mgr
 			ShardID:       shardID,
 		})
 		if err != nil {
-			logger.WithFields(bark.Fields{
-				logging.TagErr: err,
-			}).Error("Conflict resolution current workflow finished.", err)
+			logger.Error("Conflict resolution current workflow finished.", tag.Error(err))
 			return nil, err
 		}
 		events = response.HistoryEvents
@@ -3398,19 +3379,14 @@ func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, historyV2Mgr
 			NextPageToken: nil,
 		})
 		if err != nil {
-			logger.WithFields(bark.Fields{
-				logging.TagErr: err,
-			}).Error("Conflict resolution current workflow finished.", err)
+			logger.Error("Conflict resolution current workflow finished.", tag.Error(err))
 			return nil, err
 		}
 		events = response.History.Events
 	}
 
 	if len(events) == 0 {
-		logger.WithFields(bark.Fields{
-			logging.TagWorkflowExecutionID: workflowID,
-			logging.TagWorkflowRunID:       runID,
-		})
+		logger.WithTags(tag.WorkflowID(workflowID), tag.WorkflowRunID(runID))
 		logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
 		return nil, errNoHistoryFound
 	}

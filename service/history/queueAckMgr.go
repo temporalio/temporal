@@ -21,15 +21,15 @@
 package history
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/uber-common/bark"
-
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 )
 
@@ -43,7 +43,7 @@ type (
 		shard         ShardContext
 		options       *QueueProcessorOptions
 		processor     processor
-		logger        bark.Logger
+		logger        log.Logger
 		metricsClient metrics.Client
 		finishedChan  chan struct{}
 
@@ -59,7 +59,7 @@ const (
 	warnPendingTasks = 2000
 )
 
-func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger bark.Logger) *queueAckMgrImpl {
+func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
 		isFailover:       false,
@@ -75,7 +75,7 @@ func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processo
 	}
 }
 
-func newQueueFailoverAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger bark.Logger) *queueAckMgrImpl {
+func newQueueFailoverAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
 		isFailover:       true,
@@ -120,15 +120,16 @@ TaskFilterLoop:
 		_, isLoaded := a.outstandingTasks[task.GetTaskID()]
 		if isLoaded {
 			// task already loaded
-			a.logger.Debugf("Skipping transfer task: %v.", task)
+			a.logger.Debug(fmt.Sprintf("Skipping transfer task: %v.", task))
 			continue TaskFilterLoop
 		}
 
 		if a.readLevel >= task.GetTaskID() {
-			a.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", task.GetTaskID(),
-				a.readLevel)
+			a.logger.Fatal("Next task ID is less than current read level.",
+				tag.TaskID(task.GetTaskID()),
+				tag.ReadLevel(a.readLevel))
 		}
-		a.logger.Debugf("Moving read level: %v", task.GetTaskID())
+		a.logger.Debug(fmt.Sprintf("Moving read level: %v", task.GetTaskID()))
 		a.readLevel = task.GetTaskID()
 		a.outstandingTasks[task.GetTaskID()] = false
 	}
@@ -166,7 +167,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() {
 	a.Lock()
 	ackLevel := a.ackLevel
 
-	a.logger.Debugf("Moving timer ack level from %v, with %v.", ackLevel, a.outstandingTasks)
+	a.logger.Debug(fmt.Sprintf("Moving timer ack level from %v, with %v.", ackLevel, a.outstandingTasks))
 
 	// task ID is not sequancial, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
@@ -195,7 +196,7 @@ MoveAckLevelLoop:
 		if acked {
 			ackLevel = current
 			delete(a.outstandingTasks, current)
-			a.logger.Debugf("Moving timer ack level to %v.", ackLevel)
+			a.logger.Debug(fmt.Sprintf("Moving timer ack level to %v.", ackLevel))
 		} else {
 			break MoveAckLevelLoop
 		}
@@ -206,7 +207,7 @@ MoveAckLevelLoop:
 		a.Unlock()
 		// this means in failover mode, all possible failover transfer tasks
 		// are processed and we are free to shundown
-		a.logger.Debugf("Queue ack manager shutdown.")
+		a.logger.Debug(fmt.Sprintf("Queue ack manager shutdown."))
 		a.finishedChan <- struct{}{}
 		a.processor.queueShutdown()
 		return
@@ -215,6 +216,6 @@ MoveAckLevelLoop:
 	a.Unlock()
 	if err := a.processor.updateAckLevel(ackLevel); err != nil {
 		a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
-		logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
+		a.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
 	}
 }

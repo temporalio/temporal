@@ -23,7 +23,8 @@ package membership
 import (
 	"sync"
 
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	ringpop "github.com/uber/ringpop-go"
 )
 
@@ -33,14 +34,14 @@ type ringpopMonitor struct {
 	services []string
 	rp       *ringpop.Ringpop
 	rings    map[string]*ringpopServiceResolver
-	logger   bark.Logger
+	logger   log.Logger
 	mutex    sync.Mutex
 }
 
 var _ Monitor = (*ringpopMonitor)(nil)
 
 // NewRingpopMonitor returns a ringpop-based membership monitor
-func NewRingpopMonitor(services []string, rp *ringpop.Ringpop, logger bark.Logger) Monitor {
+func NewRingpopMonitor(services []string, rp *ringpop.Ringpop, logger log.Logger) Monitor {
 	rpo := &ringpopMonitor{
 		services: services,
 		rp:       rp,
@@ -64,7 +65,7 @@ func (rpo *ringpopMonitor) Start() error {
 	for service, ring := range rpo.rings {
 		err := ring.Start()
 		if err != nil {
-			rpo.logger.WithField("service", service).Error("Failed to initialize ring.")
+			rpo.logger.Error("Failed to initialize ring.", tag.Service(service))
 			return err
 		}
 	}

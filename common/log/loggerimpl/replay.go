@@ -18,25 +18,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package log
+package loggerimpl
 
 import (
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence/workflow"
 )
 
 type replayLogger struct {
-	logger            Logger
+	logger            log.Logger
 	ctx               workflow.Context
 	enableLogInReplay bool
 }
 
-var _ Logger = (*replayLogger)(nil)
+var _ log.Logger = (*replayLogger)(nil)
 
 const skipForReplayLogger = skipForDefaultLogger + 1
 
 // NewReplayLogger creates a logger which is aware of cadence's replay mode
-func NewReplayLogger(logger Logger, ctx workflow.Context, enableLogInReplay bool) Logger {
+func NewReplayLogger(logger log.Logger, ctx workflow.Context, enableLogInReplay bool) log.Logger {
 	lg, ok := logger.(*loggerImpl)
 	if ok {
 		logger = &loggerImpl{
@@ -88,7 +89,7 @@ func (r *replayLogger) Fatal(msg string, tags ...tag.Tag) {
 	r.logger.Fatal(msg, tags...)
 }
 
-func (r *replayLogger) WithTags(tags ...tag.Tag) Logger {
+func (r *replayLogger) WithTags(tags ...tag.Tag) log.Logger {
 	return &replayLogger{
 		logger:            r.logger.WithTags(tags...),
 		ctx:               r.ctx,

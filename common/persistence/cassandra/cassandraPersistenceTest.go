@@ -27,7 +27,6 @@ import (
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
-	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/environment"
 )
@@ -119,7 +118,7 @@ func (s *TestCluster) CreateSession() {
 	var err error
 	s.session, err = s.cluster.CreateSession()
 	if err != nil {
-		log.WithField(logging.TagErr, err).Fatal(`CreateSession`)
+		log.Fatal(`CreateSession`, err)
 	}
 }
 

@@ -22,12 +22,11 @@ package matching
 
 import (
 	"errors"
-	"fmt"
 	"sync/atomic"
 
-	"github.com/uber-common/bark"
 	s "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -57,7 +56,7 @@ type (
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
 		stopped      int64 // set to 1 if the writer is stopped or is shutting down
-		logger       bark.Logger
+		logger       log.Logger
 		stopCh       chan struct{} // shutdown signal for all routines in this class
 	}
 )
@@ -174,9 +173,14 @@ writerLoop:
 
 				r, err := w.tlMgr.db.CreateTasks(tasks)
 				if err != nil {
-					logging.LogPersistantStoreErrorEvent(w.logger, logging.TagValueStoreOperationCreateTask, err,
-						fmt.Sprintf("{taskID: [%v, %v], taskType: %v, taskList: %v}",
-							taskIDs[0], taskIDs[batchSize-1], w.taskListID.taskType, w.taskListID.taskListName))
+					w.logger.Error("Persistent store operation failure",
+						tag.StoreOperationCreateTask,
+						tag.Error(err),
+						tag.WorkflowTaskListName(w.taskListID.taskListName),
+						tag.WorkflowTaskListType(w.taskListID.taskType),
+						tag.Number(taskIDs[0]),
+						tag.NextNumber(taskIDs[batchSize-1]),
+					)
 				}
 
 				// Update the maxReadLevel after the writes are completed.

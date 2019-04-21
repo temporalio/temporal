@@ -27,13 +27,13 @@ import (
 	"time"
 
 	farm "github.com/dgryski/go-farm"
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cron"
-	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
@@ -247,15 +247,15 @@ func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 }
 
 // PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *workflow.History, logger bark.Logger) {
+func PrettyPrintHistory(history *workflow.History, logger log.Logger) {
 	data, err := json.MarshalIndent(history, "", "    ")
 
 	if err != nil {
-		logger.Errorf("Error serializing history: %v\n", err)
+		logger.Error("Error serializing history: %v\n", tag.Error(err))
 	}
 
 	logger.Info("******************************************")
-	logger.Infof("History: %v", string(data))
+	logger.Info("History", tag.DetailInfo(string(data)))
 	logger.Info("******************************************")
 }
 
@@ -370,17 +370,13 @@ func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.S
 
 // CheckEventBlobSizeLimit checks if a blob data exceeds limits. It logs a warning if it exceeds warnLimit,
 // and return ErrBlobSizeExceedsLimit if it exceeds errorLimit.
-func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, workflowID, runID string, scope metrics.Scope, logger bark.Logger) error {
+func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, workflowID, runID string, scope metrics.Scope, logger log.Logger) error {
 	scope.RecordTimer(metrics.EventBlobSize, time.Duration(actualSize))
 
 	if actualSize > warnLimit {
 		if logger != nil {
-			logger.WithFields(bark.Fields{
-				logging.TagDomainID:            domainID,
-				logging.TagWorkflowExecutionID: workflowID,
-				logging.TagWorkflowRunID:       runID,
-				logging.TagSize:                actualSize,
-			}).Warn("Blob size exceeds limit.")
+			logger.Warn("Blob size exceeds limit.",
+				tag.WorkflowDomainID(domainID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID), tag.WorkflowSize(int64(actualSize)))
 		}
 
 		if actualSize > errorLimit {
@@ -393,32 +389,25 @@ func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, wo
 // ValidateLongPollContextTimeout check if the context timeout for a long poll handler is too short or below a normal value.
 // If the timeout is not set or too short, it logs an error, and return ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
 // accordingly. If the timeout is only below a normal value, it just logs an info and return nil.
-func ValidateLongPollContextTimeout(ctx context.Context, handlerName string, logger bark.Logger) error {
+func ValidateLongPollContextTimeout(ctx context.Context, handlerName string, logger log.Logger) error {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		err := ErrContextTimeoutNotSet
-		logger.WithFields(bark.Fields{
-			logging.TagHandlerName: handlerName,
-			logging.TagErr:         err,
-		}).Error("Context timeout not set for long poll API.")
+		logger.Error("Context timeout not set for long poll API.",
+			tag.WorkflowHandlerName(handlerName), tag.Error(err))
 		return err
 	}
 
 	timeout := deadline.Sub(time.Now())
 	if timeout < MinLongPollTimeout {
 		err := ErrContextTimeoutTooShort
-		logger.WithFields(bark.Fields{
-			logging.TagHandlerName:    handlerName,
-			logging.TagContextTimeout: timeout,
-			logging.TagErr:            err,
-		}).Error("Context timeout is too short for long poll API.")
+		logger.Error("Context timeout is too short for long poll API.",
+			tag.WorkflowHandlerName(handlerName), tag.Error(err), tag.WorkflowPollContextTimeout(timeout))
 		return err
 	}
 	if timeout < CriticalLongPollTimeout {
-		logger.WithFields(bark.Fields{
-			logging.TagHandlerName:    handlerName,
-			logging.TagContextTimeout: timeout,
-		}).Warn("Context timeout is lower than critical value for long poll API.")
+		logger.Warn("Context timeout is lower than critical value for long poll API.",
+			tag.WorkflowHandlerName(handlerName), tag.WorkflowPollContextTimeout(timeout))
 	}
 	return nil
 }

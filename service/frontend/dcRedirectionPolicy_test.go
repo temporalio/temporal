@@ -21,16 +21,15 @@
 package frontend
 
 import (
-	"os"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -44,7 +43,7 @@ type (
 	}
 
 	forwardingDCRedirectionPolicySuite struct {
-		logger bark.Logger
+		logger log.Logger
 		suite.Suite
 		fromDC              string
 		toDC                string
@@ -60,9 +59,6 @@ func TestNoopDCRedirectionPolicySuite(t *testing.T) {
 }
 
 func (s *noopDCRedirectionPolicySuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *noopDCRedirectionPolicySuite) TearDownSuite() {
@@ -97,9 +93,6 @@ func TestForwardingDCRedirectionPolicySuite(t *testing.T) {
 }
 
 func (s *forwardingDCRedirectionPolicySuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *forwardingDCRedirectionPolicySuite) TearDownSuite() {
@@ -109,9 +102,9 @@ func (s *forwardingDCRedirectionPolicySuite) TearDownSuite() {
 func (s *forwardingDCRedirectionPolicySuite) SetupTest() {
 	s.fromDC = cluster.TestCurrentClusterName
 	s.toDC = cluster.TestAlternativeClusterName
-	log2 := log.New()
-	log2.Level = log.DebugLevel
-	s.logger = bark.NewLoggerFromLogrus(log2)
+	var err error
+	s.logger, err = loggerimpl.NewDevelopment()
+	s.Require().NoError(err)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)

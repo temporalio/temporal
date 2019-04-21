@@ -21,12 +21,14 @@
 package history
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -43,7 +45,7 @@ type (
 		isFailover          bool
 		shard               ShardContext
 		executionMgr        persistence.ExecutionManager
-		logger              bark.Logger
+		logger              log.Logger
 		metricsClient       metrics.Client
 		config              *Config
 		timeNow             timeNow
@@ -97,7 +99,7 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 }
 
 func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client,
-	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger bark.Logger, clusterName string) *timerQueueAckMgrImpl {
+	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger log.Logger, clusterName string) *timerQueueAckMgrImpl {
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
@@ -127,7 +129,7 @@ func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Cl
 
 func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client,
 	minLevel time.Time, maxLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel,
-	timerQueueShutdown timerQueueShutdown, logger bark.Logger) *timerQueueAckMgrImpl {
+	timerQueueShutdown timerQueueShutdown, logger log.Logger) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
@@ -176,8 +178,8 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 			return nil, nil, false, err
 		}
 		morePage = len(pageToken) != 0
-		t.logger.Debugf("readTimerTasks: minQueryLevel: (%s), maxQueryLevel: (%s), count: %v, more timer: %v",
-			minQueryLevel, maxQueryLevel, len(tasks), morePage)
+		t.logger.Debug(fmt.Sprintf("readTimerTasks: minQueryLevel: (%s)), maxQueryLevel: (%s), count: %v, more timer: %v",
+			minQueryLevel, maxQueryLevel, len(tasks), morePage))
 	}
 
 	t.Lock()
@@ -199,8 +201,8 @@ TaskFilterLoop:
 		_, isLoaded := t.outstandingTasks[timerSequenceID]
 		if isLoaded {
 			// timer already loaded
-			t.logger.Debugf("Skipping timer task: %v. WorkflowID: %v, RunID: %v, Type: %v",
-				timerSequenceID.String(), task.WorkflowID, task.RunID, task.TaskType)
+			t.logger.Debug(fmt.Sprintf("Skipping timer task: %v. WorkflowID: %v, RunID: %v, Type: %v",
+				timerSequenceID.String(), task.WorkflowID, task.RunID, task.TaskType))
 			continue TaskFilterLoop
 		}
 
@@ -210,7 +212,7 @@ TaskFilterLoop:
 			break TaskFilterLoop
 		}
 
-		t.logger.Debugf("Moving timer read level: (%s)", timerSequenceID)
+		t.logger.Debug(fmt.Sprintf("Moving timer read level: (%s)", timerSequenceID))
 		t.readLevel = timerSequenceID
 
 		t.outstandingTasks[timerSequenceID] = false
@@ -223,7 +225,7 @@ TaskFilterLoop:
 		} else {
 			t.minQueryLevel = t.maxQueryLevel
 		}
-		t.logger.Debugf("Moved timer minQueryLevel: (%s)", t.minQueryLevel)
+		t.logger.Debug(fmt.Sprintf("Moved timer minQueryLevel: (%s)", t.minQueryLevel))
 		t.pageToken = nil
 	}
 	t.Unlock()
@@ -290,7 +292,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() {
 	ackLevel := t.ackLevel
 	outstandingTasks := t.outstandingTasks
 
-	t.logger.Debugf("Moving timer ack level from %v, with %v.", ackLevel, outstandingTasks)
+	t.logger.Debug(fmt.Sprintf("Moving timer ack level from %v, with %v.", ackLevel, outstandingTasks))
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
@@ -317,7 +319,7 @@ MoveAckLevelLoop:
 		if acked {
 			ackLevel = current
 			delete(outstandingTasks, current)
-			t.logger.Debugf("Moving timer ack level to %v.", ackLevel)
+			t.logger.Debug(fmt.Sprintf("Moving timer ack level to %v.", ackLevel))
 		} else {
 			break MoveAckLevelLoop
 		}
@@ -328,7 +330,7 @@ MoveAckLevelLoop:
 		t.Unlock()
 		// this means in failover mode, all possible failover timer tasks
 		// are processed and we are free to shutdown
-		t.logger.Debugf("Timer ack manager shutdown.")
+		t.logger.Debug(fmt.Sprintf("Timer ack manager shutdown."))
 		t.finishedChan <- struct{}{}
 		t.timerQueueShutdown()
 		return
@@ -337,7 +339,7 @@ MoveAckLevelLoop:
 	t.Unlock()
 	if err := t.updateTimerAckLevel(ackLevel); err != nil {
 		t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
-		t.logger.Errorf("Error updating timer ack level for shard: %v", err)
+		t.logger.Error("Error updating timer ack level for shard", tag.Error(err))
 	}
 }
 

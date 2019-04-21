@@ -21,11 +21,9 @@
 package history
 
 import (
-	"os"
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -61,9 +59,7 @@ func TestRemoteTimerGeteSuite(t *testing.T) {
 }
 
 func (s *localTimerGateSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
+
 }
 
 func (s *localTimerGateSuite) TearDownSuite() {
@@ -79,9 +75,7 @@ func (s *localTimerGateSuite) TearDownTest() {
 }
 
 func (s *remoteTimerGateSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
+
 }
 
 func (s *remoteTimerGateSuite) TearDownSuite() {
