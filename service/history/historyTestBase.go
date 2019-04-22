@@ -505,11 +505,6 @@ func (s *TestShardContext) GetCurrentTime(cluster string) time.Time {
 	return time.Now()
 }
 
-// GetEncoding test implementation
-func (s *TestShardContext) GetEncoding(domainEntry *cache.DomainCacheEntry) common.EncodingType {
-	return common.EncodingType(s.config.EventEncodingType(domainEntry.GetInfo().Name))
-}
-
 // NewDynamicConfigForTest return dc for test
 func NewDynamicConfigForTest() *Config {
 	dc := dynamicconfig.NewNopCollection()

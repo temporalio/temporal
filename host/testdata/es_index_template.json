@@ -11,7 +11,7 @@
   },
   "mappings": {
     "_doc": {
-      "dynamic": "strict",
+      "dynamic": "false",
       "properties": {
         "DomainID": {
           "type": "keyword"

@@ -105,12 +105,12 @@ func (v *cassandraVisibilityPersistenceV2) GetName() string {
 }
 
 func (v *cassandraVisibilityPersistenceV2) RecordWorkflowExecutionStarted(
-	request *p.RecordWorkflowExecutionStartedRequest) error {
+	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	return v.persistence.RecordWorkflowExecutionStarted(request)
 }
 
 func (v *cassandraVisibilityPersistenceV2) RecordWorkflowExecutionClosed(
-	request *p.RecordWorkflowExecutionClosedRequest) error {
+	request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	return v.persistence.RecordWorkflowExecutionClosed(request)
 }
 

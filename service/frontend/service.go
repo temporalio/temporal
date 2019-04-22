@@ -23,18 +23,16 @@ package frontend
 import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/elasticsearch"
+	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/tokenbucket"
 )
 
 // Config represents configuration for cadence-frontend service
@@ -151,23 +149,17 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatal("failed to create visibility manager", tag.Error(err))
 	}
+
 	var visibilityFromES persistence.VisibilityManager
 	if s.config.EnableVisibilityToKafka() {
 		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
 		visibilityConfigForES := &config.VisibilityConfig{
+			MaxQPS:                 s.config.PersistenceMaxQPS,
 			VisibilityListMaxQPS:   s.config.ESVisibilityListMaxQPS,
 			ESIndexMaxResultWindow: s.config.ESIndexMaxResultWindow,
 		}
-
-		visibilityFromESStore := elasticsearch.NewElasticSearchVisibilityStore(params.ESClient, visibilityIndexName, visibilityConfigForES, log)
-		visibilityFromES := persistence.NewVisibilityManagerImpl(visibilityFromESStore, log)
-		// wrap with rate limiter
-		esRateLimiter := tokenbucket.New(s.config.PersistenceMaxQPS(), clock.NewRealTimeSource())
-		visibilityFromES = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
-		// wrap with advanced rate limit for list
-		visibilityFromES = persistence.NewVisibilitySamplingClient(visibilityFromES, visibilityConfigForES, base.GetMetricsClient(), log)
-		// wrap with metrics
-		visibilityFromES = elasticsearch.NewVisibilityMetricsClient(visibilityFromES, base.GetMetricsClient(), log)
+		visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
+			nil, base.GetMetricsClient(), log)
 	}
 	visibility := persistence.NewVisibilityManagerWrapper(visibilityFromDB, visibilityFromES, s.config.EnableReadVisibilityFromES)
 

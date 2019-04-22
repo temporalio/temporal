@@ -60,34 +60,34 @@ func NewSQLVisibilityStore(cfg config.SQL, logger log.Logger) (p.VisibilityStore
 	}, nil
 }
 
-func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.RecordWorkflowExecutionStartedRequest) error {
+func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	_, err := s.db.InsertIntoVisibility(&sqldb.VisibilityRow{
 		DomainID:         request.DomainUUID,
-		WorkflowID:       *request.Execution.WorkflowId,
-		RunID:            *request.Execution.RunId,
+		WorkflowID:       request.WorkflowID,
+		RunID:            request.RunID,
 		StartTime:        time.Unix(0, request.StartTimestamp),
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
-		Memo:             request.Memo,
-		Encoding:         string(request.Encoding),
+		Memo:             request.Memo.Data,
+		Encoding:         string(request.Memo.GetEncoding()),
 	})
 	return err
 }
 
-func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.RecordWorkflowExecutionClosedRequest) error {
+func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	closeTime := time.Unix(0, request.CloseTimestamp)
 	result, err := s.db.ReplaceIntoVisibility(&sqldb.VisibilityRow{
 		DomainID:         request.DomainUUID,
-		WorkflowID:       *request.Execution.WorkflowId,
-		RunID:            *request.Execution.RunId,
+		WorkflowID:       request.WorkflowID,
+		RunID:            request.RunID,
 		StartTime:        time.Unix(0, request.StartTimestamp),
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 		CloseTime:        &closeTime,
 		CloseStatus:      common.Int32Ptr(int32(request.Status)),
 		HistoryLength:    &request.HistoryLength,
-		Memo:             request.Memo,
-		Encoding:         string(request.Encoding),
+		Memo:             request.Memo.Data,
+		Encoding:         string(request.Memo.GetEncoding()),
 	})
 	if err != nil {
 		return err

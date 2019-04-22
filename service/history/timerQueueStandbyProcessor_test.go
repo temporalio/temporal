@@ -59,7 +59,6 @@ type (
 		mockHistoryMgr          *mocks.HistoryManager
 		mockShard               ShardContext
 		mockClusterMetadata     *mocks.ClusterMetadata
-		mockProducer            *mocks.KafkaProducer
 		mockMessagingClient     messaging.Client
 		mocktimerQueueAckMgr    *MockTimerQueueAckMgr
 		mockService             service.Service
@@ -109,9 +108,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockProducer = &mocks.KafkaProducer{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
 
@@ -148,7 +145,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	}
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
-	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(s.mockShard, h, s.clusterName, newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.mockProducer, s.logger)
+	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(s.mockShard, h, s.clusterName, newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.logger)
 	s.mocktimerQueueAckMgr = &MockTimerQueueAckMgr{}
 	s.timerQueueStandbyProcessor.timerQueueAckMgr = s.mocktimerQueueAckMgr
 }
@@ -158,7 +155,6 @@ func (s *timerQueueStandbyProcessorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
 	s.mocktimerQueueAckMgr.AssertExpectations(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())

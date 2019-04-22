@@ -145,7 +145,6 @@ func NewEngineWithShardContext(
 	publicClient workflowserviceclient.Interface,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
-	visibilityProducer messaging.Producer,
 	config *Config,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
@@ -177,8 +176,8 @@ func NewEngineWithShardContext(
 		archivalClient:       archiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows),
 	}
 
-	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, visibilityProducer, matching, historyClient, logger)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, visibilityProducer, logger)
+	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.txProcessor = txProcessor
 	shardWrapper.txProcessor = txProcessor
 
@@ -2682,11 +2681,14 @@ func (e *historyEngineImpl) ResetWorkflowExecution(ctx context.Context, resetReq
 	return e.resetor.ResetWorkflowExecution(ctx, resetRequest)
 }
 
-func (e *historyEngineImpl) DeleteExecutionFromVisibility(domainID string, runID string) error {
-	return e.visibilityMgr.DeleteWorkflowExecution(&persistence.VisibilityDeleteWorkflowExecutionRequest{
-		DomainID: domainID,
-		RunID:    runID,
-	})
+func (e *historyEngineImpl) DeleteExecutionFromVisibility(task *persistence.TimerTaskInfo) error {
+	request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
+		DomainID:   task.DomainID,
+		WorkflowID: task.WorkflowID,
+		RunID:      task.RunID,
+		TaskID:     task.TaskID,
+	}
+	return e.visibilityMgr.DeleteWorkflowExecution(request) // delete from db
 }
 
 type updateWorkflowAction struct {

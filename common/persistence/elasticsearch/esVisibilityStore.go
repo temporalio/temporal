@@ -28,11 +28,14 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pkg/errors"
+
+	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/messaging"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -45,6 +48,7 @@ type (
 	esVisibilityStore struct {
 		esClient es.Client
 		index    string
+		producer messaging.Producer
 		logger   log.Logger
 		config   *config.VisibilityConfig
 	}
@@ -80,10 +84,11 @@ var (
 )
 
 // NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
-func NewElasticSearchVisibilityStore(esClient es.Client, index string, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
+func NewElasticSearchVisibilityStore(esClient es.Client, index string, producer messaging.Producer, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
 	return &esVisibilityStore{
 		esClient: esClient,
 		index:    index,
+		producer: producer,
 		logger:   logger.WithTags(tag.ComponentESVisibilityManager),
 		config:   config,
 	}
@@ -95,12 +100,39 @@ func (v *esVisibilityStore) GetName() string {
 	return esPersistenceName
 }
 
-func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.RecordWorkflowExecutionStartedRequest) error {
-	return errOperationNotSupported
+func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
+	v.checkProducer()
+	msg := getVisibilityMessageForOpenExecution(
+		request.DomainUUID,
+		request.WorkflowID,
+		request.RunID,
+		request.WorkflowTypeName,
+		request.StartTimestamp,
+		request.ExecutionTimestamp,
+		request.TaskID,
+		request.Memo.Data,
+		request.Memo.GetEncoding(),
+	)
+	return v.producer.Publish(msg)
 }
 
-func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.RecordWorkflowExecutionClosedRequest) error {
-	return errOperationNotSupported
+func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
+	v.checkProducer()
+	msg := getVisibilityMessageForCloseExecution(
+		request.DomainUUID,
+		request.WorkflowID,
+		request.RunID,
+		request.WorkflowTypeName,
+		request.StartTimestamp,
+		request.ExecutionTimestamp,
+		request.CloseTimestamp,
+		request.Status,
+		request.HistoryLength,
+		request.TaskID,
+		request.Memo.Data,
+		request.Memo.GetEncoding(),
+	)
+	return v.producer.Publish(msg)
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutions(
@@ -276,7 +308,21 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 }
 
 func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
-	return nil // not applicable for elastic search, which relies on retention policies for deletion
+	v.checkProducer()
+	msg := getVisibilityMessageForDeletion(
+		request.DomainID,
+		request.WorkflowID,
+		request.RunID,
+		request.TaskID,
+	)
+	return v.producer.Publish(msg)
+}
+
+func (v *esVisibilityStore) checkProducer() {
+	if v.producer == nil {
+		// must be bug, check history setup
+		panic("message producer is nil")
+	}
 }
 
 func (v *esVisibilityStore) getNextPageToken(token []byte) (*esVisibilityPageToken, error) {
@@ -427,4 +473,70 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	}
 
 	return record
+}
+
+func getVisibilityMessageForOpenExecution(domainID string, wid, rid string, workflowTypeName string,
+	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType) *indexer.Message {
+
+	msgType := indexer.MessageTypeIndex
+	fields := map[string]*indexer.Field{
+		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
+		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
+		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
+	}
+	if len(memo) != 0 {
+		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
+	}
+
+	msg := &indexer.Message{
+		MessageType: &msgType,
+		DomainID:    common.StringPtr(domainID),
+		WorkflowID:  common.StringPtr(wid),
+		RunID:       common.StringPtr(rid),
+		Version:     common.Int64Ptr(taskID),
+		Fields:      fields,
+	}
+	return msg
+}
+
+func getVisibilityMessageForCloseExecution(domainID string, wid, rid string, workflowTypeName string,
+	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
+	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType) *indexer.Message {
+
+	msgType := indexer.MessageTypeIndex
+	fields := map[string]*indexer.Field{
+		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
+		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
+		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
+		es.CloseTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(endTimeUnixNano)},
+		es.CloseStatus:   {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(int64(closeStatus))},
+		es.HistoryLength: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(historyLength)},
+	}
+	if len(memo) != 0 {
+		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
+	}
+
+	msg := &indexer.Message{
+		MessageType: &msgType,
+		DomainID:    common.StringPtr(domainID),
+		WorkflowID:  common.StringPtr(wid),
+		RunID:       common.StringPtr(rid),
+		Version:     common.Int64Ptr(taskID),
+		Fields:      fields,
+	}
+	return msg
+}
+
+func getVisibilityMessageForDeletion(domainID, workflowID, runID string, docVersion int64) *indexer.Message {
+	msgType := indexer.MessageTypeDelete
+	msg := &indexer.Message{
+		MessageType: &msgType,
+		DomainID:    common.StringPtr(domainID),
+		WorkflowID:  common.StringPtr(workflowID),
+		RunID:       common.StringPtr(runID),
+		Version:     common.Int64Ptr(docVersion),
+	}
+	return msg
 }

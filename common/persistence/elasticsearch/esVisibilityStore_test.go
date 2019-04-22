@@ -31,11 +31,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
 	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
 	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -48,6 +51,7 @@ type ESVisibilitySuite struct {
 	*require.Assertions
 	visibilityStore *esVisibilityStore
 	mockESClient    *esMocks.Client
+	mockProducer    *mocks.KafkaProducer
 }
 
 var (
@@ -94,20 +98,113 @@ func (s *ESVisibilitySuite) SetupTest() {
 	config := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
 	}
-	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, config, loggerimpl.NewNopLogger())
+
+	s.mockProducer = &mocks.KafkaProducer{}
+	mgr := NewElasticSearchVisibilityStore(s.mockESClient, testIndex, s.mockProducer, config, loggerimpl.NewNopLogger())
 	s.visibilityStore = mgr.(*esVisibilityStore)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
 	s.mockESClient.AssertExpectations(s.T())
+	s.mockProducer.AssertExpectations(s.T())
 }
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
-	s.Equal(errOperationNotSupported, s.visibilityStore.RecordWorkflowExecutionStarted(nil))
+	// test non-empty request fields match
+	request := &p.InternalRecordWorkflowExecutionStartedRequest{}
+	request.DomainUUID = "domainID"
+	request.WorkflowID = "wid"
+	request.RunID = "rid"
+	request.WorkflowTypeName = "wfType"
+	request.StartTimestamp = int64(123)
+	request.ExecutionTimestamp = int64(321)
+	request.TaskID = int64(111)
+	memoBytes := []byte(`test bytes`)
+	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeThriftRW)
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
+		fields := input.Fields
+		s.Equal(request.DomainUUID, input.GetDomainID())
+		s.Equal(request.WorkflowID, input.GetWorkflowID())
+		s.Equal(request.RunID, input.GetRunID())
+		s.Equal(request.TaskID, input.GetVersion())
+		s.Equal(request.WorkflowTypeName, fields[es.WorkflowType].GetStringData())
+		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
+		s.Equal(request.ExecutionTimestamp, fields[es.ExecutionTime].GetIntData())
+		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
+		s.Equal(string(common.EncodingTypeThriftRW), fields[es.Encoding].GetStringData())
+		return true
+	})).Return(nil).Once()
+	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
+	s.NoError(err)
+}
+
+func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
+	// test empty request
+	request := &p.InternalRecordWorkflowExecutionStartedRequest{
+		Memo: &p.DataBlob{},
+	}
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
+		s.Equal(indexer.MessageTypeIndex, input.GetMessageType())
+		_, ok := input.Fields[es.Memo]
+		s.False(ok)
+		_, ok = input.Fields[es.Encoding]
+		s.False(ok)
+		return true
+	})).Return(nil).Once()
+	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
+	s.NoError(err)
 }
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
-	s.Equal(errOperationNotSupported, s.visibilityStore.RecordWorkflowExecutionClosed(nil))
+	// test non-empty request fields match
+	request := &p.InternalRecordWorkflowExecutionClosedRequest{}
+	request.DomainUUID = "domainID"
+	request.WorkflowID = "wid"
+	request.RunID = "rid"
+	request.WorkflowTypeName = "wfType"
+	request.StartTimestamp = int64(123)
+	request.ExecutionTimestamp = int64(321)
+	request.TaskID = int64(111)
+	memoBytes := []byte(`test bytes`)
+	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeThriftRW)
+	request.CloseTimestamp = int64(999)
+	request.Status = workflow.WorkflowExecutionCloseStatusTerminated
+	request.HistoryLength = int64(20)
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
+		fields := input.Fields
+		s.Equal(request.DomainUUID, input.GetDomainID())
+		s.Equal(request.WorkflowID, input.GetWorkflowID())
+		s.Equal(request.RunID, input.GetRunID())
+		s.Equal(request.TaskID, input.GetVersion())
+		s.Equal(request.WorkflowTypeName, fields[es.WorkflowType].GetStringData())
+		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
+		s.Equal(request.ExecutionTimestamp, fields[es.ExecutionTime].GetIntData())
+		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
+		s.Equal(string(common.EncodingTypeThriftRW), fields[es.Encoding].GetStringData())
+		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
+		s.Equal(int64(request.Status), fields[es.CloseStatus].GetIntData())
+		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())
+		return true
+	})).Return(nil).Once()
+	err := s.visibilityStore.RecordWorkflowExecutionClosed(request)
+	s.NoError(err)
+}
+
+func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
+	// test empty request
+	request := &p.InternalRecordWorkflowExecutionClosedRequest{
+		Memo: &p.DataBlob{},
+	}
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
+		s.Equal(indexer.MessageTypeIndex, input.GetMessageType())
+		_, ok := input.Fields[es.Memo]
+		s.False(ok)
+		_, ok = input.Fields[es.Encoding]
+		s.False(ok)
+		return true
+	})).Return(nil).Once()
+	err := s.visibilityStore.RecordWorkflowExecutionClosed(request)
+	s.NoError(err)
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {

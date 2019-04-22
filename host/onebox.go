@@ -43,7 +43,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -348,23 +347,10 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, c.logger)
-	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.esConfig.Enable, true)
-	visibilityMgr := c.visibilityMgr
-	if c.esConfig.Enable {
-		frontendConfig.EnableReadVisibilityFromES = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, true)
-		visibilityIndexName := c.esConfig.Indices[common.VisibilityAppName]
-		visibilityConfigForES := &config.VisibilityConfig{
-			VisibilityListMaxQPS:   frontendConfig.ESVisibilityListMaxQPS,
-			ESIndexMaxResultWindow: frontendConfig.ESIndexMaxResultWindow,
-		}
-
-		visibilityFromESStore := espersistence.NewElasticSearchVisibilityStore(c.esClient, visibilityIndexName, visibilityConfigForES, c.logger)
-		visibilityFromES := persistence.NewVisibilityManagerImpl(visibilityFromESStore, c.logger)
-		visibilityMgr = persistence.NewVisibilityManagerWrapper(visibilityMgr, visibilityFromES, frontendConfig.EnableReadVisibilityFromES)
-	}
+	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.workerConfig.EnableIndexer, true)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
-		visibilityMgr, kafkaProducer, params.BlobstoreClient)
+		c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
 	err = c.frontendHandler.Start()
 	if err != nil {
 		c.logger.Fatal("Failed to start frontend", tag.Error(err))
@@ -409,7 +395,7 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		c.initLock.Lock()
 		service := service.New(params)
 		hConfig := c.historyConfig
-		historyConfig := history.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), hConfig.NumHistoryShards, c.esConfig.Enable, config.StoreTypeCassandra)
+		historyConfig := history.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), hConfig.NumHistoryShards, c.workerConfig.EnableIndexer, config.StoreTypeCassandra)
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)

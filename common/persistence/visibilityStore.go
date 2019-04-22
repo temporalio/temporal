@@ -35,6 +35,9 @@ type (
 	}
 )
 
+// VisibilityEncoding is default encoding for visibility data
+const VisibilityEncoding = common.EncodingTypeThriftRW
+
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
 // NewVisibilityManagerImpl returns new VisibilityManager
@@ -55,11 +58,36 @@ func (v *visibilityManagerImpl) GetName() string {
 }
 
 func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
-	return v.persistence.RecordWorkflowExecutionStarted(request)
+	req := &InternalRecordWorkflowExecutionStartedRequest{
+		DomainUUID:         request.DomainUUID,
+		WorkflowID:         request.Execution.GetWorkflowId(),
+		RunID:              request.Execution.GetRunId(),
+		WorkflowTypeName:   request.WorkflowTypeName,
+		StartTimestamp:     request.StartTimestamp,
+		ExecutionTimestamp: request.ExecutionTimestamp,
+		WorkflowTimeout:    request.WorkflowTimeout,
+		TaskID:             request.TaskID,
+		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+	}
+	return v.persistence.RecordWorkflowExecutionStarted(req)
 }
 
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
-	return v.persistence.RecordWorkflowExecutionClosed(request)
+	req := &InternalRecordWorkflowExecutionClosedRequest{
+		DomainUUID:         request.DomainUUID,
+		WorkflowID:         request.Execution.GetWorkflowId(),
+		RunID:              request.Execution.GetRunId(),
+		WorkflowTypeName:   request.WorkflowTypeName,
+		StartTimestamp:     request.StartTimestamp,
+		ExecutionTimestamp: request.ExecutionTimestamp,
+		TaskID:             request.TaskID,
+		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		CloseTimestamp:     request.CloseTimestamp,
+		Status:             request.Status,
+		HistoryLength:      request.HistoryLength,
+		RetentionSeconds:   request.RetentionSeconds,
+	}
+	return v.persistence.RecordWorkflowExecutionClosed(req)
 }
 
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
@@ -190,4 +218,20 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	}
 
 	return convertedExecution
+}
+
+func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *shared.Memo, domainID, wID, rID string) *DataBlob {
+	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
+	if err != nil {
+		v.logger.WithTags(
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(wID),
+			tag.WorkflowRunID(rID),
+			tag.Error(err)).
+			Error("Unable to encode visibility memo")
+	}
+	if memo == nil {
+		return &DataBlob{}
+	}
+	return memo
 }

@@ -22,7 +22,6 @@ package persistence
 
 import (
 	s "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 )
 
 // Interfaces for the Visibility Store.
@@ -36,21 +35,21 @@ type (
 	// started execution
 	RecordWorkflowExecutionStartedRequest struct {
 		DomainUUID         string
-		Domain             string // domain name is not persisted, but used as config filter key
+		Domain             string // not persisted, used as config filter key
 		Execution          s.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
-		WorkflowTimeout    int64
-		Memo               []byte
-		Encoding           common.EncodingType // optional binary encoding type
+		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
+		TaskID             int64 // not persisted, used as condition update version for ES
+		Memo               *s.Memo
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
 	// closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		DomainUUID         string
-		Domain             string // domain name is not persisted, but used as config filter key
+		Domain             string // not persisted, used as config filter key
 		Execution          s.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
@@ -59,8 +58,8 @@ type (
 		Status             s.WorkflowExecutionCloseStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
-		Memo               []byte
-		Encoding           common.EncodingType // optional binary encoding type
+		TaskID             int64 // not persisted, used as condition update version for ES
+		Memo               *s.Memo
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain
@@ -119,8 +118,10 @@ type (
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
-		DomainID string
-		RunID    string
+		DomainID   string
+		RunID      string
+		WorkflowID string
+		TaskID     int64
 	}
 
 	// VisibilityManager is used to manage the visibility store

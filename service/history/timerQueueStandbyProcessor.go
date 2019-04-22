@@ -28,9 +28,9 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
@@ -58,8 +58,7 @@ type (
 )
 
 func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEngineImpl, clusterName string,
-	taskAllocator taskAllocator, historyRereplicator xdc.HistoryRereplicator, visibilityProducer messaging.Producer,
-	logger log.Logger) *timerQueueStandbyProcessorImpl {
+	taskAllocator taskAllocator, historyRereplicator xdc.HistoryRereplicator, logger log.Logger) *timerQueueStandbyProcessorImpl {
 
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
@@ -102,7 +101,6 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			shard.GetConfig().TimerProcessorStartDelay,
-			visibilityProducer,
 			logger,
 		),
 		timerQueueAckMgr:    timerQueueAckMgr,

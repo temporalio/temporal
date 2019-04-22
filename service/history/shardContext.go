@@ -86,7 +86,6 @@ type (
 		GetCurrentTime(cluster string) time.Time
 		GetTimerMaxReadLevel(cluster string) time.Time
 		UpdateTimerMaxReadLevel(cluster string) time.Time
-		GetEncoding(domainEntry *cache.DomainCacheEntry) common.EncodingType
 	}
 
 	shardContextImpl struct {
@@ -457,7 +456,7 @@ Create_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) GetEncoding(domainEntry *cache.DomainCacheEntry) common.EncodingType {
+func (s *shardContextImpl) getDefaultEncoding(domainEntry *cache.DomainCacheEntry) common.EncodingType {
 	return common.EncodingType(s.config.EventEncodingType(domainEntry.GetInfo().Name))
 }
 
@@ -468,7 +467,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 	if err != nil {
 		return nil, err
 	}
-	request.Encoding = s.GetEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(domainEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -594,7 +593,7 @@ func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWork
 	if err != nil {
 		return err
 	}
-	request.Encoding = s.GetEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(domainEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -681,7 +680,7 @@ func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableSt
 	if err != nil {
 		return err
 	}
-	request.Encoding = s.GetEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(domainEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -738,7 +737,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	if err != nil {
 		return 0, err
 	}
-	request.Encoding = s.GetEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(domainEntry)
 	request.ShardID = common.IntPtr(s.shardID)
 	size := 0
 	defer func() {
@@ -769,7 +768,7 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	if err != nil {
 		return 0, err
 	}
-	request.Encoding = s.GetEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(domainEntry)
 
 	size := 0
 	defer func() {

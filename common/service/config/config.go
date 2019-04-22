@@ -146,6 +146,8 @@ type (
 		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
 		// ESIndexMaxResultWindow ElasticSearch index setting max_result_window
 		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn
+		// MaxQPS is overall max QPS
+		MaxQPS dynamicconfig.IntPropertyFn
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster

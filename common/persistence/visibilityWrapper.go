@@ -56,13 +56,21 @@ func (v *visibilityManagerWrapper) GetName() string {
 }
 
 func (v *visibilityManagerWrapper) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
-	return manager.RecordWorkflowExecutionStarted(request)
+	if v.esVisibilityManager != nil {
+		if err := v.esVisibilityManager.RecordWorkflowExecutionStarted(request); err != nil {
+			return err
+		}
+	}
+	return v.visibilityManager.RecordWorkflowExecutionStarted(request)
 }
 
 func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
-	return manager.RecordWorkflowExecutionClosed(request)
+	if v.esVisibilityManager != nil {
+		if err := v.esVisibilityManager.RecordWorkflowExecutionClosed(request); err != nil {
+			return err
+		}
+	}
+	return v.visibilityManager.RecordWorkflowExecutionClosed(request)
 }
 
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
@@ -106,11 +114,12 @@ func (v *visibilityManagerWrapper) GetClosedWorkflowExecution(request *GetClosed
 }
 
 func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
-	// this api is only applicable for sql based persistence as of today
-	if v.visibilityManager != nil {
-		return v.visibilityManager.DeleteWorkflowExecution(request)
+	if v.esVisibilityManager != nil {
+		if err := v.esVisibilityManager.DeleteWorkflowExecution(request); err != nil {
+			return err
+		}
 	}
-	return nil
+	return v.visibilityManager.DeleteWorkflowExecution(request)
 }
 
 func (v *visibilityManagerWrapper) chooseVisibilityManagerForDomain(domain string) VisibilityManager {

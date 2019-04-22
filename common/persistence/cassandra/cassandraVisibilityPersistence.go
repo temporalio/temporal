@@ -169,7 +169,7 @@ func (v *cassandraVisibilityPersistence) Close() {
 }
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
-	request *p.RecordWorkflowExecutionStartedRequest) error {
+	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	ttl := request.WorkflowTimeout + openExecutionTTLBuffer
 	var query *gocql.Query
 
@@ -177,25 +177,25 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		query = v.session.Query(templateCreateWorkflowExecutionStarted,
 			request.DomainUUID,
 			domainPartition,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
+			request.WorkflowID,
+			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
-			request.Memo,
-			string(request.Encoding),
+			request.Memo.Data,
+			string(request.Memo.GetEncoding()),
 		)
 	} else {
 		query = v.session.Query(templateCreateWorkflowExecutionStartedWithTTL,
 			request.DomainUUID,
 			domainPartition,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
+			request.WorkflowID,
+			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			request.WorkflowTypeName,
-			request.Memo,
-			string(request.Encoding),
+			request.Memo.Data,
+			string(request.Memo.GetEncoding()),
 			ttl,
 		)
 	}
@@ -216,7 +216,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 }
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
-	request *p.RecordWorkflowExecutionClosedRequest) error {
+	request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table
@@ -224,7 +224,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		request.DomainUUID,
 		domainPartition,
 		p.UnixNanoToDBTimestamp(request.StartTimestamp),
-		*request.Execution.RunId,
+		request.RunID,
 	)
 
 	// Next, add a row in the closed table.
@@ -239,62 +239,62 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		batch.Query(templateCreateWorkflowExecutionClosed,
 			request.DomainUUID,
 			domainPartition,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
+			request.WorkflowID,
+			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
 			request.HistoryLength,
-			request.Memo,
-			string(request.Encoding),
+			request.Memo.Data,
+			string(request.Memo.GetEncoding()),
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedV2,
 			request.DomainUUID,
 			domainPartition,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
+			request.WorkflowID,
+			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
 			request.HistoryLength,
-			request.Memo,
-			string(request.Encoding),
+			request.Memo.Data,
+			string(request.Memo.GetEncoding()),
 		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
 			request.DomainUUID,
 			domainPartition,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
+			request.WorkflowID,
+			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
 			request.HistoryLength,
-			request.Memo,
-			string(request.Encoding),
+			request.Memo.Data,
+			string(request.Memo.GetEncoding()),
 			retention,
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTLV2,
 			request.DomainUUID,
 			domainPartition,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
+			request.WorkflowID,
+			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
 			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
 			p.UnixNanoToDBTimestamp(request.CloseTimestamp),
 			request.WorkflowTypeName,
 			request.Status,
 			request.HistoryLength,
-			request.Memo,
-			string(request.Encoding),
+			request.Memo.Data,
+			string(request.Memo.GetEncoding()),
 			retention,
 		)
 	}

@@ -21,18 +21,14 @@
 package history
 
 import (
-	"time"
-
-	"github.com/uber/cadence/.gen/go/indexer"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
+	"time"
 )
 
 type (
@@ -46,12 +42,10 @@ type (
 		options                *QueueProcessorOptions
 		executionManager       persistence.ExecutionManager
 		visibilityMgr          persistence.VisibilityManager
-		visibilityProducer     messaging.Producer
 		matchingClient         matching.Client
 		maxReadAckLevel        maxReadAckLevel
 		updateTransferAckLevel updateTransferAckLevel
 		transferQueueShutdown  transferQueueShutdown
-		serializer             persistence.PayloadSerializer
 		logger                 log.Logger
 	}
 )
@@ -59,7 +53,7 @@ type (
 const defaultDomainName = "defaultDomainName"
 
 func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
-	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer, matchingClient matching.Client,
+	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,
 	maxReadAckLevel maxReadAckLevel, updateTransferAckLevel updateTransferAckLevel,
 	transferQueueShutdown transferQueueShutdown, logger log.Logger) *transferQueueProcessorBase {
 	return &transferQueueProcessorBase{
@@ -67,13 +61,11 @@ func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOp
 		options:                options,
 		executionManager:       shard.GetExecutionManager(),
 		visibilityMgr:          visibilityMgr,
-		visibilityProducer:     visibilityProducer,
 		matchingClient:         matchingClient,
 		maxReadAckLevel:        maxReadAckLevel,
 		updateTransferAckLevel: updateTransferAckLevel,
 		transferQueueShutdown:  transferQueueShutdown,
 		logger:                 logger,
-		serializer:             persistence.NewPayloadSerializer(),
 	}
 }
 
@@ -166,32 +158,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 		return nil
 	}
 
-	var memo []byte
-	encoding := t.shard.GetEncoding(domainEntry)
-	memoBlob, err := t.serializer.SerializeVisibilityMemo(visibilityMemo, encoding)
-	if err != nil {
-		t.logger.Error("error serialize visibility memo",
-			tag.WorkflowDomainID(domainID),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err))
-	}
-	if memoBlob != nil {
-		memo = memoBlob.Data
-		encoding = memoBlob.GetEncoding()
-	}
-
-	// publish to kafka
-	if t.visibilityProducer != nil {
-		msg := getVisibilityMessageForOpenExecution(domainID, execution, workflowTypeName, startTimeUnixNano,
-			executionTimeUnixNano, taskID, memo, encoding)
-		err := t.visibilityProducer.Publish(msg)
-		if err != nil {
-			return err
-		}
-	}
-
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
+	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID:         domainID,
 		Domain:             domain,
 		Execution:          execution,
@@ -199,9 +166,11 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
 		WorkflowTimeout:    int64(workflowTimeout),
-		Memo:               memo,
-		Encoding:           encoding,
-	})
+		TaskID:             taskID,
+		Memo:               visibilityMemo,
+	}
+
+	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
 func (t *transferQueueProcessorBase) recordWorkflowClosed(
@@ -233,33 +202,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		return nil
 	}
 
-	var memo []byte
-	encoding := t.shard.GetEncoding(domainEntry)
-	memoBlob, err := t.serializer.SerializeVisibilityMemo(visibilityMemo, encoding)
-	if err != nil {
-		t.logger.Error("error serialize visibility memo",
-			tag.WorkflowDomainID(domainID),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err))
-	}
-	if memoBlob != nil {
-		memo = memoBlob.Data
-		encoding = memoBlob.GetEncoding()
-	}
-
-	// publish to kafka
-	if t.visibilityProducer != nil {
-		msg := getVisibilityMessageForCloseExecution(domainID, execution, workflowTypeName,
-			startTimeUnixNano, executionTimeUnixNano, endTimeUnixNano, closeStatus, historyLength, taskID,
-			memo, encoding)
-		err := t.visibilityProducer.Publish(msg)
-		if err != nil {
-			return err
-		}
-	}
-
-	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
+	request := &persistence.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:         domainID,
 		Domain:             domain,
 		Execution:          execution,
@@ -270,63 +213,11 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		Status:             closeStatus,
 		HistoryLength:      historyLength,
 		RetentionSeconds:   retentionSeconds,
-		Memo:               memo,
-		Encoding:           encoding,
-	})
-}
-
-func getVisibilityMessageForOpenExecution(domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType) *indexer.Message {
-
-	msgType := indexer.MessageTypeIndex
-	fields := map[string]*indexer.Field{
-		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
-		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
-		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
-	}
-	if len(memo) != 0 {
-		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
+		TaskID:             taskID,
+		Memo:               visibilityMemo,
 	}
 
-	msg := &indexer.Message{
-		MessageType: &msgType,
-		DomainID:    common.StringPtr(domainID),
-		WorkflowID:  common.StringPtr(execution.GetWorkflowId()),
-		RunID:       common.StringPtr(execution.GetRunId()),
-		Version:     common.Int64Ptr(taskID),
-		Fields:      fields,
-	}
-	return msg
-}
-
-func getVisibilityMessageForCloseExecution(domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
-	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType) *indexer.Message {
-
-	msgType := indexer.MessageTypeIndex
-	fields := map[string]*indexer.Field{
-		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
-		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
-		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
-		es.CloseTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(endTimeUnixNano)},
-		es.CloseStatus:   {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(int64(closeStatus))},
-		es.HistoryLength: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(historyLength)},
-	}
-	if len(memo) != 0 {
-		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
-	}
-
-	msg := &indexer.Message{
-		MessageType: &msgType,
-		DomainID:    common.StringPtr(domainID),
-		WorkflowID:  common.StringPtr(execution.GetWorkflowId()),
-		RunID:       common.StringPtr(execution.GetRunId()),
-		Version:     common.Int64Ptr(taskID),
-		Fields:      fields,
-	}
-	return msg
+	return t.visibilityMgr.RecordWorkflowExecutionClosed(request)
 }
 
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent

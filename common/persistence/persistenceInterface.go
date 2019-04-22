@@ -114,8 +114,8 @@ type (
 	VisibilityStore interface {
 		Closeable
 		GetName() string
-		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
-		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
+		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
+		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -492,7 +492,7 @@ type (
 		Memo          *DataBlob
 	}
 
-	// InternalListWorkflowExecutionsResponse is response to ListWorkflowExecutions
+	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
 	InternalListWorkflowExecutionsResponse struct {
 		Executions []*VisibilityWorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
@@ -500,9 +500,38 @@ type (
 		NextPageToken []byte
 	}
 
-	// InternalGetClosedWorkflowExecutionResponse is response to GetWorkflowExecution
+	// InternalGetClosedWorkflowExecutionResponse is response from GetWorkflowExecution
 	InternalGetClosedWorkflowExecutionResponse struct {
 		Execution *VisibilityWorkflowExecutionInfo
+	}
+
+	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
+	InternalRecordWorkflowExecutionStartedRequest struct {
+		DomainUUID         string
+		WorkflowID         string
+		RunID              string
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		WorkflowTimeout    int64
+		TaskID             int64
+		Memo               *DataBlob
+	}
+
+	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
+	InternalRecordWorkflowExecutionClosedRequest struct {
+		DomainUUID         string
+		WorkflowID         string
+		RunID              string
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		TaskID             int64
+		Memo               *DataBlob
+		CloseTimestamp     int64
+		Status             workflow.WorkflowExecutionCloseStatus
+		HistoryLength      int64
+		RetentionSeconds   int64
 	}
 )
 
@@ -539,6 +568,8 @@ func (d *DataBlob) GetEncoding() common.EncodingType {
 		return common.EncodingTypeJSON
 	case common.EncodingTypeThriftRW:
 		return common.EncodingTypeThriftRW
+	case common.EncodingTypeEmpty:
+		return common.EncodingTypeEmpty
 	default:
 		return common.EncodingTypeUnknown
 	}
