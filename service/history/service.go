@@ -21,10 +21,10 @@
 package history
 
 import (
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"time"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
@@ -244,12 +244,12 @@ type Service struct {
 
 // NewService builds a new cadence-history service
 func NewService(params *service.BootstrapParams) common.Daemon {
-	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
 	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
 		params.ESConfig.Enable,
 		params.PersistenceConfig.DefaultStoreType())
 	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
+	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),

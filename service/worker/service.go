@@ -70,9 +70,9 @@ type (
 
 // NewService builds a new cadence-worker service
 func NewService(params *service.BootstrapParams) common.Daemon {
-	params.UpdateLoggerWithServiceName(common.WorkerServiceName)
 	config := NewConfig(params)
 	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
+	params.UpdateLoggerWithServiceName(common.WorkerServiceName)
 	return &Service{
 		params: params,
 		config: config,

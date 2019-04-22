@@ -84,9 +84,9 @@ type Service struct {
 
 // NewService builds a new cadence-matching service
 func NewService(params *service.BootstrapParams) common.Daemon {
-	params.UpdateLoggerWithServiceName(common.MatchingServiceName)
 	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
 	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
+	params.UpdateLoggerWithServiceName(common.MatchingServiceName)
 	return &Service{
 		params: params,
 		config: config,
