@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
@@ -94,23 +95,29 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(request *p.InternalAppendHistor
 	}
 
 	if request.IsNewBranch {
-		var ans []*shared.HistoryBranchRange
+		var ancestors []*shared.HistoryBranchRange
 		for _, anc := range branchInfo.Ancestors {
-			ans = append(ans, anc)
+			ancestors = append(ancestors, anc)
 		}
 
-		ancestors, err := m.serializeAncestors(ans)
+		treeInfo := &sqlblobs.HistoryTreeInfo{
+			Ancestors:        ancestors,
+			Info:             &request.Info,
+			CreatedTimeNanos: common.TimeNowNanosPtr(),
+		}
+
+		blob, err := historyTreeInfoToBlob(treeInfo)
 		if err != nil {
 			return err
 		}
+
 		treeRow := &sqldb.HistoryTreeRow{
-			TreeID:     sqldb.MustParseUUID(branchInfo.GetTreeID()),
-			BranchID:   sqldb.MustParseUUID(branchInfo.GetBranchID()),
-			InProgress: false,
-			CreatedTs:  time.Now(),
-			Ancestors:  ancestors,
-			Info:       request.Info,
-			ShardID:    request.ShardID,
+			ShardID:      request.ShardID,
+			TreeID:       sqldb.MustParseUUID(branchInfo.GetTreeID()),
+			BranchID:     sqldb.MustParseUUID(branchInfo.GetBranchID()),
+			InProgress:   false,
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		}
 
 		return m.txExecute("AppendHistoryNodes", func(tx sqldb.Tx) error {
@@ -302,19 +309,24 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(request *p.InternalForkHistoryBr
 			Ancestors: newAncestors,
 		}}
 
-	ancestors, err := m.serializeAncestors(newAncestors)
+	treeInfo := &sqlblobs.HistoryTreeInfo{
+		Ancestors:        newAncestors,
+		Info:             &request.Info,
+		CreatedTimeNanos: common.TimeNowNanosPtr(),
+	}
+
+	blob, err := historyTreeInfoToBlob(treeInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	row := &sqldb.HistoryTreeRow{
-		TreeID:     sqldb.MustParseUUID(treeID),
-		BranchID:   sqldb.MustParseUUID(request.NewBranchID),
-		InProgress: true,
-		CreatedTs:  time.Now(),
-		Ancestors:  ancestors,
-		Info:       request.Info,
-		ShardID:    request.ShardID,
+		ShardID:      request.ShardID,
+		TreeID:       sqldb.MustParseUUID(treeID),
+		BranchID:     sqldb.MustParseUUID(request.NewBranchID),
+		InProgress:   true,
+		Data:         blob.Data,
+		DataEncoding: string(blob.Encoding),
 	}
 	result, err := m.db.InsertIntoHistoryTree(row)
 	if err != nil {
@@ -486,22 +498,22 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(request *p.GetHistoryTreeRequest) (
 		return &p.GetHistoryTreeResponse{}, nil
 	}
 	for _, row := range rows {
+		treeInfo, err := historyTreeInfoFromBlob(row.Data, row.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		if row.InProgress {
 			br := p.ForkingInProgressBranch{
 				BranchID: row.BranchID.String(),
-				ForkTime: row.CreatedTs,
-				Info:     row.Info,
+				ForkTime: time.Unix(0, treeInfo.GetCreatedTimeNanos()),
+				Info:     treeInfo.GetInfo(),
 			}
 			forkingBranches = append(forkingBranches, br)
-		}
-		ancs, err := m.deserializeAncestors(row.Ancestors)
-		if err != nil {
-			return nil, err
 		}
 		br := &shared.HistoryBranch{
 			TreeID:    &request.TreeID,
 			BranchID:  common.StringPtr(row.BranchID.String()),
-			Ancestors: ancs,
+			Ancestors: treeInfo.Ancestors,
 		}
 		branches = append(branches, br)
 	}

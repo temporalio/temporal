@@ -28,6 +28,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
@@ -72,15 +73,23 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		TaskType: common.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
 		if err == sql.ErrNoRows {
+			tlInfo := &sqlblobs.TaskListInfo{
+				AckLevel:         &ackLevel,
+				Kind:             common.Int16Ptr(int16(request.TaskListKind)),
+				ExpiryTimeNanos:  common.Int64Ptr(0),
+				LastUpdatedNanos: common.Int64Ptr(time.Now().UnixNano()),
+			}
+			blob, err := taskListInfoToBlob(tlInfo)
+			if err != nil {
+				return nil, err
+			}
 			row := sqldb.TaskListsRow{
-				ShardID:     shardID,
-				DomainID:    domainID,
-				Name:        request.TaskList,
-				TaskType:    int64(request.TaskType),
-				AckLevel:    ackLevel,
-				Kind:        int64(request.TaskListKind),
-				ExpiryTs:    time.Time{},
-				LastUpdated: time.Now(),
+				ShardID:      shardID,
+				DomainID:     domainID,
+				Name:         request.TaskList,
+				TaskType:     int64(request.TaskType),
+				Data:         blob.Data,
+				DataEncoding: string(blob.Encoding),
 			}
 			rows = []sqldb.TaskListsRow{row}
 			if _, err := m.db.InsertIntoTaskLists(&row); err != nil {
@@ -103,10 +112,15 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		}
 	}
 
+	tlInfo, err := taskListInfoFromBlob(row.Data, row.DataEncoding)
+	if err != nil {
+		return nil, err
+	}
+
 	var resp *persistence.LeaseTaskListResponse
 	err = m.txExecute("LeaseTaskList", func(tx sqldb.Tx) error {
 		rangeID = row.RangeID
-		ackLevel = row.AckLevel
+		ackLevel = tlInfo.GetAckLevel()
 		// We need to separately check the condition and do the
 		// update because we want to throw different error codes.
 		// Since we need to do things separately (in a transaction), we need to take a lock.
@@ -115,16 +129,19 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 			return err1
 		}
 		now := time.Now()
+		tlInfo.LastUpdatedNanos = common.Int64Ptr(now.UnixNano())
+		blob, err1 := taskListInfoToBlob(tlInfo)
+		if err1 != nil {
+			return err1
+		}
 		result, err1 := tx.UpdateTaskLists(&sqldb.TaskListsRow{
-			ShardID:     shardID,
-			DomainID:    row.DomainID,
-			RangeID:     row.RangeID + 1,
-			Name:        row.Name,
-			TaskType:    row.TaskType,
-			AckLevel:    row.AckLevel,
-			Kind:        row.Kind,
-			ExpiryTs:    row.ExpiryTs,
-			LastUpdated: now,
+			ShardID:      shardID,
+			DomainID:     row.DomainID,
+			RangeID:      row.RangeID + 1,
+			Name:         row.Name,
+			TaskType:     row.TaskType,
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		})
 		if err1 != nil {
 			return err1
@@ -153,17 +170,26 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
 	shardID := m.shardID(request.TaskListInfo.DomainID, request.TaskListInfo.Name)
 	domainID := sqldb.MustParseUUID(request.TaskListInfo.DomainID)
+	tlInfo := &sqlblobs.TaskListInfo{
+		AckLevel:         common.Int64Ptr(request.TaskListInfo.AckLevel),
+		Kind:             common.Int16Ptr(int16(request.TaskListInfo.Kind)),
+		ExpiryTimeNanos:  common.Int64Ptr(0),
+		LastUpdatedNanos: common.TimeNowNanosPtr(),
+	}
 	if request.TaskListInfo.Kind == persistence.TaskListKindSticky {
+		tlInfo.ExpiryTimeNanos = common.Int64Ptr(stickyTaskListTTL().UnixNano())
+		blob, err := taskListInfoToBlob(tlInfo)
+		if err != nil {
+			return nil, err
+		}
 		if _, err := m.db.ReplaceIntoTaskLists(&sqldb.TaskListsRow{
-			ShardID:     shardID,
-			DomainID:    domainID,
-			RangeID:     request.TaskListInfo.RangeID,
-			Name:        request.TaskListInfo.Name,
-			TaskType:    int64(request.TaskListInfo.TaskType),
-			AckLevel:    request.TaskListInfo.AckLevel,
-			Kind:        int64(request.TaskListInfo.Kind),
-			ExpiryTs:    stickyTaskListTTL(),
-			LastUpdated: time.Now(),
+			ShardID:      shardID,
+			DomainID:     domainID,
+			RangeID:      request.TaskListInfo.RangeID,
+			Name:         request.TaskListInfo.Name,
+			TaskType:     int64(request.TaskListInfo.TaskType),
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		}); err != nil {
 			return nil, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("UpdateTaskList operation failed. Failed to make sticky task list. Error: %v", err),
@@ -171,22 +197,24 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 		}
 	}
 	var resp *persistence.UpdateTaskListResponse
-	err := m.txExecute("UpdateTaskList", func(tx sqldb.Tx) error {
+	blob, err := taskListInfoToBlob(tlInfo)
+	if err != nil {
+		return nil, err
+	}
+	err = m.txExecute("UpdateTaskList", func(tx sqldb.Tx) error {
 		err1 := lockTaskList(
 			tx, shardID, domainID, request.TaskListInfo.Name, request.TaskListInfo.TaskType, request.TaskListInfo.RangeID)
 		if err1 != nil {
 			return err1
 		}
 		result, err1 := tx.UpdateTaskLists(&sqldb.TaskListsRow{
-			ShardID:     shardID,
-			DomainID:    domainID,
-			RangeID:     request.TaskListInfo.RangeID,
-			Name:        request.TaskListInfo.Name,
-			TaskType:    int64(request.TaskListInfo.TaskType),
-			AckLevel:    request.TaskListInfo.AckLevel,
-			Kind:        int64(request.TaskListInfo.Kind),
-			ExpiryTs:    time.Time{},
-			LastUpdated: time.Now(),
+			ShardID:      shardID,
+			DomainID:     domainID,
+			RangeID:      request.TaskListInfo.RangeID,
+			Name:         request.TaskListInfo.Name,
+			TaskType:     int64(request.TaskListInfo.TaskType),
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		})
 		if err1 != nil {
 			return err1
@@ -262,14 +290,18 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	}
 
 	for i := range rows {
+		info, err := taskListInfoFromBlob(rows[i].Data, rows[i].DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		resp.Items[i].DomainID = rows[i].DomainID.String()
 		resp.Items[i].Name = rows[i].Name
 		resp.Items[i].TaskType = int(rows[i].TaskType)
 		resp.Items[i].RangeID = rows[i].RangeID
-		resp.Items[i].Kind = int(rows[i].Kind)
-		resp.Items[i].AckLevel = rows[i].AckLevel
-		resp.Items[i].Expiry = rows[i].ExpiryTs
-		resp.Items[i].LastUpdated = rows[i].LastUpdated
+		resp.Items[i].Kind = int(info.GetKind())
+		resp.Items[i].AckLevel = info.GetAckLevel()
+		resp.Items[i].Expiry = time.Unix(0, info.GetExpiryTimeNanos())
+		resp.Items[i].LastUpdated = time.Unix(0, info.GetLastUpdatedNanos())
 	}
 
 	return resp, nil
@@ -304,15 +336,22 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		if v.Data.ScheduleToStartTimeout > 0 {
 			expiryTime = time.Now().Add(time.Second * time.Duration(v.Data.ScheduleToStartTimeout))
 		}
+		blob, err := taskInfoToBlob(&sqlblobs.TaskInfo{
+			WorkflowID:      &v.Data.WorkflowID,
+			RunID:           sqldb.MustParseUUID(v.Data.RunID),
+			ScheduleID:      &v.Data.ScheduleID,
+			ExpiryTimeNanos: common.Int64Ptr(expiryTime.UnixNano()),
+		})
+		if err != nil {
+			return nil, err
+		}
 		tasksRows[i] = sqldb.TasksRow{
 			DomainID:     sqldb.MustParseUUID(v.Data.DomainID),
-			WorkflowID:   v.Data.WorkflowID,
-			RunID:        sqldb.MustParseUUID(v.Data.RunID),
-			ScheduleID:   v.Data.ScheduleID,
 			TaskListName: request.TaskListInfo.Name,
 			TaskType:     int64(request.TaskListInfo.TaskType),
 			TaskID:       v.TaskID,
-			ExpiryTs:     expiryTime,
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		}
 	}
 	var resp *persistence.CreateTasksResponse
@@ -352,13 +391,17 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 
 	var tasks = make([]*persistence.TaskInfo, len(rows))
 	for i, v := range rows {
+		info, err := taskInfoFromBlob(v.Data, v.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		tasks[i] = &persistence.TaskInfo{
 			DomainID:   request.DomainID,
-			WorkflowID: v.WorkflowID,
-			RunID:      v.RunID.String(),
+			WorkflowID: info.GetWorkflowID(),
+			RunID:      sqldb.UUID(info.RunID).String(),
 			TaskID:     v.TaskID,
-			ScheduleID: v.ScheduleID,
-			Expiry:     v.ExpiryTs,
+			ScheduleID: info.GetScheduleID(),
+			Expiry:     time.Unix(0, info.GetExpiryTimeNanos()),
 		}
 	}
 

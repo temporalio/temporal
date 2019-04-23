@@ -21,12 +21,19 @@
 package common
 
 import (
+	"time"
+
 	s "github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/cadence/.gen/go/shared"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.
 func IntPtr(v int) *int {
+	return &v
+}
+
+// Int16Ptr makes a copy and returns the pointer to an int16.
+func Int16Ptr(v int16) *int16 {
 	return &v
 }
 
@@ -62,6 +69,12 @@ func BoolPtr(v bool) *bool {
 
 // StringPtr makes a copy and returns the pointer to a string.
 func StringPtr(v string) *string {
+	return &v
+}
+
+// TimeNowNanosPtr returns an int64 ptr to current time in unix nanos
+func TimeNowNanosPtr() *int64 {
+	v := time.Now().UnixNano()
 	return &v
 }
 

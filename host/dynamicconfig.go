@@ -29,7 +29,7 @@ import (
 var (
 	// Override value for integer keys for dynamic config
 	intKeys = map[dynamicconfig.Key]int{
-		dynamicconfig.FrontendRPS: 1500,
+		dynamicconfig.FrontendRPS: 3000,
 	}
 )
 

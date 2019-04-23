@@ -488,6 +488,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.Equal(id, resp3.Info.ID)
 	m.Equal(name, resp3.Info.Name)
 	m.Equal(status, resp3.Info.Status)
+	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
 	m.Equal(description, resp3.Info.Description)
 	m.Equal(owner, resp3.Info.OwnerEmail)
 
@@ -625,6 +626,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	m.NotNil(resp4)
 	m.Equal(id, resp4.Info.ID)
 	m.Equal(name, resp4.Info.Name)
+	m.Equal(isGlobalDomain, resp4.IsGlobalDomain)
 	m.Equal(updatedStatus, resp4.Info.Status)
 	m.Equal(updatedDescription, resp4.Info.Description)
 	m.Equal(updatedOwner, resp4.Info.OwnerEmail)
@@ -648,6 +650,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	m.NotNil(resp5)
 	m.Equal(id, resp5.Info.ID)
 	m.Equal(name, resp5.Info.Name)
+	m.Equal(isGlobalDomain, resp5.IsGlobalDomain)
 	m.Equal(updatedStatus, resp5.Info.Status)
 	m.Equal(updatedDescription, resp5.Info.Description)
 	m.Equal(updatedOwner, resp5.Info.OwnerEmail)

@@ -28,23 +28,11 @@ import (
 type (
 	// DomainRow represents a row in domain table
 	DomainRow struct {
-		ID                          UUID
-		Name                        string
-		Status                      int
-		Description                 string
-		OwnerEmail                  string
-		Data                        []byte
-		Retention                   int
-		EmitMetric                  bool
-		ArchivalBucket              string
-		ArchivalStatus              int
-		ConfigVersion               int64
-		NotificationVersion         int64
-		FailoverNotificationVersion int64
-		FailoverVersion             int64
-		IsGlobalDomain              bool
-		ActiveClusterName           string
-		Clusters                    []byte
+		ID           UUID
+		Name         string
+		Data         []byte
+		DataEncoding string
+		IsGlobal     bool
 	}
 
 	// DomainFilter contains the column names within domain table that
@@ -66,17 +54,10 @@ type (
 
 	// ShardsRow represents a row in shards table
 	ShardsRow struct {
-		ShardID                   int64
-		Owner                     string
-		RangeID                   int64
-		StolenSinceRenew          int64
-		UpdatedAt                 time.Time
-		ReplicationAckLevel       int64
-		TransferAckLevel          int64
-		TimerAckLevel             time.Time
-		ClusterTransferAckLevel   []byte
-		ClusterTimerAckLevel      []byte
-		DomainNotificationVersion int64
+		ShardID      int64
+		RangeID      int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// ShardsFilter contains the column names within shards table that
@@ -87,20 +68,10 @@ type (
 
 	// TransferTasksRow represents a row in transfer_tasks table
 	TransferTasksRow struct {
-		ShardID                 int
-		TaskID                  int64
-		DomainID                UUID
-		WorkflowID              string
-		RunID                   UUID
-		TaskType                int
-		TargetDomainID          UUID
-		TargetWorkflowID        string
-		TargetRunID             UUID
-		TargetChildWorkflowOnly bool
-		TaskList                string
-		ScheduleID              int64
-		Version                 int64
-		VisibilityTimestamp     time.Time
+		ShardID      int
+		TaskID       int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// TransferTasksFilter contains the column names within transfer_tasks table that
@@ -114,64 +85,14 @@ type (
 
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
-		ShardID                      int
-		DomainID                     UUID
-		WorkflowID                   string
-		RunID                        UUID
-		ParentDomainID               *UUID
-		ParentWorkflowID             *string
-		ParentRunID                  *UUID
-		InitiatedID                  *int64
-		CompletionEventBatchID       *int64
-		CompletionEvent              *[]byte
-		CompletionEventEncoding      *string
-		TaskList                     string
-		WorkflowTypeName             string
-		WorkflowTimeoutSeconds       int64
-		DecisionTaskTimeoutMinutes   int64
-		ExecutionContext             *[]byte
-		State                        int64
-		CloseStatus                  int64
-		StartVersion                 int64
-		CurrentVersion               int64
-		LastWriteVersion             int64
-		LastWriteEventID             *int64
-		LastReplicationInfo          *[]byte
-		LastFirstEventID             int64
-		LastEventTaskID              int64
-		NextEventID                  int64
-		LastProcessedEvent           int64
-		StartTime                    time.Time
-		LastUpdatedTime              time.Time
-		CreateRequestID              string
-		DecisionVersion              int64
-		DecisionScheduleID           int64
-		DecisionStartedID            int64
-		DecisionRequestID            string
-		DecisionTimeout              int64
-		DecisionAttempt              int64
-		DecisionTimestamp            int64
-		CancelRequested              *int64
-		CancelRequestID              *string
-		StickyTaskList               string
-		StickyScheduleToStartTimeout int64
-		ClientLibraryVersion         string
-		ClientFeatureVersion         string
-		ClientImpl                   string
-		SignalCount                  int
-		HistorySize                  int64
-		CronSchedule                 string
-		HasRetryPolicy               bool
-		Attempt                      int
-		InitialInterval              int
-		BackoffCoefficient           float64
-		MaximumInterval              int
-		MaximumAttempts              int
-		ExpirationSeconds            int
-		ExpirationTime               time.Time
-		NonRetryableErrors           []byte
-		EventStoreVersion            int
-		BranchToken                  []byte
+		ShardID          int
+		DomainID         UUID
+		WorkflowID       string
+		RunID            UUID
+		NextEventID      int64
+		LastWriteVersion int64
+		Data             []byte
+		DataEncoding     string
 	}
 
 	// ExecutionsFilter contains the column names within domain table that
@@ -230,10 +151,8 @@ type (
 		TaskType     int64
 		TaskID       int64
 		TaskListName string
-		WorkflowID   string
-		RunID        UUID
-		ScheduleID   int64
-		ExpiryTs     time.Time
+		Data         []byte
+		DataEncoding string
 	}
 
 	// TasksFilter contains the column names within domain table that
@@ -252,15 +171,13 @@ type (
 
 	// TaskListsRow represents a row in task_lists table
 	TaskListsRow struct {
-		ShardID     int
-		DomainID    UUID
-		Name        string
-		TaskType    int64
-		RangeID     int64
-		AckLevel    int64
-		Kind        int64
-		LastUpdated time.Time
-		ExpiryTs    time.Time
+		ShardID      int
+		DomainID     UUID
+		Name         string
+		TaskType     int64
+		RangeID      int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// TaskListsFilter contains the column names within domain table that
@@ -279,22 +196,10 @@ type (
 
 	// ReplicationTasksRow represents a row in replication_tasks table
 	ReplicationTasksRow struct {
-		ShardID                 int
-		TaskID                  int64
-		DomainID                UUID
-		WorkflowID              string
-		RunID                   UUID
-		TaskType                int
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		LastReplicationInfo     []byte
-		ScheduledID             int64
-		EventStoreVersion       int32
-		BranchToken             []byte
-		NewRunEventStoreVersion int32
-		NewRunBranchToken       []byte
-		ResetWorkflow           bool
+		ShardID      int
+		TaskID       int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// ReplicationTasksFilter contains the column names within domain table that
@@ -312,14 +217,8 @@ type (
 		ShardID             int
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		DomainID            UUID
-		WorkflowID          string
-		RunID               UUID
-		TaskType            int
-		TimeoutType         int
-		EventID             int64
-		ScheduleAttempt     int64
-		Version             int64
+		Data                []byte
+		DataEncoding        string
 	}
 
 	// TimerTasksFilter contains the column names within domain table that
@@ -384,13 +283,12 @@ type (
 
 	// HistoryTreeRow represents a row in history_tree table
 	HistoryTreeRow struct {
-		ShardID    int
-		TreeID     UUID
-		BranchID   UUID
-		InProgress bool
-		CreatedTs  time.Time
-		Ancestors  []byte
-		Info       string
+		ShardID      int
+		TreeID       UUID
+		BranchID     UUID
+		InProgress   bool
+		Data         []byte
+		DataEncoding string
 	}
 
 	// HistoryTreeFilter contains the column names within history_tree table that
@@ -408,36 +306,10 @@ type (
 		WorkflowID               string
 		RunID                    UUID
 		ScheduleID               int64
-		Version                  int64
-		ScheduledEventBatchID    int64
-		ScheduledEvent           []byte
-		ScheduledEventEncoding   string
-		ScheduledTime            time.Time
-		StartedID                int64
-		StartedEvent             *[]byte
-		StartedEventEncoding     string
-		StartedTime              time.Time
-		ActivityID               string
-		RequestID                string
-		Details                  *[]byte
-		ScheduleToStartTimeout   int64
-		ScheduleToCloseTimeout   int64
-		StartToCloseTimeout      int64
-		HeartbeatTimeout         int64
-		CancelRequested          int64
-		CancelRequestID          int64
+		Data                     []byte
+		DataEncoding             string
+		LastHeartbeatDetails     []byte
 		LastHeartbeatUpdatedTime time.Time
-		TimerTaskStatus          int64
-		Attempt                  int64
-		TaskList                 string
-		StartedIdentity          string
-		HasRetryPolicy           int64
-		InitInterval             int64
-		BackoffCoefficient       float64
-		MaxInterval              int64
-		ExpirationTime           time.Time
-		MaxAttempts              int64
-		NonRetriableErrors       *[]byte
 	}
 
 	// ActivityInfoMapsFilter contains the column names within domain table that
@@ -452,15 +324,13 @@ type (
 
 	// TimerInfoMapsRow represents a row in timer_info_maps table
 	TimerInfoMapsRow struct {
-		ShardID    int64
-		DomainID   UUID
-		WorkflowID string
-		RunID      UUID
-		TimerID    string
-		Version    int64
-		StartedID  int64
-		ExpiryTime time.Time
-		TaskID     int64
+		ShardID      int64
+		DomainID     UUID
+		WorkflowID   string
+		RunID        UUID
+		TimerID      string
+		Data         []byte
+		DataEncoding string
 	}
 
 	// TimerInfoMapsFilter contains the column names within domain table that
@@ -475,23 +345,13 @@ type (
 
 	// ChildExecutionInfoMapsRow represents a row in child_execution_info_maps table
 	ChildExecutionInfoMapsRow struct {
-		ShardID                int64
-		DomainID               UUID
-		WorkflowID             string
-		RunID                  UUID
-		InitiatedID            int64
-		Version                int64
-		InitiatedEventBatchID  int64
-		InitiatedEvent         *[]byte
-		InitiatedEventEncoding string
-		StartedID              int64
-		StartedWorkflowID      string
-		StartedRunID           UUID
-		StartedEvent           *[]byte
-		StartedEventEncoding   string
-		CreateRequestID        string
-		DomainName             string
-		WorkflowTypeName       string
+		ShardID      int64
+		DomainID     UUID
+		WorkflowID   string
+		RunID        UUID
+		InitiatedID  int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// ChildExecutionInfoMapsFilter contains the column names within domain table that
@@ -506,13 +366,13 @@ type (
 
 	// RequestCancelInfoMapsRow represents a row in request_cancel_info_maps table
 	RequestCancelInfoMapsRow struct {
-		ShardID         int64
-		DomainID        UUID
-		WorkflowID      string
-		RunID           UUID
-		InitiatedID     int64
-		Version         int64
-		CancelRequestID string
+		ShardID      int64
+		DomainID     UUID
+		WorkflowID   string
+		RunID        UUID
+		InitiatedID  int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// RequestCancelInfoMapsFilter contains the column names within domain table that
@@ -527,16 +387,13 @@ type (
 
 	// SignalInfoMapsRow represents a row in signal_info_maps table
 	SignalInfoMapsRow struct {
-		ShardID         int64
-		DomainID        UUID
-		WorkflowID      string
-		RunID           UUID
-		InitiatedID     int64
-		Version         int64
-		SignalRequestID string
-		SignalName      string
-		Input           *[]byte
-		Control         *[]byte
+		ShardID      int64
+		DomainID     UUID
+		WorkflowID   string
+		RunID        UUID
+		InitiatedID  int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// SignalInfoMapsFilter contains the column names within domain table that

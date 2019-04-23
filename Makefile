@@ -19,6 +19,7 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/indexer.thrift \
   idl/github.com/uber/cadence/shared.thrift \
   idl/github.com/uber/cadence/admin.thrift \
+  idl/github.com/uber/cadence/sqlblobs.thrift \
 
 PROGS = cadence
 TEST_ARG ?= -race -v -timeout 40m

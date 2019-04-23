@@ -383,8 +383,8 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
 		}
 	}
 
-	total := 10
-	pageSize := int32(6)
+	total := 10          // we expect list API to return 10 + 1 (cadence-system domain) records
+	pageSize := int32(7) // cassandra pagination seems to retrieve pageSize-1 records in each call
 	domainNamePrefix := "some random domain name"
 	for i := 0; i < total; i++ {
 		err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
@@ -409,8 +409,8 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
 		NextPageToken: resp1.NextPageToken,
 	})
 	s.Nil(err)
-
 	s.Equal(0, len(resp2.NextPageToken))
+
 	domains := append(resp1.Domains, resp2.Domains...)
 
 	for _, resp := range domains {

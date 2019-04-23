@@ -26,6 +26,8 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/sqlblobs"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage"
@@ -87,21 +89,34 @@ func lockMetadata(tx sqldb.Tx) error {
 }
 
 func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainRequest) (*persistence.CreateDomainResponse, error) {
-	data, err := gobSerialize(request.Info.Data)
-	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed. Failed to encode DomainInfo.Data. Error: %v", err),
-		}
-	}
-
-	clusters, err := gobSerialize(persistence.SerializeClusterConfigs(request.ReplicationConfig.Clusters))
-	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed. Failed to encode ReplicationConfig.Clusters. Error: %v", err),
-		}
-	}
-
 	metadata, err := m.GetMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	clusters := make([]string, len(request.ReplicationConfig.Clusters))
+	for i := range clusters {
+		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
+	}
+
+	domainInfo := &sqlblobs.DomainInfo{
+		Status:                      common.Int32Ptr(int32(request.Info.Status)),
+		Description:                 &request.Info.Description,
+		Owner:                       &request.Info.OwnerEmail,
+		Data:                        request.Info.Data,
+		RetentionDays:               common.Int16Ptr(int16(request.Config.Retention)),
+		EmitMetric:                  &request.Config.EmitMetric,
+		ArchivalBucket:              &request.Config.ArchivalBucket,
+		ArchivalStatus:              common.Int16Ptr(int16(request.Config.ArchivalStatus)),
+		ActiveClusterName:           &request.ReplicationConfig.ActiveClusterName,
+		Clusters:                    clusters,
+		ConfigVersion:               common.Int64Ptr(request.ConfigVersion),
+		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
+		NotificationVersion:         common.Int64Ptr(metadata.NotificationVersion),
+		FailoverNotificationVersion: common.Int64Ptr(persistence.InitialFailoverNotificationVersion),
+	}
+
+	blob, err := domainInfoToBlob(domainInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -109,23 +124,11 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 	var resp *persistence.CreateDomainResponse
 	err = m.txExecute("CreateDomain", func(tx sqldb.Tx) error {
 		if _, err1 := tx.InsertIntoDomain(&sqldb.DomainRow{
-			Name:                        request.Info.Name,
-			ID:                          sqldb.MustParseUUID(request.Info.ID),
-			Status:                      request.Info.Status,
-			Description:                 request.Info.Description,
-			OwnerEmail:                  request.Info.OwnerEmail,
-			Data:                        data,
-			Retention:                   int(request.Config.Retention),
-			EmitMetric:                  request.Config.EmitMetric,
-			ArchivalBucket:              request.Config.ArchivalBucket,
-			ArchivalStatus:              int(request.Config.ArchivalStatus),
-			ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
-			Clusters:                    clusters,
-			ConfigVersion:               request.ConfigVersion,
-			FailoverVersion:             request.FailoverVersion,
-			NotificationVersion:         metadata.NotificationVersion,
-			FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
-			IsGlobalDomain:              request.IsGlobalDomain,
+			Name:         request.Info.Name,
+			ID:           sqldb.MustParseUUID(request.Info.ID),
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
+			IsGlobal:     request.IsGlobalDomain,
 		}); err1 != nil {
 			if sqlErr, ok := err1.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
 				return &workflow.DomainAlreadyExistsError{
@@ -192,22 +195,14 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 }
 
 func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow) (*persistence.GetDomainResponse, error) {
-	var data map[string]string
-	if row.Data != nil {
-		if err := gobDeserialize(row.Data, &data); err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Error in deserializing DomainInfo.Data. Error: %v", err),
-			}
-		}
+	domainInfo, err := domainInfoFromBlob(row.Data, row.DataEncoding)
+	if err != nil {
+		return nil, err
 	}
 
-	var clusters []map[string]interface{}
-	if row.Clusters != nil {
-		if err := gobDeserialize(row.Clusters, &clusters); err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Error in deserializing ReplicationConfig.Clusters. Error: %v", err),
-			}
-		}
+	clusters := make([]*persistence.ClusterReplicationConfig, len(domainInfo.Clusters))
+	for i := range domainInfo.Clusters {
+		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: domainInfo.Clusters[i]}
 	}
 
 	return &persistence.GetDomainResponse{
@@ -215,62 +210,63 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow
 		Info: &persistence.DomainInfo{
 			ID:          row.ID.String(),
 			Name:        row.Name,
-			Status:      row.Status,
-			Description: row.Description,
-			OwnerEmail:  row.OwnerEmail,
-			Data:        data,
+			Status:      int(domainInfo.GetStatus()),
+			Description: domainInfo.GetDescription(),
+			OwnerEmail:  domainInfo.GetOwner(),
+			Data:        domainInfo.GetData(),
 		},
 		Config: &persistence.DomainConfig{
-			Retention:      int32(row.Retention),
-			EmitMetric:     row.EmitMetric,
-			ArchivalBucket: row.ArchivalBucket,
-			ArchivalStatus: workflow.ArchivalStatus(row.ArchivalStatus),
+			Retention:      int32(domainInfo.GetRetentionDays()),
+			EmitMetric:     domainInfo.GetEmitMetric(),
+			ArchivalBucket: domainInfo.GetArchivalBucket(),
+			ArchivalStatus: workflow.ArchivalStatus(domainInfo.GetArchivalStatus()),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, row.ActiveClusterName),
-			Clusters:          persistence.GetOrUseDefaultClusters(m.activeClusterName, persistence.DeserializeClusterConfigs(clusters)),
+			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, domainInfo.GetActiveClusterName()),
+			Clusters:          persistence.GetOrUseDefaultClusters(m.activeClusterName, clusters),
 		},
-		IsGlobalDomain:              row.IsGlobalDomain,
-		FailoverVersion:             row.FailoverVersion,
-		ConfigVersion:               row.ConfigVersion,
-		NotificationVersion:         row.NotificationVersion,
-		FailoverNotificationVersion: row.FailoverNotificationVersion,
+		IsGlobalDomain:              row.IsGlobal,
+		FailoverVersion:             domainInfo.GetFailoverVersion(),
+		ConfigVersion:               domainInfo.GetConfigVersion(),
+		NotificationVersion:         domainInfo.GetNotificationVersion(),
+		FailoverNotificationVersion: domainInfo.GetFailoverNotificationVersion(),
 	}, nil
 }
 
 func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainRequest) error {
-	clusters, err := gobSerialize(persistence.SerializeClusterConfigs(request.ReplicationConfig.Clusters))
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Failed to encode ReplicationConfig.Clusters. Value: %v", request.ReplicationConfig.Clusters),
-		}
+	clusters := make([]string, len(request.ReplicationConfig.Clusters))
+	for i := range clusters {
+		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
 	}
 
-	data, err := gobSerialize(request.Info.Data)
+	domainInfo := &sqlblobs.DomainInfo{
+		Status:                      common.Int32Ptr(int32(request.Info.Status)),
+		Description:                 &request.Info.Description,
+		Owner:                       &request.Info.OwnerEmail,
+		Data:                        request.Info.Data,
+		RetentionDays:               common.Int16Ptr(int16(request.Config.Retention)),
+		EmitMetric:                  &request.Config.EmitMetric,
+		ArchivalBucket:              &request.Config.ArchivalBucket,
+		ArchivalStatus:              common.Int16Ptr(int16(request.Config.ArchivalStatus)),
+		ActiveClusterName:           &request.ReplicationConfig.ActiveClusterName,
+		Clusters:                    clusters,
+		ConfigVersion:               common.Int64Ptr(request.ConfigVersion),
+		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
+		NotificationVersion:         common.Int64Ptr(request.NotificationVersion),
+		FailoverNotificationVersion: common.Int64Ptr(request.FailoverNotificationVersion),
+	}
+
+	blob, err := domainInfoToBlob(domainInfo)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Failed to encode DomainInfo.Data. Value: %v", request.Info.Data),
-		}
+		return err
 	}
 
 	return m.txExecute("UpdateDomain", func(tx sqldb.Tx) error {
 		result, err := tx.UpdateDomain(&sqldb.DomainRow{
-			Name:                        request.Info.Name,
-			ID:                          sqldb.MustParseUUID(request.Info.ID),
-			Status:                      request.Info.Status,
-			Description:                 request.Info.Description,
-			OwnerEmail:                  request.Info.OwnerEmail,
-			Data:                        data,
-			Retention:                   int(request.Config.Retention),
-			EmitMetric:                  request.Config.EmitMetric,
-			ArchivalBucket:              request.Config.ArchivalBucket,
-			ArchivalStatus:              int(request.Config.ArchivalStatus),
-			ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
-			Clusters:                    clusters,
-			ConfigVersion:               request.ConfigVersion,
-			FailoverVersion:             request.FailoverVersion,
-			NotificationVersion:         request.NotificationVersion,
-			FailoverNotificationVersion: request.FailoverNotificationVersion,
+			Name:         request.Info.Name,
+			ID:           sqldb.MustParseUUID(request.Info.ID),
+			Data:         blob.Data,
+			DataEncoding: string(blob.Encoding),
 		})
 		if err != nil {
 			return err

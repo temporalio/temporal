@@ -27,64 +27,16 @@ import (
 )
 
 const (
-	createShardQry = `INSERT INTO shards 
-(shard_id, 
-owner, 
-range_id,
-stolen_since_renew,
-updated_at,
-replication_ack_level,
-transfer_ack_level,
-timer_ack_level,
-cluster_transfer_ack_level,
-cluster_timer_ack_level,
-domain_notification_version)
-VALUES
-(:shard_id, 
-:owner, 
-:range_id,
-:stolen_since_renew,
-:updated_at,
-:replication_ack_level,
-:transfer_ack_level,
-:timer_ack_level,
-:cluster_transfer_ack_level,
-:cluster_timer_ack_level,
-:domain_notification_version)`
+	createShardQry = `INSERT INTO
+ shards (shard_id, range_id, data, data_encoding) VALUES (?, ?, ?, ?)`
 
 	getShardQry = `SELECT
-shard_id,
-owner,
-range_id,
-stolen_since_renew,
-updated_at,
-replication_ack_level,
-transfer_ack_level,
-timer_ack_level,
-cluster_transfer_ack_level,
-cluster_timer_ack_level,
-domain_notification_version
-FROM shards WHERE
-shard_id = ?
-`
+ shard_id, range_id, data, data_encoding
+ FROM shards WHERE shard_id = ?`
 
-	updateShardQry = `UPDATE
-shards 
-SET
-shard_id = :shard_id,
-owner = :owner,
-range_id = :range_id,
-stolen_since_renew = :stolen_since_renew,
-updated_at = :updated_at,
-replication_ack_level = :replication_ack_level,
-transfer_ack_level = :transfer_ack_level,
-timer_ack_level = :timer_ack_level,
-cluster_transfer_ack_level = :cluster_transfer_ack_level,
-cluster_timer_ack_level = :cluster_timer_ack_level,
-domain_notification_version = :domain_notification_version
-WHERE
-shard_id = :shard_id
-`
+	updateShardQry = `UPDATE shards 
+ SET range_id = ?, data = ?, data_encoding = ? 
+ WHERE shard_id = ?`
 
 	lockShardQry     = `SELECT range_id FROM shards WHERE shard_id = ? FOR UPDATE`
 	readLockShardQry = `SELECT range_id FROM shards WHERE shard_id = ? LOCK IN SHARE MODE`
@@ -92,16 +44,12 @@ shard_id = :shard_id
 
 // InsertIntoShards inserts one or more rows into shards table
 func (mdb *DB) InsertIntoShards(row *sqldb.ShardsRow) (sql.Result, error) {
-	row.UpdatedAt = mdb.converter.ToMySQLDateTime(row.UpdatedAt)
-	row.TimerAckLevel = mdb.converter.ToMySQLDateTime(row.TimerAckLevel)
-	return mdb.conn.NamedExec(createShardQry, row)
+	return mdb.conn.Exec(createShardQry, row.ShardID, row.RangeID, row.Data, row.DataEncoding)
 }
 
 // UpdateShards updates one or more rows into shards table
 func (mdb *DB) UpdateShards(row *sqldb.ShardsRow) (sql.Result, error) {
-	row.UpdatedAt = mdb.converter.ToMySQLDateTime(row.UpdatedAt)
-	row.TimerAckLevel = mdb.converter.ToMySQLDateTime(row.TimerAckLevel)
-	return mdb.conn.NamedExec(updateShardQry, row)
+	return mdb.conn.Exec(updateShardQry, row.RangeID, row.Data, row.DataEncoding, row.ShardID)
 }
 
 // SelectFromShards reads one or more rows from shards table
@@ -111,8 +59,6 @@ func (mdb *DB) SelectFromShards(filter *sqldb.ShardsFilter) (*sqldb.ShardsRow, e
 	if err != nil {
 		return nil, err
 	}
-	row.UpdatedAt = mdb.converter.FromMySQLDateTime(row.UpdatedAt)
-	row.TimerAckLevel = mdb.converter.FromMySQLDateTime(row.TimerAckLevel)
 	return &row, err
 }
 

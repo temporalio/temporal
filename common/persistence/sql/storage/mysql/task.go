@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	taskListCreatePart = `INTO task_lists(shard_id, domain_id, range_id, name, task_type, ack_level, kind, expiry_ts, last_updated) ` +
-		`VALUES (:shard_id, :domain_id, :range_id, :name, :task_type, :ack_level, :kind, :expiry_ts, :last_updated)`
+	taskListCreatePart = `INTO task_lists(shard_id, domain_id, name, task_type, range_id, data, data_encoding) ` +
+		`VALUES (:shard_id, :domain_id, :name, :task_type, :range_id, :data, :data_encoding)`
 
 	// (default range ID: initialRangeID == 1)
 	createTaskListQry = `INSERT ` + taskListCreatePart
@@ -39,11 +39,8 @@ const (
 
 	updateTaskListQry = `UPDATE task_lists SET
 range_id = :range_id,
-task_type = :task_type,
-ack_level = :ack_level,
-kind = :kind,
-expiry_ts = :expiry_ts,
-last_updated = :last_updated
+data = :data,
+data_encoding = :data_encoding
 WHERE
 shard_id = :shard_id AND
 domain_id = :domain_id AND
@@ -51,11 +48,11 @@ name = :name AND
 task_type = :task_type
 `
 
-	listTaskListQry = `SELECT domain_id, range_id, name, task_type, ack_level, kind, expiry_ts, last_updated ` +
+	listTaskListQry = `SELECT domain_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_lists ` +
 		`WHERE shard_id = ? AND domain_id > ? AND name > ? AND task_type > ? ORDER BY domain_id,name,task_type LIMIT ?`
 
-	getTaskListQry = `SELECT domain_id, range_id, name, task_type, ack_level, kind, expiry_ts, last_updated ` +
+	getTaskListQry = `SELECT domain_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_lists ` +
 		`WHERE shard_id = ? AND domain_id = ? AND name = ? AND task_type = ?`
 
@@ -64,18 +61,18 @@ task_type = :task_type
 	lockTaskListQry = `SELECT range_id FROM task_lists ` +
 		`WHERE shard_id = ? AND domain_id = ? AND name = ? AND task_type = ? FOR UPDATE`
 
-	getTaskMinMaxQry = `SELECT workflow_id, run_id, schedule_id, task_id, expiry_ts ` +
+	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
 		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? AND task_id <= ? ` +
 		` ORDER BY task_id LIMIT ?`
 
-	getTaskMinQry = `SELECT workflow_id, run_id, schedule_id, task_id, expiry_ts ` +
+	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
 		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id > ? ORDER BY task_id LIMIT ?`
 
 	createTaskQry = `INSERT INTO ` +
-		`tasks(domain_id, workflow_id, run_id, schedule_id, task_list_name, task_type, task_id, expiry_ts) ` +
-		`VALUES(:domain_id, :workflow_id, :run_id, :schedule_id, :task_list_name, :task_type, :task_id, :expiry_ts)`
+		`tasks(domain_id, task_list_name, task_type, task_id, data, data_encoding) ` +
+		`VALUES(:domain_id, :task_list_name, :task_type, :task_id, :data, :data_encoding)`
 
 	deleteTaskQry = `DELETE FROM tasks ` +
 		`WHERE domain_id = ? AND task_list_name = ? AND task_type = ? AND task_id = ?`
@@ -87,9 +84,6 @@ task_type = :task_type
 
 // InsertIntoTasks inserts one or more rows into tasks table
 func (mdb *DB) InsertIntoTasks(rows []sqldb.TasksRow) (sql.Result, error) {
-	for i := range rows {
-		rows[i].ExpiryTs = mdb.converter.ToMySQLDateTime(rows[i].ExpiryTs)
-	}
 	return mdb.conn.NamedExec(createTaskQry, rows)
 }
 
@@ -108,9 +102,6 @@ func (mdb *DB) SelectFromTasks(filter *sqldb.TasksFilter) ([]sqldb.TasksRow, err
 	if err != nil {
 		return nil, err
 	}
-	for i := range rows {
-		rows[i].ExpiryTs = mdb.converter.FromMySQLDateTime(rows[i].ExpiryTs)
-	}
 	return rows, err
 }
 
@@ -128,19 +119,16 @@ func (mdb *DB) DeleteFromTasks(filter *sqldb.TasksFilter) (sql.Result, error) {
 
 // InsertIntoTaskLists inserts one or more rows into task_lists table
 func (mdb *DB) InsertIntoTaskLists(row *sqldb.TaskListsRow) (sql.Result, error) {
-	row.ExpiryTs = mdb.converter.ToMySQLDateTime(row.ExpiryTs)
 	return mdb.conn.NamedExec(createTaskListQry, row)
 }
 
 // ReplaceIntoTaskLists replaces one or more rows in task_lists table
 func (mdb *DB) ReplaceIntoTaskLists(row *sqldb.TaskListsRow) (sql.Result, error) {
-	row.ExpiryTs = mdb.converter.ToMySQLDateTime(row.ExpiryTs)
 	return mdb.conn.NamedExec(replaceTaskListQry, row)
 }
 
 // UpdateTaskLists updates a row in task_lists table
 func (mdb *DB) UpdateTaskLists(row *sqldb.TaskListsRow) (sql.Result, error) {
-	row.ExpiryTs = mdb.converter.ToMySQLDateTime(row.ExpiryTs)
 	return mdb.conn.NamedExec(updateTaskListQry, row)
 }
 
@@ -163,7 +151,6 @@ func (mdb *DB) selectFromTaskLists(filter *sqldb.TaskListsFilter) ([]sqldb.TaskL
 	if err != nil {
 		return nil, err
 	}
-	row.ExpiryTs = mdb.converter.FromMySQLDateTime(row.ExpiryTs)
 	return []sqldb.TaskListsRow{row}, err
 }
 
@@ -177,7 +164,6 @@ func (mdb *DB) rangeSelectFromTaskLists(filter *sqldb.TaskListsFilter) ([]sqldb.
 	}
 	for i := range rows {
 		rows[i].ShardID = filter.ShardID
-		rows[i].ExpiryTs = mdb.converter.FromMySQLDateTime(rows[i].ExpiryTs)
 	}
 	return rows, nil
 }

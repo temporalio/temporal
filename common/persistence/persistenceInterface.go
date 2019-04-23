@@ -541,7 +541,7 @@ func NewDataBlob(data []byte, encodingType common.EncodingType) *DataBlob {
 		return nil
 	}
 	if encodingType != "thriftrw" && data[0] == 'Y' {
-		panic(fmt.Sprintf("Invlid incoding: \"%v\"", encodingType))
+		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
 	}
 	return &DataBlob{
 		Data:     data,

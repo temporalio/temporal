@@ -23,8 +23,10 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
@@ -41,58 +43,54 @@ func updateActivityInfos(tx sqldb.Tx,
 	if len(activityInfos) > 0 {
 		rows := make([]sqldb.ActivityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
+			info := &sqlblobs.ActivityInfo{
+				ScheduledEventBatchID:         &v.ScheduledEventBatchID,
+				Version:                       &v.Version,
+				ScheduledTimeNanos:            common.Int64Ptr(v.ScheduledTime.UnixNano()),
+				StartedID:                     &v.StartedID,
+				StartedTimeNanos:              common.Int64Ptr(v.StartedTime.UnixNano()),
+				ActivityID:                    &v.ActivityID,
+				RequestID:                     &v.RequestID,
+				ScheduleToStartTimeoutSeconds: &v.ScheduleToStartTimeout,
+				ScheduleToCloseTimeoutSeconds: &v.ScheduleToCloseTimeout,
+				StartToCloseTimeoutSeconds:    &v.StartToCloseTimeout,
+				HeartbeatTimeoutSeconds:       &v.HeartbeatTimeout,
+				CancelRequested:               &v.CancelRequested,
+				CancelRequestID:               &v.CancelRequestID,
+				TimerTaskStatus:               &v.TimerTaskStatus,
+				Attempt:                       &v.Attempt,
+				TaskList:                      &v.TaskList,
+				StartedIdentity:               &v.StartedIdentity,
+				HasRetryPolicy:                &v.HasRetryPolicy,
+				RetryInitialIntervalSeconds:   &v.InitialInterval,
+				RetryBackoffCoefficient:       &v.BackoffCoefficient,
+				RetryMaximumIntervalSeconds:   &v.MaximumInterval,
+				RetryExpirationTimeNanos:      common.Int64Ptr(v.ExpirationTime.UnixNano()),
+				RetryMaximumAttempts:          &v.MaximumAttempts,
+				RetryNonRetryableErrors:       v.NonRetriableErrors,
+			}
+			if v.StartedEvent != nil {
+				info.StartedEvent = v.StartedEvent.Data
+				info.StartedEventEncoding = common.StringPtr(string(v.StartedEvent.Encoding))
+			}
+			if v.ScheduledEvent != nil {
+				info.ScheduledEvent = v.ScheduledEvent.Data
+				info.ScheduledEventEncoding = common.StringPtr(string(v.ScheduledEvent.Encoding))
+			}
+			blob, err := activityInfoToBlob(info)
+			if err != nil {
+				return err
+			}
 			rows[i] = sqldb.ActivityInfoMapsRow{
 				ShardID:                  int64(shardID),
 				DomainID:                 domainID,
 				WorkflowID:               workflowID,
 				RunID:                    runID,
 				ScheduleID:               v.ScheduleID,
-				ScheduledEventBatchID:    v.ScheduledEventBatchID,
-				Version:                  v.Version,
-				ScheduledTime:            v.ScheduledTime,
-				StartedID:                v.StartedID,
-				StartedTime:              v.StartedTime,
-				ActivityID:               v.ActivityID,
-				RequestID:                v.RequestID,
-				ScheduleToStartTimeout:   int64(v.ScheduleToStartTimeout),
-				ScheduleToCloseTimeout:   int64(v.ScheduleToCloseTimeout),
-				StartToCloseTimeout:      int64(v.StartToCloseTimeout),
-				HeartbeatTimeout:         int64(v.HeartbeatTimeout),
-				CancelRequested:          boolToInt64(v.CancelRequested),
-				CancelRequestID:          v.CancelRequestID,
 				LastHeartbeatUpdatedTime: v.LastHeartBeatUpdatedTime,
-				TimerTaskStatus:          int64(v.TimerTaskStatus),
-				Attempt:                  int64(v.Attempt),
-				TaskList:                 v.TaskList,
-				StartedIdentity:          v.StartedIdentity,
-				HasRetryPolicy:           boolToInt64(v.HasRetryPolicy),
-				InitInterval:             int64(v.InitialInterval),
-				BackoffCoefficient:       v.BackoffCoefficient,
-				MaxInterval:              int64(v.MaximumInterval),
-				ExpirationTime:           v.ExpirationTime,
-				MaxAttempts:              int64(v.MaximumAttempts),
-			}
-			if v.StartedEvent != nil {
-				rows[i].StartedEvent = &v.StartedEvent.Data
-				rows[i].StartedEventEncoding = string(v.StartedEvent.Encoding)
-			}
-			if v.ScheduledEvent != nil {
-				rows[i].ScheduledEvent = v.ScheduledEvent.Data
-				rows[i].ScheduledEventEncoding = string(v.ScheduledEvent.Encoding)
-			}
-
-			if v.Details != nil {
-				rows[i].Details = &v.Details
-			}
-
-			if v.NonRetriableErrors != nil {
-				nonRetriableErrors, err := gobSerialize(&v.NonRetriableErrors)
-				if err != nil {
-					return &workflow.InternalServiceError{
-						Message: fmt.Sprintf("Failed to update activity info. Failed to serialize ActivityInfo.NonRetriableErrors. Error: %v", err),
-					}
-				}
-				rows[i].NonRetriableErrors = &nonRetriableErrors
+				LastHeartbeatDetails:     v.Details,
+				Data:                     blob.Data,
+				DataEncoding:             string(blob.Encoding),
 			}
 		}
 
@@ -153,52 +151,45 @@ func getActivityInfoMap(db sqldb.Interface,
 
 	ret := make(map[int64]*persistence.InternalActivityInfo)
 	for _, v := range rows {
-		info := &persistence.InternalActivityInfo{
-			Version:                  v.Version,
-			ScheduleID:               v.ScheduleID,
-			ScheduledEventBatchID:    v.ScheduledEventBatchID,
-			ScheduledEvent:           persistence.NewDataBlob(v.ScheduledEvent, common.EncodingType(v.ScheduledEventEncoding)),
-			ScheduledTime:            v.ScheduledTime,
-			StartedID:                v.StartedID,
-			StartedTime:              v.StartedTime,
-			ActivityID:               v.ActivityID,
-			RequestID:                v.RequestID,
-			ScheduleToStartTimeout:   int32(v.ScheduleToStartTimeout),
-			ScheduleToCloseTimeout:   int32(v.ScheduleToCloseTimeout),
-			StartToCloseTimeout:      int32(v.StartToCloseTimeout),
-			HeartbeatTimeout:         int32(v.HeartbeatTimeout),
-			CancelRequested:          int64ToBool(v.CancelRequested),
-			CancelRequestID:          v.CancelRequestID,
-			LastHeartBeatUpdatedTime: v.LastHeartbeatUpdatedTime,
-			TimerTaskStatus:          int32(v.TimerTaskStatus),
-			Attempt:                  int32(v.Attempt),
-			DomainID:                 v.DomainID.String(),
-			StartedIdentity:          v.StartedIdentity,
-			TaskList:                 v.TaskList,
-			HasRetryPolicy:           int64ToBool(v.HasRetryPolicy),
-			InitialInterval:          int32(v.InitInterval),
-			BackoffCoefficient:       v.BackoffCoefficient,
-			MaximumInterval:          int32(v.MaxInterval),
-			ExpirationTime:           v.ExpirationTime,
-			MaximumAttempts:          int32(v.MaxAttempts),
+		decoded, err := activityInfoFromBlob(v.Data, v.DataEncoding)
+		if err != nil {
+			return nil, err
 		}
-		if v.StartedEvent != nil {
-			info.StartedEvent = persistence.NewDataBlob(*v.StartedEvent, common.EncodingType(v.ScheduledEventEncoding))
+		info := &persistence.InternalActivityInfo{
+			DomainID:                 v.DomainID.String(),
+			ScheduleID:               v.ScheduleID,
+			Details:                  v.LastHeartbeatDetails,
+			LastHeartBeatUpdatedTime: v.LastHeartbeatUpdatedTime,
+			Version:                  decoded.GetVersion(),
+			ScheduledEventBatchID:    decoded.GetScheduledEventBatchID(),
+			ScheduledEvent:           persistence.NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
+			ScheduledTime:            time.Unix(0, decoded.GetScheduledTimeNanos()),
+			StartedID:                decoded.GetStartedID(),
+			StartedTime:              time.Unix(0, decoded.GetStartedTimeNanos()),
+			ActivityID:               decoded.GetActivityID(),
+			RequestID:                decoded.GetRequestID(),
+			ScheduleToStartTimeout:   decoded.GetScheduleToStartTimeoutSeconds(),
+			ScheduleToCloseTimeout:   decoded.GetScheduleToCloseTimeoutSeconds(),
+			StartToCloseTimeout:      decoded.GetStartToCloseTimeoutSeconds(),
+			HeartbeatTimeout:         decoded.GetHeartbeatTimeoutSeconds(),
+			CancelRequested:          decoded.GetCancelRequested(),
+			CancelRequestID:          decoded.GetCancelRequestID(),
+			TimerTaskStatus:          decoded.GetTimerTaskStatus(),
+			Attempt:                  decoded.GetAttempt(),
+			StartedIdentity:          decoded.GetStartedIdentity(),
+			TaskList:                 decoded.GetTaskList(),
+			HasRetryPolicy:           decoded.GetHasRetryPolicy(),
+			InitialInterval:          decoded.GetRetryInitialIntervalSeconds(),
+			BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
+			MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
+			ExpirationTime:           time.Unix(0, decoded.GetRetryExpirationTimeNanos()),
+			MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
+			NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
+		}
+		if decoded.StartedEvent != nil {
+			info.StartedEvent = persistence.NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))
 		}
 		ret[v.ScheduleID] = info
-
-		if v.Details != nil {
-			ret[v.ScheduleID].Details = *v.Details
-		}
-
-		if v.NonRetriableErrors != nil {
-			ret[v.ScheduleID].NonRetriableErrors = []string{}
-			if err := gobDeserialize(*v.NonRetriableErrors, &ret[v.ScheduleID].NonRetriableErrors); err != nil {
-				return nil, &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to get activity info. Failed to deserialize ActivityInfo.NonRetriableErrors. %v", err),
-				}
-			}
-		}
 	}
 
 	return ret, nil
@@ -228,16 +219,23 @@ func updateTimerInfos(tx sqldb.Tx,
 	if len(timerInfos) > 0 {
 		rows := make([]sqldb.TimerInfoMapsRow, len(timerInfos))
 		for i, v := range timerInfos {
+			blob, err := timerInfoToBlob(&sqlblobs.TimerInfo{
+				Version:         &v.Version,
+				StartedID:       &v.StartedID,
+				ExpiryTimeNanos: common.Int64Ptr(v.ExpiryTime.UnixNano()),
+				TaskID:          &v.TaskID,
+			})
+			if err != nil {
+				return err
+			}
 			rows[i] = sqldb.TimerInfoMapsRow{
-				ShardID:    int64(shardID),
-				DomainID:   domainID,
-				WorkflowID: workflowID,
-				RunID:      runID,
-				TimerID:    v.TimerID,
-				Version:    v.Version,
-				StartedID:  v.StartedID,
-				ExpiryTime: v.ExpiryTime,
-				TaskID:     v.TaskID,
+				ShardID:      int64(shardID),
+				DomainID:     domainID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				TimerID:      v.TimerID,
+				Data:         blob.Data,
+				DataEncoding: string(blob.Encoding),
 			}
 		}
 		if _, err := tx.ReplaceIntoTimerInfoMaps(rows); err != nil {
@@ -294,12 +292,16 @@ func getTimerInfoMap(db sqldb.Interface,
 	}
 	ret := make(map[string]*persistence.TimerInfo)
 	for _, v := range rows {
+		info, err := timerInfoFromBlob(v.Data, v.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		ret[v.TimerID] = &persistence.TimerInfo{
-			Version:    v.Version,
 			TimerID:    v.TimerID,
-			StartedID:  v.StartedID,
-			ExpiryTime: v.ExpiryTime,
-			TaskID:     v.TaskID,
+			Version:    info.GetVersion(),
+			StartedID:  info.GetStartedID(),
+			ExpiryTime: time.Unix(0, info.GetExpiryTimeNanos()),
+			TaskID:     info.GetTaskID(),
 		}
 	}
 
@@ -331,26 +333,34 @@ func updateChildExecutionInfos(tx sqldb.Tx,
 		rows := make([]sqldb.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
 			initEvent, initEncoding := persistence.FromDataBlob(v.InitiatedEvent)
-			rows[i] = sqldb.ChildExecutionInfoMapsRow{
-				ShardID:                int64(shardID),
-				DomainID:               domainID,
-				WorkflowID:             workflowID,
-				RunID:                  runID,
-				InitiatedID:            v.InitiatedID,
-				InitiatedEventBatchID:  v.InitiatedEventBatchID,
-				Version:                v.Version,
-				StartedID:              v.StartedID,
-				StartedWorkflowID:      v.StartedWorkflowID,
+			info := &sqlblobs.ChildExecutionInfo{
+				InitiatedEventBatchID:  &v.InitiatedEventBatchID,
+				Version:                &v.Version,
+				StartedID:              &v.StartedID,
+				StartedWorkflowID:      &v.StartedWorkflowID,
 				StartedRunID:           sqldb.MustParseUUID(v.StartedRunID),
-				InitiatedEvent:         &initEvent,
-				InitiatedEventEncoding: initEncoding,
-				CreateRequestID:        v.CreateRequestID,
-				DomainName:             v.DomainName,
-				WorkflowTypeName:       v.WorkflowTypeName,
+				InitiatedEvent:         initEvent,
+				InitiatedEventEncoding: &initEncoding,
+				CreateRequestID:        &v.CreateRequestID,
+				DomainName:             &v.DomainName,
+				WorkflowTypeName:       &v.WorkflowTypeName,
 			}
 			if v.StartedEvent != nil {
-				rows[i].StartedEvent = &v.StartedEvent.Data
-				rows[i].StartedEventEncoding = string(v.StartedEvent.Encoding)
+				info.StartedEvent = v.StartedEvent.Data
+				info.StartedEventEncoding = common.StringPtr(string(v.StartedEvent.Encoding))
+			}
+			blob, err := childExecutionInfoToBlob(info)
+			if err != nil {
+				return err
+			}
+			rows[i] = sqldb.ChildExecutionInfoMapsRow{
+				ShardID:      int64(shardID),
+				DomainID:     domainID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				InitiatedID:  v.InitiatedID,
+				Data:         blob.Data,
+				DataEncoding: string(blob.Encoding),
 			}
 		}
 		if _, err := tx.ReplaceIntoChildExecutionInfoMaps(rows); err != nil {
@@ -395,22 +405,26 @@ func getChildExecutionInfoMap(db sqldb.Interface,
 
 	ret := make(map[int64]*persistence.InternalChildExecutionInfo)
 	for _, v := range rows {
+		rowInfo, err := childExecutionInfoFromBlob(v.Data, v.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		info := &persistence.InternalChildExecutionInfo{
 			InitiatedID:           v.InitiatedID,
-			InitiatedEventBatchID: v.InitiatedEventBatchID,
-			Version:               v.Version,
-			StartedID:             v.StartedID,
-			StartedWorkflowID:     v.StartedWorkflowID,
-			StartedRunID:          v.StartedRunID.String(),
-			CreateRequestID:       v.CreateRequestID,
-			DomainName:            v.DomainName,
-			WorkflowTypeName:      v.WorkflowTypeName,
+			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
+			Version:               rowInfo.GetVersion(),
+			StartedID:             rowInfo.GetStartedID(),
+			StartedWorkflowID:     rowInfo.GetStartedWorkflowID(),
+			StartedRunID:          sqldb.UUID(rowInfo.GetStartedRunID()).String(),
+			CreateRequestID:       rowInfo.GetCreateRequestID(),
+			DomainName:            rowInfo.GetDomainName(),
+			WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
 		}
-		if v.InitiatedEvent != nil {
-			info.InitiatedEvent = persistence.NewDataBlob(*v.InitiatedEvent, common.EncodingType(v.InitiatedEventEncoding))
+		if rowInfo.InitiatedEvent != nil {
+			info.InitiatedEvent = persistence.NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.GetInitiatedEventEncoding()))
 		}
-		if v.StartedEvent != nil {
-			info.StartedEvent = persistence.NewDataBlob(*v.StartedEvent, common.EncodingType(v.InitiatedEventEncoding))
+		if rowInfo.StartedEvent != nil {
+			info.StartedEvent = persistence.NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.GetStartedEventEncoding()))
 		}
 		ret[v.InitiatedID] = info
 	}
@@ -442,14 +456,21 @@ func updateRequestCancelInfos(tx sqldb.Tx,
 	if len(requestCancelInfos) > 0 {
 		rows := make([]sqldb.RequestCancelInfoMapsRow, len(requestCancelInfos))
 		for i, v := range requestCancelInfos {
+			blob, err := requestCancelInfoToBlob(&sqlblobs.RequestCancelInfo{
+				Version:         &v.Version,
+				CancelRequestID: &v.CancelRequestID,
+			})
+			if err != nil {
+				return err
+			}
 			rows[i] = sqldb.RequestCancelInfoMapsRow{
-				ShardID:         int64(shardID),
-				DomainID:        domainID,
-				WorkflowID:      workflowID,
-				RunID:           runID,
-				InitiatedID:     v.InitiatedID,
-				Version:         v.Version,
-				CancelRequestID: v.CancelRequestID,
+				ShardID:      int64(shardID),
+				DomainID:     domainID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				InitiatedID:  v.InitiatedID,
+				Data:         blob.Data,
+				DataEncoding: string(blob.Encoding),
 			}
 		}
 
@@ -507,9 +528,13 @@ func getRequestCancelInfoMap(db sqldb.Interface,
 
 	ret := make(map[int64]*persistence.RequestCancelInfo)
 	for _, v := range rows {
+		rowInfo, err := requestCancelInfoFromBlob(v.Data, v.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		ret[v.InitiatedID] = &persistence.RequestCancelInfo{
-			Version:         v.Version,
-			CancelRequestID: v.CancelRequestID,
+			Version:         rowInfo.GetVersion(),
+			CancelRequestID: rowInfo.GetCancelRequestID(),
 			InitiatedID:     v.InitiatedID,
 		}
 	}
@@ -541,17 +566,24 @@ func updateSignalInfos(tx sqldb.Tx,
 	if len(signalInfos) > 0 {
 		rows := make([]sqldb.SignalInfoMapsRow, len(signalInfos))
 		for i, v := range signalInfos {
+			blob, err := signalInfoToBlob(&sqlblobs.SignalInfo{
+				Version:   &v.Version,
+				RequestID: &v.SignalRequestID,
+				Name:      &v.SignalName,
+				Input:     v.Input,
+				Control:   v.Control,
+			})
+			if err != nil {
+				return err
+			}
 			rows[i] = sqldb.SignalInfoMapsRow{
-				ShardID:         int64(shardID),
-				DomainID:        domainID,
-				WorkflowID:      workflowID,
-				RunID:           runID,
-				InitiatedID:     v.InitiatedID,
-				Version:         v.Version,
-				SignalRequestID: v.SignalRequestID,
-				SignalName:      v.SignalName,
-				Input:           takeAddressIfNotNil(v.Input),
-				Control:         takeAddressIfNotNil(v.Control),
+				ShardID:      int64(shardID),
+				DomainID:     domainID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				InitiatedID:  v.InitiatedID,
+				Data:         blob.Data,
+				DataEncoding: string(blob.Encoding),
 			}
 		}
 
@@ -609,13 +641,17 @@ func getSignalInfoMap(db sqldb.Interface,
 
 	ret := make(map[int64]*persistence.SignalInfo)
 	for _, v := range rows {
+		rowInfo, err := signalInfoFromBlob(v.Data, v.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
 		ret[v.InitiatedID] = &persistence.SignalInfo{
-			Version:         v.Version,
+			Version:         rowInfo.GetVersion(),
 			InitiatedID:     v.InitiatedID,
-			SignalRequestID: v.SignalRequestID,
-			SignalName:      v.SignalName,
-			Input:           dereferenceIfNotNil(v.Input),
-			Control:         dereferenceIfNotNil(v.Control),
+			SignalRequestID: rowInfo.GetRequestID(),
+			SignalName:      rowInfo.GetName(),
+			Input:           rowInfo.GetInput(),
+			Control:         rowInfo.GetControl(),
 		}
 	}
 

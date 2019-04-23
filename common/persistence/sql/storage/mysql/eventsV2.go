@@ -39,10 +39,10 @@ const (
 
 	// below are templates for history_tree table
 	addHistoryTreeQry = `INSERT INTO history_tree (` +
-		`shard_id, tree_id, branch_id, ancestors, in_progress, created_ts, info) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :ancestors, :in_progress, :created_ts, :info) `
+		`shard_id, tree_id, branch_id, in_progress, data, data_encoding) ` +
+		`VALUES (:shard_id, :tree_id, :branch_id, :in_progress, :data, :data_encoding) `
 
-	getHistoryTreeQry = `SELECT branch_id, ancestors, in_progress, created_ts, info FROM history_tree WHERE shard_id = ? AND tree_id = ? `
+	getHistoryTreeQry = `SELECT branch_id, in_progress, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
 	deleteHistoryTreeQry = `DELETE FROM history_tree WHERE shard_id = ? AND tree_id = ? AND branch_id = ? `
 

@@ -30,106 +30,40 @@ import (
 const (
 	shardID = 54321
 
-	createDomainQry = `INSERT INTO domains (
-		id,
-		name,
-		retention, 
-		emit_metric,
-		archival_bucket,
-		archival_status,
-		config_version,
-		status, 
-		description, 
-		owner_email,
-		failover_version, 
-		is_global_domain,
-		active_cluster_name, 
-		clusters, 
-		notification_version,
-		failover_notification_version,
-		data
-		)
-		VALUES(
-		:id,
-		:name,
-		:retention, 
-		:emit_metric,
-		:archival_bucket,
-		:archival_status,
-		:config_version,
-		:status, 
-		:description, 
-		:owner_email,
-		:failover_version, 
-		:is_global_domain,
-		:active_cluster_name, 
-		:clusters,
-		:notification_version,
-		:failover_notification_version,
-		:data
-		)`
+	createDomainQry = `INSERT INTO 
+ domains (id, name, is_global, data, data_encoding)
+ VALUES(?, ?, ?, ?, ?)`
 
-	updateDomainQry = `UPDATE domains SET
-		retention = :retention, 
-		emit_metric = :emit_metric,
-		archival_bucket = :archival_bucket,
-		archival_status = :archival_status,
-		config_version = :config_version,
-		status = :status, 
-		description = :description, 
-		owner_email = :owner_email,
-		failover_version = :failover_version, 
-		active_cluster_name = :active_cluster_name,  
-		clusters = :clusters,
-		notification_version = :notification_version,
-		failover_notification_version = :failover_notification_version,
-		data = :data
-		WHERE shard_id=54321 AND name = :name AND id = :id`
+	updateDomainQry = `UPDATE domains 
+ SET name = ?, data = ?, data_encoding = ?
+ WHERE shard_id=54321 AND id = ?`
 
-	getDomainPart = `SELECT
-		id,
-		retention, 
-		emit_metric,
-		archival_bucket,
-		archival_status,
-		config_version,
-		name, 
-		status, 
-		description, 
-		owner_email,
-		failover_version, 
-		is_global_domain,
-		active_cluster_name, 
-		clusters,
-		notification_version,
-		failover_notification_version,
-		data FROM domains
-`
-	getDomainByIDQry   = getDomainPart + `WHERE shard_id=? AND id = ?`
-	getDomainByNameQry = getDomainPart + `WHERE shard_id=? AND name = ?`
+	getDomainPart = `SELECT id, name, is_global, data, data_encoding FROM domains`
+
+	getDomainByIDQry   = getDomainPart + ` WHERE shard_id=? AND id = ?`
+	getDomainByNameQry = getDomainPart + ` WHERE shard_id=? AND name = ?`
+
+	listDomainsQry      = getDomainPart + ` WHERE shard_id=? ORDER BY id LIMIT ?`
+	listDomainsRangeQry = getDomainPart + ` WHERE shard_id=? AND id > ? ORDER BY id LIMIT ?`
 
 	deleteDomainByIDQry   = `DELETE FROM domains WHERE shard_id=? AND id = ?`
 	deleteDomainByNameQry = `DELETE FROM domains WHERE shard_id=? AND name = ?`
 
 	getDomainMetadataQry    = `SELECT notification_version FROM domain_metadata`
 	lockDomainMetadataQry   = `SELECT notification_version FROM domain_metadata FOR UPDATE`
-	updateDomainMetadataQry = `UPDATE domain_metadata SET notification_version = :notification_version + 1 
-WHERE notification_version = :notification_version`
-
-	listDomainsQry      = getDomainPart + ` WHERE shard_id=? ORDER BY id LIMIT ?`
-	listDomainsRangeQry = getDomainPart + ` WHERE shard_id=? AND id > ? ORDER BY id LIMIT ?`
+	updateDomainMetadataQry = `UPDATE domain_metadata SET notification_version = ? WHERE notification_version = ?`
 )
 
 var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoDomain inserts a single row into domains table
 func (mdb *DB) InsertIntoDomain(row *sqldb.DomainRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(createDomainQry, row)
+	return mdb.conn.Exec(createDomainQry, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding)
 }
 
 // UpdateDomain updates a single row in domains table
 func (mdb *DB) UpdateDomain(row *sqldb.DomainRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(updateDomainQry, row)
+	return mdb.conn.Exec(updateDomainQry, row.Name, row.Data, row.DataEncoding, row.ID)
 }
 
 // SelectFromDomain reads one or more rows from domains table
@@ -200,5 +134,5 @@ func (mdb *DB) SelectFromDomainMetadata() (*sqldb.DomainMetadataRow, error) {
 
 // UpdateDomainMetadata updates a single row in domain_metadata table
 func (mdb *DB) UpdateDomainMetadata(row *sqldb.DomainMetadataRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(updateDomainMetadataQry, row)
+	return mdb.conn.Exec(updateDomainMetadataQry, row.NotificationVersion+1, row.NotificationVersion)
 }

@@ -105,36 +105,10 @@ func makeGetMapQryTemplate(tableName string, nonPrimaryKeyColumns []string, mapK
 var (
 	// Omit shard_id, run_id, domain_id, workflow_id, schedule_id since they're in the primary key
 	activityInfoColumns = []string{
-		"version",
-		"scheduled_event_batch_id",
-		"scheduled_event",
-		"scheduled_event_encoding",
-		"scheduled_time",
-		"started_id",
-		"started_event",
-		"started_event_encoding",
-		"started_time",
-		"activity_id",
-		"request_id",
-		"details",
-		"schedule_to_start_timeout",
-		"schedule_to_close_timeout",
-		"start_to_close_timeout",
-		"heartbeat_timeout",
-		"cancel_requested",
-		"cancel_request_id",
+		"data",
+		"data_encoding",
+		"last_heartbeat_details",
 		"last_heartbeat_updated_time",
-		"timer_task_status",
-		"attempt",
-		"task_list",
-		"started_identity",
-		"has_retry_policy",
-		"init_interval",
-		"backoff_coefficient",
-		"max_interval",
-		"expiration_time",
-		"max_attempts",
-		"non_retriable_errors",
 	}
 	activityInfoTableName = "activity_info_maps"
 	activityInfoKey       = "schedule_id"
@@ -148,10 +122,7 @@ var (
 // ReplaceIntoActivityInfoMaps replaces one or more rows in activity_info_maps table
 func (mdb *DB) ReplaceIntoActivityInfoMaps(rows []sqldb.ActivityInfoMapsRow) (sql.Result, error) {
 	for i := range rows {
-		rows[i].ScheduledTime = mdb.converter.ToMySQLDateTime(rows[i].ScheduledTime)
-		rows[i].StartedTime = mdb.converter.ToMySQLDateTime(rows[i].StartedTime)
 		rows[i].LastHeartbeatUpdatedTime = mdb.converter.ToMySQLDateTime(rows[i].LastHeartbeatUpdatedTime)
-		rows[i].ExpirationTime = mdb.converter.ToMySQLDateTime(rows[i].ExpirationTime)
 	}
 	return mdb.conn.NamedExec(setKeyInActivityInfoMapQry, rows)
 }
@@ -165,10 +136,7 @@ func (mdb *DB) SelectFromActivityInfoMaps(filter *sqldb.ActivityInfoMapsFilter) 
 		rows[i].DomainID = filter.DomainID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
-		rows[i].ScheduledTime = mdb.converter.FromMySQLDateTime(rows[i].ScheduledTime)
-		rows[i].StartedTime = mdb.converter.FromMySQLDateTime(rows[i].StartedTime)
 		rows[i].LastHeartbeatUpdatedTime = mdb.converter.FromMySQLDateTime(rows[i].LastHeartbeatUpdatedTime)
-		rows[i].ExpirationTime = mdb.converter.FromMySQLDateTime(rows[i].ExpirationTime)
 	}
 	return rows, err
 }
@@ -183,10 +151,8 @@ func (mdb *DB) DeleteFromActivityInfoMaps(filter *sqldb.ActivityInfoMapsFilter) 
 
 var (
 	timerInfoColumns = []string{
-		"version",
-		"started_id",
-		"expiry_time",
-		"task_id",
+		"data",
+		"data_encoding",
 	}
 	timerInfoTableName = "timer_info_maps"
 	timerInfoKey       = "timer_id"
@@ -199,9 +165,6 @@ var (
 
 // ReplaceIntoTimerInfoMaps replaces one or more rows in timer_info_maps table
 func (mdb *DB) ReplaceIntoTimerInfoMaps(rows []sqldb.TimerInfoMapsRow) (sql.Result, error) {
-	for i := range rows {
-		rows[i].ExpiryTime = mdb.converter.ToMySQLDateTime(rows[i].ExpiryTime)
-	}
 	return mdb.conn.NamedExec(setKeyInTimerInfoMapSQLQuery, rows)
 }
 
@@ -228,18 +191,8 @@ func (mdb *DB) DeleteFromTimerInfoMaps(filter *sqldb.TimerInfoMapsFilter) (sql.R
 
 var (
 	childExecutionInfoColumns = []string{
-		"version",
-		"initiated_event_batch_id",
-		"initiated_event",
-		"initiated_event_encoding",
-		"started_id",
-		"started_workflow_id",
-		"started_run_id",
-		"started_event",
-		"started_event_encoding",
-		"create_request_id",
-		"domain_name",
-		"workflow_type_name",
+		"data",
+		"data_encoding",
 	}
 	childExecutionInfoTableName = "child_execution_info_maps"
 	childExecutionInfoKey       = "initiated_id"
@@ -278,8 +231,8 @@ func (mdb *DB) DeleteFromChildExecutionInfoMaps(filter *sqldb.ChildExecutionInfo
 
 var (
 	requestCancelInfoColumns = []string{
-		"version",
-		"cancel_request_id",
+		"data",
+		"data_encoding",
 	}
 	requestCancelInfoTableName = "request_cancel_info_maps"
 	requestCancelInfoKey       = "initiated_id"
@@ -318,11 +271,8 @@ func (mdb *DB) DeleteFromRequestCancelInfoMaps(filter *sqldb.RequestCancelInfoMa
 
 var (
 	signalInfoColumns = []string{
-		"version",
-		"signal_request_id",
-		"signal_name",
-		"input",
-		"control",
+		"data",
+		"data_encoding",
 	}
 	signalInfoTableName = "signal_info_maps"
 	signalInfoKey       = "initiated_id"

@@ -26,6 +26,8 @@ import (
 	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/sqlblobs"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage"
@@ -91,42 +93,40 @@ func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persi
 		}
 	}
 
-	clusterTransferAckLevel := make(map[string]int64)
-	if err := gobDeserialize(row.ClusterTransferAckLevel, &clusterTransferAckLevel); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetShard operation failed. Failed to deserialize ShardInfo.ClusterTransferAckLevel. ShardId: %v. Error: %v", request.ShardID, err),
-		}
+	shardInfo, err := shardInfoFromBlob(row.Data, row.DataEncoding)
+	if err != nil {
+		return nil, err
 	}
-	if len(clusterTransferAckLevel) == 0 {
-		clusterTransferAckLevel = map[string]int64{
-			m.currentClusterName: row.TransferAckLevel,
+
+	if len(shardInfo.ClusterTransferAckLevel) == 0 {
+		shardInfo.ClusterTransferAckLevel = map[string]int64{
+			m.currentClusterName: shardInfo.GetTransferAckLevel(),
 		}
 	}
 
-	clusterTimerAckLevel := make(map[string]time.Time)
-	if err := gobDeserialize(row.ClusterTimerAckLevel, &clusterTimerAckLevel); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetShard operation failed. Failed to deserialize ShardInfo.ClusterTimerAckLevel. ShardId: %v. Error: %v", request.ShardID, err),
-		}
+	timerAckLevel := make(map[string]time.Time, len(shardInfo.ClusterTimerAckLevel))
+	for k, v := range shardInfo.ClusterTimerAckLevel {
+		timerAckLevel[k] = time.Unix(0, v)
 	}
-	if len(clusterTimerAckLevel) == 0 {
-		clusterTimerAckLevel = map[string]time.Time{
-			m.currentClusterName: row.TimerAckLevel,
+
+	if len(timerAckLevel) == 0 {
+		timerAckLevel = map[string]time.Time{
+			m.currentClusterName: time.Unix(0, shardInfo.GetTimerAckLevelNanos()),
 		}
 	}
 
 	resp := &persistence.GetShardResponse{ShardInfo: &persistence.ShardInfo{
 		ShardID:                   int(row.ShardID),
-		Owner:                     row.Owner,
 		RangeID:                   row.RangeID,
-		StolenSinceRenew:          int(row.StolenSinceRenew),
-		UpdatedAt:                 row.UpdatedAt,
-		ReplicationAckLevel:       row.ReplicationAckLevel,
-		TransferAckLevel:          row.TransferAckLevel,
-		TimerAckLevel:             row.TimerAckLevel,
-		ClusterTransferAckLevel:   clusterTransferAckLevel,
-		ClusterTimerAckLevel:      clusterTimerAckLevel,
-		DomainNotificationVersion: row.DomainNotificationVersion,
+		Owner:                     shardInfo.GetOwner(),
+		StolenSinceRenew:          int(shardInfo.GetStolenSinceRenew()),
+		UpdatedAt:                 time.Unix(0, shardInfo.GetUpdatedAtNanos()),
+		ReplicationAckLevel:       shardInfo.GetReplicationAckLevel(),
+		TransferAckLevel:          shardInfo.GetTransferAckLevel(),
+		TimerAckLevel:             time.Unix(0, shardInfo.GetTimerAckLevelNanos()),
+		ClusterTransferAckLevel:   shardInfo.ClusterTransferAckLevel,
+		ClusterTimerAckLevel:      timerAckLevel,
+		DomainNotificationVersion: shardInfo.GetDomainNotificationVersion(),
 	}}
 
 	return resp, nil
@@ -206,31 +206,31 @@ func readLockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
 }
 
 func shardInfoToShardsRow(s persistence.ShardInfo) (*sqldb.ShardsRow, error) {
-	clusterTransferAckLevel, err := gobSerialize(s.ClusterTransferAckLevel)
-	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateShard operation failed. Failed to serialize ShardInfo.ClusterTransferAckLevel. Error: %v", err),
-		}
+	timerAckLevels := make(map[string]int64, len(s.ClusterTimerAckLevel))
+	for k, v := range s.ClusterTimerAckLevel {
+		timerAckLevels[k] = v.UnixNano()
 	}
 
-	clusterTimerAckLevel, err := gobSerialize(s.ClusterTimerAckLevel)
-	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateShard operation failed. Failed to serialize ShardInfo.ClusterTimerAckLevel. Error: %v", err),
-		}
+	shardInfo := &sqlblobs.ShardInfo{
+		StolenSinceRenew:          common.Int32Ptr(int32(s.StolenSinceRenew)),
+		UpdatedAtNanos:            common.Int64Ptr(s.UpdatedAt.UnixNano()),
+		ReplicationAckLevel:       common.Int64Ptr(s.ReplicationAckLevel),
+		TransferAckLevel:          common.Int64Ptr(s.TransferAckLevel),
+		TimerAckLevelNanos:        common.Int64Ptr(s.TimerAckLevel.UnixNano()),
+		ClusterTransferAckLevel:   s.ClusterTransferAckLevel,
+		ClusterTimerAckLevel:      timerAckLevels,
+		DomainNotificationVersion: common.Int64Ptr(s.DomainNotificationVersion),
+		Owner:                     &s.Owner,
 	}
 
+	blob, err := shardInfoToBlob(shardInfo)
+	if err != nil {
+		return nil, err
+	}
 	return &sqldb.ShardsRow{
-		ShardID:                   int64(s.ShardID),
-		Owner:                     s.Owner,
-		RangeID:                   s.RangeID,
-		StolenSinceRenew:          int64(s.StolenSinceRenew),
-		UpdatedAt:                 s.UpdatedAt,
-		ReplicationAckLevel:       s.ReplicationAckLevel,
-		TransferAckLevel:          s.TransferAckLevel,
-		TimerAckLevel:             s.TimerAckLevel,
-		ClusterTransferAckLevel:   clusterTransferAckLevel,
-		ClusterTimerAckLevel:      clusterTimerAckLevel,
-		DomainNotificationVersion: s.DomainNotificationVersion,
+		ShardID:      int64(s.ShardID),
+		RangeID:      s.RangeID,
+		Data:         blob.Data,
+		DataEncoding: string(blob.Encoding),
 	}, nil
 }
