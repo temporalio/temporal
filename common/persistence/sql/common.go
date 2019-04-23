@@ -115,10 +115,6 @@ func gobDeserialize(a []byte, x interface{}) error {
 	return nil
 }
 
-const (
-	dataSourceName = "%s:%s@%v(%v)/%s?multiStatements=true&tx_isolation=%%27READ-COMMITTED%%27&parseTime=true&clientFoundRows=true"
-)
-
 func boolToInt64(b bool) int64 {
 	if b {
 		return 1

@@ -186,6 +186,8 @@ type (
 		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
 		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
 		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
+		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url
+		ConnectAttributes map[string]string `yaml:"connectAttributes"`
 		// MaxQPS the max request rate on this datastore
 		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns the max number of connections to this datastore

@@ -1,1 +1,0 @@
-CREATE DATABASE cadence_visibility;
