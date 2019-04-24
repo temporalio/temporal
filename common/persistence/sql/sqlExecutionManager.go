@@ -633,32 +633,8 @@ func (m *sqlExecutionManager) ResetWorkflowExecution(request *p.InternalResetWor
 			lastWriteVersion = insertReplicationState.LastWriteVersion
 		}
 
-		// 1. update current execution with checking prevRunState and prevRunVersion
-		currRow, err := lockCurrentExecutionIfExists(tx, shardID, domainID, workflowID)
-		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed at lockCurrentExecutionIfExists. Error: %v", err),
-			}
-		}
-		if currRow == nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. current_executions row doesn't exist."),
-			}
-		}
-		if currRow.RunID.String() != currRunID.String() {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. runID in current_executions row doesn't match"),
-			}
-		}
-		if currReplicationState != nil {
-			// only check when with replication
-			if currRow.LastWriteVersion != request.PrevRunVersion || currRow.State != request.PrevRunState {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. current_executions row last state/version doesn't match"),
-				}
-			}
-		}
-
+		// 1. update current execution
+		// TODO: https://github.com/uber/cadence/issues/1679
 		if err := updateCurrentExecution(tx,
 			shardID,
 			domainID,

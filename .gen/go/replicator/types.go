@@ -658,20 +658,13 @@ func (v *DomainTaskAttributes) IsSetFailoverVersion() bool {
 	return v != nil && v.FailoverVersion != nil
 }
 
-type HistoryTaskAttributes struct {
-	TargetClusters          []string                           `json:"targetClusters,omitempty"`
-	DomainId                *string                            `json:"domainId,omitempty"`
-	WorkflowId              *string                            `json:"workflowId,omitempty"`
-	RunId                   *string                            `json:"runId,omitempty"`
-	FirstEventId            *int64                             `json:"firstEventId,omitempty"`
-	NextEventId             *int64                             `json:"nextEventId,omitempty"`
-	Version                 *int64                             `json:"version,omitempty"`
-	ReplicationInfo         map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
-	History                 *shared.History                    `json:"history,omitempty"`
-	NewRunHistory           *shared.History                    `json:"newRunHistory,omitempty"`
-	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
-	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
-	ResetWorkflow           *bool                              `json:"resetWorkflow,omitempty"`
+type HistoryMetadataTaskAttributes struct {
+	TargetClusters []string `json:"targetClusters,omitempty"`
+	DomainId       *string  `json:"domainId,omitempty"`
+	WorkflowId     *string  `json:"workflowId,omitempty"`
+	RunId          *string  `json:"runId,omitempty"`
+	FirstEventId   *int64   `json:"firstEventId,omitempty"`
+	NextEventId    *int64   `json:"nextEventId,omitempty"`
 }
 
 type _List_String_ValueList []string
@@ -699,6 +692,413 @@ func (_List_String_ValueList) ValueType() wire.Type {
 }
 
 func (_List_String_ValueList) Close() {}
+
+// ToWire translates a HistoryMetadataTaskAttributes struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryMetadataTaskAttributes) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.TargetClusters != nil {
+		w, err = wire.NewValueList(_List_String_ValueList(v.TargetClusters)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.DomainId != nil {
+		w, err = wire.NewValueString(*(v.DomainId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowId != nil {
+		w, err = wire.NewValueString(*(v.WorkflowId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunId != nil {
+		w, err = wire.NewValueString(*(v.RunId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.FirstEventId != nil {
+		w, err = wire.NewValueI64(*(v.FirstEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.NextEventId != nil {
+		w, err = wire.NewValueI64(*(v.NextEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _List_String_Read(l wire.ValueList) ([]string, error) {
+	if l.ValueType() != wire.TBinary {
+		return nil, nil
+	}
+
+	o := make([]string, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := x.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a HistoryMetadataTaskAttributes struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryMetadataTaskAttributes struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryMetadataTaskAttributes
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryMetadataTaskAttributes) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 5:
+			if field.Value.Type() == wire.TList {
+				v.TargetClusters, err = _List_String_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.FirstEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NextEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryMetadataTaskAttributes
+// struct.
+func (v *HistoryMetadataTaskAttributes) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.TargetClusters != nil {
+		fields[i] = fmt.Sprintf("TargetClusters: %v", v.TargetClusters)
+		i++
+	}
+	if v.DomainId != nil {
+		fields[i] = fmt.Sprintf("DomainId: %v", *(v.DomainId))
+		i++
+	}
+	if v.WorkflowId != nil {
+		fields[i] = fmt.Sprintf("WorkflowId: %v", *(v.WorkflowId))
+		i++
+	}
+	if v.RunId != nil {
+		fields[i] = fmt.Sprintf("RunId: %v", *(v.RunId))
+		i++
+	}
+	if v.FirstEventId != nil {
+		fields[i] = fmt.Sprintf("FirstEventId: %v", *(v.FirstEventId))
+		i++
+	}
+	if v.NextEventId != nil {
+		fields[i] = fmt.Sprintf("NextEventId: %v", *(v.NextEventId))
+		i++
+	}
+
+	return fmt.Sprintf("HistoryMetadataTaskAttributes{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_String_Equals(lhs, rhs []string) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !(lv == rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this HistoryMetadataTaskAttributes match the
+// provided HistoryMetadataTaskAttributes.
+//
+// This function performs a deep comparison.
+func (v *HistoryMetadataTaskAttributes) Equals(rhs *HistoryMetadataTaskAttributes) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.TargetClusters == nil && rhs.TargetClusters == nil) || (v.TargetClusters != nil && rhs.TargetClusters != nil && _List_String_Equals(v.TargetClusters, rhs.TargetClusters))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.DomainId, rhs.DomainId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowId, rhs.WorkflowId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunId, rhs.RunId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.FirstEventId, rhs.FirstEventId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NextEventId, rhs.NextEventId) {
+		return false
+	}
+
+	return true
+}
+
+type _List_String_Zapper []string
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_String_Zapper.
+func (l _List_String_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		enc.AppendString(v)
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryMetadataTaskAttributes.
+func (v *HistoryMetadataTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.TargetClusters != nil {
+		err = multierr.Append(err, enc.AddArray("targetClusters", (_List_String_Zapper)(v.TargetClusters)))
+	}
+	if v.DomainId != nil {
+		enc.AddString("domainId", *v.DomainId)
+	}
+	if v.WorkflowId != nil {
+		enc.AddString("workflowId", *v.WorkflowId)
+	}
+	if v.RunId != nil {
+		enc.AddString("runId", *v.RunId)
+	}
+	if v.FirstEventId != nil {
+		enc.AddInt64("firstEventId", *v.FirstEventId)
+	}
+	if v.NextEventId != nil {
+		enc.AddInt64("nextEventId", *v.NextEventId)
+	}
+	return err
+}
+
+// GetTargetClusters returns the value of TargetClusters if it is set or its
+// zero value if it is unset.
+func (v *HistoryMetadataTaskAttributes) GetTargetClusters() (o []string) {
+	if v != nil && v.TargetClusters != nil {
+		return v.TargetClusters
+	}
+
+	return
+}
+
+// IsSetTargetClusters returns true if TargetClusters is not nil.
+func (v *HistoryMetadataTaskAttributes) IsSetTargetClusters() bool {
+	return v != nil && v.TargetClusters != nil
+}
+
+// GetDomainId returns the value of DomainId if it is set or its
+// zero value if it is unset.
+func (v *HistoryMetadataTaskAttributes) GetDomainId() (o string) {
+	if v != nil && v.DomainId != nil {
+		return *v.DomainId
+	}
+
+	return
+}
+
+// IsSetDomainId returns true if DomainId is not nil.
+func (v *HistoryMetadataTaskAttributes) IsSetDomainId() bool {
+	return v != nil && v.DomainId != nil
+}
+
+// GetWorkflowId returns the value of WorkflowId if it is set or its
+// zero value if it is unset.
+func (v *HistoryMetadataTaskAttributes) GetWorkflowId() (o string) {
+	if v != nil && v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+
+	return
+}
+
+// IsSetWorkflowId returns true if WorkflowId is not nil.
+func (v *HistoryMetadataTaskAttributes) IsSetWorkflowId() bool {
+	return v != nil && v.WorkflowId != nil
+}
+
+// GetRunId returns the value of RunId if it is set or its
+// zero value if it is unset.
+func (v *HistoryMetadataTaskAttributes) GetRunId() (o string) {
+	if v != nil && v.RunId != nil {
+		return *v.RunId
+	}
+
+	return
+}
+
+// IsSetRunId returns true if RunId is not nil.
+func (v *HistoryMetadataTaskAttributes) IsSetRunId() bool {
+	return v != nil && v.RunId != nil
+}
+
+// GetFirstEventId returns the value of FirstEventId if it is set or its
+// zero value if it is unset.
+func (v *HistoryMetadataTaskAttributes) GetFirstEventId() (o int64) {
+	if v != nil && v.FirstEventId != nil {
+		return *v.FirstEventId
+	}
+
+	return
+}
+
+// IsSetFirstEventId returns true if FirstEventId is not nil.
+func (v *HistoryMetadataTaskAttributes) IsSetFirstEventId() bool {
+	return v != nil && v.FirstEventId != nil
+}
+
+// GetNextEventId returns the value of NextEventId if it is set or its
+// zero value if it is unset.
+func (v *HistoryMetadataTaskAttributes) GetNextEventId() (o int64) {
+	if v != nil && v.NextEventId != nil {
+		return *v.NextEventId
+	}
+
+	return
+}
+
+// IsSetNextEventId returns true if NextEventId is not nil.
+func (v *HistoryMetadataTaskAttributes) IsSetNextEventId() bool {
+	return v != nil && v.NextEventId != nil
+}
+
+type HistoryTaskAttributes struct {
+	TargetClusters          []string                           `json:"targetClusters,omitempty"`
+	DomainId                *string                            `json:"domainId,omitempty"`
+	WorkflowId              *string                            `json:"workflowId,omitempty"`
+	RunId                   *string                            `json:"runId,omitempty"`
+	FirstEventId            *int64                             `json:"firstEventId,omitempty"`
+	NextEventId             *int64                             `json:"nextEventId,omitempty"`
+	Version                 *int64                             `json:"version,omitempty"`
+	ReplicationInfo         map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
+	History                 *shared.History                    `json:"history,omitempty"`
+	NewRunHistory           *shared.History                    `json:"newRunHistory,omitempty"`
+	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
+	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
+	ResetWorkflow           *bool                              `json:"resetWorkflow,omitempty"`
+}
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*shared.ReplicationInfo
 
@@ -867,24 +1267,6 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _List_String_Read(l wire.ValueList) ([]string, error) {
-	if l.ValueType() != wire.TBinary {
-		return nil, nil
-	}
-
-	o := make([]string, 0, l.Size())
-	err := l.ForEach(func(x wire.Value) error {
-		i, err := x.GetString(), error(nil)
-		if err != nil {
-			return err
-		}
-		o = append(o, i)
-		return nil
-	})
-	l.Close()
-	return o, err
 }
 
 func _ReplicationInfo_Read(w wire.Value) (*shared.ReplicationInfo, error) {
@@ -1142,21 +1524,6 @@ func (v *HistoryTaskAttributes) String() string {
 	return fmt.Sprintf("HistoryTaskAttributes{%v}", strings.Join(fields[:i], ", "))
 }
 
-func _List_String_Equals(lhs, rhs []string) bool {
-	if len(lhs) != len(rhs) {
-		return false
-	}
-
-	for i, lv := range lhs {
-		rv := rhs[i]
-		if !(lv == rv) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*shared.ReplicationInfo) bool {
 	if len(lhs) != len(rhs) {
 		return false
@@ -1245,17 +1612,6 @@ func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
 	}
 
 	return true
-}
-
-type _List_String_Zapper []string
-
-// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
-// fast logging of _List_String_Zapper.
-func (l _List_String_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
-	for _, v := range l {
-		enc.AppendString(v)
-	}
-	return err
 }
 
 type _Map_String_ReplicationInfo_Zapper map[string]*shared.ReplicationInfo
@@ -1518,6 +1874,7 @@ type ReplicationTask struct {
 	HistoryTaskAttributes         *HistoryTaskAttributes         `json:"historyTaskAttributes,omitempty"`
 	SyncShardStatusTaskAttributes *SyncShardStatusTaskAttributes `json:"syncShardStatusTaskAttributes,omitempty"`
 	SyncActicvityTaskAttributes   *SyncActicvityTaskAttributes   `json:"syncActicvityTaskAttributes,omitempty"`
+	HistoryMetadataTaskAttributes *HistoryMetadataTaskAttributes `json:"historyMetadataTaskAttributes,omitempty"`
 }
 
 // ToWire translates a ReplicationTask struct into a Thrift-level intermediate
@@ -1537,7 +1894,7 @@ type ReplicationTask struct {
 //   }
 func (v *ReplicationTask) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1583,6 +1940,14 @@ func (v *ReplicationTask) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
+	if v.HistoryMetadataTaskAttributes != nil {
+		w, err = v.HistoryMetadataTaskAttributes.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -1613,6 +1978,12 @@ func _SyncShardStatusTaskAttributes_Read(w wire.Value) (*SyncShardStatusTaskAttr
 
 func _SyncActicvityTaskAttributes_Read(w wire.Value) (*SyncActicvityTaskAttributes, error) {
 	var v SyncActicvityTaskAttributes
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _HistoryMetadataTaskAttributes_Read(w wire.Value) (*HistoryMetadataTaskAttributes, error) {
+	var v HistoryMetadataTaskAttributes
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -1681,6 +2052,14 @@ func (v *ReplicationTask) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 60:
+			if field.Value.Type() == wire.TStruct {
+				v.HistoryMetadataTaskAttributes, err = _HistoryMetadataTaskAttributes_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1694,7 +2073,7 @@ func (v *ReplicationTask) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.TaskType != nil {
 		fields[i] = fmt.Sprintf("TaskType: %v", *(v.TaskType))
@@ -1714,6 +2093,10 @@ func (v *ReplicationTask) String() string {
 	}
 	if v.SyncActicvityTaskAttributes != nil {
 		fields[i] = fmt.Sprintf("SyncActicvityTaskAttributes: %v", v.SyncActicvityTaskAttributes)
+		i++
+	}
+	if v.HistoryMetadataTaskAttributes != nil {
+		fields[i] = fmt.Sprintf("HistoryMetadataTaskAttributes: %v", v.HistoryMetadataTaskAttributes)
 		i++
 	}
 
@@ -1755,6 +2138,9 @@ func (v *ReplicationTask) Equals(rhs *ReplicationTask) bool {
 	if !((v.SyncActicvityTaskAttributes == nil && rhs.SyncActicvityTaskAttributes == nil) || (v.SyncActicvityTaskAttributes != nil && rhs.SyncActicvityTaskAttributes != nil && v.SyncActicvityTaskAttributes.Equals(rhs.SyncActicvityTaskAttributes))) {
 		return false
 	}
+	if !((v.HistoryMetadataTaskAttributes == nil && rhs.HistoryMetadataTaskAttributes == nil) || (v.HistoryMetadataTaskAttributes != nil && rhs.HistoryMetadataTaskAttributes != nil && v.HistoryMetadataTaskAttributes.Equals(rhs.HistoryMetadataTaskAttributes))) {
+		return false
+	}
 
 	return true
 }
@@ -1779,6 +2165,9 @@ func (v *ReplicationTask) MarshalLogObject(enc zapcore.ObjectEncoder) (err error
 	}
 	if v.SyncActicvityTaskAttributes != nil {
 		err = multierr.Append(err, enc.AddObject("syncActicvityTaskAttributes", v.SyncActicvityTaskAttributes))
+	}
+	if v.HistoryMetadataTaskAttributes != nil {
+		err = multierr.Append(err, enc.AddObject("historyMetadataTaskAttributes", v.HistoryMetadataTaskAttributes))
 	}
 	return err
 }
@@ -1858,6 +2247,21 @@ func (v *ReplicationTask) IsSetSyncActicvityTaskAttributes() bool {
 	return v != nil && v.SyncActicvityTaskAttributes != nil
 }
 
+// GetHistoryMetadataTaskAttributes returns the value of HistoryMetadataTaskAttributes if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTask) GetHistoryMetadataTaskAttributes() (o *HistoryMetadataTaskAttributes) {
+	if v != nil && v.HistoryMetadataTaskAttributes != nil {
+		return v.HistoryMetadataTaskAttributes
+	}
+
+	return
+}
+
+// IsSetHistoryMetadataTaskAttributes returns true if HistoryMetadataTaskAttributes is not nil.
+func (v *ReplicationTask) IsSetHistoryMetadataTaskAttributes() bool {
+	return v != nil && v.HistoryMetadataTaskAttributes != nil
+}
+
 type ReplicationTaskType int32
 
 const (
@@ -1865,6 +2269,7 @@ const (
 	ReplicationTaskTypeHistory         ReplicationTaskType = 1
 	ReplicationTaskTypeSyncShardStatus ReplicationTaskType = 2
 	ReplicationTaskTypeSyncActivity    ReplicationTaskType = 3
+	ReplicationTaskTypeHistoryMetadata ReplicationTaskType = 4
 )
 
 // ReplicationTaskType_Values returns all recognized values of ReplicationTaskType.
@@ -1874,6 +2279,7 @@ func ReplicationTaskType_Values() []ReplicationTaskType {
 		ReplicationTaskTypeHistory,
 		ReplicationTaskTypeSyncShardStatus,
 		ReplicationTaskTypeSyncActivity,
+		ReplicationTaskTypeHistoryMetadata,
 	}
 }
 
@@ -1895,6 +2301,9 @@ func (v *ReplicationTaskType) UnmarshalText(value []byte) error {
 		return nil
 	case "SyncActivity":
 		*v = ReplicationTaskTypeSyncActivity
+		return nil
+	case "HistoryMetadata":
+		*v = ReplicationTaskTypeHistoryMetadata
 		return nil
 	default:
 		val, err := strconv.ParseInt(s, 10, 32)
@@ -1922,6 +2331,8 @@ func (v ReplicationTaskType) MarshalText() ([]byte, error) {
 		return []byte("SyncShardStatus"), nil
 	case 3:
 		return []byte("SyncActivity"), nil
+	case 4:
+		return []byte("HistoryMetadata"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -1941,6 +2352,8 @@ func (v ReplicationTaskType) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 		enc.AddString("name", "SyncShardStatus")
 	case 3:
 		enc.AddString("name", "SyncActivity")
+	case 4:
+		enc.AddString("name", "HistoryMetadata")
 	}
 	return nil
 }
@@ -1989,6 +2402,8 @@ func (v ReplicationTaskType) String() string {
 		return "SyncShardStatus"
 	case 3:
 		return "SyncActivity"
+	case 4:
+		return "HistoryMetadata"
 	}
 	return fmt.Sprintf("ReplicationTaskType(%d)", w)
 }
@@ -2015,6 +2430,8 @@ func (v ReplicationTaskType) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"SyncShardStatus\""), nil
 	case 3:
 		return ([]byte)("\"SyncActivity\""), nil
+	case 4:
+		return ([]byte)("\"HistoryMetadata\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }

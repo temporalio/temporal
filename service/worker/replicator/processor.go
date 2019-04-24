@@ -207,6 +207,9 @@ SubmitLoop:
 		case replicator.ReplicationTaskTypeHistory:
 			scope = metrics.HistoryReplicationTaskScope
 			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
+		case replicator.ReplicationTaskTypeHistoryMetadata:
+			scope = metrics.HistoryMetadataReplicationTaskScope
+			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
 		default:
 			logger.Error("Unknown task type.")
 			scope = metrics.ReplicatorScope
@@ -319,6 +322,12 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator
 	historyReplicationTask := newHistoryReplicationTask(task, msg, p.sourceCluster, logger,
 		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
 	return p.sequentialTaskProcessor.Submit(historyReplicationTask)
+}
+
+func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
+	historyMetadataReplicationTask := newHistoryMetadataReplicationTask(task, msg, p.sourceCluster, logger,
+		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
+	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)
 }
 
 func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {

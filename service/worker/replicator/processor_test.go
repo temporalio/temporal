@@ -349,3 +349,46 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
+
+func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_Success() {
+	replicationAttr := &replicator.HistoryMetadataTaskAttributes{
+		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+		DomainId:       common.StringPtr("some random domain ID"),
+		WorkflowId:     common.StringPtr("some random workflow ID"),
+		RunId:          common.StringPtr("some random run ID"),
+		FirstEventId:   common.Int64Ptr(728),
+		NextEventId:    common.Int64Ptr(1015),
+	}
+	replicationTask := &replicator.ReplicationTask{
+		TaskType:                      replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
+		HistoryMetadataTaskAttributes: replicationAttr,
+	}
+	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	s.Nil(err)
+	s.mockMsg.On("Value").Return(replicationTaskBinary)
+	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+
+	s.processor.decodeMsgAndSubmit(s.mockMsg)
+}
+
+func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_FailedThenSuccess() {
+	replicationAttr := &replicator.HistoryMetadataTaskAttributes{
+		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+		DomainId:       common.StringPtr("some random domain ID"),
+		WorkflowId:     common.StringPtr("some random workflow ID"),
+		RunId:          common.StringPtr("some random run ID"),
+		FirstEventId:   common.Int64Ptr(728),
+		NextEventId:    common.Int64Ptr(1015),
+	}
+	replicationTask := &replicator.ReplicationTask{
+		TaskType:                      replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
+		HistoryMetadataTaskAttributes: replicationAttr,
+	}
+	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	s.Nil(err)
+	s.mockMsg.On("Value").Return(replicationTaskBinary)
+	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(errors.New("some random error")).Once()
+	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+
+	s.processor.decodeMsgAndSubmit(s.mockMsg)
+}

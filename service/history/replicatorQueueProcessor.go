@@ -219,7 +219,28 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 		return err
 	}
 
-	return p.replicator.Publish(replicationTask)
+	err = p.replicator.Publish(replicationTask)
+	if err == messaging.ErrMessageSizeLimit {
+		// message size exceeds the server messaging size limit
+		// for this specific case, just send out a metadata message and
+		// let receiver fetch from source (for the concrete history events)
+		err = p.replicator.Publish(p.generateHistoryMetadataTask(targetClusters, task))
+	}
+	return err
+}
+
+func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistence.ReplicationTaskInfo) *replicator.ReplicationTask {
+	return &replicator.ReplicationTask{
+		TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
+		HistoryMetadataTaskAttributes: &replicator.HistoryMetadataTaskAttributes{
+			TargetClusters: targetClusters,
+			DomainId:       common.StringPtr(task.DomainID),
+			WorkflowId:     common.StringPtr(task.WorkflowID),
+			RunId:          common.StringPtr(task.RunID),
+			FirstEventId:   common.Int64Ptr(task.FirstEventID),
+			NextEventId:    common.Int64Ptr(task.NextEventID),
+		},
+	}
 }
 
 // GenerateReplicationTask generate replication task
@@ -276,6 +297,7 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 	}
 	return ret, nil
 }
+
 func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
 	response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
 		ReadLevel:    readLevel,
