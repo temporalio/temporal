@@ -363,3 +363,11 @@ func (s *esProcessorSuite) TestIsResponseRetriable() {
 		s.True(isResponseRetriable(code))
 	}
 }
+
+func (s *esProcessorSuite) TestGetErrorMsgFromESResp() {
+	reason := "error reason"
+	resp := &elastic.BulkResponseItem{Status: 400}
+	s.Equal("", getErrorMsgFromESResp(resp))
+	resp.Error = &elastic.ErrorDetails{Reason: reason}
+	s.Equal(reason, getErrorMsgFromESResp(resp))
+}

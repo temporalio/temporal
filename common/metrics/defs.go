@@ -1267,6 +1267,8 @@ const (
 	ReplicatorFailures
 	ReplicatorMessagesDropped
 	ReplicatorLatency
+	ESProcessorRequests
+	ESProcessorRetries
 	ESProcessorFailures
 	ESProcessorCorruptedData
 	IndexProcessorCorruptedData
@@ -1492,6 +1494,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicatorFailures:                                     {metricName: "replicator_errors"},
 		ReplicatorMessagesDropped:                              {metricName: "replicator_messages_dropped"},
 		ReplicatorLatency:                                      {metricName: "replicator_latency"},
+		ESProcessorRequests:                                    {metricName: "es_processor_requests"},
+		ESProcessorRetries:                                     {metricName: "es_processor_retries"},
 		ESProcessorFailures:                                    {metricName: "es_processor_errors"},
 		ESProcessorCorruptedData:                               {metricName: "es_processor_corrupted_data"},
 		IndexProcessorCorruptedData:                            {metricName: "index_processor_corrupted_data"},

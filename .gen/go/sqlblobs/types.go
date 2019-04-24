@@ -27,12 +27,11 @@ import (
 	bytes "bytes"
 	base64 "encoding/base64"
 	fmt "fmt"
-	strings "strings"
-
 	shared "github.com/uber/cadence/.gen/go/shared"
 	multierr "go.uber.org/multierr"
 	wire "go.uber.org/thriftrw/wire"
 	zapcore "go.uber.org/zap/zapcore"
+	strings "strings"
 )
 
 type ActivityInfo struct {

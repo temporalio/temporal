@@ -107,6 +107,7 @@ func (c *elasticWrapper) RunBulkProcessor(ctx context.Context, p *BulkProcessorP
 		BulkSize(p.BulkSize).
 		FlushInterval(p.FlushInterval).
 		Backoff(p.Backoff).
+		Before(p.BeforeFunc).
 		After(p.AfterFunc).
 		Do(ctx)
 }

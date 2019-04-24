@@ -481,11 +481,21 @@ func ScheduleAttempt(scheduleAttempt int64) Tag {
 	return newInt64("schedule-attempt", scheduleAttempt)
 }
 
-// ElastiSearch
+// ElasticSearch
 
 // ESRequest returns tag for ESRequest
 func ESRequest(ESRequest string) Tag {
 	return newStringTag("es-request", ESRequest)
+}
+
+// ESResponseStatus returns tag for ESResponse status
+func ESResponseStatus(status int) Tag {
+	return newInt("es-response-status", status)
+}
+
+// ESResponseError returns tag for ESResponse error
+func ESResponseError(msg string) Tag {
+	return newStringTag("es-response-error", msg)
 }
 
 // ESKey returns tag for ESKey

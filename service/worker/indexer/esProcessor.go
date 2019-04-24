@@ -90,6 +90,7 @@ func NewESProcessorAndStart(config *Config, client es.Client, processorName stri
 		BulkSize:      config.ESProcessorBulkSize(),
 		FlushInterval: config.ESProcessorFlushInterval(),
 		Backoff:       elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval),
+		BeforeFunc:    p.bulkBeforeAction,
 		AfterFunc:     p.bulkAfterAction,
 	}
 	processor, err := client.RunBulkProcessor(context.Background(), params)
@@ -120,6 +121,11 @@ func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafka
 	p.processor.Add(request)
 }
 
+// bulkBeforeAction is triggered before bulk processor commit
+func (p *esProcessorImpl) bulkBeforeAction(executionId int64, requests []elastic.BulkableRequest) {
+	p.metricsClient.AddCounter(metrics.ESProcessorScope, metrics.ESProcessorRequests, int64(len(requests)))
+}
+
 // bulkAfterAction is triggered after bulk processor commit
 func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
@@ -129,7 +135,6 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
-
 			p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorFailures)
 		}
 		return
@@ -147,9 +152,12 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 			case isResponseSuccess(resp.Status):
 				p.ackKafkaMsg(key)
 			case !isResponseRetriable(resp.Status):
+				p.logger.Error("ES request failed.",
+					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)))
 				p.nackKafkaMsg(key)
-			default:
-				// do nothing, bulk processor will retry
+			default: // bulk processor will retry
+				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
+				p.metricsClient.IncCounter(metrics.ESProcessorScope, metrics.ESProcessorRetries)
 			}
 		}
 	}
@@ -261,4 +269,12 @@ func isResponseRetriable(status int) bool {
 		return true
 	}
 	return false
+}
+
+func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
+	var errMsg string
+	if resp.Error != nil {
+		errMsg = resp.Error.Reason
+	}
+	return errMsg
 }
