@@ -20,12 +20,13 @@
 
 package history
 
-import "github.com/stretchr/testify/mock"
+import (
+	"context"
 
-import "context"
-
-import h "github.com/uber/cadence/.gen/go/history"
-import workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/stretchr/testify/mock"
+	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+)
 
 type mockWorkflowResetor struct {
 	mock.Mock
@@ -34,12 +35,16 @@ type mockWorkflowResetor struct {
 var _ workflowResetor = (*mockWorkflowResetor)(nil)
 
 // ResetWorkflowExecution provides a mock function with given fields: ctx, resetRequest
-func (_m *mockWorkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *h.ResetWorkflowExecutionRequest) (*workflow.ResetWorkflowExecutionResponse, error) {
+func (_m *mockWorkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *workflow.ResetWorkflowExecutionRequest,
+	baseContext workflowExecutionContext, baseMutableState mutableState,
+	currContext workflowExecutionContext, currMutableState mutableState) (*workflow.ResetWorkflowExecutionResponse, error) {
 	ret := _m.Called(ctx, resetRequest)
 
 	var r0 *workflow.ResetWorkflowExecutionResponse
-	if rf, ok := ret.Get(0).(func(context.Context, *h.ResetWorkflowExecutionRequest) *workflow.ResetWorkflowExecutionResponse); ok {
-		r0 = rf(ctx, resetRequest)
+	if rf, ok := ret.Get(0).(func(context.Context, *workflow.ResetWorkflowExecutionRequest,
+		workflowExecutionContext, mutableState,
+		workflowExecutionContext, mutableState) *workflow.ResetWorkflowExecutionResponse); ok {
+		r0 = rf(ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*workflow.ResetWorkflowExecutionResponse)
@@ -47,8 +52,10 @@ func (_m *mockWorkflowResetor) ResetWorkflowExecution(ctx context.Context, reset
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *h.ResetWorkflowExecutionRequest) error); ok {
-		r1 = rf(ctx, resetRequest)
+	if rf, ok := ret.Get(1).(func(context.Context, *workflow.ResetWorkflowExecutionRequest,
+		workflowExecutionContext, mutableState,
+		workflowExecutionContext, mutableState) error); ok {
+		r1 = rf(ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
 	} else {
 		r1 = ret.Error(1)
 	}

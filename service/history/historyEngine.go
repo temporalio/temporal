@@ -2677,8 +2677,90 @@ func (e *historyEngineImpl) SyncActivity(ctx context.Context, request *h.SyncAct
 	return e.replicator.SyncActivity(ctx, request)
 }
 
-func (e *historyEngineImpl) ResetWorkflowExecution(ctx context.Context, resetRequest *h.ResetWorkflowExecutionRequest) (response *workflow.ResetWorkflowExecutionResponse, retError error) {
-	return e.resetor.ResetWorkflowExecution(ctx, resetRequest)
+func (e *historyEngineImpl) ResetWorkflowExecution(ctx context.Context,
+	resetRequest *h.ResetWorkflowExecutionRequest) (response *workflow.ResetWorkflowExecutionResponse, retError error) {
+
+	domainEntry, retError := e.getActiveDomainEntry(resetRequest.DomainUUID)
+	if retError != nil {
+		return
+	}
+	domainID := domainEntry.GetInfo().ID
+
+	request := resetRequest.ResetRequest
+	if request == nil || request.WorkflowExecution == nil || len(request.WorkflowExecution.GetRunId()) == 0 || len(request.WorkflowExecution.GetWorkflowId()) == 0 {
+		retError = &workflow.BadRequestError{
+			Message: fmt.Sprintf("Require workflowId and runId."),
+		}
+		return
+	}
+	if request.GetDecisionFinishEventId() <= common.FirstEventID {
+		retError = &workflow.BadRequestError{
+			Message: fmt.Sprintf("Decision finish ID must be > 1."),
+		}
+		return
+	}
+	baseExecution := workflow.WorkflowExecution{
+		WorkflowId: request.WorkflowExecution.WorkflowId,
+		RunId:      request.WorkflowExecution.RunId,
+	}
+
+	baseContext, baseRelease, retError := e.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, baseExecution)
+	if retError != nil {
+		return
+	}
+	defer func() { baseRelease(retError) }()
+
+	baseMutableState, retError := baseContext.loadWorkflowExecution()
+	if retError != nil {
+		return
+	}
+
+	// also load the current run of the workflow, it can be different from the base runID
+	resp, retError := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: request.WorkflowExecution.GetWorkflowId(),
+	})
+	if retError != nil {
+		return
+	}
+
+	var currMutableState mutableState
+	var currContext workflowExecutionContext
+	var currExecution workflow.WorkflowExecution
+	if resp.RunID == baseExecution.GetRunId() {
+		currContext = baseContext
+		currMutableState = baseMutableState
+		currExecution = baseExecution
+	} else {
+		currExecution = workflow.WorkflowExecution{
+			WorkflowId: request.WorkflowExecution.WorkflowId,
+			RunId:      common.StringPtr(resp.RunID),
+		}
+		var currRelease func(err error)
+		currContext, currRelease, retError = e.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, currExecution)
+		if retError != nil {
+			return
+		}
+		defer func() { currRelease(retError) }()
+		currMutableState, retError = currContext.loadWorkflowExecution()
+		if retError != nil {
+			return
+		}
+	}
+
+	// dedup by requestID
+	if currMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestId() {
+		response = &workflow.ResetWorkflowExecutionResponse{
+			RunId: currExecution.RunId,
+		}
+		e.logger.Info("Duplicated reset request",
+			tag.WorkflowID(currExecution.GetWorkflowId()),
+			tag.WorkflowRunID(currExecution.GetRunId()),
+			tag.WorkflowDomainID(domainID))
+		return
+	}
+
+	return e.resetor.ResetWorkflowExecution(ctx, request, baseContext, baseMutableState, currContext, currMutableState)
 }
 
 func (e *historyEngineImpl) DeleteExecutionFromVisibility(task *persistence.TimerTaskInfo) error {
