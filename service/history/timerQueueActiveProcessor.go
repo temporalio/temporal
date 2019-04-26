@@ -519,12 +519,11 @@ Update_History_Loop:
 			}
 		case int(workflow.TimeoutTypeScheduleToStart):
 			t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
-			// decision schedule to start timeout only apply to sticky decision
 			// check if scheduled decision still pending and not started yet
-			if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID && msBuilder.IsStickyTaskListEnabled() {
+			if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID {
 				timeoutEvent := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 				if timeoutEvent == nil {
-					// Unable to add DecisionTaskTimedout event to history
+					// Unable to add DecisionTaskTimeout event to history
 					return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskScheduleToStartTimeout event to history."}
 				}
 

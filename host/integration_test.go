@@ -2945,6 +2945,175 @@ WaitForStickyTimeoutLoop:
 	s.printWorkflowHistory(s.domainName, workflowExecution)
 }
 
+func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
+	id := "interation-reset-sticky-fire-schedule-to-start-timeout"
+	wt := "interation-reset-sticky-fire-schedule-to-start-timeout-type"
+	tl := "interation-reset-sticky-fire-schedule-to-start-timeout-tasklist"
+	stl := "interation-reset-sticky-fire-schedule-to-start-timeout-tasklist-sticky"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	stickyTaskList := &workflow.TaskList{}
+	stickyTaskList.Name = common.StringPtr(stl)
+	stickyScheduleToStartTimeoutSeconds := common.Int32Ptr(2)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	workflowExecution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      we.RunId,
+	}
+
+	// decider logic
+	localActivityDone := false
+	failureCount := 5
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !localActivityDone {
+			localActivityDone = true
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRecordMarker),
+				RecordMarkerDecisionAttributes: &workflow.RecordMarkerDecisionAttributes{
+					MarkerName: common.StringPtr("local activity marker"),
+					Details:    []byte("local activity data"),
+				},
+			}}, nil
+		}
+
+		if failureCount > 0 {
+			failureCount--
+			return nil, nil, errors.New("non deterministic error")
+		}
+
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:                              s.engine,
+		Domain:                              s.domainName,
+		TaskList:                            taskList,
+		Identity:                            identity,
+		DecisionHandler:                     dtHandler,
+		Logger:                              s.Logger,
+		T:                                   s.T(),
+		StickyTaskList:                      stickyTaskList,
+		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
+	}
+
+	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
+	s.Logger.Info("PollAndProcessDecisionTask: %v", tag.Error(err))
+	s.Nil(err)
+
+	err = s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain:            common.StringPtr(s.domainName),
+		WorkflowExecution: workflowExecution,
+		SignalName:        common.StringPtr("signalA"),
+		Input:             []byte("signal input"),
+		Identity:          common.StringPtr(identity),
+		RequestId:         common.StringPtr(uuid.New()),
+	})
+
+	//Reset sticky tasklist before sticky decision task starts
+	s.engine.ResetStickyTaskList(createContext(), &workflow.ResetStickyTaskListRequest{
+		Domain:    common.StringPtr(s.domainName),
+		Execution: workflowExecution,
+	})
+
+	// Wait for decision timeout
+	stickyTimeout := false
+WaitForStickyTimeoutLoop:
+	for i := 0; i < 10; i++ {
+		events := s.getHistory(s.domainName, workflowExecution)
+		for _, event := range events {
+			if event.GetEventType() == workflow.EventTypeDecisionTaskTimedOut {
+				s.Equal(workflow.TimeoutTypeScheduleToStart, event.DecisionTaskTimedOutEventAttributes.GetTimeoutType())
+				stickyTimeout = true
+				break WaitForStickyTimeoutLoop
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	s.True(stickyTimeout, "Decision not timed out.")
+
+	for i := 0; i < 3; i++ {
+		_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(i))
+		s.Logger.Info("PollAndProcessDecisionTask: %v", tag.Error(err))
+		s.Nil(err)
+	}
+
+	err = s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain:            common.StringPtr(s.domainName),
+		WorkflowExecution: workflowExecution,
+		SignalName:        common.StringPtr("signalB"),
+		Input:             []byte("signal input"),
+		Identity:          common.StringPtr(identity),
+		RequestId:         common.StringPtr(uuid.New()),
+	})
+	s.Nil(err)
+
+	for i := 0; i < 2; i++ {
+		_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(i))
+		s.Logger.Info("PollAndProcessDecisionTask: %v", tag.Error(err))
+		s.Nil(err)
+	}
+
+	decisionTaskFailed := false
+	events := s.getHistory(s.domainName, workflowExecution)
+	for _, event := range events {
+		if event.GetEventType() == workflow.EventTypeDecisionTaskFailed {
+			decisionTaskFailed = true
+			break
+		}
+	}
+	s.True(decisionTaskFailed)
+
+	// Complete workflow execution
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(2))
+
+	// Assert for single decision task failed and workflow completion
+	failedDecisions := 0
+	workflowComplete := false
+	events = s.getHistory(s.domainName, workflowExecution)
+	for _, event := range events {
+		switch event.GetEventType() {
+		case workflow.EventTypeDecisionTaskFailed:
+			failedDecisions++
+		case workflow.EventTypeWorkflowExecutionCompleted:
+			workflowComplete = true
+		}
+	}
+	s.True(workflowComplete, "Workflow not complete")
+	s.Equal(2, failedDecisions, "Mismatched failed decision count")
+	s.printWorkflowHistory(s.domainName, workflowExecution)
+}
+
 func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	id := "interation-buffered-events-out-of-order-test"
 	wt := "interation-buffered-events-out-of-order-test-type"
