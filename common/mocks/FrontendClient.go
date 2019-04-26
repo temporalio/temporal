@@ -269,6 +269,36 @@ func (_m *FrontendClient) ListOpenWorkflowExecutions(ctx context.Context, ListRe
 	return r0, r1
 }
 
+// ListWorkflowExecutions provides a mock function with given fields: ctx, ListRequest, opts
+func (_m *FrontendClient) ListWorkflowExecutions(ctx context.Context, ListRequest *shared.ListWorkflowExecutionsRequest, opts ...yarpc.CallOption) (*shared.ListWorkflowExecutionsResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, ListRequest)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	var r0 *shared.ListWorkflowExecutionsResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *shared.ListWorkflowExecutionsRequest, ...yarpc.CallOption) *shared.ListWorkflowExecutionsResponse); ok {
+		r0 = rf(ctx, ListRequest, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.ListWorkflowExecutionsResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *shared.ListWorkflowExecutionsRequest, ...yarpc.CallOption) error); ok {
+		r1 = rf(ctx, ListRequest, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // PollForActivityTask provides a mock function with given fields: ctx, PollRequest, opts
 func (_m *FrontendClient) PollForActivityTask(ctx context.Context, PollRequest *shared.PollForActivityTaskRequest, opts ...yarpc.CallOption) (*shared.PollForActivityTaskResponse, error) {
 	_va := make([]interface{}, len(opts))

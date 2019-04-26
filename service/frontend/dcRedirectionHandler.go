@@ -211,6 +211,24 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ListOpenWorkflowExecutions(ctx, request)
 }
 
+// ListWorkflowExecutions API call
+func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
+	ctx context.Context,
+	request *shared.ListWorkflowExecutionsRequest,
+) (*shared.ListWorkflowExecutionsResponse, error) {
+
+	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
+	if err != nil {
+		return nil, err
+	}
+
+	if targetDC == handler.currentClusterName {
+		return handler.frontendHandler.ListWorkflowExecutions(ctx, request)
+	}
+
+	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ListWorkflowExecutions(ctx, request)
+}
+
 // PollForActivityTask API call
 func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 	ctx context.Context,

@@ -142,3 +142,11 @@ ignored = ["github.com/uber/cadence/.gen"]
 [[constraint]]
   name = "github.com/hashicorp/go-version.git"
   version = "1.1.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/cch123/elasticsql"
+
+[[constraint]]
+  name = "github.com/valyala/fastjson"
+  version = "1.4.1"

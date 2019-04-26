@@ -158,6 +158,14 @@ func (v *visibilityManagerImpl) DeleteWorkflowExecution(request *VisibilityDelet
 	return v.persistence.DeleteWorkflowExecution(request)
 }
 
+func (v *visibilityManagerImpl) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
+	internalResp, err := v.persistence.ListWorkflowExecutions(request)
+	if err != nil {
+		return nil, err
+	}
+	return v.convertInternalListResponse(internalResp), nil
+}
+
 func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *InternalGetClosedWorkflowExecutionResponse) *GetClosedWorkflowExecutionResponse {
 	if internalResp == nil {
 		return nil

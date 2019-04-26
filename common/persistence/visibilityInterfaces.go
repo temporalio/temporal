@@ -75,6 +75,17 @@ type (
 		NextPageToken []byte
 	}
 
+	// ListWorkflowExecutionsRequestV2 is used to list executions in a domain
+	ListWorkflowExecutionsRequestV2 struct {
+		DomainUUID string
+		Domain     string // domain name is not persisted, but used as config filter key
+		PageSize   int    // Maximum number of workflow executions per page
+		// Token to continue reading next page of workflow executions.
+		// Pass in empty slice for first page.
+		NextPageToken []byte
+		Query         string
+	}
+
 	// ListWorkflowExecutionsResponse is the response to ListWorkflowExecutionsRequest
 	ListWorkflowExecutionsResponse struct {
 		Executions []*s.WorkflowExecutionInfo
@@ -139,5 +150,11 @@ type (
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
+		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 	}
 )
+
+// NewOperationNotSupportErrorForVis create error for operation not support in visibility
+func NewOperationNotSupportErrorForVis() error {
+	return &s.BadRequestError{Message: "Operation not support. Please use on ElasticSearch"}
+}

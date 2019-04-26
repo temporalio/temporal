@@ -24,11 +24,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
 	"github.com/pkg/errors"
-
 	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -38,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/valyala/fastjson"
 )
 
 const (
@@ -318,6 +322,107 @@ func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteW
 	return v.producer.Publish(msg)
 }
 
+func (v *esVisibilityStore) ListWorkflowExecutions(
+	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
+
+	if request.PageSize == 0 {
+		request.PageSize = 1000
+	}
+
+	token, err := v.getNextPageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	queryDSL, isOpen, err := getESQueryDSL(request, token)
+	if err != nil {
+		return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
+	}
+
+	ctx := context.Background()
+	searchResult, err := v.esClient.SearchWithDSL(ctx, v.index, queryDSL)
+	if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ListWorkflowExecutions failed. Error: %v", err),
+		}
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
+}
+
+const (
+	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
+	jsonSortForOpen        = `[{"StartTime":"desc"},{"WorkflowID":"desc"}]`
+	jsonSortForClose       = `[{"CloseTime":"desc"},{"WorkflowID":"desc"}]`
+	jsonSortWithTieBreaker = `{"WorkflowID":"desc"}`
+
+	dslFieldSort        = "sort"
+	dslFieldSearchAfter = "search_after"
+	dslFieldFrom        = "from"
+)
+
+func getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, bool, error) {
+	sql := getSQLFromRequest(request)
+	dslStr, _, err := elasticsql.Convert(sql)
+	if err != nil {
+		return "", false, err
+	}
+
+	dsl := fastjson.MustParse(dslStr) // dsl.String() will be a compact json without spaces
+	isOpen := strings.Contains(dsl.String(), jsonMissingCloseTime)
+	if isOpen {
+		dsl = replaceQueryForOpen(dsl)
+	}
+	isSorted := dsl.Exists(dslFieldSort)
+	if !isSorted { // set default sorting
+		if isOpen {
+			dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForOpen))
+		} else {
+			dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForClose))
+		}
+	} else {
+		// add WorkflowID as tie-breaker
+		dsl.Get(dslFieldSort).Set("1", fastjson.MustParse(jsonSortWithTieBreaker))
+	}
+
+	if shouldSearchAfter(token) {
+		dsl.Set(dslFieldSearchAfter, fastjson.MustParse(getValueOfSearchAfterInJSON(token)))
+	} else { // use from+size
+		dsl.Set(dslFieldFrom, fastjson.MustParse(strconv.Itoa(token.From)))
+	}
+
+	return dsl.String(), isOpen, nil
+}
+
+func getSQLFromRequest(request *p.ListWorkflowExecutionsRequestV2) string {
+	var sql string
+	if strings.TrimSpace(request.Query) == "" {
+		sql = fmt.Sprintf("select * from dumy limit %d", request.PageSize)
+	} else {
+		sql = fmt.Sprintf("select * from dumy where %s limit %d", request.Query, request.PageSize)
+	}
+	return sql
+}
+
+// ES v6 only accepts "must_not exists" query instead of "missing" query, but elasticsql will produce "missing",
+// so use this func to replace.
+// Note it also means a temp limitation that we cannot support field missing search
+func replaceQueryForOpen(dsl *fastjson.Value) *fastjson.Value {
+	re := regexp.MustCompile(`(,)?` + jsonMissingCloseTime + `(,)?`)
+	newDslStr := re.ReplaceAllString(dsl.String(), "")
+	dsl = fastjson.MustParse(newDslStr)
+	dsl.Get("query").Get("bool").Set("must_not", fastjson.MustParse(`{"exists": {"field": "CloseTime"}}`))
+	return dsl
+}
+
+func shouldSearchAfter(token *esVisibilityPageToken) bool {
+	return token.SortTime != 0 && token.TieBreaker != ""
+}
+
+func getValueOfSearchAfterInJSON(token *esVisibilityPageToken) string {
+	return fmt.Sprintf(`[%v, "%s"]`, token.SortTime, token.TieBreaker)
+}
+
 func (v *esVisibilityStore) checkProducer() {
 	if v.producer == nil {
 		// must be bug, check history setup
@@ -379,7 +484,7 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	}
 	params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.RunID).Desc())
 
-	if token.SortTime != 0 && token.TieBreaker != "" {
+	if shouldSearchAfter(token) {
 		params.SearchAfter = []interface{}{token.SortTime, token.TieBreaker}
 	}
 

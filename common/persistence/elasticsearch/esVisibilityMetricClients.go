@@ -189,6 +189,20 @@ func (p *visibilityMetricsClient) GetClosedWorkflowExecution(request *p.GetClose
 	return response, err
 }
 
+func (p *visibilityMetricsClient) ListWorkflowExecutions(request *p.ListWorkflowExecutionsRequestV2) (*p.ListWorkflowExecutionsResponse, error) {
+	p.metricClient.IncCounter(metrics.ElasticsearchListWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+
+	sw := p.metricClient.StartTimer(metrics.ElasticsearchListWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	response, err := p.persistence.ListWorkflowExecutions(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.ElasticsearchListWorkflowExecutionsScope, err)
+	}
+
+	return response, err
+}
+
 func (p *visibilityMetricsClient) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	return nil // not applicable for elastic search, which relies on retention policies for deletion
 }

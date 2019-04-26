@@ -324,6 +324,39 @@ func (mr *_MockClientRecorder) ListOpenWorkflowExecutions(
 	return mr.mock.ctrl.RecordCall(mr.mock, "ListOpenWorkflowExecutions", args...)
 }
 
+// ListWorkflowExecutions responds to a ListWorkflowExecutions call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ListWorkflowExecutions(gomock.Any(), ...).Return(...)
+// 	... := client.ListWorkflowExecutions(...)
+func (m *MockClient) ListWorkflowExecutions(
+	ctx context.Context,
+	_ListRequest *shared.ListWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListWorkflowExecutionsResponse, err error) {
+
+	args := []interface{}{ctx, _ListRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ListWorkflowExecutions", args...)
+	success, _ = ret[i].(*shared.ListWorkflowExecutionsResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ListWorkflowExecutions(
+	ctx interface{},
+	_ListRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ListRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ListWorkflowExecutions", args...)
+}
+
 // PollForActivityTask responds to a PollForActivityTask call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

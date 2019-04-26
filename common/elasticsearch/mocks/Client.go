@@ -76,3 +76,26 @@ func (_m *Client) Search(ctx context.Context, p *elasticsearch.SearchParameters)
 
 	return r0, r1
 }
+
+// SearchWithDSL provides a mock function with given fields: ctx, index, query
+func (_m *Client) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
+	ret := _m.Called(ctx, index, query)
+
+	var r0 *elastic.SearchResult
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) *elastic.SearchResult); ok {
+		r0 = rf(ctx, index, query)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*elastic.SearchResult)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, index, query)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}

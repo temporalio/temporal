@@ -80,6 +80,8 @@ type (
 	}
 )
 
+const defaultTestValueOfESIndexMaxResultWindow = 5
+
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 	clusterInfo := options.ClusterInfo
@@ -123,7 +125,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 		visConfig := &config.VisibilityConfig{
 			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByDomain(2000),
-			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(100),
+			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
 		}
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, visProducer, visConfig, logger)
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)

@@ -74,6 +74,11 @@ type Interface interface {
 		ListRequest *shared.ListOpenWorkflowExecutionsRequest,
 	) (*shared.ListOpenWorkflowExecutionsResponse, error)
 
+	ListWorkflowExecutions(
+		ctx context.Context,
+		ListRequest *shared.ListWorkflowExecutionsRequest,
+	) (*shared.ListWorkflowExecutionsResponse, error)
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *shared.PollForActivityTaskRequest,
@@ -286,6 +291,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.ListOpenWorkflowExecutions),
 				},
 				Signature:    "ListOpenWorkflowExecutions(ListRequest *shared.ListOpenWorkflowExecutionsRequest) (*shared.ListOpenWorkflowExecutionsResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "ListWorkflowExecutions",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ListWorkflowExecutions),
+				},
+				Signature:    "ListWorkflowExecutions(ListRequest *shared.ListWorkflowExecutionsRequest) (*shared.ListWorkflowExecutionsResponse)",
 				ThriftModule: cadence.ThriftModule,
 			},
 
@@ -544,7 +560,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 31)
+	procedures := make([]transport.Procedure, 0, 32)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -694,6 +710,25 @@ func (h handler) ListOpenWorkflowExecutions(ctx context.Context, body wire.Value
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_ListOpenWorkflowExecutions_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ListWorkflowExecutions(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_ListWorkflowExecutions_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.ListWorkflowExecutions(ctx, args.ListRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_ListWorkflowExecutions_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

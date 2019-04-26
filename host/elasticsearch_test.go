@@ -25,7 +25,9 @@ package host
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
+	"strconv"
 	"testing"
 	"time"
 
@@ -118,6 +120,161 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
+}
+
+func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
+	id := "es-integration-list-workflow-test"
+	wt := "es-integration-list-workflow-test-type"
+	tl := "es-integration-list-workflow-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+
+	var openExecution *workflow.WorkflowExecutionInfo
+	for i := 0; i < 20; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), &workflow.ListWorkflowExecutionsRequest{
+			Domain:   common.StringPtr(s.domainName),
+			PageSize: common.Int32Ptr(100),
+			Query:    common.StringPtr(fmt.Sprintf(`WorkflowID = "%s"`, id)),
+		})
+		s.Nil(err)
+		if len(resp.GetExecutions()) == 1 {
+			openExecution = resp.GetExecutions()[0]
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.NotNil(openExecution)
+	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
+}
+
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
+	id := "es-integration-list-workflow-token-test"
+	wt := "es-integration-list-workflow-token-test-type"
+	tl := "es-integration-list-workflow-token-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	numOfWorkflows := defaultTestValueOfESIndexMaxResultWindow - 1 // == 4
+	pageSize := 3
+
+	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt)
+}
+
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
+	id := "es-integration-list-workflow-searchAfter-test"
+	wt := "es-integration-list-workflow-searchAfter-test-type"
+	tl := "es-integration-list-workflow-searchAfter-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	numOfWorkflows := defaultTestValueOfESIndexMaxResultWindow + 1 // == 6
+	pageSize := 4
+
+	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt)
+}
+
+func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
+	startRequest *workflow.StartWorkflowExecutionRequest, wid, wType string) {
+
+	// start enough number of workflows so that list will use search after
+	for i := 0; i < numOfWorkflows; i++ {
+		startRequest.RequestId = common.StringPtr(uuid.New())
+		startRequest.WorkflowId = common.StringPtr(wid + strconv.Itoa(i))
+		_, err := s.engine.StartWorkflowExecution(createContext(), startRequest)
+		s.Nil(err)
+	}
+
+	var openExecutions []*workflow.WorkflowExecutionInfo
+	var nextPageToken []byte
+
+	listRequest := &workflow.ListWorkflowExecutionsRequest{
+		Domain:        common.StringPtr(s.domainName),
+		PageSize:      common.Int32Ptr(int32(pageSize)),
+		NextPageToken: nextPageToken,
+		Query:         common.StringPtr(fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wType)),
+	}
+	// test first page
+	for i := 0; i < 20; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if len(resp.GetExecutions()) == pageSize {
+			openExecutions = resp.GetExecutions()
+			nextPageToken = resp.NextPageToken
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.NotNil(openExecutions)
+	s.NotNil(nextPageToken)
+	s.True(len(nextPageToken) > 0)
+
+	// test last page
+	listRequest.NextPageToken = nextPageToken
+	inIf := false
+	for i := 0; i < 20; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if len(resp.GetExecutions()) == numOfWorkflows-pageSize {
+			inIf = true
+			openExecutions = resp.GetExecutions()
+			nextPageToken = resp.NextPageToken
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.True(inIf)
+	s.NotNil(openExecutions)
+	s.Nil(nextPageToken)
 }
 
 func (s *elasticsearchIntegrationSuite) createESClient() {

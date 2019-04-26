@@ -84,6 +84,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.ListOpenWorkflowExecutionsResponse, error)
 
+	ListWorkflowExecutions(
+		ctx context.Context,
+		ListRequest *shared.ListWorkflowExecutionsRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.ListWorkflowExecutionsResponse, error)
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *shared.PollForActivityTaskRequest,
@@ -428,6 +434,29 @@ func (c client) ListOpenWorkflowExecutions(
 	}
 
 	success, err = cadence.WorkflowService_ListOpenWorkflowExecutions_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ListWorkflowExecutions(
+	ctx context.Context,
+	_ListRequest *shared.ListWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListWorkflowExecutionsResponse, err error) {
+
+	args := cadence.WorkflowService_ListWorkflowExecutions_Helper.Args(_ListRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_ListWorkflowExecutions_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_ListWorkflowExecutions_Helper.UnwrapResponse(&result)
 	return
 }
 

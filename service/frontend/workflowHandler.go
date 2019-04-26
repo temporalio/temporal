@@ -2415,6 +2415,61 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	return resp, nil
 }
 
+// ListWorkflowExecutions - retrieves info for workflow executions in a domain
+func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listRequest *gen.ListWorkflowExecutionsRequest) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope := wh.metricsClient.Scope(metrics.FrontendListOpenWorkflowExecutionsScope)
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if listRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if listRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if listRequest.GetPageSize() <= 0 {
+		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
+	}
+
+	domain := listRequest.GetDomain()
+	domainID, err := wh.domainCache.GetDomainID(domain)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// add domain tag to scope, so further metrics will have the domain tag
+	scope = scope.Tagged(metrics.DomainTag(domain))
+
+	req := &persistence.ListWorkflowExecutionsRequestV2{
+		DomainUUID:    domainID,
+		Domain:        domain,
+		PageSize:      int(listRequest.GetPageSize()),
+		NextPageToken: listRequest.NextPageToken,
+		Query:         listRequest.GetQuery(),
+	}
+	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(req)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	resp = &gen.ListWorkflowExecutionsResponse{}
+	resp.Executions = persistenceResp.Executions
+	resp.NextPageToken = persistenceResp.NextPageToken
+	return resp, nil
+}
+
 // ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
 func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest *gen.ResetStickyTaskListRequest) (resp *gen.ResetStickyTaskListResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)

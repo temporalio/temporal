@@ -22273,6 +22273,452 @@ func (v *ListOpenWorkflowExecutionsResponse) IsSetNextPageToken() bool {
 	return v != nil && v.NextPageToken != nil
 }
 
+type ListWorkflowExecutionsRequest struct {
+	Domain        *string `json:"domain,omitempty"`
+	PageSize      *int32  `json:"pageSize,omitempty"`
+	NextPageToken []byte  `json:"nextPageToken,omitempty"`
+	Query         *string `json:"query,omitempty"`
+}
+
+// ToWire translates a ListWorkflowExecutionsRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ListWorkflowExecutionsRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.PageSize != nil {
+		w, err = wire.NewValueI32(*(v.PageSize)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.Query != nil {
+		w, err = wire.NewValueString(*(v.Query)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ListWorkflowExecutionsRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ListWorkflowExecutionsRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ListWorkflowExecutionsRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ListWorkflowExecutionsRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.PageSize = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Query = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ListWorkflowExecutionsRequest
+// struct.
+func (v *ListWorkflowExecutionsRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [4]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.PageSize != nil {
+		fields[i] = fmt.Sprintf("PageSize: %v", *(v.PageSize))
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+	if v.Query != nil {
+		fields[i] = fmt.Sprintf("Query: %v", *(v.Query))
+		i++
+	}
+
+	return fmt.Sprintf("ListWorkflowExecutionsRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ListWorkflowExecutionsRequest match the
+// provided ListWorkflowExecutionsRequest.
+//
+// This function performs a deep comparison.
+func (v *ListWorkflowExecutionsRequest) Equals(rhs *ListWorkflowExecutionsRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.PageSize, rhs.PageSize) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Query, rhs.Query) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ListWorkflowExecutionsRequest.
+func (v *ListWorkflowExecutionsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Domain != nil {
+		enc.AddString("domain", *v.Domain)
+	}
+	if v.PageSize != nil {
+		enc.AddInt32("pageSize", *v.PageSize)
+	}
+	if v.NextPageToken != nil {
+		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	if v.Query != nil {
+		enc.AddString("query", *v.Query)
+	}
+	return err
+}
+
+// GetDomain returns the value of Domain if it is set or its
+// zero value if it is unset.
+func (v *ListWorkflowExecutionsRequest) GetDomain() (o string) {
+	if v != nil && v.Domain != nil {
+		return *v.Domain
+	}
+
+	return
+}
+
+// IsSetDomain returns true if Domain is not nil.
+func (v *ListWorkflowExecutionsRequest) IsSetDomain() bool {
+	return v != nil && v.Domain != nil
+}
+
+// GetPageSize returns the value of PageSize if it is set or its
+// zero value if it is unset.
+func (v *ListWorkflowExecutionsRequest) GetPageSize() (o int32) {
+	if v != nil && v.PageSize != nil {
+		return *v.PageSize
+	}
+
+	return
+}
+
+// IsSetPageSize returns true if PageSize is not nil.
+func (v *ListWorkflowExecutionsRequest) IsSetPageSize() bool {
+	return v != nil && v.PageSize != nil
+}
+
+// GetNextPageToken returns the value of NextPageToken if it is set or its
+// zero value if it is unset.
+func (v *ListWorkflowExecutionsRequest) GetNextPageToken() (o []byte) {
+	if v != nil && v.NextPageToken != nil {
+		return v.NextPageToken
+	}
+
+	return
+}
+
+// IsSetNextPageToken returns true if NextPageToken is not nil.
+func (v *ListWorkflowExecutionsRequest) IsSetNextPageToken() bool {
+	return v != nil && v.NextPageToken != nil
+}
+
+// GetQuery returns the value of Query if it is set or its
+// zero value if it is unset.
+func (v *ListWorkflowExecutionsRequest) GetQuery() (o string) {
+	if v != nil && v.Query != nil {
+		return *v.Query
+	}
+
+	return
+}
+
+// IsSetQuery returns true if Query is not nil.
+func (v *ListWorkflowExecutionsRequest) IsSetQuery() bool {
+	return v != nil && v.Query != nil
+}
+
+type ListWorkflowExecutionsResponse struct {
+	Executions    []*WorkflowExecutionInfo `json:"executions,omitempty"`
+	NextPageToken []byte                   `json:"nextPageToken,omitempty"`
+}
+
+// ToWire translates a ListWorkflowExecutionsResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ListWorkflowExecutionsResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Executions != nil {
+		w, err = wire.NewValueList(_List_WorkflowExecutionInfo_ValueList(v.Executions)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ListWorkflowExecutionsResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ListWorkflowExecutionsResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ListWorkflowExecutionsResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ListWorkflowExecutionsResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TList {
+				v.Executions, err = _List_WorkflowExecutionInfo_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ListWorkflowExecutionsResponse
+// struct.
+func (v *ListWorkflowExecutionsResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.Executions != nil {
+		fields[i] = fmt.Sprintf("Executions: %v", v.Executions)
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("ListWorkflowExecutionsResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ListWorkflowExecutionsResponse match the
+// provided ListWorkflowExecutionsResponse.
+//
+// This function performs a deep comparison.
+func (v *ListWorkflowExecutionsResponse) Equals(rhs *ListWorkflowExecutionsResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Executions == nil && rhs.Executions == nil) || (v.Executions != nil && rhs.Executions != nil && _List_WorkflowExecutionInfo_Equals(v.Executions, rhs.Executions))) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ListWorkflowExecutionsResponse.
+func (v *ListWorkflowExecutionsResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Executions != nil {
+		err = multierr.Append(err, enc.AddArray("executions", (_List_WorkflowExecutionInfo_Zapper)(v.Executions)))
+	}
+	if v.NextPageToken != nil {
+		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	return err
+}
+
+// GetExecutions returns the value of Executions if it is set or its
+// zero value if it is unset.
+func (v *ListWorkflowExecutionsResponse) GetExecutions() (o []*WorkflowExecutionInfo) {
+	if v != nil && v.Executions != nil {
+		return v.Executions
+	}
+
+	return
+}
+
+// IsSetExecutions returns true if Executions is not nil.
+func (v *ListWorkflowExecutionsResponse) IsSetExecutions() bool {
+	return v != nil && v.Executions != nil
+}
+
+// GetNextPageToken returns the value of NextPageToken if it is set or its
+// zero value if it is unset.
+func (v *ListWorkflowExecutionsResponse) GetNextPageToken() (o []byte) {
+	if v != nil && v.NextPageToken != nil {
+		return v.NextPageToken
+	}
+
+	return
+}
+
+// IsSetNextPageToken returns true if NextPageToken is not nil.
+func (v *ListWorkflowExecutionsResponse) IsSetNextPageToken() bool {
+	return v != nil && v.NextPageToken != nil
+}
+
 type MarkerRecordedEventAttributes struct {
 	MarkerName                   *string `json:"markerName,omitempty"`
 	Details                      []byte  `json:"details,omitempty"`

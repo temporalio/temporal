@@ -1193,6 +1193,18 @@ struct ListClosedWorkflowExecutionsResponse {
   20: optional binary nextPageToken
 }
 
+struct ListWorkflowExecutionsRequest {
+  10: optional string domain
+  20: optional i32 pageSize
+  30: optional binary nextPageToken
+  40: optional string query
+}
+
+struct ListWorkflowExecutionsResponse {
+  10: optional list<WorkflowExecutionInfo> executions
+  20: optional binary nextPageToken
+}
+
 struct QueryWorkflowRequest {
   10: optional string domain
   20: optional WorkflowExecution execution

@@ -74,6 +74,14 @@
   version = "v3.1.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:e67b5f68ee2c2d4376973daa8d1589c1e0fc95d0be2d2607dabf2a6a2401239e"
+  name = "github.com/cch123/elasticsql"
+  packages = ["."]
+  pruneopts = ""
+  revision = "a1a440758eb915b22b160eb43e6aa6c5212b1064"
+
+[[projects]]
   digest = "1:0deddd908b6b4b768cfc272c16ee61e7088a60f7fe2f06c547bd3d8e1f8b8e77"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -641,6 +649,31 @@
   revision = "693af58b4d51b8fcc7f9d89576da170765980581"
 
 [[projects]]
+  digest = "1:ded68a73f6dcedbf1b90909e00a28417854bfa8fb3a4ca6f12f11960e151214e"
+  name = "github.com/valyala/fastjson"
+  packages = [
+    ".",
+    "fastfloat",
+  ]
+  pruneopts = ""
+  revision = "73ca3ce4bcd1cb08f60e48df25675b80c6a4e51e"
+  version = "v1.4.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:0870e51ccaa635794d3071e4379f14605188d4d3239bf6a7a4b154796682758d"
+  name = "github.com/xwb1989/sqlparser"
+  packages = [
+    ".",
+    "dependency/bytes2",
+    "dependency/hack",
+    "dependency/querypb",
+    "dependency/sqltypes",
+  ]
+  pruneopts = ""
+  revision = "120387863bf27d04bc07db8015110a6e96d0146c"
+
+[[projects]]
   digest = "1:74f86c458e82e1c4efbab95233e0cf51b7cc02dc03193be9f62cd81224e10401"
   name = "go.uber.org/atomic"
   packages = ["."]
@@ -930,6 +963,7 @@
     "github.com/apache/thrift/lib/go/thrift",
     "github.com/bsm/sarama-cluster",
     "github.com/cactus/go-statsd-client/statsd",
+    "github.com/cch123/elasticsql",
     "github.com/davecgh/go-spew/spew",
     "github.com/dgryski/go-farm",
     "github.com/emirpasic/gods/maps/treemap",
@@ -965,6 +999,7 @@
     "github.com/uber/ringpop-go/swim",
     "github.com/uber/tchannel-go",
     "github.com/urfave/cli",
+    "github.com/valyala/fastjson",
     "go.uber.org/atomic",
     "go.uber.org/cadence",
     "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient",

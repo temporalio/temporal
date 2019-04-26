@@ -637,3 +637,97 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit, isOpen)
 	s.Nil(info)
 }
+
+func (s *ESVisibilitySuite) TestShouldSearchAfter() {
+	token := &esVisibilityPageToken{}
+	s.False(shouldSearchAfter(token))
+
+	token.TieBreaker = "a"
+	s.False(shouldSearchAfter(token))
+
+	token.SortTime = 1
+	s.True(shouldSearchAfter(token))
+}
+
+func (s *ESVisibilitySuite) TestGetESQueryDSL() {
+	request := &p.ListWorkflowExecutionsRequestV2{
+		PageSize: 10,
+	}
+	token := &esVisibilityPageToken{}
+
+	request.Query = ""
+	dsl, isOpen, err := getESQueryDSL(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_all":{}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+
+	request.Query = "invaild query"
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.NotNil(err)
+	s.False(isOpen)
+	s.Equal("", dsl)
+
+	request.Query = `WorkflowID = 'wid'`
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+
+	request.Query = `WorkflowID = 'wid' order by StartTime desc`
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+
+	request.Query = `WorkflowID = 'wid' and CloseTime = missing`
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.Nil(err)
+	s.True(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}],"must_not":{"exists":{"field":"CloseTime"}}}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+
+	request.Query = `CloseTime = missing order by CloseTime desc`
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.Nil(err)
+	s.True(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[],"must_not":{"exists":{"field":"CloseTime"}}}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+
+	token = &esVisibilityPageToken{
+		SortTime:   1,
+		TieBreaker: "a",
+	}
+	request.Query = `WorkflowID = 'wid'`
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}],"search_after":[1,"a"]}`, dsl)
+}
+
+func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
+	s.mockESClient.On("SearchWithDSL", mock.Anything, mock.Anything, mock.MatchedBy(func(input string) bool {
+		s.True(strings.Contains(input, `{"match_phrase":{"CloseStatus":{"query":"5"}}}`))
+		return true
+	})).Return(testSearchResult, nil).Once()
+
+	request := &p.ListWorkflowExecutionsRequestV2{
+		DomainUUID: testDomainID,
+		Domain:     testDomain,
+		PageSize:   10,
+		Query:      `CloseStatus = 5`,
+	}
+	_, err := s.visibilityStore.ListWorkflowExecutions(request)
+	s.NoError(err)
+
+	s.mockESClient.On("SearchWithDSL", mock.Anything, mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
+	_, err = s.visibilityStore.ListWorkflowExecutions(request)
+	s.Error(err)
+	_, ok := err.(*workflow.InternalServiceError)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListWorkflowExecutions failed"))
+
+	request.Query = `invalid query`
+	_, err = s.visibilityStore.ListWorkflowExecutions(request)
+	s.Error(err)
+	_, ok = err.(*workflow.BadRequestError)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "Error when parse query"))
+}
