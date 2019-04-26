@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
+	"github.com/valyala/fastjson"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 )
@@ -67,6 +68,13 @@ const (
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
 )
 
+type jsonType int
+
+const (
+	jsonTypeInput jsonType = iota
+	jsonTypeMemo
+)
+
 // SetFactory is used to set the ClientFactory global
 func SetFactory(factory ClientFactory) {
 	cFactory = factory
@@ -88,6 +96,7 @@ var (
 		"canceled":       s.WorkflowExecutionCloseStatusCanceled,
 		"terminated":     s.WorkflowExecutionCloseStatusTerminated,
 		"continuedasnew": s.WorkflowExecutionCloseStatusContinuedAsNew,
+		"continueasnew":  s.WorkflowExecutionCloseStatusContinuedAsNew,
 		"timedout":       s.WorkflowExecutionCloseStatusTimedOut,
 		// below are some alias
 		"c":         s.WorkflowExecutionCloseStatusCompleted,
@@ -501,6 +510,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		startRequest.CronSchedule = common.StringPtr(c.String(FlagCronSchedule))
 	}
 
+	memoFields := processMemo(c)
+	if len(memoFields) != 0 {
+		startRequest.Memo = &s.Memo{Fields: memoFields}
+	}
+
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
 		defer cancel()
@@ -727,7 +741,7 @@ func ListWorkflow(c *cli.Context) {
 	pageSize := c.Int(FlagPageSize)
 
 	queryOpen := c.Bool(FlagOpen)
-	table := createTableForListWorkflow(false, queryOpen)
+	table := createTableForListWorkflow(c, false, queryOpen)
 	prepareTable := listWorkflow(c, table, queryOpen)
 
 	if !more { // default mode only show one page items
@@ -761,7 +775,7 @@ func ListWorkflow(c *cli.Context) {
 // ListAllWorkflow list all workflow executions based on filters
 func ListAllWorkflow(c *cli.Context) {
 	queryOpen := c.Bool(FlagOpen)
-	table := createTableForListWorkflow(true, queryOpen)
+	table := createTableForListWorkflow(c, true, queryOpen)
 	prepareTable := listWorkflow(c, table, queryOpen)
 	var resultSize int
 	var nextPageToken []byte
@@ -906,7 +920,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 	}
 }
 
-func createTableForListWorkflow(listAll bool, queryOpen bool) *tablewriter.Table {
+func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *tablewriter.Table {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
@@ -914,6 +928,10 @@ func createTableForListWorkflow(listAll bool, queryOpen bool) *tablewriter.Table
 	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 	if !queryOpen {
 		header = append(header, "End Time")
+		headerColor = append(headerColor, tableHeaderBlue)
+	}
+	if printMemo := c.Bool(FlagPrintMemo); printMemo {
+		header = append(header, "Memo")
 		headerColor = append(headerColor, tableHeaderBlue)
 	}
 	table.SetHeader(header)
@@ -933,6 +951,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	workflowType := c.String(FlagWorkflowType)
 	printRawTime := c.Bool(FlagPrintRawTime)
 	printDateTime := c.Bool(FlagPrintDateTime)
+	printMemo := c.Bool(FlagPrintMemo)
 	pageSize := c.Int(FlagPageSize)
 	if pageSize <= 0 {
 		pageSize = defaultPageSizeForList
@@ -975,6 +994,9 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 			if !queryOpen {
 				row = append(row, closeTime)
+			}
+			if printMemo {
+				row = append(row, getPrintableMemo(e.Memo))
 			}
 			table.Append(row)
 		}
@@ -1295,11 +1317,30 @@ func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc)
 
 // process and validate input provided through cmd or file
 func processJSONInput(c *cli.Context) string {
+	return processJSONInputHelper(c, jsonTypeInput)
+}
+
+// process and validate json
+func processJSONInputHelper(c *cli.Context, jType jsonType) string {
+	var flagNameOfRawInput string
+	var flagNameOfInputFileName string
+
+	switch jType {
+	case jsonTypeInput:
+		flagNameOfRawInput = FlagInput
+		flagNameOfInputFileName = FlagInputFile
+	case jsonTypeMemo:
+		flagNameOfRawInput = FlagMemo
+		flagNameOfInputFileName = FlagMemoFile
+	default:
+		return ""
+	}
+
 	var input string
-	if c.IsSet(FlagInput) {
-		input = c.String(FlagInput)
-	} else if c.IsSet(FlagInputFile) {
-		inputFile := c.String(FlagInputFile)
+	if c.IsSet(flagNameOfRawInput) {
+		input = c.String(flagNameOfRawInput)
+	} else if c.IsSet(flagNameOfInputFileName) {
+		inputFile := c.String(flagNameOfInputFileName)
 		data, err := ioutil.ReadFile(inputFile)
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
@@ -1327,6 +1368,43 @@ func validateJSONs(str string) error {
 			return err // Invalid input
 		}
 	}
+}
+
+func processMemo(c *cli.Context) map[string][]byte {
+	rawMemoKey := c.String(FlagMemoKey)
+	var memoKeys []string
+	if strings.TrimSpace(rawMemoKey) != "" {
+		memoKeys = strings.Split(rawMemoKey, " ")
+	}
+
+	rawMemoValue := processJSONInputHelper(c, jsonTypeMemo)
+	var memoValues []string
+
+	var sc fastjson.Scanner
+	sc.Init(rawMemoValue)
+	for sc.Next() {
+		memoValues = append(memoValues, sc.Value().String())
+	}
+	if err := sc.Error(); err != nil {
+		ErrorAndExit("Parse json error.", err)
+	}
+	if len(memoKeys) != len(memoValues) {
+		ErrorAndExit("Number of memo keys and values are not equal.", nil)
+	}
+
+	fields := map[string][]byte{}
+	for i, key := range memoKeys {
+		fields[key] = []byte(memoValues[i])
+	}
+	return fields
+}
+
+func getPrintableMemo(memo *s.Memo) string {
+	buf := new(bytes.Buffer)
+	for k, v := range memo.Fields {
+		fmt.Fprintf(buf, "%s=%s\n", k, string(v))
+	}
+	return buf.String()
 }
 
 func truncate(str string) string {

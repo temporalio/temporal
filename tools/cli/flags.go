@@ -99,6 +99,8 @@ const (
 	FlagPrintRawTimeWithAlias       = FlagPrintRawTime + ", prt"
 	FlagPrintDateTime               = "print_datetime"
 	FlagPrintDateTimeWithAlias      = FlagPrintDateTime + ", pdt"
+	FlagPrintMemo                   = "print_memo"
+	FlagPrintMemoWithAlias          = FlagPrintMemo + ", pme"
 	FlagDescription                 = "description"
 	FlagDescriptionWithAlias        = FlagDescription + ", desc"
 	FlagOwnerEmail                  = "owner_email"
@@ -145,6 +147,9 @@ const (
 	FlagIndex                       = "index"
 	FlagBatchSize                   = "batch_size"
 	FlagBatchSizeWithAlias          = FlagBatchSize + ", bs"
+	FlagMemoKey                     = "memo_key"
+	FlagMemo                        = "memo"
+	FlagMemoFile                    = "memo_file"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -244,6 +249,20 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "Optional input for the workflow from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"Input from file will be overwrite by input from command line",
 		},
+		cli.StringFlag{
+			Name:  FlagMemoKey,
+			Usage: "Optional key of memo. If there are multiple keys, concatenate them and separate by space",
+		},
+		cli.StringFlag{
+			Name: FlagMemo,
+			Usage: "Optional info that can be showed when list workflow, in JSON format. If there are multiple JSON, concatenate them and separate by space. " +
+				"The order must be same as memo_key",
+		},
+		cli.StringFlag{
+			Name: FlagMemoFile,
+			Usage: "Optional info that can be listed in list workflow, from JSON format file. If there are multiple JSON, concatenate them and separate by space or newline. " +
+				"The order must be same as memo_key",
+		},
 	}
 }
 
@@ -308,9 +327,13 @@ func getFlagsForListAll() []cli.Flag {
 			Name:  FlagPrintDateTimeWithAlias,
 			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
 		},
+		cli.BoolFlag{
+			Name:  FlagPrintMemoWithAlias,
+			Usage: "Print memo",
+		},
 		cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,
-			Usage: "Closed workflow status [completed, failed, canceled, terminated, continueasnew, timedout]",
+			Usage: "Closed workflow status [completed, failed, canceled, terminated, continuedasnew, timedout]",
 		},
 	}
 }

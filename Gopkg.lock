@@ -10,20 +10,20 @@
   version = "v0.3.1"
 
 [[projects]]
-  digest = "1:29b1e6604e762715716cae79145c8732a964b8fe564cc330de1495090fbc777a"
+  digest = "1:e001bd0a052223a9dc871d38e303774759efae171abc702dedd312866400552d"
   name = "github.com/DataDog/zstd"
   packages = ["."]
   pruneopts = ""
-  revision = "c7161f8c63c045cbc7ca051dcc969dd0e4054de2"
-  version = "v1.3.5"
+  revision = "809b919c325d7887bff7bd876162af73db53e878"
+  version = "v1.4.0"
 
 [[projects]]
-  digest = "1:10ff6d0124af07664e2c0815e87ac1e04f5bfb6aae3c7bc408dfea51f4c6c64d"
+  digest = "1:eba1bfcb20f6e42341bd201a1b0d1999bbbf94f1abaf5e4380d7fcec48b6fbf9"
   name = "github.com/Shopify/sarama"
   packages = ["."]
   pruneopts = ""
-  revision = "4602b5a8c6e826f9e0737865818dd43b2339a092"
-  version = "v1.21.0"
+  revision = "5d2af84cf5e2dd36f2daecaaafa13c4e286f20fd"
+  version = "v1.22.0"
 
 [[projects]]
   branch = "master"
@@ -50,12 +50,12 @@
   revision = "7dc76406b6d3c05b5f71a86293cbcf3c4ea03b19"
 
 [[projects]]
-  branch = "master"
-  digest = "1:c0bec5f9b98d0bc872ff5e834fac186b807b656683bd29cb82fb207a1513fabb"
+  digest = "1:0d3deb8a6da8ffba5635d6fb1d2144662200def6c9d82a35a6d05d6c2d4a48f9"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
   pruneopts = ""
-  revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
+  revision = "4b2b341e8d7715fae06375aa633dbb6e91b3fb46"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:6da5545112f73dbad12895d25e39818c1c3e8040ebba488d4d3fe43bc8685eb6"
@@ -91,11 +91,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:db8ee41b5f69636987d3ffe6e22c37df45c3662863ceb9274e16c8b96b096219"
+  digest = "1:3d4ecaf57661da13928aac94e33d68a323c5777c4090b5ed0596d12a7da080ea"
   name = "github.com/dgryski/go-farm"
   packages = ["."]
   pruneopts = ""
-  revision = "8198c7b169ec28630587aded52777c5e10a037c2"
+  revision = "e1214b5e05dc9a680734f587f0e1686b3889f983"
 
 [[projects]]
   digest = "1:6d6672f85a84411509885eaa32f597577873de00e30729b9bb0eb1e1faa49c12"
@@ -361,7 +361,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:9901b471977536c9cd2c19212546aec5c3c0572bd768964020108d2d459f5283"
+  digest = "1:580f79bbb55a397ea234a61ca53adde6fed16253ac52507e14db71adc811af86"
   name = "github.com/mmcloughlin/avo"
   packages = [
     "attr",
@@ -379,15 +379,15 @@
     "x86",
   ]
   pruneopts = ""
-  revision = "138eaf8dc34d1c265aab931e3541149d667426ca"
+  revision = "2e7d06bc7ada2979f17ccf8ebf486dba23b84fc7"
 
 [[projects]]
   branch = "master"
-  digest = "1:9452423cddeac377d2afc01f96164fc96d1f557862351745f287738264e5e6a5"
+  digest = "1:e8c47d4fefdf7114d57f2e6d17564b113fbbe72a8003dc7f6780aca456ce5435"
   name = "github.com/olekukonko/tablewriter"
   packages = ["."]
   pruneopts = ""
-  revision = "f82d31373321de71ad0289113725564fe180a301"
+  revision = "7e037d187b0c13d81ccf0dd1c6b990c2759e6597"
 
 [[projects]]
   digest = "1:f15de75c5d3590a9e78c76d6bd70640d8b9c496d4742bfb9baedd90cad3911ac"
@@ -422,15 +422,15 @@
   version = "v1.2"
 
 [[projects]]
-  digest = "1:eea52fd418b317ff9afc060cd1697b841f3b22e30df465271c0b6049c479c3b4"
+  digest = "1:997789da35f4b8442e474414d843cd2c75d3d8643cbe219149b80015beb51d3f"
   name = "github.com/pierrec/lz4"
   packages = [
     ".",
     "internal/xxh32",
   ]
   pruneopts = ""
-  revision = "315a67e90e415bcdaff33057da191569bf4d8479"
-  version = "v2.1.1"
+  revision = "9419d2361c8ae111073ffe3337ecc364fb590921"
+  version = "v2.1.2"
 
 [[projects]]
   digest = "1:1d7e1867c49a6dd9856598ef7c3123604ea3daabf5b83f303ff457bcbc410b1d"
@@ -469,7 +469,7 @@
   revision = "fd36f4220a901265f90734c3183c5f0c91daa0b8"
 
 [[projects]]
-  digest = "1:96af18a3819d2ff7d6aa07e6e50955b11e477dbc8b890324c67462b84adca56b"
+  digest = "1:cf0d0ad53268d7c0e6cbe9a037059a6583ffd58d25f1cd6d48920f8c3ccc537f"
   name = "github.com/prometheus/common"
   packages = [
     "expfmt",
@@ -477,16 +477,16 @@
     "model",
   ]
   pruneopts = ""
-  revision = "cfeb6f9992ffa54aaa4f2170ade4067ee478b250"
-  version = "v0.2.0"
+  revision = "a82f4c12f983cc2649298185f296632953e50d3e"
+  version = "v0.3.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:1b213893f9ce51b3510fe3b34323024fbed05306e744f900095991ef006ee235"
+  digest = "1:3e7d42d07f02a3931e339dd0c46276132955b66a0db74b0c1f0f406532d7f32d"
   name = "github.com/prometheus/procfs"
   packages = ["."]
   pruneopts = ""
-  revision = "ea9eea63887261e4d8ed8315f4078e88d540c725"
+  revision = "8368d24ba045f26503eb745b624d930cbe214c79"
 
 [[projects]]
   branch = "master"
@@ -542,12 +542,12 @@
   version = "v1.3.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:92e24fa043b9dc538f60cbc202177668e9fae022fa1bdf8bdc5724507e48af96"
+  digest = "1:a3c73ad1e5fd96b7999e4daab8ce66d67295880f5da8106c33b3add6c5a20e92"
   name = "github.com/uber-common/bark"
   packages = ["."]
   pruneopts = ""
-  revision = "362cbdc2431a7f2414126b4fb4914820b876fad4"
+  revision = "02d883c81a4e7b76904d97efb176efdf4be791bd"
+  version = "v1.2.1"
 
 [[projects]]
   digest = "1:74f86c458e82e1c4efbab95233e0cf51b7cc02dc03193be9f62cd81224e10401"
@@ -683,7 +683,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:78cf4ada6aef5840897f382453419f3f6af752f2d503fc30227f9b2f6a82ef70"
+  digest = "1:6b2d9beb436074af575467f8dea79661819c2f2cf4ee938b9101dfe90b7b4dcb"
   name = "go.uber.org/cadence"
   packages = [
     ".",
@@ -705,7 +705,7 @@
     "workflow",
   ]
   pruneopts = ""
-  revision = "3dc80212c3e279ea4bc172b5acfc30800f9365cb"
+  revision = "cd8a63ed95537217ee7f1d6293f86049ade8e515"
 
 [[projects]]
   digest = "1:22c7effcb4da0eacb2bb1940ee173fac010e9ef3c691f5de4b524d538bd980f5"
@@ -772,7 +772,7 @@
   revision = "ce2550dad7144b81ae2f67dc5e55597643f6902b"
 
 [[projects]]
-  digest = "1:a6011300313748ff30d18c7733b2a4391f193b0d53132705732b2ff25ebda2fd"
+  digest = "1:784f792af084d9dfb8ad5a8ee1251ea29f61328ba22cdd29738e45380e635f2e"
   name = "go.uber.org/yarpc"
   packages = [
     ".",
@@ -810,8 +810,8 @@
     "yarpcerrors",
   ]
   pruneopts = ""
-  revision = "fd9e2c3be1a5c526226bb61bbc1cf5bee05314b6"
-  version = "v1.37.1"
+  revision = "c0aa7d55bd8a5a507d5e1bed74393daf0c41c77f"
+  version = "v1.37.2"
 
 [[projects]]
   digest = "1:246f378f80fba6fcf0f191c486b6613265abd2bc0f2fa55a36b928c67352021e"
@@ -830,38 +830,40 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:904a96f1b41dd718461284637f0c164a9cdc47aaf3026406de6cc139e19411b5"
+  digest = "1:99dc4c94284ccd0d515bc11c906edcc33da407af228c6cf75b6f20e2cd3e6ab6"
   name = "golang.org/x/lint"
   packages = [
     ".",
     "golint",
   ]
   pruneopts = ""
-  revision = "d0100b6bd8b389f0385611eb39152c4d7c3a7905"
+  revision = "959b441ac422379a43da2230f62be024250818b0"
 
 [[projects]]
   branch = "master"
-  digest = "1:09972eaa1645553c1cf5b0d2b471aa3aef8d9ab88ca45528e131cd32e8572fb9"
+  digest = "1:a2a9a2c106855d5fd3b11383f7c591064a81f25ee0d9749524801f636e7f473a"
   name = "golang.org/x/net"
   packages = [
     "bpf",
     "context",
     "internal/iana",
     "internal/socket",
+    "internal/socks",
     "ipv4",
     "ipv6",
+    "proxy",
   ]
   pruneopts = ""
-  revision = "eb5bcb51f2a31c7d5141d810b70815c05d9c9146"
+  revision = "afa5a82059c6356159f699d81beff22a81842231"
   source = "https://github.com/golang/net"
 
 [[projects]]
   branch = "master"
-  digest = "1:55c52474bb389797ed66db92966e2b9ddc98a25d9d05c8aa55787fe03d4d4084"
+  digest = "1:65b26625b8071c34051fdc3933aa41aabba2172296f325428e3a6492b0e7691f"
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = ""
-  revision = "4b34438f7a67ee5f45cc6132e2bad873a20324e9"
+  revision = "953cdadca894cdc07be76fc99f95b40c28f06623"
 
 [[projects]]
   branch = "master"
@@ -873,7 +875,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ad62017292ee6e989529ccc9fa5bcc3f3e4e0d426e0041d152098366187464a9"
+  digest = "1:1d45c116330be383a097136d98c68187edd8964ca9db4aa76bcede4752c9490b"
   name = "golang.org/x/tools"
   packages = [
     "cmd/stringer",
@@ -891,7 +893,7 @@
     "internal/semver",
   ]
   pruneopts = ""
-  revision = "052fc3cfdbc2c9e9082b1d51f850b7974b5efb2a"
+  revision = "3ff669b183a17dd5e5d03ed96e1715343cc21ff6"
 
 [[projects]]
   digest = "1:0a6cbf5be24f00105d33c9f6d2f40b8149e0316537a92be1b0d4c761b7ae39fb"
