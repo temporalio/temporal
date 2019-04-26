@@ -192,6 +192,10 @@ type (
 		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`
+		// MaxIdleConns is the max number of idle connections to this datastore
+		MaxIdleConns int `yaml:"maxIdleConns"`
+		// MaxConnLifetime is the maximum time a connection can be alive
+		MaxConnLifetime time.Duration `yaml:"maxConnLifetime"`
 		// NumShards is the number of storage shards to use for tables
 		// in a sharded sql database. The default value for this param is 1
 		NumShards int `yaml:"nShards"`

@@ -30,9 +30,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
-	"github.com/uber/cadence/common/service/config"
 )
 
 type sqlMetadataManagerV2 struct {
@@ -41,12 +39,8 @@ type sqlMetadataManagerV2 struct {
 }
 
 // newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
-func newMetadataPersistenceV2(cfg config.SQL, currentClusterName string,
+func newMetadataPersistenceV2(db sqldb.Interface, currentClusterName string,
 	logger log.Logger) (persistence.MetadataManager, error) {
-	var db, err = storage.NewSQLDB(&cfg)
-	if err != nil {
-		return nil, err
-	}
 	return &sqlMetadataManagerV2{
 		sqlStore: sqlStore{
 			db:     db,

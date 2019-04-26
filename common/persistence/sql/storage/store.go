@@ -55,6 +55,15 @@ func NewSQLDB(cfg *config.SQL) (sqldb.Interface, error) {
 	if err != nil {
 		return nil, err
 	}
+	if cfg.MaxConns > 0 {
+		db.SetMaxOpenConns(cfg.MaxConns)
+	}
+	if cfg.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(cfg.MaxIdleConns)
+	}
+	if cfg.MaxConnLifetime > 0 {
+		db.SetConnMaxLifetime(cfg.MaxConnLifetime)
+	}
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
 	return mysql.NewDB(db, nil), nil

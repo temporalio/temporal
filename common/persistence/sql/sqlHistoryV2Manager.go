@@ -32,9 +32,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
-	"github.com/uber/cadence/common/service/config"
 )
 
 type sqlHistoryV2Manager struct {
@@ -42,12 +40,8 @@ type sqlHistoryV2Manager struct {
 	shardID int
 }
 
-// newHistoryPersistence creates an instance of HistoryManager
-func newHistoryV2Persistence(cfg config.SQL, logger log.Logger) (p.HistoryV2Store, error) {
-	var db, err = storage.NewSQLDB(&cfg)
-	if err != nil {
-		return nil, err
-	}
+// newHistoryV2Persistence creates an instance of HistoryManager
+func newHistoryV2Persistence(db sqldb.Interface, logger log.Logger) (p.HistoryV2Store, error) {
 	return &sqlHistoryV2Manager{
 		sqlStore: sqlStore{
 			db:     db,

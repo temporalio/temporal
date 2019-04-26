@@ -29,9 +29,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
-	"github.com/uber/cadence/common/service/config"
 )
 
 type sqlHistoryManager struct {
@@ -40,11 +38,7 @@ type sqlHistoryManager struct {
 }
 
 // newHistoryPersistence creates an instance of HistoryManager
-func newHistoryPersistence(cfg config.SQL, logger log.Logger) (p.HistoryStore, error) {
-	var db, err = storage.NewSQLDB(&cfg)
-	if err != nil {
-		return nil, err
-	}
+func newHistoryPersistence(db sqldb.Interface, logger log.Logger) (p.HistoryStore, error) {
 	return &sqlHistoryManager{
 		sqlStore: sqlStore{
 			db:     db,

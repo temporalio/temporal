@@ -30,9 +30,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
-	"github.com/uber/cadence/common/service/config"
 )
 
 type sqlShardManager struct {
@@ -41,11 +39,7 @@ type sqlShardManager struct {
 }
 
 // newShardPersistence creates an instance of ShardManager
-func newShardPersistence(cfg config.SQL, currentClusterName string, log log.Logger) (persistence.ShardManager, error) {
-	var db, err = storage.NewSQLDB(&cfg)
-	if err != nil {
-		return nil, err
-	}
+func newShardPersistence(db sqldb.Interface, currentClusterName string, log log.Logger) (persistence.ShardManager, error) {
 	return &sqlShardManager{
 		sqlStore: sqlStore{
 			db:     db,

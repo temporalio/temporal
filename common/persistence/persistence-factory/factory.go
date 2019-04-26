@@ -137,17 +137,8 @@ func New(
 		metricsClient: metricsClient,
 		logger:        logger,
 	}
-	defaultCfg := cfg.DataStores[cfg.DefaultStore]
-	visibilityCfg := cfg.DataStores[cfg.VisibilityStore]
 	limiters := buildRatelimiters(cfg)
-	factory.datastores = map[storeType]Datastore{
-		storeTypeTask:       newStore(defaultCfg, limiters[cfg.DefaultStore], clusterName, 0, logger),
-		storeTypeShard:      newStore(defaultCfg, limiters[cfg.DefaultStore], clusterName, 0, logger),
-		storeTypeMetadata:   newStore(defaultCfg, limiters[cfg.DefaultStore], clusterName, 0, logger),
-		storeTypeExecution:  newStore(defaultCfg, limiters[cfg.DefaultStore], clusterName, 0, logger),
-		storeTypeHistory:    newStore(defaultCfg, limiters[cfg.DefaultStore], clusterName, cfg.HistoryMaxConns, logger),
-		storeTypeVisibility: newStore(visibilityCfg, limiters[cfg.VisibilityStore], clusterName, 0, logger),
-	}
+	factory.init(clusterName, limiters)
 	return factory
 }
 
@@ -305,29 +296,37 @@ func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
 	return cfg.DataStores[cfg.VisibilityStore].Cassandra
 }
 
-func newStore(cfg config.DataStore, tb tokenbucket.TokenBucket, clusterName string, maxConnsOverride int, logger log.Logger) Datastore {
-	var ds Datastore
-	ds.ratelimit = tb
-	if cfg.SQL != nil {
-		ds.factory = newSQLStore(*cfg.SQL, clusterName, maxConnsOverride, logger)
-		return ds
+func (f *factoryImpl) init(clusterName string, limiters map[string]tokenbucket.TokenBucket) {
+	f.datastores = make(map[storeType]Datastore, len(storeTypes))
+	defaultCfg := f.config.DataStores[f.config.DefaultStore]
+	defaultDataStore := Datastore{ratelimit: limiters[f.config.DefaultStore]}
+	switch {
+	case defaultCfg.Cassandra != nil:
+		defaultDataStore.factory = cassandra.NewFactory(*defaultCfg.Cassandra, clusterName, f.logger)
+	case defaultCfg.SQL != nil:
+		defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, clusterName, f.logger)
+	default:
+		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified")
 	}
-	ds.factory = newCassandraStore(*cfg.Cassandra, clusterName, maxConnsOverride, logger)
-	return ds
-}
 
-func newSQLStore(cfg config.SQL, clusterName string, maxConnsOverride int, logger log.Logger) DataStoreFactory {
-	if maxConnsOverride > 0 {
-		cfg.MaxConns = maxConnsOverride
+	for _, st := range storeTypes {
+		if st != storeTypeVisibility {
+			f.datastores[st] = defaultDataStore
+		}
 	}
-	return sql.NewFactory(cfg, clusterName, logger)
-}
 
-func newCassandraStore(cfg config.Cassandra, clusterName string, maxConnsOverride int, logger log.Logger) DataStoreFactory {
-	if maxConnsOverride > 0 {
-		cfg.MaxConns = maxConnsOverride
+	visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
+	visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
+	switch {
+	case defaultCfg.Cassandra != nil:
+		visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, clusterName, f.logger)
+	case visibilityCfg.SQL != nil:
+		visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, clusterName, f.logger)
+	default:
+		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified")
 	}
-	return cassandra.NewFactory(cfg, clusterName, logger)
+
+	f.datastores[storeTypeVisibility] = visibilityDataStore
 }
 
 func buildRatelimiters(cfg *config.Persistence) map[string]tokenbucket.TokenBucket {

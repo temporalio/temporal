@@ -30,20 +30,14 @@ import (
 	"github.com/uber/cadence/common/service/config"
 )
 
-type (
-	// Factory vends store objects backed by MySQL
-	Factory struct {
-		sync.RWMutex
-		cfg              config.SQL
-		clusterName      string
-		logger           log.Logger
-		execStoreFactory *executionStoreFactory
-	}
-	executionStoreFactory struct {
-		db     sqldb.Interface
-		logger log.Logger
-	}
-)
+// Factory vends store objects backed by MySQL
+type Factory struct {
+	sync.RWMutex
+	db          sqldb.Interface
+	cfg         config.SQL
+	clusterName string
+	logger      log.Logger
+}
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores backed by any kind of SQL store
@@ -53,27 +47,47 @@ func NewFactory(cfg config.SQL, clusterName string, logger log.Logger) *Factory 
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return newTaskPersistence(f.cfg, f.logger)
+	conn, err := f.conn()
+	if err != nil {
+		return nil, err
+	}
+	return newTaskPersistence(conn, f.cfg.NumShards, f.logger)
 }
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	return newShardPersistence(f.cfg, f.clusterName, f.logger)
+	conn, err := f.conn()
+	if err != nil {
+		return nil, err
+	}
+	return newShardPersistence(conn, f.clusterName, f.logger)
 }
 
 // NewHistoryStore returns a new history store
 func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
-	return newHistoryPersistence(f.cfg, f.logger)
+	conn, err := f.conn()
+	if err != nil {
+		return nil, err
+	}
+	return newHistoryPersistence(conn, f.logger)
 }
 
 // NewHistoryV2Store returns a new history store
 func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
-	return newHistoryV2Persistence(f.cfg, f.logger)
+	conn, err := f.conn()
+	if err != nil {
+		return nil, err
+	}
+	return newHistoryV2Persistence(conn, f.logger)
 }
 
 // NewMetadataStore returns a new metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	return newMetadataPersistenceV2(f.cfg, f.clusterName, f.logger)
+	conn, err := f.conn()
+	if err != nil {
+		return nil, err
+	}
+	return newMetadataPersistenceV2(conn, f.clusterName, f.logger)
 }
 
 // NewMetadataStoreV1 returns the default metadatastore
@@ -88,11 +102,11 @@ func (f *Factory) NewMetadataStoreV2() (p.MetadataStore, error) {
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
 func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
-	factory, err := f.newExecutionStoreFactory()
+	conn, err := f.conn()
 	if err != nil {
 		return nil, err
 	}
-	return factory.new(shardID)
+	return NewSQLExecutionStore(conn, f.logger, shardID)
 }
 
 // NewVisibilityStore returns a visibility store
@@ -104,47 +118,21 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 func (f *Factory) Close() {
 	f.Lock()
 	defer f.Unlock()
-	if f.execStoreFactory != nil {
-		f.execStoreFactory.close()
+	if f.db != nil {
+		f.db.Close()
 	}
 }
 
-// newExecutionStoreFactory returns a new instance of a factory that vends
-// execution stores. This factory exist to make sure all of the execution
-// managers reuse the same underlying db connection / object and that closing
-// one closes all of them
-func (f *Factory) newExecutionStoreFactory() (*executionStoreFactory, error) {
+func (f *Factory) conn() (sqldb.Interface, error) {
 	f.RLock()
-	if f.execStoreFactory != nil {
+	if f.db != nil {
 		f.RUnlock()
-		return f.execStoreFactory, nil
+		return f.db, nil
 	}
 	f.RUnlock()
 	f.Lock()
 	defer f.Unlock()
 	var err error
-	f.execStoreFactory, err = newExecutionStoreFactory(f.cfg, f.logger)
-	return f.execStoreFactory, err
-}
-
-func newExecutionStoreFactory(cfg config.SQL, logger log.Logger) (*executionStoreFactory, error) {
-	db, err := storage.NewSQLDB(&cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &executionStoreFactory{
-		db:     db,
-		logger: logger,
-	}, nil
-}
-
-func (f *executionStoreFactory) new(shardID int) (p.ExecutionStore, error) {
-	return NewSQLExecutionStore(f.db, f.logger, shardID)
-}
-
-// close closes the factory
-func (f *executionStoreFactory) close() {
-	if f.db != nil {
-		f.db.Close()
-	}
+	f.db, err = storage.NewSQLDB(&f.cfg)
+	return f.db, err
 }
