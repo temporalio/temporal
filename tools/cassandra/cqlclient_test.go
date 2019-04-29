@@ -21,32 +21,22 @@
 package cassandra
 
 import (
-	"fmt"
-	"io/ioutil"
-	"math/rand"
-	"os"
 	"testing"
-	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
+	"github.com/uber/cadence/tools/common/schema/test"
 )
 
 type (
 	CQLClientTestSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
-		keyspace string
-		session  *gocql.Session
-		client   CQLClient
-		log      log.Logger
+		test.DBTestBase
 	}
 )
+
+var _ test.DB = (*cqlClient)(nil)
 
 func TestCQLClientTestSuite(t *testing.T) {
 	suite.Run(t, new(CQLClientTestSuite))
@@ -57,149 +47,38 @@ func (s *CQLClientTestSuite) SetupTest() {
 }
 
 func (s *CQLClientTestSuite) SetupSuite() {
-	var err error
-	s.log, err = loggerimpl.NewDevelopment()
-	s.Require().NoError(err)
-	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	s.keyspace = fmt.Sprintf("cql_client_test_%v", rand.Int63())
-
-	client, err := newCQLClient(environment.GetCassandraAddress(), defaultCassandraPort, "", "", "system", defaultTimeout)
+	client, err := newTestCQLClient(systemKeyspace)
 	if err != nil {
-		s.log.Fatal("error creating CQLClient, ", tag.Error(err))
+		s.Log.Fatal("error creating CQLClient, ", tag.Error(err))
 	}
-
-	err = client.CreateKeyspace(s.keyspace, 1)
-	if err != nil {
-		s.log.Fatal("error creating keyspace, ", tag.Error(err))
-	}
-
-	s.client = client
+	s.SetupSuiteBase(client)
 }
 
 func (s *CQLClientTestSuite) TearDownSuite() {
-	s.client.Exec("DROP keyspace " + s.keyspace)
-	s.client.Close()
+	s.TearDownSuiteBase()
 }
 
 func (s *CQLClientTestSuite) TestParseCQLFile() {
-	rootDir, err := ioutil.TempDir("", "cqlClientTestDir")
-	s.Nil(err)
-	defer os.Remove(rootDir)
-
-	cqlFile, err := ioutil.TempFile(rootDir, "parseCQLTest")
-	s.Nil(err)
-	defer os.Remove(cqlFile.Name())
-
-	cqlFile.WriteString(createTestCQLFileContent())
-	stmts, err := ParseCQLFile(cqlFile.Name())
-	s.Nil(err)
-	s.Equal(2, len(stmts), "wrong number of cql statements")
-}
-
-func (s *CQLClientTestSuite) testUpdate(client CQLClient) {
-	// Update / Read schema version test
-	err := client.UpdateSchemaVersion("10.0", "5.0")
-	s.Nil(err)
-	err = client.WriteSchemaUpdateLog("9.0", "10.0", "abc", "test")
-	s.Nil(err)
-
-	ver, err := client.ReadSchemaVersion()
-	s.Nil(err)
-	s.Equal("10.0", ver)
-
-	err = client.UpdateSchemaVersion("12.0", "5.0")
-	ver, err = client.ReadSchemaVersion()
-	s.Nil(err)
-	s.Equal("12.0", ver)
-}
-
-func (s *CQLClientTestSuite) testDrop(client CQLClient) {
-
-	tables, err := client.ListTables()
-	s.Nil(err)
-	s.True(len(tables) > 0)
-
-	types, err := client.ListTypes()
-	s.Nil(err)
-	s.True(len(types) > 0)
-
-	// Drop table / type test
-	for _, t := range tables {
-		err1 := client.DropTable(t)
-		s.Nil(err1)
-	}
-	for _, t := range types {
-		err1 := client.DropType(t)
-		s.Nil(err1)
-	}
-
-	tables, err = client.ListTables()
-	s.Nil(err)
-	s.Equal(0, len(tables))
-
-	types, err = client.ListTypes()
-	s.Nil(err)
-	s.Equal(0, len(types))
-
-	_, err = client.ReadSchemaVersion()
-	s.NotNil(err)
-}
-
-func (s *CQLClientTestSuite) testCreate(client CQLClient) {
-
-	tables, err := client.ListTables()
-	s.Nil(err)
-	s.Equal(0, len(tables))
-
-	err = client.CreateSchemaVersionTables()
-	s.Nil(err)
-
-	expectedTables := make(map[string]struct{})
-	expectedTables["schema_version"] = struct{}{}
-	expectedTables["schema_update_history"] = struct{}{}
-
-	tables, err = client.ListTables()
-	s.Nil(err)
-	s.Equal(len(expectedTables), len(tables))
-
-	for _, t := range tables {
-		_, ok := expectedTables[t]
-		s.True(ok)
-		delete(expectedTables, t)
-	}
-	s.Equal(0, len(expectedTables))
-
-	types, err := client.ListTypes()
-	s.Nil(err)
-	s.Equal(0, len(types))
-
-	err = client.Exec("CREATE TYPE name(first text, second text);")
-	s.Nil(err)
-	err = client.Exec("CREATE TYPE city(name text, zip text);")
-	s.Nil(err)
-
-	expectedTypes := make(map[string]struct{})
-	expectedTypes["name"] = struct{}{}
-	expectedTypes["city"] = struct{}{}
-
-	types, err = client.ListTypes()
-	s.Nil(err)
-	s.Equal(len(expectedTypes), len(types))
-
-	for _, t := range types {
-		_, ok := expectedTypes[t]
-		s.True(ok)
-		delete(expectedTypes, t)
-	}
-	s.Equal(0, len(expectedTypes))
+	s.RunParseFileTest(createTestCQLFileContent())
 }
 
 func (s *CQLClientTestSuite) TestCQLClient() {
-	client, err := newCQLClient(environment.GetCassandraAddress(), defaultCassandraPort, "", "", s.keyspace, defaultTimeout)
+	client, err := newTestCQLClient(s.DBName)
 	s.Nil(err)
-	s.testCreate(client)
-	s.testUpdate(client)
-	s.testDrop(client)
+	s.RunCreateTest(client)
+	s.RunUpdateTest(client)
+	s.RunDropTest(client)
+	client.Close()
+}
+
+func newTestCQLClient(keyspace string) (*cqlClient, error) {
+	return newCQLClient(&CQLClientConfig{
+		Hosts:       environment.GetCassandraAddress(),
+		Port:        defaultCassandraPort,
+		Keyspace:    keyspace,
+		Timeout:     defaultTimeout,
+		numReplicas: 1,
+	})
 }
 
 func createTestCQLFileContent() string {

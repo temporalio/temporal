@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package schema
 
 import (
 	"crypto/md5"
@@ -32,11 +32,11 @@ import (
 )
 
 type (
-	// UpdateSchemaTask represents a task
+	// UpdateTask represents a task
 	// that executes a cassandra schema upgrade
-	UpdateSchemaTask struct {
-		client CQLClient
-		config *UpdateSchemaConfig
+	UpdateTask struct {
+		db     DB
+		config *UpdateConfig
 	}
 
 	// manifest is a value type that represents
@@ -65,8 +65,6 @@ type (
 )
 
 const (
-	dryrunKeyspace   = "dryrun_"
-	systemKeyspace   = "system"
 	manifestFileName = "manifest.json"
 )
 
@@ -74,45 +72,27 @@ var (
 	whitelistedCQLPrefixes = [3]string{"CREATE", "ALTER", "INSERT"}
 )
 
-// NewUpdateSchemaTask returns a new instance of UpdateSchemaTask
-func NewUpdateSchemaTask(config *UpdateSchemaConfig) (*UpdateSchemaTask, error) {
-
-	keyspace := config.CassKeyspace
-	if config.IsDryRun {
-		keyspace = dryrunKeyspace
-		err := setupDryrunKeyspace(config)
-		if err != nil {
-			return nil, fmt.Errorf("error creating dryrun keyspace:%v", err.Error())
-		}
-	}
-
-	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, keyspace,
-		config.CassTimeout)
-	if err != nil {
-		return nil, err
-	}
-
-	return &UpdateSchemaTask{
-		client: client,
+// NewUpdateSchemaTask returns a new instance of UpdateTask
+func newUpdateSchemaTask(db DB, config *UpdateConfig) *UpdateTask {
+	return &UpdateTask{
+		db:     db,
 		config: config,
-	}, nil
+	}
 }
 
-// run executes the task
-func (task *UpdateSchemaTask) run() error {
-
+// Run executes the task
+func (task *UpdateTask) Run() error {
 	config := task.config
-
-	defer func() {
-		if config.IsDryRun {
-			task.client.DropKeyspace(dryrunKeyspace)
-		}
-		task.client.Close()
-	}()
 
 	log.Printf("UpdateSchemeTask started, config=%+v\n", config)
 
-	currVer, err := task.client.ReadSchemaVersion()
+	if config.IsDryRun {
+		if err := task.setupDryrunDatabase(); err != nil {
+			return fmt.Errorf("error creating dryrun database:%v", err.Error())
+		}
+	}
+
+	currVer, err := task.db.ReadSchemaVersion()
 	if err != nil {
 		return fmt.Errorf("error reading current schema version:%v", err.Error())
 	}
@@ -132,7 +112,7 @@ func (task *UpdateSchemaTask) run() error {
 	return nil
 }
 
-func (task *UpdateSchemaTask) executeUpdates(currVer string, updates []changeSet) error {
+func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) error {
 
 	for _, cs := range updates {
 
@@ -152,11 +132,11 @@ func (task *UpdateSchemaTask) executeUpdates(currVer string, updates []changeSet
 	return nil
 }
 
-func (task *UpdateSchemaTask) execCQLStmts(ver string, stmts []string) error {
+func (task *UpdateTask) execCQLStmts(ver string, stmts []string) error {
 	log.Printf("---- Executing updates for version %v ----\n", ver)
 	for _, stmt := range stmts {
 		log.Println(rmspaceRegex.ReplaceAllString(stmt, " "))
-		e := task.client.Exec(stmt)
+		e := task.db.Exec(stmt)
 		if e != nil {
 			return fmt.Errorf("error executing CQL statement:%v", e)
 		}
@@ -165,14 +145,14 @@ func (task *UpdateSchemaTask) execCQLStmts(ver string, stmts []string) error {
 	return nil
 }
 
-func (task *UpdateSchemaTask) updateSchemaVersion(oldVer string, cs *changeSet) error {
+func (task *UpdateTask) updateSchemaVersion(oldVer string, cs *changeSet) error {
 
-	err := task.client.UpdateSchemaVersion(cs.version, cs.manifest.MinCompatibleVersion)
+	err := task.db.UpdateSchemaVersion(cs.version, cs.manifest.MinCompatibleVersion)
 	if err != nil {
 		return fmt.Errorf("failed to update schema_version table, err=%v", err.Error())
 	}
 
-	err = task.client.WriteSchemaUpdateLog(oldVer, cs.manifest.CurrVersion, cs.manifest.md5, cs.manifest.Description)
+	err = task.db.WriteSchemaUpdateLog(oldVer, cs.manifest.CurrVersion, cs.manifest.md5, cs.manifest.Description)
 	if err != nil {
 		return fmt.Errorf("failed to add entry to schema_update_history, err=%v", err.Error())
 	}
@@ -180,7 +160,7 @@ func (task *UpdateSchemaTask) updateSchemaVersion(oldVer string, cs *changeSet) 
 	return nil
 }
 
-func (task *UpdateSchemaTask) buildChangeSet(currVer string) ([]changeSet, error) {
+func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 
 	config := task.config
 
@@ -208,7 +188,7 @@ func (task *UpdateSchemaTask) buildChangeSet(currVer string) ([]changeSet, error
 				vd, m.CurrVersion)
 		}
 
-		stmts, e := parseCQLStmts(dirPath, m)
+		stmts, e := task.parseSQLStmts(dirPath, m)
 		if e != nil {
 			return nil, e
 		}
@@ -228,13 +208,13 @@ func (task *UpdateSchemaTask) buildChangeSet(currVer string) ([]changeSet, error
 	return result, nil
 }
 
-func parseCQLStmts(dir string, manifest *manifest) ([]string, error) {
+func (task *UpdateTask) parseSQLStmts(dir string, manifest *manifest) ([]string, error) {
 
 	result := make([]string, 0, 4)
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
 		path := dir + "/" + file
-		stmts, err := ParseCQLFile(path)
+		stmts, err := ParseFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing file %v, err=%v", path, err)
 		}
@@ -355,37 +335,15 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 	return result, nil
 }
 
-// sets up a temporary dryrun keyspace for
+// sets up a temporary dryrun database for
 // executing the cassandra schema update
-func setupDryrunKeyspace(config *UpdateSchemaConfig) error {
-	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, systemKeyspace,
-		config.CassTimeout)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	err = client.CreateKeyspace(dryrunKeyspace, 1)
-	if err != nil {
-		return err
-	}
-
-	setupConfig := &SetupSchemaConfig{
-		BaseConfig: BaseConfig{
-			CassHosts:    config.CassHosts,
-			CassPort:     config.CassPort,
-			CassKeyspace: dryrunKeyspace,
-		},
+func (task *UpdateTask) setupDryrunDatabase() error {
+	setupConfig := &SetupConfig{
 		Overwrite:      true,
 		InitialVersion: "0.0",
 	}
-
-	setupTask, err := newSetupSchemaTask(setupConfig)
-	if err != nil {
-		return err
-	}
-
-	return setupTask.run()
+	setupTask := newSetupSchemaTask(task.db, setupConfig)
+	return setupTask.Run()
 }
 
 func dirToVersion(dir string) string {

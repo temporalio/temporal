@@ -18,13 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package sql
 
 import (
 	"log"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema/test"
 )
 
@@ -37,11 +39,14 @@ func TestUpdateSchemaTestSuite(t *testing.T) {
 }
 
 func (s *UpdateSchemaTestSuite) SetupSuite() {
-	client, err := newTestCQLClient(systemKeyspace)
+	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
+	os.Setenv("SQL_USER", testUser)
+	os.Setenv("SQL_PASSWORD", testPassword)
+	conn, err := newTestConn("")
 	if err != nil {
 		log.Fatal("Error creating CQLClient")
 	}
-	s.SetupSuiteBase(client)
+	s.SetupSuiteBase(conn)
 }
 
 func (s *UpdateSchemaTestSuite) TearDownSuite() {
@@ -49,16 +54,16 @@ func (s *UpdateSchemaTestSuite) TearDownSuite() {
 }
 
 func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
-	client, err := newTestCQLClient(s.DBName)
+	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
-	defer client.Close()
-	s.RunUpdateSchemaTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"events", "tasks"})
+	defer conn.Close()
+	s.RunUpdateSchemaTest(buildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
 }
 
 func (s *UpdateSchemaTestSuite) TestDryrun() {
-	client, err := newTestCQLClient(s.DBName)
+	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
-	defer client.Close()
-	dir := "../../schema/cassandra/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, "0.14")
+	defer conn.Close()
+	dir := "../../schema/mysql/v57/cadence/versioned"
+	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, "0.1")
 }

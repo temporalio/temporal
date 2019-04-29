@@ -18,47 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package sql
 
 import (
-	"log"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/tools/common/schema/test"
+	"github.com/uber/cadence/environment"
+	"github.com/uber/cadence/tools/common/schema"
 )
 
-type UpdateSchemaTestSuite struct {
-	test.UpdateSchemaTestBase
-}
-
-func TestUpdateSchemaTestSuite(t *testing.T) {
-	suite.Run(t, new(UpdateSchemaTestSuite))
-}
-
-func (s *UpdateSchemaTestSuite) SetupSuite() {
-	client, err := newTestCQLClient(systemKeyspace)
-	if err != nil {
-		log.Fatal("Error creating CQLClient")
+type (
+	HandlerTestSuite struct {
+		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
+		suite.Suite
 	}
-	s.SetupSuiteBase(client)
+)
+
+func TestHandlerTestSuite(t *testing.T) {
+	suite.Run(t, new(HandlerTestSuite))
 }
 
-func (s *UpdateSchemaTestSuite) TearDownSuite() {
-	s.TearDownSuiteBase()
+func (s *HandlerTestSuite) SetupTest() {
+	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
-func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
-	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
-	defer client.Close()
-	s.RunUpdateSchemaTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"events", "tasks"})
-}
+func (s *HandlerTestSuite) TestValidateConnectParams() {
+	p := new(sqlConnectParams)
+	s.NotNil(validateConnectParams(p, false))
+	s.NotNil(validateConnectParams(p, true))
 
-func (s *UpdateSchemaTestSuite) TestDryrun() {
-	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
-	defer client.Close()
-	dir := "../../schema/cassandra/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, "0.14")
+	p.host = environment.GetMySQLAddress()
+	s.NotNil(validateConnectParams(p, false))
+	s.Nil(validateConnectParams(p, true))
+	s.Equal(schema.DryrunDBName, p.database)
+
+	p.database = "foobar"
+	s.Nil(validateConnectParams(p, false))
+	s.Nil(validateConnectParams(p, true))
 }

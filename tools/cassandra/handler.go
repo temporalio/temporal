@@ -22,19 +22,75 @@ package cassandra
 
 import (
 	"fmt"
-	"github.com/urfave/cli"
 	"log"
+	"path"
+
+	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/tools/common/schema"
+	"github.com/urfave/cli"
 )
+
+const defaultNumReplicas = 1
+
+// SetupSchemaConfig contains the configuration params needed to setup schema tables
+type SetupSchemaConfig struct {
+	CQLClientConfig
+	schema.SetupConfig
+}
+
+// VerifyCompatibleVersion ensures that the installed version of cadence and visibility keyspaces
+// is greater than or equal to the expected version.
+// In most cases, the versions should match. However if after a schema upgrade there is a code
+// rollback, the code version (expected version) would fall lower than the actual version in
+// cassandra.
+func VerifyCompatibleVersion(cfg config.Persistence, rootPath string) error {
+	ds, ok := cfg.DataStores[cfg.DefaultStore]
+	if ok && ds.Cassandra != nil {
+		schemaPath := path.Join(rootPath, "schema/cassandra/cadence/versioned")
+		err := checkCompatibleVersion(*ds.Cassandra, ds.Cassandra.Keyspace, schemaPath)
+		if err != nil {
+			return err
+		}
+	}
+	ds, ok = cfg.DataStores[cfg.VisibilityStore]
+	if ok && ds.Cassandra != nil {
+		schemaPath := path.Join(rootPath, "schema/cassandra/visibility/versioned")
+		return checkCompatibleVersion(*ds.Cassandra, ds.Cassandra.Keyspace, schemaPath)
+	}
+	return nil
+}
+
+// checkCompatibleVersion check the version compatibility
+func checkCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath string) error {
+	client, err := newCQLClient(&CQLClientConfig{
+		Hosts:    cfg.Hosts,
+		Port:     cfg.Port,
+		User:     cfg.User,
+		Password: cfg.Password,
+		Keyspace: keyspace,
+		Timeout:  defaultTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
+	}
+	defer client.Close()
+	return schema.VerifyCompatibleVersion(client, dirPath, cfg.Keyspace)
+}
 
 // setupSchema executes the setupSchemaTask
 // using the given command line arguments
 // as input
 func setupSchema(cli *cli.Context) error {
-	config, err := newSetupSchemaConfig(cli)
+	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(newConfigError(err.Error()))
+		return handleErr(schema.NewConfigError(err.Error()))
 	}
-	if err := handleSetupSchema(config); err != nil {
+	client, err := newCQLClient(config)
+	if err != nil {
+		return handleErr(err)
+	}
+	defer client.Close()
+	if err := schema.Setup(cli, client); err != nil {
 		return handleErr(err)
 	}
 	return nil
@@ -43,175 +99,98 @@ func setupSchema(cli *cli.Context) error {
 // updateSchema executes the updateSchemaTask
 // using the given command lien args as input
 func updateSchema(cli *cli.Context) error {
-	config, err := newUpdateSchemaConfig(cli)
+	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(newConfigError(err.Error()))
+		return handleErr(schema.NewConfigError(err.Error()))
 	}
-	if err := handleUpdateSchema(config); err != nil {
+	if config.Keyspace == schema.DryrunDBName {
+		cfg := *config
+		if err := doCreateKeyspace(cfg, cfg.Keyspace); err != nil {
+			return handleErr(fmt.Errorf("error creating dryrun Keyspace: %v", err))
+		}
+		defer doDropKeyspace(cfg, cfg.Keyspace)
+	}
+	client, err := newCQLClient(config)
+	if err != nil {
+		return handleErr(err)
+	}
+	defer client.Close()
+	if err := schema.Update(cli, client); err != nil {
 		return handleErr(err)
 	}
 	return nil
 }
 
-// createKeyspace creates a cassandra keyspace
+// createKeyspace creates a cassandra Keyspace
 func createKeyspace(cli *cli.Context) error {
-	config, err := newCreateKeyspaceConfig(cli)
+	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(err)
+		return handleErr(schema.NewConfigError(err.Error()))
 	}
-	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, "system",
-		config.CassTimeout)
-	if err != nil {
-		return handleErr(fmt.Errorf("error creating cql client:%v", err))
+	keyspace := cli.String(schema.CLIOptKeyspace)
+	if keyspace == "" {
+		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument "))
 	}
-	err = client.CreateKeyspace(config.CassKeyspace, config.ReplicationFactor)
+	err = doCreateKeyspace(*config, keyspace)
 	if err != nil {
-		return handleErr(fmt.Errorf("error creating keyspace:%v", err))
+		return handleErr(fmt.Errorf("error creating Keyspace:%v", err))
 	}
 	return nil
 }
 
-func handleUpdateSchema(config *UpdateSchemaConfig) error {
-	task, err := NewUpdateSchemaTask(config)
+func doCreateKeyspace(cfg CQLClientConfig, name string) error {
+	cfg.Keyspace = systemKeyspace
+	client, err := newCQLClient(&cfg)
 	if err != nil {
-		return fmt.Errorf("error creating task, err=%v", err)
+		return err
 	}
-	if err := task.run(); err != nil {
-		return fmt.Errorf("error setting up schema, err=%v", err)
-	}
-	return nil
+	defer client.Close()
+	return client.createKeyspace(name)
 }
 
-func handleSetupSchema(config *SetupSchemaConfig) error {
-	task, err := newSetupSchemaTask(config)
+func doDropKeyspace(cfg CQLClientConfig, name string) {
+	cfg.Keyspace = systemKeyspace
+	client, err := newCQLClient(&cfg)
 	if err != nil {
-		return fmt.Errorf("error creating task, err=%v", err)
+		return
 	}
-	if err := task.run(); err != nil {
-		return fmt.Errorf("error setting up schema, err=%v", err)
-	}
-	return nil
+	client.dropKeyspace(name)
+	client.Close()
 }
 
-func validateSetupSchemaConfig(config *SetupSchemaConfig) error {
-	if len(config.CassHosts) == 0 {
-		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
+func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
+	config := new(CQLClientConfig)
+	config.Hosts = cli.GlobalString(schema.CLIOptEndpoint)
+	config.Port = cli.GlobalInt(schema.CLIOptPort)
+	config.User = cli.GlobalString(schema.CLIOptUser)
+	config.Password = cli.GlobalString(schema.CLIOptPassword)
+	config.Timeout = cli.GlobalInt(schema.CLIOptTimeout)
+	config.Keyspace = cli.GlobalString(schema.CLIOptKeyspace)
+	config.numReplicas = cli.Int(schema.CLIOptReplicationFactor)
+	isDryRun := cli.Bool(schema.CLIOptDryrun)
+	if err := validateCQLClientConfig(config, isDryRun); err != nil {
+		return nil, err
 	}
-	if config.CassPort == 0 {
-		config.CassPort = defaultCassandraPort
+	return config, nil
+}
+
+func validateCQLClientConfig(config *CQLClientConfig, isDryRun bool) error {
+	if len(config.Hosts) == 0 {
+		return schema.NewConfigError("missing cassandra endpoint argument " + flag(schema.CLIOptEndpoint))
 	}
-	if len(config.CassKeyspace) == 0 {
-		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")
-	}
-	if len(config.SchemaFilePath) == 0 && config.DisableVersioning {
-		return newConfigError("missing schemaFilePath " + flag(cliOptSchemaFile))
-	}
-	if (config.DisableVersioning && len(config.InitialVersion) > 0) ||
-		(!config.DisableVersioning && len(config.InitialVersion) == 0) {
-		return newConfigError("either " + flag(cliOptDisableVersioning) + " or " +
-			flag(cliOptVersion) + " but not both must be specified")
-	}
-	if !config.DisableVersioning {
-		ver, err := parseValidateVersion(config.InitialVersion)
-		if err != nil {
-			return newConfigError("invalid " + flag(cliOptVersion) + " argument:" + err.Error())
+	if config.Keyspace == "" {
+		if !isDryRun {
+			return schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument ")
 		}
-		config.InitialVersion = ver
+		config.Keyspace = schema.DryrunDBName
 	}
-	return nil
-}
-
-func newSetupSchemaConfig(cli *cli.Context) (*SetupSchemaConfig, error) {
-
-	config := new(SetupSchemaConfig)
-	config.CassHosts = cli.GlobalString(cliOptEndpoint)
-	config.CassPort = cli.GlobalInt(cliOptPort)
-	config.CassUser = cli.GlobalString(cliOptUser)
-	config.CassPassword = cli.GlobalString(cliOptPassword)
-	config.CassTimeout = cli.GlobalInt(cliOptTimeout)
-	config.CassKeyspace = cli.GlobalString(cliOptKeyspace)
-	config.SchemaFilePath = cli.String(cliOptSchemaFile)
-	config.InitialVersion = cli.String(cliOptVersion)
-	config.DisableVersioning = cli.Bool(cliOptDisableVersioning)
-	config.Overwrite = cli.Bool(cliOptOverwrite)
-
-	if err := validateSetupSchemaConfig(config); err != nil {
-		return nil, err
+	if config.Port == 0 {
+		config.Port = defaultCassandraPort
+	}
+	if config.numReplicas == 0 {
+		config.numReplicas = defaultNumReplicas
 	}
 
-	return config, nil
-}
-
-func validateUpdateSchemaConfig(config *UpdateSchemaConfig) error {
-
-	if len(config.CassHosts) == 0 {
-		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
-	}
-	if config.CassPort == 0 {
-		config.CassPort = defaultCassandraPort
-	}
-	if len(config.CassKeyspace) == 0 {
-		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")
-	}
-	if len(config.SchemaDir) == 0 {
-		return newConfigError("missing " + flag(cliOptSchemaDir) + " argument ")
-	}
-	if len(config.TargetVersion) > 0 {
-		ver, err := parseValidateVersion(config.TargetVersion)
-		if err != nil {
-			return newConfigError("invalid " + flag(cliOptTargetVersion) + " argument:" + err.Error())
-		}
-		config.TargetVersion = ver
-	}
-	return nil
-}
-
-func newUpdateSchemaConfig(cli *cli.Context) (*UpdateSchemaConfig, error) {
-
-	config := new(UpdateSchemaConfig)
-	config.CassHosts = cli.GlobalString(cliOptEndpoint)
-	config.CassPort = cli.GlobalInt(cliOptPort)
-	config.CassUser = cli.GlobalString(cliOptUser)
-	config.CassPassword = cli.GlobalString(cliOptPassword)
-	config.CassTimeout = cli.GlobalInt(cliOptTimeout)
-	config.CassKeyspace = cli.GlobalString(cliOptKeyspace)
-	config.SchemaDir = cli.String(cliOptSchemaDir)
-	config.IsDryRun = cli.Bool(cliOptDryrun)
-	config.TargetVersion = cli.String(cliOptTargetVersion)
-
-	if err := validateUpdateSchemaConfig(config); err != nil {
-		return nil, err
-	}
-
-	return config, nil
-}
-
-func newCreateKeyspaceConfig(cli *cli.Context) (*CreateKeyspaceConfig, error) {
-	config := new(CreateKeyspaceConfig)
-	config.CassHosts = cli.GlobalString(cliOptEndpoint)
-	config.CassPort = cli.GlobalInt(cliOptPort)
-	config.CassUser = cli.GlobalString(cliOptUser)
-	config.CassPassword = cli.GlobalString(cliOptPassword)
-	config.CassTimeout = cli.GlobalInt(cliOptTimeout)
-	config.CassKeyspace = cli.String(cliOptKeyspace)
-	config.ReplicationFactor = cli.Int(cliOptReplicationFactor)
-
-	if err := validateCreateKeyspaceConfig(config); err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
-func validateCreateKeyspaceConfig(config *CreateKeyspaceConfig) error {
-	if len(config.CassHosts) == 0 {
-		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
-	}
-	if config.CassPort == 0 {
-		config.CassPort = defaultCassandraPort
-	}
-	if len(config.CassKeyspace) == 0 {
-		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")
-	}
 	return nil
 }
 

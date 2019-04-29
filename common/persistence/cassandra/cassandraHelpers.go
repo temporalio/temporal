@@ -29,6 +29,7 @@ import (
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
 	"github.com/uber/cadence/tools/cassandra"
+	"github.com/uber/cadence/tools/common/schema"
 )
 
 const cassandraPersistenceName = "cassandra"
@@ -111,14 +112,16 @@ func LoadCassandraSchema(
 	tmpFile.Close()
 
 	config := &cassandra.SetupSchemaConfig{
-		BaseConfig: cassandra.BaseConfig{
-			CassHosts:    strings.Join(hosts, ","),
-			CassPort:     port,
-			CassKeyspace: keyspace,
+		CQLClientConfig: cassandra.CQLClientConfig{
+			Hosts:    strings.Join(hosts, ","),
+			Port:     port,
+			Keyspace: keyspace,
 		},
-		SchemaFilePath:    tmpFile.Name(),
-		Overwrite:         override,
-		DisableVersioning: true,
+		SetupConfig: schema.SetupConfig{
+			SchemaFilePath:    tmpFile.Name(),
+			Overwrite:         override,
+			DisableVersioning: true,
+		},
 	}
 
 	err = cassandra.SetupSchema(config)

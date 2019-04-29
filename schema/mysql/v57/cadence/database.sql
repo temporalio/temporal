@@ -1,1 +1,1 @@
-CREATE DATABASE cadence;
+CREATE DATABASE cadence character set utf8;

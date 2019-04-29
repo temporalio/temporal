@@ -18,11 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package sql
 
 import (
 	"os"
 
+	_ "github.com/go-sql-driver/mysql" // needed to load the mysql driver
 	"github.com/uber/cadence/tools/common/schema"
 	"github.com/urfave/cli"
 )
@@ -31,18 +32,6 @@ import (
 func RunTool(args []string) error {
 	app := buildCLIOptions()
 	return app.Run(args)
-}
-
-// SetupSchema setups the cassandra schema
-func SetupSchema(config *SetupSchemaConfig) error {
-	if err := validateCQLClientConfig(&config.CQLClientConfig, false); err != nil {
-		return err
-	}
-	db, err := newCQLClient(&config.CQLClientConfig)
-	if err != nil {
-		return err
-	}
-	return schema.SetupFromConfig(&config.SetupConfig, db)
 }
 
 // root handler for all cli commands
@@ -57,46 +46,46 @@ func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
 func buildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
-	app.Name = "cadence-cassandra-tool"
-	app.Usage = "Command line tool for cadence cassandra operations"
+	app.Name = "cadence-sql-tool"
+	app.Usage = "Command line tool for cadence sql operations"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   schema.CLIFlagEndpoint,
 			Value:  "127.0.0.1",
-			Usage:  "hostname or ip address of cassandra host to connect to",
-			EnvVar: "CASSANDRA_HOST",
+			Usage:  "hostname or ip address of sql host to connect to",
+			EnvVar: "SQL_HOST",
 		},
 		cli.IntFlag{
 			Name:   schema.CLIFlagPort,
-			Value:  defaultCassandraPort,
-			Usage:  "Port of cassandra host to connect to",
-			EnvVar: "CASSANDRA_PORT",
+			Value:  defaultSQLPort,
+			Usage:  "port of sql host to connect to",
+			EnvVar: "SQL_PORT",
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagUser,
 			Value:  "",
-			Usage:  "User name used for authentication for connecting to cassandra host",
-			EnvVar: "CASSANDRA_USER",
+			Usage:  "user name used for authentication when connecting to sql host",
+			EnvVar: "SQL_USER",
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagPassword,
 			Value:  "",
-			Usage:  "Password used for authentication for connecting to cassandra host",
-			EnvVar: "CASSANDRA_PASSWORD",
-		},
-		cli.IntFlag{
-			Name:   schema.CLIFlagTimeout,
-			Value:  defaultTimeout,
-			Usage:  "request Timeout in seconds used for cql client",
-			EnvVar: "CASSANDRA_TIMEOUT",
+			Usage:  "password used for authentication when connecting to sql host",
+			EnvVar: "SQL_PASSWORD",
 		},
 		cli.StringFlag{
-			Name:   schema.CLIFlagKeyspace,
+			Name:   schema.CLIFlagDatabase,
 			Value:  "cadence",
-			Usage:  "name of the cassandra Keyspace",
-			EnvVar: "CASSANDRA_KEYSPACE",
+			Usage:  "name of the sql database",
+			EnvVar: "SQL_DATABASE",
+		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagDriverName,
+			Value:  "mysql",
+			Usage:  "name of the sql driver",
+			EnvVar: "SQL_DRIVER",
 		},
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
@@ -108,7 +97,7 @@ func buildCLIOptions() *cli.App {
 		{
 			Name:    "setup-schema",
 			Aliases: []string{"setup"},
-			Usage:   "setup initial version of cassandra schema",
+			Usage:   "setup initial version of sql schema",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  schema.CLIFlagVersion,
@@ -116,7 +105,7 @@ func buildCLIOptions() *cli.App {
 				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagSchemaFile,
-					Usage: "path to the .cql schema file; if un-specified, will just setup versioning tables",
+					Usage: "path to the .sql schema file; if un-specified, will just setup versioning tables",
 				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
@@ -134,7 +123,7 @@ func buildCLIOptions() *cli.App {
 		{
 			Name:    "update-schema",
 			Aliases: []string{"update"},
-			Usage:   "update cassandra schema to a specific version",
+			Usage:   "update sql schema to a specific version",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  schema.CLIFlagTargetVersion,
@@ -154,22 +143,17 @@ func buildCLIOptions() *cli.App {
 			},
 		},
 		{
-			Name:    "create-Keyspace",
+			Name:    "create-database",
 			Aliases: []string{"create"},
-			Usage:   "creates a Keyspace with simple strategy",
+			Usage:   "creates a database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  schema.CLIFlagKeyspace,
-					Usage: "name of the Keyspace",
-				},
-				cli.IntFlag{
-					Name:  schema.CLIFlagReplicationFactor,
-					Value: 1,
-					Usage: "replication factor for the Keyspace",
+					Name:  schema.CLIFlagDatabase,
+					Usage: "name of the database",
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, createKeyspace)
+				cliHandler(c, createDatabase)
 			},
 		},
 	}

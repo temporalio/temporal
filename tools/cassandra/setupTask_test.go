@@ -21,32 +21,19 @@
 package cassandra
 
 import (
-	"fmt"
-	"io/ioutil"
-	"math/rand"
 	"os"
-	"strconv"
 	"testing"
-	"time"
 
-	"github.com/gocql/gocql"
-	"github.com/stretchr/testify/require"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
+	"github.com/uber/cadence/tools/common/schema/test"
 )
 
 type (
 	SetupSchemaTestSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
-		rand     *rand.Rand
-		keyspace string
-		session  *gocql.Session
-		client   CQLClient
-		log      log.Logger
+		test.SetupSchemaTestBase
+		client *cqlClient
 	}
 )
 
@@ -54,109 +41,28 @@ func TestSetupSchemaTestSuite(t *testing.T) {
 	suite.Run(t, new(SetupSchemaTestSuite))
 }
 
-func (s *SetupSchemaTestSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
-
 func (s *SetupSchemaTestSuite) SetupSuite() {
-	var err error
-	s.log, err = loggerimpl.NewDevelopment()
-	s.Require().NoError(err)
-	s.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
-	s.keyspace = fmt.Sprintf("setup_schema_test_%v", s.rand.Int63())
 	os.Setenv("CASSANDRA_HOST", environment.GetCassandraAddress())
-	client, err := newCQLClient(environment.GetCassandraAddress(), defaultCassandraPort, "", "", "system", defaultTimeout)
+	client, err := newTestCQLClient(systemKeyspace)
 	if err != nil {
-		s.log.Fatal("Error creating CQLClient")
+		log.Fatal("Error creating CQLClient")
 	}
-
-	err = client.CreateKeyspace(s.keyspace, 1)
-	if err != nil {
-		s.log.Fatal("error creating keyspace, ", tag.Error(err))
-	}
-
 	s.client = client
+	s.SetupSuiteBase(client)
 }
 
 func (s *SetupSchemaTestSuite) TearDownSuite() {
-	s.client.DropKeyspace(s.keyspace)
-	s.client.Close()
+	s.TearDownSuiteBase()
 }
 
 func (s *SetupSchemaTestSuite) TestCreateKeyspace() {
 	RunTool([]string{"./tool", "create", "-k", "foobar123", "--rf", "1"})
-	err := s.client.DropKeyspace("foobar123")
+	err := s.client.dropKeyspace("foobar123")
 	s.Nil(err)
 }
 
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
-
-	client, err := newCQLClient(environment.GetCassandraAddress(), defaultCassandraPort, "", "", s.keyspace, defaultTimeout)
+	client, err := newTestCQLClient(s.DBName)
 	s.Nil(err)
-
-	// test command fails without required arguments
-	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema"})
-	tables, err := client.ListTables()
-	s.Nil(err)
-	s.Equal(0, len(tables))
-
-	tmpDir, err := ioutil.TempDir("", "setupSchemaTestDir")
-	s.Nil(err)
-	defer os.Remove(tmpDir)
-
-	cqlFile, err := ioutil.TempFile(tmpDir, "setupSchema.cliOptionsTest")
-	s.Nil(err)
-	defer os.Remove(cqlFile.Name())
-
-	cqlFile.WriteString(createTestCQLFileContent())
-
-	// make sure command doesn't succeed without version or disable-version
-	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-f", cqlFile.Name()})
-	tables, err = client.ListTables()
-	s.Nil(err)
-	s.Equal(0, len(tables))
-
-	for i := 0; i < 4; i++ {
-
-		ver := strconv.Itoa(int(s.rand.Int31()))
-		versioningEnabled := (i%2 == 0)
-
-		// test overwrite with versioning works
-		if versioningEnabled {
-			RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-f", cqlFile.Name(), "-version", ver, "-o"})
-		} else {
-			RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-f", cqlFile.Name(), "-d", "-o"})
-		}
-
-		expectedTables := getExpectedTables(versioningEnabled)
-		tables, err = client.ListTables()
-		s.Nil(err)
-		s.Equal(len(expectedTables), len(tables))
-
-		for _, t := range tables {
-			_, ok := expectedTables[t]
-			s.True(ok)
-			delete(expectedTables, t)
-		}
-		s.Equal(0, len(expectedTables))
-
-		gotVer, err := client.ReadSchemaVersion()
-		if versioningEnabled {
-			s.Nil(err)
-			s.Equal(ver, gotVer)
-		} else {
-			s.NotNil(err)
-		}
-	}
-}
-
-func getExpectedTables(versioningEnabled bool) map[string]struct{} {
-	expectedTables := make(map[string]struct{})
-	expectedTables["tasks"] = struct{}{}
-	expectedTables["events"] = struct{}{}
-	if versioningEnabled {
-		expectedTables["schema_version"] = struct{}{}
-		expectedTables["schema_update_history"] = struct{}{}
-	}
-	return expectedTables
+	s.RunSetupTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"tasks", "events"})
 }

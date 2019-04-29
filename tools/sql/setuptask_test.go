@@ -18,47 +18,53 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package sql
 
 import (
-	"log"
+	"os"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema/test"
 )
 
-type UpdateSchemaTestSuite struct {
-	test.UpdateSchemaTestBase
-}
-
-func TestUpdateSchemaTestSuite(t *testing.T) {
-	suite.Run(t, new(UpdateSchemaTestSuite))
-}
-
-func (s *UpdateSchemaTestSuite) SetupSuite() {
-	client, err := newTestCQLClient(systemKeyspace)
-	if err != nil {
-		log.Fatal("Error creating CQLClient")
+type (
+	SetupSchemaTestSuite struct {
+		test.SetupSchemaTestBase
+		conn *sqlConn
 	}
-	s.SetupSuiteBase(client)
+)
+
+func TestSetupSchemaTestSuite(t *testing.T) {
+	suite.Run(t, new(SetupSchemaTestSuite))
 }
 
-func (s *UpdateSchemaTestSuite) TearDownSuite() {
+func (s *SetupSchemaTestSuite) SetupSuite() {
+	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
+	os.Setenv("SQL_USER", testUser)
+	os.Setenv("SQL_PASSWORD", testPassword)
+	conn, err := newTestConn("")
+	if err != nil {
+		log.Fatalf("error creating sql connection:%v", err)
+	}
+	s.conn = conn
+	s.SetupSuiteBase(conn)
+}
+
+func (s *SetupSchemaTestSuite) TearDownSuite() {
 	s.TearDownSuiteBase()
 }
 
-func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
-	client, err := newTestCQLClient(s.DBName)
+func (s *SetupSchemaTestSuite) TestCreateDatabase() {
+	RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"})
+	err := s.conn.DropDatabase("foobar123")
 	s.Nil(err)
-	defer client.Close()
-	s.RunUpdateSchemaTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"events", "tasks"})
 }
 
-func (s *UpdateSchemaTestSuite) TestDryrun() {
-	client, err := newTestCQLClient(s.DBName)
+func (s *SetupSchemaTestSuite) TestSetupSchema() {
+	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
-	defer client.Close()
-	dir := "../../schema/cassandra/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, "0.14")
+	s.RunSetupTest(buildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
 }

@@ -52,117 +52,6 @@ func (s *VersionTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
-func (s *VersionTestSuite) TestParseVersion() {
-	s.execParseTest("", 0, 0, false)
-	s.execParseTest("0", 0, 0, false)
-	s.execParseTest("99", 99, 0, false)
-	s.execParseTest("0.0", 0, 0, false)
-	s.execParseTest("0.9", 0, 9, false)
-	s.execParseTest("0.10", 0, 10, false)
-	s.execParseTest("1.0", 1, 0, false)
-	s.execParseTest("9999.0", 9999, 0, false)
-	s.execParseTest("999.999", 999, 999, false)
-	s.execParseTest("88.88.88", 88, 88, false)
-	s.execParseTest("a.b", 0, 0, true)
-	s.execParseTest("1.5a", 0, 0, true)
-	s.execParseTest("5.b", 0, 0, true)
-	s.execParseTest("golang", 0, 0, true)
-}
-
-func (s *VersionTestSuite) TestCmpVersion() {
-
-	s.Equal(0, cmpVersion("0", "0"))
-	s.Equal(0, cmpVersion("999", "999"))
-	s.Equal(0, cmpVersion("0.0", "0.0"))
-	s.Equal(0, cmpVersion("0.999", "0.999"))
-	s.Equal(0, cmpVersion("99.888", "99.888"))
-
-	s.True(cmpVersion("0.1", "0") > 0)
-	s.True(cmpVersion("0.5", "0.1") > 0)
-	s.True(cmpVersion("1.1", "0.1") > 0)
-	s.True(cmpVersion("1.1", "0.9") > 0)
-	s.True(cmpVersion("1.1", "1.0") > 0)
-
-	s.True(cmpVersion("0", "0.1") < 0)
-	s.True(cmpVersion("0.1", "0.5") < 0)
-	s.True(cmpVersion("0.1", "1.1") < 0)
-	s.True(cmpVersion("0.9", "1.1") < 0)
-	s.True(cmpVersion("1.0", "1.1") < 0)
-
-	s.True(cmpVersion("0.1a", "0.5") < 0)
-	s.True(cmpVersion("0.1", "0.5a") > 0)
-	s.True(cmpVersion("ab", "cd") == 0)
-}
-
-func (s *VersionTestSuite) TestParseValidateVersion() {
-
-	inputs := []string{"0", "1000", "9999", "0.1", "0.9", "99.9", "100.8"}
-	for _, in := range inputs {
-		s.execParseValidateTest(in, in, false)
-		s.execParseValidateTest("v"+in, in, false)
-	}
-
-	errInputs := []string{"1.2a", "ab", "5.11a"}
-	for _, in := range errInputs {
-		s.execParseValidateTest(in, "", true)
-		s.execParseValidateTest("v"+in, "", true)
-	}
-}
-
-func (s *VersionTestSuite) execParseValidateTest(input string, output string, isErr bool) {
-	ver, err := parseValidateVersion(input)
-	if isErr {
-		s.NotNil(err)
-		return
-	}
-	s.Nil(err)
-	s.Equal(output, ver)
-}
-
-func (s *VersionTestSuite) execParseTest(input string, expMajor int, expMinor int, isErr bool) {
-	maj, min, err := parseVersion(input)
-	if isErr {
-		s.NotNil(err)
-		return
-	}
-	s.Nil(err)
-	s.Equal(expMajor, maj)
-	s.Equal(expMinor, min)
-}
-
-func (s *VersionTestSuite) TestGetExpectedVersion() {
-	s.T().Skip()
-	flags := []struct {
-		dirs     []string
-		expected string
-		err      string
-	}{
-		{[]string{"1.0"}, "1.0", ""},
-		{[]string{"1.0", "2.0"}, "2.0", ""},
-		{[]string{"abc"}, "", "no valid schemas"},
-	}
-	for _, flag := range flags {
-		s.expectedVersionTest(flag.expected, flag.dirs, flag.err)
-	}
-}
-
-func (s *VersionTestSuite) expectedVersionTest(expected string, dirs []string, errStr string) {
-	tmpDir, err := ioutil.TempDir("", "version_test")
-	s.NoError(err)
-	defer os.RemoveAll(tmpDir)
-
-	for _, dir := range dirs {
-		s.createSchemaForVersion(tmpDir, dir)
-	}
-	v, err := getExpectedVersion(tmpDir)
-	if len(errStr) == 0 {
-		s.Equal(expected, v)
-	} else {
-		s.Error(err)
-		s.Contains(err.Error(), errStr)
-	}
-}
-
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	keyspace := "cadence_test"
 	visKeyspace := "cadence_visibility_test"
@@ -220,15 +109,22 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 }
 
 func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
-	client, err := newCQLClient(environment.GetCassandraAddress(), defaultCassandraPort, "", "", "system", defaultTimeout)
+	cfg := &CQLClientConfig{
+		Hosts:       environment.GetCassandraAddress(),
+		Port:        defaultCassandraPort,
+		Keyspace:    "system",
+		Timeout:     defaultTimeout,
+		numReplicas: 1,
+	}
+	client, err := newCQLClient(cfg)
 	s.NoError(err)
 
-	err = client.CreateKeyspace(keyspace, 1)
+	err = client.createKeyspace(keyspace)
 	if err != nil {
-		log.Fatalf("error creating keyspace, err=%v", err)
+		log.Fatalf("error creating Keyspace, err=%v", err)
 	}
 	return func() {
-		s.NoError(client.DropKeyspace(keyspace))
+		s.NoError(client.dropKeyspace(keyspace))
 		client.Close()
 	}
 }

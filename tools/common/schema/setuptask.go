@@ -18,56 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package schema
 
-import (
-	"log"
-)
+import "log"
 
-// SetupSchemaTask represents a task
+// SetupTask represents a task
 // that sets up cassandra schema on
 // a specified keyspace
-type SetupSchemaTask struct {
-	client CQLClient
-	config *SetupSchemaConfig
+type SetupTask struct {
+	db     DB
+	config *SetupConfig
 }
 
-func newSetupSchemaTask(config *SetupSchemaConfig) (*SetupSchemaTask, error) {
-	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword,
-		config.CassKeyspace, config.CassTimeout)
-	if err != nil {
-		return nil, err
-	}
-	return &SetupSchemaTask{
+func newSetupSchemaTask(db DB, config *SetupConfig) *SetupTask {
+	return &SetupTask{
+		db:     db,
 		config: config,
-		client: client,
-	}, nil
+	}
 }
 
-// run executes the task
-func (task *SetupSchemaTask) run() error {
-
+// Run executes the task
+func (task *SetupTask) Run() error {
 	config := task.config
-
-	defer func() {
-		task.client.Close()
-	}()
-
 	log.Printf("Starting schema setup, config=%+v\n", config)
 
 	if config.Overwrite {
-		dropAllTablesTypes(task.client)
+		task.db.DropAllTables()
 	}
 
 	if !config.DisableVersioning {
 		log.Printf("Setting up version tables\n")
-		if err := task.client.CreateSchemaVersionTables(); err != nil {
+		if err := task.db.CreateSchemaVersionTables(); err != nil {
 			return err
 		}
 	}
 
 	if len(config.SchemaFilePath) > 0 {
-		stmts, err := ParseCQLFile(config.SchemaFilePath)
+		stmts, err := ParseFile(config.SchemaFilePath)
 		if err != nil {
 			return err
 		}
@@ -75,7 +62,7 @@ func (task *SetupSchemaTask) run() error {
 		log.Println("----- Creating types and tables -----")
 		for _, stmt := range stmts {
 			log.Println(rmspaceRegex.ReplaceAllString(stmt, " "))
-			if err := task.client.Exec(stmt); err != nil {
+			if err := task.db.Exec(stmt); err != nil {
 				return err
 			}
 		}
@@ -84,12 +71,12 @@ func (task *SetupSchemaTask) run() error {
 
 	if !config.DisableVersioning {
 		log.Printf("Setting initial schema version to %v\n", config.InitialVersion)
-		err := task.client.UpdateSchemaVersion(config.InitialVersion, config.InitialVersion)
+		err := task.db.UpdateSchemaVersion(config.InitialVersion, config.InitialVersion)
 		if err != nil {
 			return err
 		}
 		log.Printf("Updating schema update log\n")
-		err = task.client.WriteSchemaUpdateLog("0", config.InitialVersion, "", "initial version")
+		err = task.db.WriteSchemaUpdateLog("0", config.InitialVersion, "", "initial version")
 		if err != nil {
 			return err
 		}
