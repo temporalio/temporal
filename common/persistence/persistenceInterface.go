@@ -41,7 +41,17 @@ type (
 	// TaskStore is a lower level of TaskManager
 	TaskStore = TaskManager
 	// MetadataStore is a lower level of MetadataManager
-	MetadataStore = MetadataManager
+	MetadataStore interface {
+		Closeable
+		GetName() string
+		CreateDomain(request *InternalCreateDomainRequest) (*CreateDomainResponse, error)
+		GetDomain(request *GetDomainRequest) (*InternalGetDomainResponse, error)
+		UpdateDomain(request *InternalUpdateDomainRequest) error
+		DeleteDomain(request *DeleteDomainRequest) error
+		DeleteDomainByName(request *DeleteDomainByNameRequest) error
+		ListDomains(request *ListDomainsRequest) (*InternalListDomainsResponse, error)
+		GetMetadata() (*GetMetadataResponse, error)
+	}
 
 	// ExecutionStore is used to manage workflow executions for Persistence layer
 	ExecutionStore interface {
@@ -581,6 +591,57 @@ type (
 		Status             workflow.WorkflowExecutionCloseStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
+	}
+
+	// InternalDomainConfig describes the domain configuration
+	InternalDomainConfig struct {
+		// NOTE: this retention is in days, not in seconds
+		Retention      int32
+		EmitMetric     bool
+		ArchivalBucket string
+		ArchivalStatus workflow.ArchivalStatus
+		BadBinaries    *DataBlob
+	}
+
+	// InternalCreateDomainRequest is used to create the domain
+	InternalCreateDomainRequest struct {
+		Info              *DomainInfo
+		Config            *InternalDomainConfig
+		ReplicationConfig *DomainReplicationConfig
+		IsGlobalDomain    bool
+		ConfigVersion     int64
+		FailoverVersion   int64
+	}
+
+	// InternalGetDomainResponse is the response for GetDomain
+	InternalGetDomainResponse struct {
+		Info                        *DomainInfo
+		Config                      *InternalDomainConfig
+		ReplicationConfig           *DomainReplicationConfig
+		IsGlobalDomain              bool
+		ConfigVersion               int64
+		FailoverVersion             int64
+		FailoverNotificationVersion int64
+		NotificationVersion         int64
+		TableVersion                int
+	}
+
+	// InternalUpdateDomainRequest is used to update domain
+	InternalUpdateDomainRequest struct {
+		Info                        *DomainInfo
+		Config                      *InternalDomainConfig
+		ReplicationConfig           *DomainReplicationConfig
+		ConfigVersion               int64
+		FailoverVersion             int64
+		FailoverNotificationVersion int64
+		NotificationVersion         int64
+		TableVersion                int
+	}
+
+	// InternalListDomainsResponse is the response for GetDomain
+	InternalListDomainsResponse struct {
+		Domains       []*InternalGetDomainResponse
+		NextPageToken []byte
 	}
 )
 

@@ -25,6 +25,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/cadence/common"
+
+	"github.com/uber/cadence/.gen/go/shared"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -80,8 +84,11 @@ func (s *domainCacheSuite) TearDownTest() {
 func (s *domainCacheSuite) TestListDomain() {
 	domainNotificationVersion := int64(0)
 	domainRecord1 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -96,8 +103,11 @@ func (s *domainCacheSuite) TestListDomain() {
 	domainNotificationVersion++
 
 	domainRecord2 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 2},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 2,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -112,8 +122,11 @@ func (s *domainCacheSuite) TestListDomain() {
 	domainNotificationVersion++
 
 	domainRecord3 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "yet another random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 3},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "yet another random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 3,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -179,8 +192,17 @@ func (s *domainCacheSuite) TestListDomain() {
 func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{
+					"abc": {
+						Reason:          common.StringPtr("test reason"),
+						Operator:        common.StringPtr("test operator"),
+						CreatedTimeNano: common.Int64Ptr(123),
+					},
+				},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -205,8 +227,13 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByID() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{
+			Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			},
+		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -231,8 +258,11 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByID() {
 func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 	domainNotificationVersion := int64(0)
 	domainRecord1 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -249,8 +279,11 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 	domainNotificationVersion++
 
 	domainRecord2 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 2},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 2,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -309,8 +342,11 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	domainNotificationVersion := int64(0)
 	domainRecord1Old := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -327,8 +363,11 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	domainNotificationVersion++
 
 	domainRecord2Old := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 2},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 2,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -441,8 +480,11 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	domainRecordOld := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -455,8 +497,11 @@ func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 	entryOld := s.buildEntryFromRecord(domainRecordOld)
 
 	domainRecordNew := &persistence.GetDomainResponse{
-		Info:   entryOld.info,
-		Config: &persistence.DomainConfig{Retention: 2},
+		Info: entryOld.info,
+		Config: &persistence.DomainConfig{Retention: 2,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -501,8 +546,11 @@ func (s *domainCacheSuite) TestGetUpdateCache_ConcurrentAccess() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	id := uuid.New()
 	domainRecordOld := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: id, Name: "some random domain name", Data: make(map[string]string)},
-		Config: &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: id, Name: "some random domain name", Data: make(map[string]string)},
+		Config: &persistence.DomainConfig{Retention: 1,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -625,6 +673,9 @@ func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 		},
 		config: &persistence.DomainConfig{
 			Retention: 7,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			},
 		},
 	}
 	wid := uuid.New()
@@ -641,6 +692,9 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 		},
 		config: &persistence.DomainConfig{
 			Retention: 7,
+			BadBinaries: shared.BadBinaries{
+				Binaries: map[string]*shared.BadBinaryInfo{},
+			},
 		},
 	}
 	wid := uuid.New()

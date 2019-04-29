@@ -40,7 +40,7 @@ type sqlMetadataManagerV2 struct {
 
 // newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
 func newMetadataPersistenceV2(db sqldb.Interface, currentClusterName string,
-	logger log.Logger) (persistence.MetadataManager, error) {
+	logger log.Logger) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
 		sqlStore: sqlStore{
 			db:     db,
@@ -82,7 +82,7 @@ func lockMetadata(tx sqldb.Tx) error {
 	return nil
 }
 
-func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainRequest) (*persistence.CreateDomainResponse, error) {
+func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateDomainRequest) (*persistence.CreateDomainResponse, error) {
 	metadata, err := m.GetMetadata()
 	if err != nil {
 		return nil, err
@@ -93,6 +93,12 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
 	}
 
+	var badBinaries []byte
+	var badBinariesEncoding *string
+	if request.Config.BadBinaries != nil {
+		badBinaries = request.Config.BadBinaries.Data
+		badBinariesEncoding = common.StringPtr(string(request.Config.BadBinaries.GetEncoding()))
+	}
 	domainInfo := &sqlblobs.DomainInfo{
 		Status:                      common.Int32Ptr(int32(request.Info.Status)),
 		Description:                 &request.Info.Description,
@@ -108,6 +114,8 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
 		NotificationVersion:         common.Int64Ptr(metadata.NotificationVersion),
 		FailoverNotificationVersion: common.Int64Ptr(persistence.InitialFailoverNotificationVersion),
+		BadBinaries:                 badBinaries,
+		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
 	blob, err := domainInfoToBlob(domainInfo)
@@ -143,7 +151,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 	return resp, err
 }
 
-func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) (*persistence.GetDomainResponse, error) {
+func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) (*persistence.InternalGetDomainResponse, error) {
 	filter := &sqldb.DomainFilter{}
 	switch {
 	case request.Name != "" && request.ID != "":
@@ -188,7 +196,7 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	return response, nil
 }
 
-func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow) (*persistence.GetDomainResponse, error) {
+func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow) (*persistence.InternalGetDomainResponse, error) {
 	domainInfo, err := domainInfoFromBlob(row.Data, row.DataEncoding)
 	if err != nil {
 		return nil, err
@@ -199,7 +207,12 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow
 		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: domainInfo.Clusters[i]}
 	}
 
-	return &persistence.GetDomainResponse{
+	var badBinaries *persistence.DataBlob
+	if domainInfo.BadBinaries != nil {
+		badBinaries = persistence.NewDataBlob(domainInfo.BadBinaries, common.EncodingType(*domainInfo.BadBinariesEncoding))
+	}
+
+	return &persistence.InternalGetDomainResponse{
 		TableVersion: persistence.DomainTableVersionV2,
 		Info: &persistence.DomainInfo{
 			ID:          row.ID.String(),
@@ -209,11 +222,12 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow
 			OwnerEmail:  domainInfo.GetOwner(),
 			Data:        domainInfo.GetData(),
 		},
-		Config: &persistence.DomainConfig{
+		Config: &persistence.InternalDomainConfig{
 			Retention:      int32(domainInfo.GetRetentionDays()),
 			EmitMetric:     domainInfo.GetEmitMetric(),
 			ArchivalBucket: domainInfo.GetArchivalBucket(),
 			ArchivalStatus: workflow.ArchivalStatus(domainInfo.GetArchivalStatus()),
+			BadBinaries:    badBinaries,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, domainInfo.GetActiveClusterName()),
@@ -227,12 +241,18 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow
 	}, nil
 }
 
-func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainRequest) error {
+func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateDomainRequest) error {
 	clusters := make([]string, len(request.ReplicationConfig.Clusters))
 	for i := range clusters {
 		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
 	}
 
+	var badBinaries []byte
+	var badBinariesEncoding *string
+	if request.Config.BadBinaries != nil {
+		badBinaries = request.Config.BadBinaries.Data
+		badBinariesEncoding = common.StringPtr(string(request.Config.BadBinaries.GetEncoding()))
+	}
 	domainInfo := &sqlblobs.DomainInfo{
 		Status:                      common.Int32Ptr(int32(request.Info.Status)),
 		Description:                 &request.Info.Description,
@@ -248,6 +268,8 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
 		NotificationVersion:         common.Int64Ptr(request.NotificationVersion),
 		FailoverNotificationVersion: common.Int64Ptr(request.FailoverNotificationVersion),
+		BadBinaries:                 badBinaries,
+		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
 	blob, err := domainInfoToBlob(domainInfo)
@@ -303,7 +325,7 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 	return &persistence.GetMetadataResponse{NotificationVersion: row.NotificationVersion}, nil
 }
 
-func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.ListDomainsResponse, error) {
+func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.InternalListDomainsResponse, error) {
 	var pageToken *sqldb.UUID
 	if request.NextPageToken != nil {
 		token := sqldb.UUID(request.NextPageToken)
@@ -315,14 +337,14 @@ func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsReque
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return &persistence.ListDomainsResponse{}, nil
+			return &persistence.InternalListDomainsResponse{}, nil
 		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ListDomains operation failed. Failed to get domain rows. Error: %v", err),
 		}
 	}
 
-	var domains []*persistence.GetDomainResponse
+	var domains []*persistence.InternalGetDomainResponse
 	for _, row := range rows {
 		resp, err := m.domainRowToGetDomainResponse(&row)
 		if err != nil {
@@ -331,7 +353,7 @@ func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsReque
 		domains = append(domains, resp)
 	}
 
-	resp := &persistence.ListDomainsResponse{Domains: domains}
+	resp := &persistence.InternalListDomainsResponse{Domains: domains}
 	if len(rows) >= request.PageSize {
 		resp.NextPageToken = rows[len(rows)-1].ID
 	}

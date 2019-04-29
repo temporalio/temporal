@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/uber/cadence/common"
+
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -121,6 +123,7 @@ func (m *MetadataPersistenceSuite) TestCreateDomain() {
 	m.Equal(emitMetric, resp1.Config.EmitMetric)
 	m.Equal(archivalBucketName, resp1.Config.ArchivalBucket)
 	m.Equal(archivalStatus, resp1.Config.ArchivalStatus)
+	m.Equal(gen.BadBinaries{}, resp1.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.ReplicationConfig.Clusters))
 	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
@@ -191,6 +194,16 @@ func (m *MetadataPersistenceSuite) TestGetDomain() {
 	m.NotNil(err0)
 	m.IsType(&gen.EntityNotExistsError{}, err0)
 
+	testBinaries := gen.BadBinaries{
+		Binaries: map[string]*gen.BadBinaryInfo{
+			"abc": &gen.BadBinaryInfo{
+				Reason:          common.StringPtr("test-reason"),
+				Operator:        common.StringPtr("test-operator"),
+				CreatedTimeNano: common.Int64Ptr(123),
+			},
+		},
+	}
+
 	resp1, err1 := m.CreateDomain(
 		&p.DomainInfo{
 			ID:          id,
@@ -205,6 +218,7 @@ func (m *MetadataPersistenceSuite) TestGetDomain() {
 			EmitMetric:     emitMetric,
 			ArchivalBucket: archivalBucketName,
 			ArchivalStatus: archivalStatus,
+			BadBinaries:    testBinaries,
 		},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: clusterActive,
@@ -254,6 +268,7 @@ func (m *MetadataPersistenceSuite) TestGetDomain() {
 	m.Equal(emitMetric, resp3.Config.EmitMetric)
 	m.Equal(archivalBucketName, resp3.Config.ArchivalBucket)
 	m.Equal(archivalStatus, resp3.Config.ArchivalStatus)
+	m.True(testBinaries.Equals(&resp3.Config.BadBinaries))
 	m.Equal(clusterActive, resp3.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp3.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -299,6 +314,15 @@ func (m *MetadataPersistenceSuite) TestConcurrentCreateDomain() {
 
 	concurrency := 16
 	successCount := int32(0)
+	testBinaries := gen.BadBinaries{
+		Binaries: map[string]*gen.BadBinaryInfo{
+			"abc": &gen.BadBinaryInfo{
+				Reason:          common.StringPtr("test-reason"),
+				Operator:        common.StringPtr("test-operator"),
+				CreatedTimeNano: common.Int64Ptr(123),
+			},
+		},
+	}
 	var wg sync.WaitGroup
 	for i := 1; i <= concurrency; i++ {
 		newValue := fmt.Sprintf("v-%v", i)
@@ -318,6 +342,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentCreateDomain() {
 					EmitMetric:     emitMetric,
 					ArchivalBucket: archivalBucketName,
 					ArchivalStatus: archivalStatus,
+					BadBinaries:    testBinaries,
 				},
 				&p.DomainReplicationConfig{
 					ActiveClusterName: clusterActive,
@@ -347,6 +372,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentCreateDomain() {
 	m.Equal(emitMetric, resp.Config.EmitMetric)
 	m.Equal(archivalBucketName, resp.Config.ArchivalBucket)
 	m.Equal(archivalStatus, resp.Config.ArchivalStatus)
+	m.True(testBinaries.Equals(&resp.Config.BadBinaries))
 	m.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -429,7 +455,17 @@ func (m *MetadataPersistenceSuite) TestConcurrentUpdateDomain() {
 	m.NotNil(resp2)
 	m.Equal(id, resp2.Info.ID)
 	m.Equal(name, resp2.Info.Name)
+	m.Equal(gen.BadBinaries{}, resp2.Config.BadBinaries)
 
+	testBinaries := gen.BadBinaries{
+		Binaries: map[string]*gen.BadBinaryInfo{
+			"abc": &gen.BadBinaryInfo{
+				Reason:          common.StringPtr("test-reason"),
+				Operator:        common.StringPtr("test-operator"),
+				CreatedTimeNano: common.Int64Ptr(123),
+			},
+		},
+	}
 	concurrency := 16
 	successCount := int32(0)
 	var wg sync.WaitGroup
@@ -451,6 +487,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentUpdateDomain() {
 					EmitMetric:     resp2.Config.EmitMetric,
 					ArchivalBucket: resp2.Config.ArchivalBucket,
 					ArchivalStatus: resp2.Config.ArchivalStatus,
+					BadBinaries:    testBinaries,
 				},
 				&p.DomainReplicationConfig{
 					ActiveClusterName: resp2.ReplicationConfig.ActiveClusterName,
@@ -483,6 +520,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentUpdateDomain() {
 	m.Equal(emitMetric, resp3.Config.EmitMetric)
 	m.Equal(archivalBucketName, resp3.Config.ArchivalBucket)
 	m.Equal(archivalStatus, resp3.Config.ArchivalStatus)
+	m.True(testBinaries.Equals(&resp3.Config.BadBinaries))
 	m.Equal(clusterActive, resp3.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp3.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -554,6 +592,16 @@ func (m *MetadataPersistenceSuite) TestUpdateDomain() {
 	m.Nil(err1)
 	m.Equal(id, resp1.ID)
 
+	testBinaries := gen.BadBinaries{
+		Binaries: map[string]*gen.BadBinaryInfo{
+			"abc": &gen.BadBinaryInfo{
+				Reason:          common.StringPtr("test-reason"),
+				Operator:        common.StringPtr("test-operator"),
+				CreatedTimeNano: common.Int64Ptr(123),
+			},
+		},
+	}
+
 	resp2, err2 := m.GetDomain(id, "")
 	m.Nil(err2)
 	updatedStatus := p.DomainStatusDeprecated
@@ -591,6 +639,7 @@ func (m *MetadataPersistenceSuite) TestUpdateDomain() {
 			EmitMetric:     updatedEmitMetric,
 			ArchivalBucket: archivalBucketName,
 			ArchivalStatus: updatedArchivalStatus,
+			BadBinaries:    testBinaries,
 		},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: updateClusterActive,
@@ -616,6 +665,7 @@ func (m *MetadataPersistenceSuite) TestUpdateDomain() {
 	m.Equal(updatedEmitMetric, resp4.Config.EmitMetric)
 	m.Equal(archivalBucketName, resp4.Config.ArchivalBucket)
 	m.Equal(updatedArchivalStatus, resp4.Config.ArchivalStatus)
+	m.True(testBinaries.Equals(&resp4.Config.BadBinaries))
 	m.Equal(updateClusterActive, resp4.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp4.ReplicationConfig.Clusters))
 	for index := range clusters {

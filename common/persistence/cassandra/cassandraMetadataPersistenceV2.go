@@ -23,6 +23,8 @@ package cassandra
 import (
 	"fmt"
 
+	"github.com/uber/cadence/common"
+
 	"github.com/gocql/gocql"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
@@ -41,7 +43,7 @@ const (
 
 	templateGetDomainByNameQueryV2 = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, ` +
+		`config.archival_bucket, config.archival_status, config.bad_binaries, config.bad_binaries_encoding,` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -80,7 +82,7 @@ const (
 
 	templateListDomainQueryV2 = `SELECT name, domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, ` +
+		`config.archival_bucket, config.archival_status, config.bad_binaries, config.bad_binaries_encoding,` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -129,7 +131,7 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 // 'Domains' table and then do a conditional insert into domains_by_name table.  If the conditional write fails we
 // delete the orphaned entry from domains table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from domains table.  We might need a background job to delete those orphaned record.
-func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.CreateDomainRequest) (*p.CreateDomainResponse, error) {
+func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
 	query := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name)
 	applied, err := query.ScanCAS()
 	if err != nil {
@@ -162,6 +164,8 @@ func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.CreateDomainReq
 		request.Config.EmitMetric,
 		request.Config.ArchivalBucket,
 		request.Config.ArchivalStatus,
+		request.Config.BadBinaries.Data,
+		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
 		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
 		request.IsGlobalDomain,
@@ -207,7 +211,7 @@ func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.CreateDomainReq
 	return &p.CreateDomainResponse{ID: request.Info.ID}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.UpdateDomainRequest) error {
+func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.InternalUpdateDomainRequest) error {
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateDomainByNameQueryWithinBatchV2,
 		request.Info.ID,
@@ -220,6 +224,8 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.UpdateDomainReq
 		request.Config.EmitMetric,
 		request.Config.ArchivalBucket,
 		request.Config.ArchivalStatus,
+		request.Config.BadBinaries.Data,
+		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
 		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
 		request.ConfigVersion,
@@ -253,11 +259,11 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.UpdateDomainReq
 	return nil
 }
 
-func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) (*p.GetDomainResponse, error) {
+func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) (*p.InternalGetDomainResponse, error) {
 	var query *gocql.Query
 	var err error
 	info := &p.DomainInfo{}
-	config := &p.DomainConfig{}
+	config := &p.InternalDomainConfig{}
 	replicationConfig := &p.DomainReplicationConfig{}
 	var replicationClusters []map[string]interface{}
 	var failoverNotificationVersion int64
@@ -300,6 +306,9 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		}
 	}
 
+	var badBinariesData []byte
+	var badBinariesDataEncoding string
+
 	query = m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, domainName)
 	err = query.Scan(
 		&info.ID,
@@ -312,6 +321,8 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		&config.EmitMetric,
 		&config.ArchivalBucket,
 		&config.ArchivalStatus,
+		&badBinariesData,
+		&badBinariesDataEncoding,
 		&replicationConfig.ActiveClusterName,
 		&replicationClusters,
 		&isGlobalDomain,
@@ -328,11 +339,12 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	if info.Data == nil {
 		info.Data = map[string]string{}
 	}
+	config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
 	replicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, replicationConfig.ActiveClusterName)
 	replicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
 	replicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, replicationConfig.Clusters)
 
-	return &p.GetDomainResponse{
+	return &p.InternalGetDomainResponse{
 		Info:                        info,
 		Config:                      config,
 		ReplicationConfig:           replicationConfig,
@@ -345,7 +357,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsRequest) (*p.ListDomainsResponse, error) {
+func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsRequest) (*p.InternalListDomainsResponse, error) {
 	var query *gocql.Query
 
 	query = m.session.Query(templateListDomainQueryV2, constDomainPartition)
@@ -357,19 +369,21 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 	}
 
 	var name string
-	domain := &p.GetDomainResponse{
+	domain := &p.InternalGetDomainResponse{
 		Info:              &p.DomainInfo{},
-		Config:            &p.DomainConfig{},
+		Config:            &p.InternalDomainConfig{},
 		ReplicationConfig: &p.DomainReplicationConfig{},
 		TableVersion:      p.DomainTableVersionV2,
 	}
 	var replicationClusters []map[string]interface{}
-	response := &p.ListDomainsResponse{}
+	var badBinariesData []byte
+	var badBinariesDataEncoding string
+	response := &p.InternalListDomainsResponse{}
 	for iter.Scan(
 		&name,
 		&domain.Info.ID, &domain.Info.Name, &domain.Info.Status, &domain.Info.Description, &domain.Info.OwnerEmail, &domain.Info.Data,
 		&domain.Config.Retention, &domain.Config.EmitMetric,
-		&domain.Config.ArchivalBucket, &domain.Config.ArchivalStatus,
+		&domain.Config.ArchivalBucket, &domain.Config.ArchivalStatus, &badBinariesData, &badBinariesDataEncoding,
 		&domain.ReplicationConfig.ActiveClusterName, &replicationClusters,
 		&domain.IsGlobalDomain, &domain.ConfigVersion, &domain.FailoverVersion,
 		&domain.FailoverNotificationVersion, &domain.NotificationVersion,
@@ -379,14 +393,17 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 			if domain.Info.Data == nil {
 				domain.Info.Data = map[string]string{}
 			}
+			domain.Config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
+			badBinariesData = []byte("")
+			badBinariesDataEncoding = ""
 			domain.ReplicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, domain.ReplicationConfig.ActiveClusterName)
 			domain.ReplicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
 			domain.ReplicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, domain.ReplicationConfig.Clusters)
 			response.Domains = append(response.Domains, domain)
 		}
-		domain = &p.GetDomainResponse{
+		domain = &p.InternalGetDomainResponse{
 			Info:              &p.DomainInfo{},
-			Config:            &p.DomainConfig{},
+			Config:            &p.InternalDomainConfig{},
 			ReplicationConfig: &p.DomainReplicationConfig{},
 			TableVersion:      p.DomainTableVersionV2,
 		}
@@ -421,7 +438,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteDomain(request *p.DeleteDomainReq
 func (m *cassandraMetadataPersistenceV2) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil
