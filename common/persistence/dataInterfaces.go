@@ -1505,6 +1505,11 @@ func (e *TimeoutError) Error() string {
 	return e.Msg
 }
 
+func IsTimeoutError(err error) bool {
+	_, ok := err.(*TimeoutError)
+	return ok
+}
+
 // GetType returns the type of the activity task
 func (a *ActivityTask) GetType() int {
 	return TransferTaskTypeActivityTask

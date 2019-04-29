@@ -420,6 +420,7 @@ Create_Loop:
 			case *shared.WorkflowExecutionAlreadyStartedError,
 				*persistence.WorkflowExecutionAlreadyStartedError,
 				*shared.ServiceBusyError,
+				*persistence.TimeoutError,
 				*shared.LimitExceededError:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
@@ -638,6 +639,7 @@ Reset_Loop:
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
 				*shared.ServiceBusyError,
+				*persistence.TimeoutError,
 				*shared.LimitExceededError:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:

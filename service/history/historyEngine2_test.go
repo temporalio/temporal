@@ -1151,6 +1151,51 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	s.Nil(resp)
 }
 
+func (s *engine2Suite) TestStartWorkflowExecution_TimeoutError() {
+	domainID := validDomainID
+	workflowID := "workflowID"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &p.TimeoutError{
+		Msg: "random message",
+	}).Once()
+	// NOTE: should not delete history for timeout because timeout is unknown instead of failure
+	//s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&p.GetDomainResponse{
+			Info:   &p.DomainInfo{ID: domainID},
+			Config: &p.DomainConfig{Retention: 1},
+			ReplicationConfig: &p.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*p.ClusterReplicationConfig{
+					&p.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: p.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		StartRequest: &workflow.StartWorkflowExecutionRequest{
+			Domain:                              common.StringPtr(domainID),
+			WorkflowId:                          common.StringPtr(workflowID),
+			WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+			RequestId:                           common.StringPtr("newRequestID"),
+		},
+	})
+	s.True(p.IsTimeoutError(err))
+	s.NotNil(resp)
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	domainID := validDomainID
 	workflowID := "workflowID"
@@ -1440,6 +1485,61 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)
+	s.NotNil(resp.GetRunId())
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
+	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := validDomainID
+	workflowID := "wId"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := []byte("test input")
+	requestID := uuid.New()
+
+	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
+			Domain:                              common.StringPtr(domainID),
+			WorkflowId:                          common.StringPtr(workflowID),
+			WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+			SignalName:                          common.StringPtr(signalName),
+			Input:                               input,
+			RequestId:                           common.StringPtr(requestID),
+		},
+	}
+
+	notExistErr := &workflow.EntityNotExistsError{Message: "Workflow not exist"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &p.TimeoutError{}).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&p.GetDomainResponse{
+			Info:   &p.DomainInfo{ID: domainID},
+			Config: &p.DomainConfig{Retention: 1},
+			ReplicationConfig: &p.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*p.ClusterReplicationConfig{
+					&p.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: p.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
+	s.True(p.IsTimeoutError(err))
 	s.NotNil(resp.GetRunId())
 }
 

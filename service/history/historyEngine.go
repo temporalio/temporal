@@ -615,12 +615,12 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx context.Context, startReq
 		}
 	}
 
-	if retError == nil {
+	if retError == nil || persistence.IsTimeoutError(retError) {
 		shouldDeleteHistory = false
 		e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 		return &workflow.StartWorkflowExecutionResponse{
 			RunId: execution.RunId,
-		}, nil
+		}, retError
 	}
 	return
 }
@@ -2491,12 +2491,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		}
 	}
 
-	if retError == nil {
+	// Timeout error is not a failure
+	if retError == nil || persistence.IsTimeoutError(retError) {
 		shouldDeleteHistory = false
 		e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 		return &workflow.StartWorkflowExecutionResponse{
 			RunId: execution.RunId,
-		}, nil
+		}, retError
 	}
 	return
 }
