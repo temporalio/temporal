@@ -2106,6 +2106,8 @@ type DomainInfo struct {
 	ActiveClusterName           *string           `json:"activeClusterName,omitempty"`
 	Clusters                    []string          `json:"clusters,omitempty"`
 	Data                        map[string]string `json:"data,omitempty"`
+	BadBinaries                 []byte            `json:"badBinaries,omitempty"`
+	BadBinariesEncoding         *string           `json:"badBinariesEncoding,omitempty"`
 }
 
 type _Map_String_String_MapItemList map[string]string
@@ -2160,7 +2162,7 @@ func (_Map_String_String_MapItemList) Close() {}
 //   }
 func (v *DomainInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [15]wire.Field
+		fields [17]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2284,6 +2286,22 @@ func (v *DomainInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 38, Value: w}
+		i++
+	}
+	if v.BadBinaries != nil {
+		w, err = wire.NewValueBinary(v.BadBinaries), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 39, Value: w}
+		i++
+	}
+	if v.BadBinariesEncoding != nil {
+		w, err = wire.NewValueString(*(v.BadBinariesEncoding)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -2486,6 +2504,24 @@ func (v *DomainInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 39:
+			if field.Value.Type() == wire.TBinary {
+				v.BadBinaries, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.BadBinariesEncoding = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2499,7 +2535,7 @@ func (v *DomainInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [15]string
+	var fields [17]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -2559,6 +2595,14 @@ func (v *DomainInfo) String() string {
 	}
 	if v.Data != nil {
 		fields[i] = fmt.Sprintf("Data: %v", v.Data)
+		i++
+	}
+	if v.BadBinaries != nil {
+		fields[i] = fmt.Sprintf("BadBinaries: %v", v.BadBinaries)
+		i++
+	}
+	if v.BadBinariesEncoding != nil {
+		fields[i] = fmt.Sprintf("BadBinariesEncoding: %v", *(v.BadBinariesEncoding))
 		i++
 	}
 
@@ -2647,6 +2691,12 @@ func (v *DomainInfo) Equals(rhs *DomainInfo) bool {
 	if !((v.Data == nil && rhs.Data == nil) || (v.Data != nil && rhs.Data != nil && _Map_String_String_Equals(v.Data, rhs.Data))) {
 		return false
 	}
+	if !((v.BadBinaries == nil && rhs.BadBinaries == nil) || (v.BadBinaries != nil && rhs.BadBinaries != nil && bytes.Equal(v.BadBinaries, rhs.BadBinaries))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.BadBinariesEncoding, rhs.BadBinariesEncoding) {
+		return false
+	}
 
 	return true
 }
@@ -2712,6 +2762,12 @@ func (v *DomainInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	}
 	if v.Data != nil {
 		err = multierr.Append(err, enc.AddObject("data", (_Map_String_String_Zapper)(v.Data)))
+	}
+	if v.BadBinaries != nil {
+		enc.AddString("badBinaries", base64.StdEncoding.EncodeToString(v.BadBinaries))
+	}
+	if v.BadBinariesEncoding != nil {
+		enc.AddString("badBinariesEncoding", *v.BadBinariesEncoding)
 	}
 	return err
 }
@@ -2939,6 +2995,36 @@ func (v *DomainInfo) GetData() (o map[string]string) {
 // IsSetData returns true if Data is not nil.
 func (v *DomainInfo) IsSetData() bool {
 	return v != nil && v.Data != nil
+}
+
+// GetBadBinaries returns the value of BadBinaries if it is set or its
+// zero value if it is unset.
+func (v *DomainInfo) GetBadBinaries() (o []byte) {
+	if v != nil && v.BadBinaries != nil {
+		return v.BadBinaries
+	}
+
+	return
+}
+
+// IsSetBadBinaries returns true if BadBinaries is not nil.
+func (v *DomainInfo) IsSetBadBinaries() bool {
+	return v != nil && v.BadBinaries != nil
+}
+
+// GetBadBinariesEncoding returns the value of BadBinariesEncoding if it is set or its
+// zero value if it is unset.
+func (v *DomainInfo) GetBadBinariesEncoding() (o string) {
+	if v != nil && v.BadBinariesEncoding != nil {
+		return *v.BadBinariesEncoding
+	}
+
+	return
+}
+
+// IsSetBadBinariesEncoding returns true if BadBinariesEncoding is not nil.
+func (v *DomainInfo) IsSetBadBinariesEncoding() bool {
+	return v != nil && v.BadBinariesEncoding != nil
 }
 
 type HistoryTreeInfo struct {
@@ -7212,6 +7298,8 @@ type WorkflowExecutionInfo struct {
 	ClientLibraryVersion         *string                     `json:"clientLibraryVersion,omitempty"`
 	ClientFeatureVersion         *string                     `json:"clientFeatureVersion,omitempty"`
 	ClientImpl                   *string                     `json:"clientImpl,omitempty"`
+	AutoResetPoints              []byte                      `json:"autoResetPoints,omitempty"`
+	AutoResetPointsEncoding      *string                     `json:"autoResetPointsEncoding,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionInfo struct into a Thrift-level intermediate
@@ -7231,7 +7319,7 @@ type WorkflowExecutionInfo struct {
 //   }
 func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [52]wire.Field
+		fields [54]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7651,6 +7739,22 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 114, Value: w}
+		i++
+	}
+	if v.AutoResetPoints != nil {
+		w, err = wire.NewValueBinary(v.AutoResetPoints), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 115, Value: w}
+		i++
+	}
+	if v.AutoResetPointsEncoding != nil {
+		w, err = wire.NewValueString(*(v.AutoResetPointsEncoding)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 116, Value: w}
 		i++
 	}
 
@@ -8185,6 +8289,24 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 115:
+			if field.Value.Type() == wire.TBinary {
+				v.AutoResetPoints, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 116:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.AutoResetPointsEncoding = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -8198,7 +8320,7 @@ func (v *WorkflowExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [52]string
+	var fields [54]string
 	i := 0
 	if v.ParentDomainID != nil {
 		fields[i] = fmt.Sprintf("ParentDomainID: %v", v.ParentDomainID)
@@ -8408,6 +8530,14 @@ func (v *WorkflowExecutionInfo) String() string {
 		fields[i] = fmt.Sprintf("ClientImpl: %v", *(v.ClientImpl))
 		i++
 	}
+	if v.AutoResetPoints != nil {
+		fields[i] = fmt.Sprintf("AutoResetPoints: %v", v.AutoResetPoints)
+		i++
+	}
+	if v.AutoResetPointsEncoding != nil {
+		fields[i] = fmt.Sprintf("AutoResetPointsEncoding: %v", *(v.AutoResetPointsEncoding))
+		i++
+	}
 
 	return fmt.Sprintf("WorkflowExecutionInfo{%v}", strings.Join(fields[:i], ", "))
 }
@@ -8578,6 +8708,12 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !_String_EqualsPtr(v.ClientImpl, rhs.ClientImpl) {
 		return false
 	}
+	if !((v.AutoResetPoints == nil && rhs.AutoResetPoints == nil) || (v.AutoResetPoints != nil && rhs.AutoResetPoints != nil && bytes.Equal(v.AutoResetPoints, rhs.AutoResetPoints))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.AutoResetPointsEncoding, rhs.AutoResetPointsEncoding) {
+		return false
+	}
 
 	return true
 }
@@ -8743,6 +8879,12 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.ClientImpl != nil {
 		enc.AddString("clientImpl", *v.ClientImpl)
+	}
+	if v.AutoResetPoints != nil {
+		enc.AddString("autoResetPoints", base64.StdEncoding.EncodeToString(v.AutoResetPoints))
+	}
+	if v.AutoResetPointsEncoding != nil {
+		enc.AddString("autoResetPointsEncoding", *v.AutoResetPointsEncoding)
 	}
 	return err
 }
@@ -9525,4 +9667,34 @@ func (v *WorkflowExecutionInfo) GetClientImpl() (o string) {
 // IsSetClientImpl returns true if ClientImpl is not nil.
 func (v *WorkflowExecutionInfo) IsSetClientImpl() bool {
 	return v != nil && v.ClientImpl != nil
+}
+
+// GetAutoResetPoints returns the value of AutoResetPoints if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetAutoResetPoints() (o []byte) {
+	if v != nil && v.AutoResetPoints != nil {
+		return v.AutoResetPoints
+	}
+
+	return
+}
+
+// IsSetAutoResetPoints returns true if AutoResetPoints is not nil.
+func (v *WorkflowExecutionInfo) IsSetAutoResetPoints() bool {
+	return v != nil && v.AutoResetPoints != nil
+}
+
+// GetAutoResetPointsEncoding returns the value of AutoResetPointsEncoding if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetAutoResetPointsEncoding() (o string) {
+	if v != nil && v.AutoResetPointsEncoding != nil {
+		return *v.AutoResetPointsEncoding
+	}
+
+	return
+}
+
+// IsSetAutoResetPointsEncoding returns true if AutoResetPointsEncoding is not nil.
+func (v *WorkflowExecutionInfo) IsSetAutoResetPointsEncoding() bool {
+	return v != nil && v.AutoResetPointsEncoding != nil
 }

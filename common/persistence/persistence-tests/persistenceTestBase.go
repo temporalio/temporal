@@ -473,7 +473,7 @@ func (s *TestBase) GetCurrentWorkflowRunID(domainID, workflowID string) (string,
 
 // ContinueAsNewExecution is a utility method to create workflow executions
 func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, condition int64,
-	newExecution workflow.WorkflowExecution, nextEventID, decisionScheduleID int64) error {
+	newExecution workflow.WorkflowExecution, nextEventID, decisionScheduleID int64, prevResetPoints *workflow.ResetPoints) error {
 	newdecisionTask := &p.DecisionTask{
 		TaskID:     s.GetNextSequenceNumber(),
 		DomainID:   updatedInfo.DomainID,
@@ -511,6 +511,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 			DecisionStartToCloseTimeout: 1,
 			CreateWorkflowMode:          p.CreateWorkflowModeContinueAsNew,
 			PreviousRunID:               updatedInfo.RunID,
+			PreviousAutoResetPoints:     prevResetPoints,
 		},
 		Encoding: pickRandomEncoding(),
 	})

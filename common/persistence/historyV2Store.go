@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 
@@ -38,7 +39,7 @@ type (
 		historySerializer     PayloadSerializer
 		persistence           HistoryV2Store
 		logger                log.Logger
-		thrifteEncoder        codec.BinaryEncoder
+		thriftEncoder         codec.BinaryEncoder
 		pagingTokenSerializer *jsonHistoryTokenSerializer
 	}
 )
@@ -51,7 +52,7 @@ func NewHistoryV2ManagerImpl(persistence HistoryV2Store, logger log.Logger) Hist
 		historySerializer:     NewPayloadSerializer(),
 		persistence:           persistence,
 		logger:                logger,
-		thrifteEncoder:        codec.NewThriftRWEncoder(),
+		thriftEncoder:         codec.NewThriftRWEncoder(),
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 	}
 }
@@ -69,7 +70,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchReque
 	}
 
 	var forkBranch workflow.HistoryBranch
-	err := m.thrifteEncoder.Decode(request.ForkBranchToken, &forkBranch)
+	err := m.thriftEncoder.Decode(request.ForkBranchToken, &forkBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchReque
 		return nil, err
 	}
 
-	token, err := m.thrifteEncoder.Encode(&resp.NewBranchInfo)
+	token, err := m.thriftEncoder.Encode(&resp.NewBranchInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchReque
 // DeleteHistoryBranch removes a branch
 func (m *historyV2ManagerImpl) DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error {
 	var branch workflow.HistoryBranch
-	err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
 	if err != nil {
 		return err
 	}
@@ -128,7 +129,7 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(request *DeleteHistoryBranchR
 // CompleteForkBranch complete the forking process
 func (m *historyV2ManagerImpl) CompleteForkBranch(request *CompleteForkBranchRequest) error {
 	var branch workflow.HistoryBranch
-	err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func (m *historyV2ManagerImpl) CompleteForkBranch(request *CompleteForkBranchReq
 func (m *historyV2ManagerImpl) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
 	if len(request.TreeID) == 0 {
 		var branch workflow.HistoryBranch
-		err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+		err := m.thriftEncoder.Decode(request.BranchToken, &branch)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +166,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(request *GetHistoryTreeRequest) (*
 // AppendHistoryNodes add(or override) a node to a history branch
 func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
 	var branch workflow.HistoryBranch
-	err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +252,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 
 func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHistoryBranchRequest) ([]*workflow.HistoryEvent, []*workflow.History, []byte, int, int64, error) {
 	var branch workflow.HistoryBranch
-	err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
+	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
 	if err != nil {
 		return nil, nil, nil, 0, 0, err
 	}

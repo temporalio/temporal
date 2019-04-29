@@ -87,6 +87,29 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 	}
 	memo0 := &workflow.Memo{Fields: memoFields}
 
+	resetPoints0 := &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			{
+				BinaryChecksum:           common.StringPtr("bad-binary-cs"),
+				RunId:                    common.StringPtr("test-run-id"),
+				FirstDecisionCompletedId: common.Int64Ptr(123),
+				CreatedTimeNano:          common.Int64Ptr(456),
+				ExpiringTimeNano:         common.Int64Ptr(789),
+				Resettable:               common.BoolPtr(true),
+			},
+		},
+	}
+
+	badBinaries0 := &workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"bad-binary-cs": {
+				CreatedTimeNano: common.Int64Ptr(456),
+				Operator:        common.StringPtr("test-operattor"),
+				Reason:          common.StringPtr("test-reason"),
+			},
+		},
+	}
+
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
@@ -218,6 +241,96 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			memo3, err := serializer.DeserializeVisibilityMemo(mEmpty)
 			s.Nil(err)
 			s.True(memo0.Equals(memo3))
+
+			// serialize reset points
+
+			nilResetPoints, err := serializer.SerializeResetPoints(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(nilResetPoints)
+
+			_, err = serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeGob)
+			s.NotNil(err)
+			_, ok = err.(*UnknownEncodingTypeError)
+			s.True(ok)
+
+			resetPointsJson, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeJSON)
+			s.Nil(err)
+			s.NotNil(resetPointsJson)
+
+			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(resetPointsThrift)
+
+			resetPointsEmpty, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(resetPointsEmpty)
+
+			// deserialize reset points
+
+			dNilResetPoints1, err := serializer.DeserializeResetPoints(nil)
+			s.Nil(err)
+			s.Equal(&workflow.ResetPoints{}, dNilResetPoints1)
+
+			dNilResetPoints2, err := serializer.DeserializeResetPoints(nilResetPoints)
+			s.Nil(err)
+			s.Equal(&workflow.ResetPoints{}, dNilResetPoints2)
+
+			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJson)
+			s.Nil(err)
+			s.True(resetPoints1.Equals(resetPoints0))
+
+			resetPoints2, err := serializer.DeserializeResetPoints(resetPointsThrift)
+			s.Nil(err)
+			s.True(resetPoints2.Equals(resetPoints0))
+
+			resetPoints3, err := serializer.DeserializeResetPoints(resetPointsEmpty)
+			s.Nil(err)
+			s.True(resetPoints3.Equals(resetPoints0))
+
+			// serialize bad binaries
+
+			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(nilBadBinaries)
+
+			_, err = serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeGob)
+			s.NotNil(err)
+			_, ok = err.(*UnknownEncodingTypeError)
+			s.True(ok)
+
+			badBinariesJson, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeJSON)
+			s.Nil(err)
+			s.NotNil(badBinariesJson)
+
+			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(badBinariesThrift)
+
+			badBinariesEmpty, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(badBinariesEmpty)
+
+			// deserialize bad binaries
+
+			dNilBadBinaries1, err := serializer.DeserializeBadBinaries(nil)
+			s.Nil(err)
+			s.Equal(&workflow.BadBinaries{}, dNilBadBinaries1)
+
+			dNilBadBinaries2, err := serializer.DeserializeBadBinaries(nilBadBinaries)
+			s.Nil(err)
+			s.Equal(&workflow.BadBinaries{}, dNilBadBinaries2)
+
+			badBinaries1, err := serializer.DeserializeBadBinaries(badBinariesJson)
+			s.Nil(err)
+			s.True(badBinaries1.Equals(badBinaries0))
+
+			badBinaries2, err := serializer.DeserializeBadBinaries(badBinariesThrift)
+			s.Nil(err)
+			s.True(badBinaries2.Equals(badBinaries0))
+
+			badBinaries3, err := serializer.DeserializeBadBinaries(badBinariesEmpty)
+			s.Nil(err)
+			s.True(badBinaries3.Equals(badBinaries0))
 		}()
 	}
 

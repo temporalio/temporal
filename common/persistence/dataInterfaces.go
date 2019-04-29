@@ -258,6 +258,7 @@ type (
 		ClientLibraryVersion         string
 		ClientFeatureVersion         string
 		ClientImpl                   string
+		AutoResetPoints              *workflow.ResetPoints
 		// for retry
 		Attempt            int32
 		HasRetryPolicy     bool
@@ -270,6 +271,7 @@ type (
 		// events V2 related
 		EventStoreVersion int32
 		BranchToken       []byte
+		// Cron
 		CronSchedule      string
 		ExpirationSeconds int32
 	}
@@ -689,6 +691,7 @@ type (
 		ExpirationTime              time.Time
 		MaximumAttempts             int32
 		NonRetriableErrors          []string
+		PreviousAutoResetPoints     *workflow.ResetPoints
 		// 2 means using eventsV2, empty/0/1 means using events(V1)
 		EventStoreVersion int32
 		// for eventsV2: branchToken from historyPersistence
@@ -1064,6 +1067,7 @@ type (
 		EmitMetric     bool
 		ArchivalBucket string
 		ArchivalStatus workflow.ArchivalStatus
+		BadBinaries    workflow.BadBinaries
 	}
 
 	// DomainReplicationConfig describes the cross DC domain replication configuration

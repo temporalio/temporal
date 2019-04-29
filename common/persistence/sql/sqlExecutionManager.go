@@ -41,6 +41,8 @@ type sqlExecutionManager struct {
 	shardID int
 }
 
+var _ p.ExecutionStore = (*sqlExecutionManager)(nil)
+
 // txExecuteShardLocked executes f under transaction and with read lock on shard row
 func (m *sqlExecutionManager) txExecuteShardLocked(operation string, rangeID int64, f func(tx sqldb.Tx) error) error {
 	return m.txExecute(operation, func(tx sqldb.Tx) error {
@@ -59,7 +61,7 @@ func (m *sqlExecutionManager) GetShardID() int {
 	return m.shardID
 }
 
-func (m *sqlExecutionManager) CreateWorkflowExecution(request *p.CreateWorkflowExecutionRequest) (response *p.CreateWorkflowExecutionResponse, err error) {
+func (m *sqlExecutionManager) CreateWorkflowExecution(request *p.InternalCreateWorkflowExecutionRequest) (response *p.CreateWorkflowExecutionResponse, err error) {
 	err = m.txExecuteShardLocked("CreateWorkflowExecution", request.RangeID, func(tx sqldb.Tx) error {
 		response, err = m.createWorkflowExecutionTx(tx, request)
 		return err
@@ -67,7 +69,7 @@ func (m *sqlExecutionManager) CreateWorkflowExecution(request *p.CreateWorkflowE
 	return
 }
 
-func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.CreateWorkflowExecutionRequest) (*p.CreateWorkflowExecutionResponse, error) {
+func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.InternalCreateWorkflowExecutionRequest) (*p.CreateWorkflowExecutionResponse, error) {
 	if request.CreateWorkflowMode == p.CreateWorkflowModeContinueAsNew {
 		return nil, &workflow.InternalServiceError{
 			Message: "CreateWorkflowExecution operation failed. Invalid CreateWorkflowModeContinueAsNew is used",
@@ -270,6 +272,11 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 	if info.CompletionEvent != nil {
 		state.ExecutionInfo.CompletionEvent = p.NewDataBlob(info.CompletionEvent,
 			common.EncodingType(info.GetCompletionEventEncoding()))
+	}
+
+	if info.AutoResetPoints != nil {
+		state.ExecutionInfo.AutoResetPoints = p.NewDataBlob(info.AutoResetPoints,
+			common.EncodingType(info.GetAutoResetPointsEncoding()))
 	}
 
 	{
@@ -1372,7 +1379,7 @@ func lockCurrentExecutionIfExists(tx sqldb.Tx, shardID int, domainID sqldb.UUID,
 
 func createExecutionFromRequest(
 	tx sqldb.Tx,
-	request *p.CreateWorkflowExecutionRequest,
+	request *p.InternalCreateWorkflowExecutionRequest,
 	shardID int, domainID sqldb.UUID, runID sqldb.UUID, nowTimestamp time.Time) error {
 	emptyStr := ""
 	zeroPtr := common.Int64Ptr(0)
@@ -1414,6 +1421,8 @@ func createExecutionFromRequest(
 		RetryExpirationTimeNanos:     common.Int64Ptr(request.ExpirationTime.UnixNano()),
 		RetryNonRetryableErrors:      request.NonRetriableErrors,
 		ExecutionContext:             request.ExecutionContext,
+		AutoResetPoints:              request.PreviousAutoResetPoints.Data,
+		AutoResetPointsEncoding:      common.StringPtr(string(request.PreviousAutoResetPoints.GetEncoding())),
 	}
 	if request.ReplicationState != nil {
 		lastWriteVersion = request.ReplicationState.LastWriteVersion
@@ -1460,7 +1469,7 @@ func createExecutionFromRequest(
 }
 
 func createOrUpdateCurrentExecution(
-	tx sqldb.Tx, request *p.CreateWorkflowExecutionRequest, shardID int, domainID sqldb.UUID, runID sqldb.UUID) error {
+	tx sqldb.Tx, request *p.InternalCreateWorkflowExecutionRequest, shardID int, domainID sqldb.UUID, runID sqldb.UUID) error {
 	row := sqldb.CurrentExecutionsRow{
 		ShardID:          int64(shardID),
 		DomainID:         domainID,
@@ -1922,6 +1931,8 @@ func buildExecutionRow(executionInfo *p.InternalWorkflowExecutionInfo,
 		RetryNonRetryableErrors:      executionInfo.NonRetriableErrors,
 		EventStoreVersion:            &executionInfo.EventStoreVersion,
 		EventBranchToken:             executionInfo.BranchToken,
+		AutoResetPoints:              executionInfo.AutoResetPoints.Data,
+		AutoResetPointsEncoding:      common.StringPtr(string(executionInfo.AutoResetPoints.GetEncoding())),
 	}
 
 	completionEvent := executionInfo.CompletionEvent

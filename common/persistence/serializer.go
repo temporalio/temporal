@@ -44,6 +44,14 @@ type (
 		// serialize/deserialize visibility memo fields
 		SerializeVisibilityMemo(memo *workflow.Memo, encodingType common.EncodingType) (*DataBlob, error)
 		DeserializeVisibilityMemo(data *DataBlob) (*workflow.Memo, error)
+
+		// serialize/deserialize reset points
+		SerializeResetPoints(event *workflow.ResetPoints, encodingType common.EncodingType) (*DataBlob, error)
+		DeserializeResetPoints(data *DataBlob) (*workflow.ResetPoints, error)
+
+		// serialize/deserialize bad binaries
+		SerializeBadBinaries(event *workflow.BadBinaries, encodingType common.EncodingType) (*DataBlob, error)
+		DeserializeBadBinaries(data *DataBlob) (*workflow.BadBinaries, error)
 	}
 
 	// CadenceSerializationError is an error type for cadence serialization
@@ -105,6 +113,32 @@ func (t *serializerImpl) DeserializeEvent(data *DataBlob) (*workflow.HistoryEven
 	return &event, err
 }
 
+func (t *serializerImpl) SerializeResetPoints(rp *workflow.ResetPoints, encodingType common.EncodingType) (*DataBlob, error) {
+	if rp == nil {
+		rp = &workflow.ResetPoints{}
+	}
+	return t.serialize(rp, encodingType)
+}
+
+func (t *serializerImpl) DeserializeResetPoints(data *DataBlob) (*workflow.ResetPoints, error) {
+	var rp workflow.ResetPoints
+	err := t.deserialize(data, &rp)
+	return &rp, err
+}
+
+func (t *serializerImpl) SerializeBadBinaries(bb *workflow.BadBinaries, encodingType common.EncodingType) (*DataBlob, error) {
+	if bb == nil {
+		bb = &workflow.BadBinaries{}
+	}
+	return t.serialize(bb, encodingType)
+}
+
+func (t *serializerImpl) DeserializeBadBinaries(data *DataBlob) (*workflow.BadBinaries, error) {
+	var bb workflow.BadBinaries
+	err := t.deserialize(data, &bb)
+	return &bb, err
+}
+
 func (t *serializerImpl) SerializeVisibilityMemo(memo *workflow.Memo, encodingType common.EncodingType) (*DataBlob, error) {
 	if memo == nil {
 		// Return nil here to be consistent with Event
@@ -152,6 +186,10 @@ func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 		return t.thriftrwEncoder.Encode(input.(*workflow.HistoryEvent))
 	case *workflow.Memo:
 		return t.thriftrwEncoder.Encode(input.(*workflow.Memo))
+	case *workflow.ResetPoints:
+		return t.thriftrwEncoder.Encode(input.(*workflow.ResetPoints))
+	case *workflow.BadBinaries:
+		return t.thriftrwEncoder.Encode(input.(*workflow.BadBinaries))
 	default:
 		return nil, nil
 	}
@@ -196,6 +234,14 @@ func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 	case *workflow.Memo:
 		memo := target.(*workflow.Memo)
 		t.thriftrwEncoder.Decode(data, memo)
+		return nil
+	case *workflow.ResetPoints:
+		rp := target.(*workflow.ResetPoints)
+		t.thriftrwEncoder.Decode(data, rp)
+		return nil
+	case *workflow.BadBinaries:
+		rp := target.(*workflow.BadBinaries)
+		t.thriftrwEncoder.Decode(data, rp)
 		return nil
 	default:
 		return nil

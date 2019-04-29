@@ -71,6 +71,8 @@ CREATE TYPE workflow_execution (
   cron_schedule                    text,
   expiration_seconds               int,    -- retry expiration duration in seconds
   last_event_task_id               bigint,
+  auto_reset_points                blob, -- the resetting points for auto-reset feature
+  auto_reset_points_encoding       text, -- encoding for auto_reset_points_data
 );
 
 -- Replication information for each cluster
@@ -243,7 +245,9 @@ CREATE TYPE domain_config (
   retention   int,
   emit_metric boolean,
   archival_bucket text,
-  archival_status int
+  archival_status int,
+  bad_binaries    blob,
+  bad_binaries_encoding blob,
 );
 
 CREATE TYPE cluster_replication_config (
