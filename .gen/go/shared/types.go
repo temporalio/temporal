@@ -1277,6 +1277,7 @@ type ActivityTaskScheduledEventAttributes struct {
 	HeartbeatTimeoutSeconds       *int32        `json:"heartbeatTimeoutSeconds,omitempty"`
 	DecisionTaskCompletedEventId  *int64        `json:"decisionTaskCompletedEventId,omitempty"`
 	RetryPolicy                   *RetryPolicy  `json:"retryPolicy,omitempty"`
+	Header                        *Header       `json:"header,omitempty"`
 }
 
 // ToWire translates a ActivityTaskScheduledEventAttributes struct into a Thrift-level intermediate
@@ -1296,7 +1297,7 @@ type ActivityTaskScheduledEventAttributes struct {
 //   }
 func (v *ActivityTaskScheduledEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1390,6 +1391,14 @@ func (v *ActivityTaskScheduledEventAttributes) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -1408,6 +1417,12 @@ func _TaskList_Read(w wire.Value) (*TaskList, error) {
 
 func _RetryPolicy_Read(w wire.Value) (*RetryPolicy, error) {
 	var v RetryPolicy
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _Header_Read(w wire.Value) (*Header, error) {
+	var v Header
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -1536,6 +1551,14 @@ func (v *ActivityTaskScheduledEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1549,7 +1572,7 @@ func (v *ActivityTaskScheduledEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [12]string
 	i := 0
 	if v.ActivityId != nil {
 		fields[i] = fmt.Sprintf("ActivityId: %v", *(v.ActivityId))
@@ -1593,6 +1616,10 @@ func (v *ActivityTaskScheduledEventAttributes) String() string {
 	}
 	if v.RetryPolicy != nil {
 		fields[i] = fmt.Sprintf("RetryPolicy: %v", v.RetryPolicy)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -1652,6 +1679,9 @@ func (v *ActivityTaskScheduledEventAttributes) Equals(rhs *ActivityTaskScheduled
 	if !((v.RetryPolicy == nil && rhs.RetryPolicy == nil) || (v.RetryPolicy != nil && rhs.RetryPolicy != nil && v.RetryPolicy.Equals(rhs.RetryPolicy))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -1694,6 +1724,9 @@ func (v *ActivityTaskScheduledEventAttributes) MarshalLogObject(enc zapcore.Obje
 	}
 	if v.RetryPolicy != nil {
 		err = multierr.Append(err, enc.AddObject("retryPolicy", v.RetryPolicy))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -1861,6 +1894,21 @@ func (v *ActivityTaskScheduledEventAttributes) GetRetryPolicy() (o *RetryPolicy)
 // IsSetRetryPolicy returns true if RetryPolicy is not nil.
 func (v *ActivityTaskScheduledEventAttributes) IsSetRetryPolicy() bool {
 	return v != nil && v.RetryPolicy != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *ActivityTaskScheduledEventAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *ActivityTaskScheduledEventAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type ActivityTaskStartedEventAttributes struct {
@@ -5617,6 +5665,7 @@ type ChildWorkflowExecutionStartedEventAttributes struct {
 	InitiatedEventId  *int64             `json:"initiatedEventId,omitempty"`
 	WorkflowExecution *WorkflowExecution `json:"workflowExecution,omitempty"`
 	WorkflowType      *WorkflowType      `json:"workflowType,omitempty"`
+	Header            *Header            `json:"header,omitempty"`
 }
 
 // ToWire translates a ChildWorkflowExecutionStartedEventAttributes struct into a Thrift-level intermediate
@@ -5636,7 +5685,7 @@ type ChildWorkflowExecutionStartedEventAttributes struct {
 //   }
 func (v *ChildWorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -5672,6 +5721,14 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, err
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -5736,6 +5793,14 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) FromWire(w wire.Value) er
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -5749,7 +5814,7 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -5765,6 +5830,10 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) String() string {
 	}
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -5793,6 +5862,9 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) Equals(rhs *ChildWorkflow
 	if !((v.WorkflowType == nil && rhs.WorkflowType == nil) || (v.WorkflowType != nil && rhs.WorkflowType != nil && v.WorkflowType.Equals(rhs.WorkflowType))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -5814,6 +5886,9 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) MarshalLogObject(enc zapc
 	}
 	if v.WorkflowType != nil {
 		err = multierr.Append(err, enc.AddObject("workflowType", v.WorkflowType))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -5876,6 +5951,21 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) GetWorkflowType() (o *Wor
 // IsSetWorkflowType returns true if WorkflowType is not nil.
 func (v *ChildWorkflowExecutionStartedEventAttributes) IsSetWorkflowType() bool {
 	return v != nil && v.WorkflowType != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *ChildWorkflowExecutionStartedEventAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *ChildWorkflowExecutionStartedEventAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type ChildWorkflowExecutionTerminatedEventAttributes struct {
@@ -7219,6 +7309,7 @@ type ContinueAsNewWorkflowExecutionDecisionAttributes struct {
 	FailureDetails                      []byte                  `json:"failureDetails,omitempty"`
 	LastCompletionResult                []byte                  `json:"lastCompletionResult,omitempty"`
 	CronSchedule                        *string                 `json:"cronSchedule,omitempty"`
+	Header                              *Header                 `json:"header,omitempty"`
 }
 
 // ToWire translates a ContinueAsNewWorkflowExecutionDecisionAttributes struct into a Thrift-level intermediate
@@ -7238,7 +7329,7 @@ type ContinueAsNewWorkflowExecutionDecisionAttributes struct {
 //   }
 func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7338,6 +7429,14 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) ToWire() (wire.Value,
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -7480,6 +7579,14 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) FromWire(w wire.Value
 				}
 
 			}
+		case 130:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -7493,7 +7600,7 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [13]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -7541,6 +7648,10 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) String() string {
 	}
 	if v.CronSchedule != nil {
 		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -7603,6 +7714,9 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) Equals(rhs *ContinueA
 	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -7648,6 +7762,9 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) MarshalLogObject(enc 
 	}
 	if v.CronSchedule != nil {
 		enc.AddString("cronSchedule", *v.CronSchedule)
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -7830,6 +7947,21 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetCronSchedule() (o 
 // IsSetCronSchedule returns true if CronSchedule is not nil.
 func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) IsSetCronSchedule() bool {
 	return v != nil && v.CronSchedule != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type DataBlob struct {
@@ -23295,12 +23427,6 @@ func (v *MarkerRecordedEventAttributes) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _Header_Read(w wire.Value) (*Header, error) {
-	var v Header
-	err := v.FromWire(w)
-	return &v, err
-}
-
 // FromWire deserializes a MarkerRecordedEventAttributes struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
@@ -24655,6 +24781,7 @@ type PollForActivityTaskResponse struct {
 	HeartbeatDetails                []byte             `json:"heartbeatDetails,omitempty"`
 	WorkflowType                    *WorkflowType      `json:"workflowType,omitempty"`
 	WorkflowDomain                  *string            `json:"workflowDomain,omitempty"`
+	Header                          *Header            `json:"header,omitempty"`
 }
 
 // ToWire translates a PollForActivityTaskResponse struct into a Thrift-level intermediate
@@ -24674,7 +24801,7 @@ type PollForActivityTaskResponse struct {
 //   }
 func (v *PollForActivityTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [15]wire.Field
+		fields [16]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -24798,6 +24925,14 @@ func (v *PollForActivityTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 160, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 170, Value: w}
 		i++
 	}
 
@@ -24964,6 +25099,14 @@ func (v *PollForActivityTaskResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 170:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -24977,7 +25120,7 @@ func (v *PollForActivityTaskResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [15]string
+	var fields [16]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -25039,6 +25182,10 @@ func (v *PollForActivityTaskResponse) String() string {
 		fields[i] = fmt.Sprintf("WorkflowDomain: %v", *(v.WorkflowDomain))
 		i++
 	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
+		i++
+	}
 
 	return fmt.Sprintf("PollForActivityTaskResponse{%v}", strings.Join(fields[:i], ", "))
 }
@@ -25098,6 +25245,9 @@ func (v *PollForActivityTaskResponse) Equals(rhs *PollForActivityTaskResponse) b
 	if !_String_EqualsPtr(v.WorkflowDomain, rhs.WorkflowDomain) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -25152,6 +25302,9 @@ func (v *PollForActivityTaskResponse) MarshalLogObject(enc zapcore.ObjectEncoder
 	}
 	if v.WorkflowDomain != nil {
 		enc.AddString("workflowDomain", *v.WorkflowDomain)
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -25379,6 +25532,21 @@ func (v *PollForActivityTaskResponse) GetWorkflowDomain() (o string) {
 // IsSetWorkflowDomain returns true if WorkflowDomain is not nil.
 func (v *PollForActivityTaskResponse) IsSetWorkflowDomain() bool {
 	return v != nil && v.WorkflowDomain != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *PollForActivityTaskResponse) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *PollForActivityTaskResponse) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type PollForDecisionTaskRequest struct {
@@ -35467,6 +35635,7 @@ type ScheduleActivityTaskDecisionAttributes struct {
 	StartToCloseTimeoutSeconds    *int32        `json:"startToCloseTimeoutSeconds,omitempty"`
 	HeartbeatTimeoutSeconds       *int32        `json:"heartbeatTimeoutSeconds,omitempty"`
 	RetryPolicy                   *RetryPolicy  `json:"retryPolicy,omitempty"`
+	Header                        *Header       `json:"header,omitempty"`
 }
 
 // ToWire translates a ScheduleActivityTaskDecisionAttributes struct into a Thrift-level intermediate
@@ -35486,7 +35655,7 @@ type ScheduleActivityTaskDecisionAttributes struct {
 //   }
 func (v *ScheduleActivityTaskDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [10]wire.Field
+		fields [11]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -35570,6 +35739,14 @@ func (v *ScheduleActivityTaskDecisionAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
 		i++
 	}
 
@@ -35690,6 +35867,14 @@ func (v *ScheduleActivityTaskDecisionAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 80:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -35703,7 +35888,7 @@ func (v *ScheduleActivityTaskDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [10]string
+	var fields [11]string
 	i := 0
 	if v.ActivityId != nil {
 		fields[i] = fmt.Sprintf("ActivityId: %v", *(v.ActivityId))
@@ -35743,6 +35928,10 @@ func (v *ScheduleActivityTaskDecisionAttributes) String() string {
 	}
 	if v.RetryPolicy != nil {
 		fields[i] = fmt.Sprintf("RetryPolicy: %v", v.RetryPolicy)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -35789,6 +35978,9 @@ func (v *ScheduleActivityTaskDecisionAttributes) Equals(rhs *ScheduleActivityTas
 	if !((v.RetryPolicy == nil && rhs.RetryPolicy == nil) || (v.RetryPolicy != nil && rhs.RetryPolicy != nil && v.RetryPolicy.Equals(rhs.RetryPolicy))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -35828,6 +36020,9 @@ func (v *ScheduleActivityTaskDecisionAttributes) MarshalLogObject(enc zapcore.Ob
 	}
 	if v.RetryPolicy != nil {
 		err = multierr.Append(err, enc.AddObject("retryPolicy", v.RetryPolicy))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -35980,6 +36175,21 @@ func (v *ScheduleActivityTaskDecisionAttributes) GetRetryPolicy() (o *RetryPolic
 // IsSetRetryPolicy returns true if RetryPolicy is not nil.
 func (v *ScheduleActivityTaskDecisionAttributes) IsSetRetryPolicy() bool {
 	return v != nil && v.RetryPolicy != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *ScheduleActivityTaskDecisionAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *ScheduleActivityTaskDecisionAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type ServiceBusyError struct {
@@ -38607,6 +38817,7 @@ type StartChildWorkflowExecutionDecisionAttributes struct {
 	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
 	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
+	Header                              *Header                `json:"header,omitempty"`
 }
 
 // ToWire translates a StartChildWorkflowExecutionDecisionAttributes struct into a Thrift-level intermediate
@@ -38626,7 +38837,7 @@ type StartChildWorkflowExecutionDecisionAttributes struct {
 //   }
 func (v *StartChildWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -38726,6 +38937,14 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, er
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -38870,6 +39089,14 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) FromWire(w wire.Value) e
 				}
 
 			}
+		case 130:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -38883,7 +39110,7 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [13]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -38931,6 +39158,10 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 	}
 	if v.CronSchedule != nil {
 		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -38993,6 +39224,9 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) Equals(rhs *StartChildWo
 	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -39038,6 +39272,9 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) MarshalLogObject(enc zap
 	}
 	if v.CronSchedule != nil {
 		enc.AddString("cronSchedule", *v.CronSchedule)
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -39220,6 +39457,21 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) GetCronSchedule() (o str
 // IsSetCronSchedule returns true if CronSchedule is not nil.
 func (v *StartChildWorkflowExecutionDecisionAttributes) IsSetCronSchedule() bool {
 	return v != nil && v.CronSchedule != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *StartChildWorkflowExecutionDecisionAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type StartChildWorkflowExecutionFailedEventAttributes struct {
@@ -39650,6 +39902,7 @@ type StartChildWorkflowExecutionInitiatedEventAttributes struct {
 	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
 	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
+	Header                              *Header                `json:"header,omitempty"`
 }
 
 // ToWire translates a StartChildWorkflowExecutionInitiatedEventAttributes struct into a Thrift-level intermediate
@@ -39669,7 +39922,7 @@ type StartChildWorkflowExecutionInitiatedEventAttributes struct {
 //   }
 func (v *StartChildWorkflowExecutionInitiatedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [13]wire.Field
+		fields [14]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -39777,6 +40030,14 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) ToWire() (wire.Val
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 130, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
 		i++
 	}
 
@@ -39925,6 +40186,14 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) FromWire(w wire.Va
 				}
 
 			}
+		case 140:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -39938,7 +40207,7 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [13]string
+	var fields [14]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -39990,6 +40259,10 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) String() string {
 	}
 	if v.CronSchedule != nil {
 		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -40045,6 +40318,9 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) Equals(rhs *StartC
 	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -40093,6 +40369,9 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) MarshalLogObject(e
 	}
 	if v.CronSchedule != nil {
 		enc.AddString("cronSchedule", *v.CronSchedule)
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -40290,6 +40569,21 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetCronSchedule() 
 // IsSetCronSchedule returns true if CronSchedule is not nil.
 func (v *StartChildWorkflowExecutionInitiatedEventAttributes) IsSetCronSchedule() bool {
 	return v != nil && v.CronSchedule != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type StartTimeFilter struct {
@@ -40671,6 +40965,7 @@ type StartWorkflowExecutionRequest struct {
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
 	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
 	Memo                                *Memo                  `json:"memo,omitempty"`
+	Header                              *Header                `json:"header,omitempty"`
 }
 
 // ToWire translates a StartWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -40690,7 +40985,7 @@ type StartWorkflowExecutionRequest struct {
 //   }
 func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [14]wire.Field
+		fields [15]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -40806,6 +41101,14 @@ func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 150, Value: w}
 		i++
 	}
 
@@ -40964,6 +41267,14 @@ func (v *StartWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 150:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -40977,7 +41288,7 @@ func (v *StartWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [14]string
+	var fields [15]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -41033,6 +41344,10 @@ func (v *StartWorkflowExecutionRequest) String() string {
 	}
 	if v.Memo != nil {
 		fields[i] = fmt.Sprintf("Memo: %v", v.Memo)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -41091,6 +41406,9 @@ func (v *StartWorkflowExecutionRequest) Equals(rhs *StartWorkflowExecutionReques
 	if !((v.Memo == nil && rhs.Memo == nil) || (v.Memo != nil && rhs.Memo != nil && v.Memo.Equals(rhs.Memo))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -41142,6 +41460,9 @@ func (v *StartWorkflowExecutionRequest) MarshalLogObject(enc zapcore.ObjectEncod
 	}
 	if v.Memo != nil {
 		err = multierr.Append(err, enc.AddObject("memo", v.Memo))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -41354,6 +41675,21 @@ func (v *StartWorkflowExecutionRequest) GetMemo() (o *Memo) {
 // IsSetMemo returns true if Memo is not nil.
 func (v *StartWorkflowExecutionRequest) IsSetMemo() bool {
 	return v != nil && v.Memo != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *StartWorkflowExecutionRequest) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *StartWorkflowExecutionRequest) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type StartWorkflowExecutionResponse struct {
@@ -46649,6 +46985,7 @@ type WorkflowExecutionContinuedAsNewEventAttributes struct {
 	FailureReason                       *string                 `json:"failureReason,omitempty"`
 	FailureDetails                      []byte                  `json:"failureDetails,omitempty"`
 	LastCompletionResult                []byte                  `json:"lastCompletionResult,omitempty"`
+	Header                              *Header                 `json:"header,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionContinuedAsNewEventAttributes struct into a Thrift-level intermediate
@@ -46668,7 +47005,7 @@ type WorkflowExecutionContinuedAsNewEventAttributes struct {
 //   }
 func (v *WorkflowExecutionContinuedAsNewEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -46768,6 +47105,14 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) ToWire() (wire.Value, e
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -46906,6 +47251,14 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) FromWire(w wire.Value) 
 				}
 
 			}
+		case 130:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -46919,7 +47272,7 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [13]string
 	i := 0
 	if v.NewExecutionRunId != nil {
 		fields[i] = fmt.Sprintf("NewExecutionRunId: %v", *(v.NewExecutionRunId))
@@ -46967,6 +47320,10 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) String() string {
 	}
 	if v.LastCompletionResult != nil {
 		fields[i] = fmt.Sprintf("LastCompletionResult: %v", v.LastCompletionResult)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -47019,6 +47376,9 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) Equals(rhs *WorkflowExe
 	if !((v.LastCompletionResult == nil && rhs.LastCompletionResult == nil) || (v.LastCompletionResult != nil && rhs.LastCompletionResult != nil && bytes.Equal(v.LastCompletionResult, rhs.LastCompletionResult))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -47064,6 +47424,9 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) MarshalLogObject(enc za
 	}
 	if v.LastCompletionResult != nil {
 		enc.AddString("lastCompletionResult", base64.StdEncoding.EncodeToString(v.LastCompletionResult))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -47246,6 +47609,21 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) GetLastCompletionResult
 // IsSetLastCompletionResult returns true if LastCompletionResult is not nil.
 func (v *WorkflowExecutionContinuedAsNewEventAttributes) IsSetLastCompletionResult() bool {
 	return v != nil && v.LastCompletionResult != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionContinuedAsNewEventAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *WorkflowExecutionContinuedAsNewEventAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type WorkflowExecutionFailedEventAttributes struct {
@@ -48383,6 +48761,7 @@ type WorkflowExecutionStartedEventAttributes struct {
 	FirstDecisionTaskBackoffSeconds     *int32                  `json:"firstDecisionTaskBackoffSeconds,omitempty"`
 	Memo                                *Memo                   `json:"memo,omitempty"`
 	PrevAutoResetPoints                 *ResetPoints            `json:"prevAutoResetPoints,omitempty"`
+	Header                              *Header                 `json:"header,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionStartedEventAttributes struct into a Thrift-level intermediate
@@ -48402,7 +48781,7 @@ type WorkflowExecutionStartedEventAttributes struct {
 //   }
 func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [22]wire.Field
+		fields [23]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -48582,6 +48961,14 @@ func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 130, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
 		i++
 	}
 
@@ -48818,6 +49205,14 @@ func (v *WorkflowExecutionStartedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 140:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -48831,7 +49226,7 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [22]string
+	var fields [23]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -48921,6 +49316,10 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 		fields[i] = fmt.Sprintf("PrevAutoResetPoints: %v", v.PrevAutoResetPoints)
 		i++
 	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
+		i++
+	}
 
 	return fmt.Sprintf("WorkflowExecutionStartedEventAttributes{%v}", strings.Join(fields[:i], ", "))
 }
@@ -49001,6 +49400,9 @@ func (v *WorkflowExecutionStartedEventAttributes) Equals(rhs *WorkflowExecutionS
 	if !((v.PrevAutoResetPoints == nil && rhs.PrevAutoResetPoints == nil) || (v.PrevAutoResetPoints != nil && rhs.PrevAutoResetPoints != nil && v.PrevAutoResetPoints.Equals(rhs.PrevAutoResetPoints))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -49076,6 +49478,9 @@ func (v *WorkflowExecutionStartedEventAttributes) MarshalLogObject(enc zapcore.O
 	}
 	if v.PrevAutoResetPoints != nil {
 		err = multierr.Append(err, enc.AddObject("prevAutoResetPoints", v.PrevAutoResetPoints))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -49408,6 +49813,21 @@ func (v *WorkflowExecutionStartedEventAttributes) GetPrevAutoResetPoints() (o *R
 // IsSetPrevAutoResetPoints returns true if PrevAutoResetPoints is not nil.
 func (v *WorkflowExecutionStartedEventAttributes) IsSetPrevAutoResetPoints() bool {
 	return v != nil && v.PrevAutoResetPoints != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *WorkflowExecutionStartedEventAttributes) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type WorkflowExecutionTerminatedEventAttributes struct {

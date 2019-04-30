@@ -1580,6 +1580,10 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	taskListChild := &workflow.TaskList{}
 	taskListChild.Name = common.StringPtr(tlChild)
 
+	header := &workflow.Header{
+		Fields: map[string][]byte{"tracing": []byte("sample payload")},
+	}
+
 	request := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
 		Domain:                              common.StringPtr(s.domainName),
@@ -1587,6 +1591,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		WorkflowType:                        parentWorkflowType,
 		TaskList:                            taskListParent,
 		Input:                               nil,
+		Header:                              header,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
@@ -1622,6 +1627,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						WorkflowType:                        childWorkflowType,
 						TaskList:                            taskListChild,
 						Input:                               []byte("child-workflow-input"),
+						Header:                              header,
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
 						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
@@ -1715,6 +1721,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(startedEvent.ChildWorkflowExecutionStartedEventAttributes.GetInitiatedEventId(),
 		childStartedEvent.WorkflowExecutionStartedEventAttributes.GetParentInitiatedEventId())
 	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
+	s.Equal(header, startedEvent.ChildWorkflowExecutionStartedEventAttributes.Header)
+	s.Equal(header, childStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)

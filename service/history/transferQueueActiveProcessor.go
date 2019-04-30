@@ -777,6 +777,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 				WorkflowType:                        attributes.WorkflowType,
 				TaskList:                            attributes.TaskList,
 				Input:                               attributes.Input,
+				Header:                              attributes.Header,
 				ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
 				TaskStartToCloseTimeoutSeconds:      attributes.TaskStartToCloseTimeoutSeconds,
 				// Use the same request ID to dedupe StartWorkflowExecution calls
@@ -898,11 +899,16 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *per
 				return &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
 			}
 
-			msBuilder.AddChildWorkflowExecutionStartedEvent(domain,
+			msBuilder.AddChildWorkflowExecutionStartedEvent(
+				domain,
 				&workflow.WorkflowExecution{
 					WorkflowId: common.StringPtr(task.TargetWorkflowID),
 					RunId:      common.StringPtr(runID),
-				}, initiatedAttributes.WorkflowType, initiatedEventID)
+				},
+				initiatedAttributes.WorkflowType,
+				initiatedEventID,
+				initiatedAttributes.Header,
+			)
 
 			return nil
 		})

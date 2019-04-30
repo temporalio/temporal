@@ -4962,6 +4962,7 @@ func addChildWorkflowExecutionStartedEvent(builder mutableState, initiatedID int
 		},
 		&workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 		initiatedID,
+		&workflow.Header{},
 	)
 	return event
 }

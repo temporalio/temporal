@@ -646,6 +646,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response := &workflow.PollForActivityTaskResponse{}
 	response.ActivityId = attributes.ActivityId
 	response.ActivityType = attributes.ActivityType
+	response.Header = attributes.Header
 	response.Input = attributes.Input
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
 	response.ScheduledTimestampOfThisAttempt = historyResponse.ScheduledTimestampOfThisAttempt

@@ -333,6 +333,7 @@ struct ScheduleActivityTaskDecisionAttributes {
   55: optional i32 startToCloseTimeoutSeconds
   60: optional i32 heartbeatTimeoutSeconds
   70: optional RetryPolicy retryPolicy
+  80: optional Header header
 }
 
 struct RequestCancelActivityTaskDecisionAttributes {
@@ -397,6 +398,7 @@ struct ContinueAsNewWorkflowExecutionDecisionAttributes {
   100: optional binary failureDetails
   110: optional binary lastCompletionResult
   120: optional string cronSchedule
+  130: optional Header header
 }
 
 struct StartChildWorkflowExecutionDecisionAttributes {
@@ -412,6 +414,7 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional RetryPolicy retryPolicy
   120: optional string cronSchedule
+  130: optional Header header
 }
 
 struct Decision {
@@ -453,6 +456,7 @@ struct WorkflowExecutionStartedEventAttributes {
   110: optional i32 firstDecisionTaskBackoffSeconds
   120: optional Memo memo
   130: optional ResetPoints prevAutoResetPoints
+  140: optional Header header
 }
 
 struct ResetPoints{
@@ -502,6 +506,7 @@ struct WorkflowExecutionContinuedAsNewEventAttributes {
   100: optional string failureReason
   110: optional binary failureDetails
   120: optional binary lastCompletionResult
+  130: optional Header header
 }
 
 struct DecisionTaskScheduledEventAttributes {
@@ -555,6 +560,7 @@ struct ActivityTaskScheduledEventAttributes {
   60: optional i32 heartbeatTimeoutSeconds
   90: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   110: optional RetryPolicy retryPolicy
+  120: optional Header header
 }
 
 struct ActivityTaskStartedEventAttributes {
@@ -724,6 +730,7 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   110: optional WorkflowIdReusePolicy workflowIdReusePolicy
   120: optional RetryPolicy retryPolicy
   130: optional string cronSchedule
+  140: optional Header header
 }
 
 struct StartChildWorkflowExecutionFailedEventAttributes {
@@ -741,6 +748,7 @@ struct ChildWorkflowExecutionStartedEventAttributes {
   20: optional i64 (js.type = "Long") initiatedEventId
   30: optional WorkflowExecution workflowExecution
   40: optional WorkflowType workflowType
+  50: optional Header header
 }
 
 struct ChildWorkflowExecutionCompletedEventAttributes {
@@ -975,6 +983,7 @@ struct StartWorkflowExecutionRequest {
   120: optional RetryPolicy retryPolicy
   130: optional string cronSchedule
   140: optional Memo memo
+  150: optional Header header
 }
 
 struct StartWorkflowExecutionResponse {
@@ -1051,6 +1060,7 @@ struct PollForActivityTaskResponse {
   140: optional binary heartbeatDetails
   150: optional WorkflowType workflowType
   160: optional string workflowDomain
+  170: optional Header header
 }
 
 struct RecordActivityTaskHeartbeatRequest {

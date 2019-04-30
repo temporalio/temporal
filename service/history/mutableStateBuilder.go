@@ -1327,6 +1327,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(d
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(decisionTimeout),
 		ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
 		Input:                               attributes.Input,
+		Header:                              attributes.Header,
 		RetryPolicy:                         attributes.RetryPolicy,
 		CronSchedule:                        attributes.CronSchedule,
 	}
@@ -2754,8 +2755,13 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 	return ci
 }
 
-func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(domain *string, execution *workflow.WorkflowExecution,
-	workflowType *workflow.WorkflowType, initiatedID int64) *workflow.HistoryEvent {
+func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
+	domain *string,
+	execution *workflow.WorkflowExecution,
+	workflowType *workflow.WorkflowType,
+	initiatedID int64,
+	header *workflow.Header,
+) *workflow.HistoryEvent {
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID != common.EmptyEventID {
 		e.logger.Warn("Invalid history builder state for action",
@@ -2767,7 +2773,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(domain *stri
 		return nil
 	}
 
-	event := e.hBuilder.AddChildWorkflowExecutionStartedEvent(domain, execution, workflowType, initiatedID)
+	event := e.hBuilder.AddChildWorkflowExecutionStartedEvent(domain, execution, workflowType, initiatedID, header)
 	if err := e.ReplicateChildWorkflowExecutionStartedEvent(event); err != nil {
 		return nil
 	}
