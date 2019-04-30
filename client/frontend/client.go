@@ -204,6 +204,22 @@ func (c *clientImpl) ListWorkflowExecutions(
 	return client.ListWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ScanWorkflowExecutions(
+	ctx context.Context,
+	request *shared.ListWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ListWorkflowExecutionsResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ScanWorkflowExecutions(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollForActivityTask(
 	ctx context.Context,
 	request *shared.PollForActivityTaskRequest,

@@ -636,6 +636,13 @@ func (p *visibilityRateLimitedPersistenceClient) ListWorkflowExecutions(request 
 	return p.persistence.ListWorkflowExecutions(request)
 }
 
+func (p *visibilityRateLimitedPersistenceClient) ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.ScanWorkflowExecutions(request)
+}
+
 func (p *visibilityRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

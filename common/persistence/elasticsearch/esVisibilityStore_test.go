@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -702,6 +703,25 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}],"search_after":[1,"a"]}`, dsl)
 }
 
+func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
+	request := &p.ListWorkflowExecutionsRequestV2{
+		PageSize: 10,
+	}
+	token := &esVisibilityPageToken{}
+
+	request.Query = `WorkflowID = 'wid' order by StartTime desc`
+	dsl, isOpen, err := getESQueryDSLForScan(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}},"from":0,"size":10}`, dsl)
+
+	request.Query = `WorkflowID = 'wid'`
+	dsl, isOpen, err = getESQueryDSLForScan(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}},"from":0,"size":10}`, dsl)
+}
+
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.mockESClient.On("SearchWithDSL", mock.Anything, mock.Anything, mock.MatchedBy(func(input string) bool {
 		s.True(strings.Contains(input, `{"match_phrase":{"CloseStatus":{"query":"5"}}}`))
@@ -730,4 +750,56 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	_, ok = err.(*workflow.BadRequestError)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "Error when parse query"))
+}
+
+func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
+	// test first page
+	s.mockESClient.On("ScrollFirstPage", mock.Anything, testIndex, mock.MatchedBy(func(input string) bool {
+		s.True(strings.Contains(input, `{"match_phrase":{"CloseStatus":{"query":"5"}}}`))
+		return true
+	})).Return(testSearchResult, nil, nil).Once()
+
+	request := &p.ListWorkflowExecutionsRequestV2{
+		DomainUUID: testDomainID,
+		Domain:     testDomain,
+		PageSize:   10,
+		Query:      `CloseStatus = 5`,
+	}
+	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
+	s.NoError(err)
+
+	// test bad request
+	request.Query = `invalid query`
+	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	s.Error(err)
+	_, ok := err.(*workflow.BadRequestError)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "Error when parse query"))
+
+	// test scroll
+	scrollID := "scrollID-1"
+	s.mockESClient.On("Scroll", mock.Anything, scrollID).Return(testSearchResult, nil, nil).Once()
+
+	token := &esVisibilityPageToken{ScrollID: scrollID}
+	tokenBytes, err := s.visibilityStore.serializePageToken(token)
+	s.NoError(err)
+	request.NextPageToken = tokenBytes
+	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	s.NoError(err)
+
+	// test last page
+	mockScroll := &esMocks.ScrollService{}
+	s.mockESClient.On("Scroll", mock.Anything, scrollID).Return(testSearchResult, mockScroll, io.EOF).Once()
+	mockScroll.On("Clear", mock.Anything).Return(nil).Once()
+	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	s.NoError(err)
+	mockScroll.AssertExpectations(s.T())
+
+	// test internal error
+	s.mockESClient.On("Scroll", mock.Anything, scrollID).Return(nil, nil, errTestESSearch).Once()
+	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	s.Error(err)
+	_, ok = err.(*workflow.InternalServiceError)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ScanWorkflowExecutions failed"))
 }

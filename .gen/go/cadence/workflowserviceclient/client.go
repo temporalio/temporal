@@ -198,6 +198,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	ScanWorkflowExecutions(
+		ctx context.Context,
+		ListRequest *shared.ListWorkflowExecutionsRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.ListWorkflowExecutionsResponse, error)
+
 	SignalWithStartWorkflowExecution(
 		ctx context.Context,
 		SignalWithStartRequest *shared.SignalWithStartWorkflowExecutionRequest,
@@ -871,6 +877,29 @@ func (c client) RespondQueryTaskCompleted(
 	}
 
 	err = cadence.WorkflowService_RespondQueryTaskCompleted_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ScanWorkflowExecutions(
+	ctx context.Context,
+	_ListRequest *shared.ListWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListWorkflowExecutionsResponse, err error) {
+
+	args := cadence.WorkflowService_ScanWorkflowExecutions_Helper.Args(_ListRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_ScanWorkflowExecutions_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_ScanWorkflowExecutions_Helper.UnwrapResponse(&result)
 	return
 }
 

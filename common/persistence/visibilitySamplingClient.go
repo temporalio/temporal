@@ -221,6 +221,10 @@ func (p *visibilitySamplingClient) ListWorkflowExecutions(request *ListWorkflowE
 	return p.persistence.ListWorkflowExecutions(request)
 }
 
+func (p *visibilitySamplingClient) ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
+	return p.persistence.ScanWorkflowExecutions(request)
+}
+
 func (p *visibilitySamplingClient) Close() {
 	p.persistence.Close()
 }

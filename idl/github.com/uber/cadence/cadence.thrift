@@ -467,6 +467,18 @@ service WorkflowService {
     )
 
   /**
+  * ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
+  **/
+  shared.ListWorkflowExecutionsResponse ScanWorkflowExecutions(1: shared.ListWorkflowExecutionsRequest listRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.ServiceBusyError serviceBusyError,
+      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+    )
+
+  /**
   * RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a DecisionTask for query)
   * as a result of 'PollForDecisionTask' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
   * API and return the query result to client as a response to 'QueryWorkflow' API call.

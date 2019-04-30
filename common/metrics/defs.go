@@ -224,6 +224,8 @@ const (
 	PersistenceVisibilityDeleteWorkflowExecutionScope
 	// PersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
 	PersistenceListWorkflowExecutionsScope
+	// PersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
+	PersistenceScanWorkflowExecutionsScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -430,6 +432,8 @@ const (
 	ElasticsearchGetClosedWorkflowExecutionScope
 	// ElasticsearchListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
 	ElasticsearchListWorkflowExecutionsScope
+	// ElasticsearchScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
+	ElasticsearchScanWorkflowExecutionsScope
 
 	NumCommonScopes
 )
@@ -492,6 +496,8 @@ const (
 	FrontendListClosedWorkflowExecutionsScope
 	// FrontendListWorkflowExecutionsScope is the metric scope for frontend.ListWorkflowExecutions
 	FrontendListWorkflowExecutionsScope
+	// FrontendScanWorkflowExecutionsScope is the metric scope for frontend.ListWorkflowExecutions
+	FrontendScanWorkflowExecutionsScope
 	// FrontendRegisterDomainScope is the metric scope for frontend.RegisterDomain
 	FrontendRegisterDomainScope
 	// FrontendDescribeDomainScope is the metric scope for frontend.DescribeDomain
@@ -814,6 +820,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 		PersistenceVisibilityDeleteWorkflowExecutionScope:        {operation: "VisibilityDeleteWorkflowExecution"},
 		PersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
+		PersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		PersistenceAppendHistoryNodesScope:                       {operation: "AppendHistoryNodes", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceReadHistoryBranchScope:                        {operation: "ReadHistoryBranch", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceForkHistoryBranchScope:                        {operation: "ForkHistoryBranch", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
@@ -920,6 +927,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
 		ElasticsearchGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 		ElasticsearchListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
+		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -951,6 +959,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendListOpenWorkflowExecutionsScope:       {operation: "ListOpenWorkflowExecutions"},
 		FrontendListClosedWorkflowExecutionsScope:     {operation: "ListClosedWorkflowExecutions"},
 		FrontendListWorkflowExecutionsScope:           {operation: "ListWorkflowExecutions"},
+		FrontendScanWorkflowExecutionsScope:           {operation: "ScanWorkflowExecutions"},
 		FrontendRegisterDomainScope:                   {operation: "RegisterDomain"},
 		FrontendDescribeDomainScope:                   {operation: "DescribeDomain"},
 		FrontendListDomainsScope:                      {operation: "ListDomain"},

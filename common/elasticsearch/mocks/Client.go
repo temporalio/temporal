@@ -54,6 +54,70 @@ func (_m *Client) RunBulkProcessor(ctx context.Context, p *elasticsearch.BulkPro
 	return r0, r1
 }
 
+// Scroll provides a mock function with given fields: ctx, scrollID
+func (_m *Client) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, elasticsearch.ScrollService, error) {
+	ret := _m.Called(ctx, scrollID)
+
+	var r0 *elastic.SearchResult
+	if rf, ok := ret.Get(0).(func(context.Context, string) *elastic.SearchResult); ok {
+		r0 = rf(ctx, scrollID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*elastic.SearchResult)
+		}
+	}
+
+	var r1 elasticsearch.ScrollService
+	if rf, ok := ret.Get(1).(func(context.Context, string) elasticsearch.ScrollService); ok {
+		r1 = rf(ctx, scrollID)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(elasticsearch.ScrollService)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(context.Context, string) error); ok {
+		r2 = rf(ctx, scrollID)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// ScrollFirstPage provides a mock function with given fields: ctx, index, query
+func (_m *Client) ScrollFirstPage(ctx context.Context, index string, query string) (*elastic.SearchResult, elasticsearch.ScrollService, error) {
+	ret := _m.Called(ctx, index, query)
+
+	var r0 *elastic.SearchResult
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) *elastic.SearchResult); ok {
+		r0 = rf(ctx, index, query)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*elastic.SearchResult)
+		}
+	}
+
+	var r1 elasticsearch.ScrollService
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) elasticsearch.ScrollService); ok {
+		r1 = rf(ctx, index, query)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(elasticsearch.ScrollService)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(context.Context, string, string) error); ok {
+		r2 = rf(ctx, index, query)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // Search provides a mock function with given fields: ctx, p
 func (_m *Client) Search(ctx context.Context, p *elasticsearch.SearchParameters) (*elastic.SearchResult, error) {
 	ret := _m.Called(ctx, p)
@@ -78,7 +142,7 @@ func (_m *Client) Search(ctx context.Context, p *elasticsearch.SearchParameters)
 }
 
 // SearchWithDSL provides a mock function with given fields: ctx, index, query
-func (_m *Client) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
+func (_m *Client) SearchWithDSL(ctx context.Context, index string, query string) (*elastic.SearchResult, error) {
 	ret := _m.Called(ctx, index, query)
 
 	var r0 *elastic.SearchResult

@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,6 +64,8 @@ type (
 		// for ES API searchAfter
 		SortTime   int64  // startTime or closeTime
 		TieBreaker string // runID
+		// for ES scroll API
+		ScrollID string
 	}
 
 	visibilityRecord struct {
@@ -325,9 +328,7 @@ func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteW
 func (v *esVisibilityStore) ListWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
 
-	if request.PageSize == 0 {
-		request.PageSize = 1000
-	}
+	checkPageSize(request)
 
 	token, err := v.getNextPageToken(request.NextPageToken)
 	if err != nil {
@@ -350,6 +351,42 @@ func (v *esVisibilityStore) ListWorkflowExecutions(
 	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, isOpen, request.PageSize)
 }
 
+func (v *esVisibilityStore) ScanWorkflowExecutions(
+	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
+
+	checkPageSize(request)
+
+	token, err := v.getNextPageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	var searchResult *elastic.SearchResult
+	var scrollService es.ScrollService
+	if len(token.ScrollID) == 0 { // first call
+		queryDSL, _, err := getESQueryDSLForScan(request, token)
+		if err != nil {
+			return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
+		}
+		searchResult, scrollService, err = v.esClient.ScrollFirstPage(ctx, v.index, queryDSL)
+	} else {
+		searchResult, scrollService, err = v.esClient.Scroll(ctx, token.ScrollID)
+	}
+
+	isLastPage := false
+	if err == io.EOF { // no more result
+		isLastPage = true
+		scrollService.Clear(context.Background())
+	} else if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err),
+		}
+	}
+
+	return v.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
+}
+
 const (
 	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
 	jsonSortForOpen        = `[{"StartTime":"desc"},{"WorkflowID":"desc"}]`
@@ -361,7 +398,15 @@ const (
 	dslFieldFrom        = "from"
 )
 
+func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, bool, error) {
+	return getESQueryDSLHelper(request, token, true)
+}
+
 func getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, bool, error) {
+	return getESQueryDSLHelper(request, token, false)
+}
+
+func getESQueryDSLHelper(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken, isScan bool) (string, bool, error) {
 	sql := getSQLFromRequest(request)
 	dslStr, _, err := elasticsql.Convert(sql)
 	if err != nil {
@@ -373,6 +418,12 @@ func getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibili
 	if isOpen {
 		dsl = replaceQueryForOpen(dsl)
 	}
+
+	if isScan { // no need to sort for scan
+		dsl.Del(dslFieldSort)
+		return dsl.String(), isOpen, nil
+	}
+
 	isSorted := dsl.Exists(dslFieldSort)
 	if !isSorted { // set default sorting
 		if isOpen {
@@ -390,7 +441,6 @@ func getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibili
 	} else { // use from+size
 		dsl.Set(dslFieldFrom, fastjson.MustParse(strconv.Itoa(token.From)))
 	}
-
 	return dsl.String(), isOpen, nil
 }
 
@@ -489,6 +539,32 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	}
 
 	return v.esClient.Search(ctx, params)
+}
+
+func (v *esVisibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
+	token *esVisibilityPageToken, pageSize int, scrollID string, isLastPage bool) (
+	*p.InternalListWorkflowExecutionsResponse, error) {
+
+	response := &p.InternalListWorkflowExecutionsResponse{}
+	actualHits := searchHits.Hits
+	numOfActualHits := len(actualHits)
+
+	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	for i := 0; i < numOfActualHits; i++ {
+		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i], false)
+		response.Executions = append(response.Executions, workflowExecutionInfo)
+	}
+
+	if numOfActualHits == pageSize && !isLastPage {
+		nextPageToken, err := v.serializePageToken(&esVisibilityPageToken{ScrollID: scrollID})
+		if err != nil {
+			return nil, err
+		}
+		response.NextPageToken = make([]byte, len(nextPageToken))
+		copy(response.NextPageToken, nextPageToken)
+	}
+
+	return response, nil
 }
 
 func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
@@ -644,4 +720,10 @@ func getVisibilityMessageForDeletion(domainID, workflowID, runID string, docVers
 		Version:     common.Int64Ptr(docVersion),
 	}
 	return msg
+}
+
+func checkPageSize(request *p.ListWorkflowExecutionsRequestV2) {
+	if request.PageSize == 0 {
+		request.PageSize = 1000
+	}
 }
