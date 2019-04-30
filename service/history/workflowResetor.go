@@ -81,7 +81,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(ctx context.Context, reques
 		return
 	}
 
-	retError = validateResetWorkflowBeforeReplay(baseMutableState, currMutableState)
+	retError = w.validateResetWorkflowBeforeReplay(baseMutableState, currMutableState)
 	if retError != nil {
 		return
 	}
@@ -152,24 +152,17 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 	return nil
 }
 
-func validateResetWorkflowBeforeReplay(baseMutableState, currMutableState mutableState) (retError error) {
+func (w *workflowResetorImpl) validateResetWorkflowBeforeReplay(baseMutableState, currMutableState mutableState) (retError error) {
 	if baseMutableState.GetEventStoreVersion() != persistence.EventStoreVersionV2 {
 		retError = &workflow.BadRequestError{
 			Message: fmt.Sprintf("reset API is not supported for V1 history events"),
 		}
 		return
 	}
-	if len(baseMutableState.GetPendingChildExecutionInfos()) > 0 {
-		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("reset is not allowed when workflow has pending child workflow. RunID: %v", baseMutableState.GetExecutionInfo().RunID),
-		}
-		return
-	}
 	if len(currMutableState.GetPendingChildExecutionInfos()) > 0 {
 		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("reset is not allowed when workflow has pending child workflow. RunID: %v", currMutableState.GetExecutionInfo().RunID),
+			Message: fmt.Sprintf("reset is not allowed when current workflow has pending child workflow."),
 		}
-		return
 	}
 	if currMutableState.IsWorkflowExecutionRunning() {
 		retError = &workflow.InternalServiceError{
@@ -179,27 +172,13 @@ func validateResetWorkflowBeforeReplay(baseMutableState, currMutableState mutabl
 	return
 }
 
-func validateResetWorkflowAfterReplay(newMutableState mutableState) (retError error) {
-	if len(newMutableState.GetAllRequestCancels()) > 0 {
-		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending request cancel "),
-		}
-		return
-	}
-	if len(newMutableState.GetPendingChildExecutionInfos()) > 0 {
-		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending child workflow "),
-		}
-		return
-	}
-	if len(newMutableState.GetAllSignalsToSend()) > 0 {
-		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending signals to send, pending signal: %+v ", newMutableState.GetAllSignalsToSend()),
-		}
+func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState mutableState) (retError error) {
+	retError = newMutableState.CheckResettable()
+	if retError != nil {
 		return
 	}
 	if !newMutableState.HasInFlightDecisionTask() {
-		retError = &workflow.BadRequestError{
+		retError = &workflow.InternalServiceError{
 			Message: fmt.Sprintf("can't find the last started decision"),
 		}
 		return
@@ -271,7 +250,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 	newMutableState = newStateBuilder.getMutableState()
 
-	retError = validateResetWorkflowAfterReplay(newMutableState)
+	retError = w.validateResetWorkflowAfterReplay(newMutableState)
 	if retError != nil {
 		return
 	}

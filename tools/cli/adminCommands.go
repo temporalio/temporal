@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strconv"
+	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/uber/cadence/.gen/go/admin"
@@ -146,6 +147,14 @@ func AdminDescribeWorkflow(c *cli.Context) {
 				ErrorAndExit("thriftrwEncoder.Decode err", err)
 			}
 			prettyPrintJSONObject(branchInfo)
+			if ms.ExecutionInfo.AutoResetPoints != nil {
+				fmt.Println("auto-reset-points:")
+				for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
+					createT := time.Unix(0, p.GetCreatedTimeNano())
+					expireT := time.Unix(0, p.GetExpiringTimeNano())
+					fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstDecisionCompletedId(), p.GetResettable(), createT, expireT)
+				}
+			}
 		}
 	}
 }

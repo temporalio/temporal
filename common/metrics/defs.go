@@ -1181,6 +1181,7 @@ const (
 	MultipleCompletionDecisionsCounter
 	FailedDecisionsCounter
 	StaleMutableStateCounter
+	AutoResetPointsLimitExceededCounter
 	ConcurrencyUpdateFailureCounter
 	CadenceErrEventAlreadyStartedCounter
 	CadenceErrShardOwnershipLostCounter
@@ -1416,6 +1417,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MultipleCompletionDecisionsCounter:           {metricName: "multiple_completion_decisions", metricType: Counter},
 		FailedDecisionsCounter:                       {metricName: "failed_decisions", metricType: Counter},
 		StaleMutableStateCounter:                     {metricName: "stale_mutable_state", metricType: Counter},
+		AutoResetPointsLimitExceededCounter:          {metricName: "auto_reset_points_exceed_limit", metricType: Counter},
 		ConcurrencyUpdateFailureCounter:              {metricName: "concurrency_update_failure", metricType: Counter},
 		CadenceErrShardOwnershipLostCounter:          {metricName: "cadence_errors_shard_ownership_lost", metricType: Counter},
 		CadenceErrEventAlreadyStartedCounter:         {metricName: "cadence_errors_event_already_started", metricType: Counter},

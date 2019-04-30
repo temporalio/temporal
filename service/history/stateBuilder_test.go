@@ -527,7 +527,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			Attempt:         newRunDecisionAttempt,
 		},
 		mock.Anything,
-		int32(0),
+		int32(0), mock.Anything,
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
@@ -855,7 +855,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			Attempt:         newRunDecisionAttempt,
 		},
 		mock.Anything,
-		int32(persistence.EventStoreVersionV2),
+		int32(persistence.EventStoreVersionV2), mock.Anything,
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
@@ -1740,7 +1740,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
 			StartedEventId:   common.Int64Ptr(startedID),
 		},
 	}
-	s.mockMutableState.On("ReplicateDecisionTaskCompletedEvent", scheduleID, startedID).Once()
+	s.mockMutableState.On("ReplicateDecisionTaskCompletedEvent", event).Once()
 	s.mockUpdateVersion(event)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
 

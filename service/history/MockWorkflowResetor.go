@@ -38,7 +38,7 @@ var _ workflowResetor = (*mockWorkflowResetor)(nil)
 func (_m *mockWorkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *workflow.ResetWorkflowExecutionRequest,
 	baseContext workflowExecutionContext, baseMutableState mutableState,
 	currContext workflowExecutionContext, currMutableState mutableState) (*workflow.ResetWorkflowExecutionResponse, error) {
-	ret := _m.Called(ctx, resetRequest)
+	ret := _m.Called(ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
 
 	var r0 *workflow.ResetWorkflowExecutionResponse
 	if rf, ok := ret.Get(0).(func(context.Context, *workflow.ResetWorkflowExecutionRequest,
@@ -70,6 +70,20 @@ func (_m *mockWorkflowResetor) ApplyResetEvent(ctx context.Context, request *h.R
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *h.ReplicateEventsRequest, string, string, string) error); ok {
 		r0 = rf(ctx, request, domainID, workflowID, currentRunID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// CheckResettable provides a mock function for CheckResettable
+func (_m *mockWorkflowResetor) CheckResettable(ms mutableState, curr bool) error {
+	ret := _m.Called(ms, curr)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(baseMutableState mutableState, curr bool) error); ok {
+		r0 = rf(ms, curr)
 	} else {
 		r0 = ret.Error(0)
 	}

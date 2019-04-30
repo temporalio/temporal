@@ -22,6 +22,7 @@ package history
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -1365,7 +1366,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(d
 		parentDomainID = parentExecutionInfo.DomainUUID
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, &previousExecutionInfo.RunID)
+	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, previousExecutionInfo)
 	e.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, createRequest.GetRequestId(), event)
 
 	return event
@@ -1612,17 +1613,90 @@ func (e *mutableStateBuilder) CreateTransientDecisionEvents(di *decisionInfo, id
 	return scheduledEvent, startedEvent
 }
 
-func (e *mutableStateBuilder) BeforeAddDecisionTaskCompletedEvent() {
+func (e *mutableStateBuilder) beforeAddDecisionTaskCompletedEvent() {
 	// Make sure to delete decision before adding events.  Otherwise they are buffered rather than getting appended
 	e.DeleteDecision()
 }
 
-func (e *mutableStateBuilder) AfterAddDecisionTaskCompletedEvent(startedID int64) {
-	e.executionInfo.LastProcessedEvent = startedID
+func (e *mutableStateBuilder) afterAddDecisionTaskCompletedEvent(event *workflow.HistoryEvent, maxResetPoints int) {
+	e.executionInfo.LastProcessedEvent = event.GetDecisionTaskCompletedEventAttributes().GetStartedEventId()
+	e.addBinaryCheckSumIfNotExists(event, maxResetPoints)
+}
+
+// add BinaryCheckSum for the first decisionTaskCompletedID for auto-reset
+func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(event *workflow.HistoryEvent, maxResetPoints int) {
+	binChecksum := event.GetDecisionTaskCompletedEventAttributes().GetBinaryChecksum()
+	if len(binChecksum) == 0 {
+		return
+	}
+	exeInfo := e.executionInfo
+	var currResetPoints []*workflow.ResetPointInfo
+	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
+		currResetPoints = e.executionInfo.AutoResetPoints.Points
+	} else {
+		currResetPoints = make([]*workflow.ResetPointInfo, 0, 1)
+	}
+
+	for _, rp := range currResetPoints {
+		if rp.GetBinaryChecksum() == binChecksum {
+			// this checksum already exists
+			return
+		}
+	}
+
+	if len(currResetPoints) == maxResetPoints {
+		// if exceeding the max limit, do rotation by taking the oldest one out
+		currResetPoints = currResetPoints[1:]
+	}
+
+	resettable := true
+	err := e.CheckResettable()
+	if err != nil {
+		resettable = false
+	}
+	info := &workflow.ResetPointInfo{
+		BinaryChecksum:           common.StringPtr(binChecksum),
+		RunId:                    common.StringPtr(exeInfo.RunID),
+		FirstDecisionCompletedId: common.Int64Ptr(event.GetEventId()),
+		CreatedTimeNano:          common.Int64Ptr(time.Now().UnixNano()),
+		Resettable:               common.BoolPtr(resettable),
+	}
+	currResetPoints = append(currResetPoints, info)
+	exeInfo.AutoResetPoints = &workflow.ResetPoints{
+		Points: currResetPoints,
+	}
+}
+
+// TODO: we will release the restriction when reset API allow those pending
+func (e *mutableStateBuilder) CheckResettable() (retError error) {
+	if e.GetEventStoreVersion() != persistence.EventStoreVersionV2 {
+		retError = &workflow.BadRequestError{
+			Message: fmt.Sprintf("reset API is not supported for V1 history events, runID"),
+		}
+		return
+	}
+	if len(e.GetPendingChildExecutionInfos()) > 0 {
+		retError = &workflow.BadRequestError{
+			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending child workflow."),
+		}
+		return
+	}
+	if len(e.GetAllRequestCancels()) > 0 {
+		retError = &workflow.BadRequestError{
+			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending request cancel."),
+		}
+		return
+	}
+	if len(e.GetAllSignalsToSend()) > 0 {
+		retError = &workflow.BadRequestError{
+			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending signals to send, pending signal: %+v ", e.GetAllSignalsToSend()),
+		}
+	}
+	return nil
 }
 
 func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64,
-	request *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent {
+	request *workflow.RespondDecisionTaskCompletedRequest, maxResetPoints int) *workflow.HistoryEvent {
 	hasPendingDecision := e.HasPendingDecisionTask()
 	di, ok := e.GetPendingDecision(scheduleEventID)
 	if !hasPendingDecision || !ok || di.StartedID != startedEventID {
@@ -1637,7 +1711,7 @@ func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, sta
 		return nil
 	}
 
-	e.BeforeAddDecisionTaskCompletedEvent()
+	e.beforeAddDecisionTaskCompletedEvent()
 	if di.Attempt > 0 {
 		// Create corresponding DecisionTaskSchedule and DecisionTaskStarted events for decisions we have been retrying
 		scheduledEvent := e.hBuilder.AddTransientDecisionTaskScheduledEvent(e.executionInfo.TaskList, di.DecisionTimeout,
@@ -1649,13 +1723,13 @@ func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, sta
 	// Now write the completed event
 	event := e.hBuilder.AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID, request)
 
-	e.AfterAddDecisionTaskCompletedEvent(startedEventID)
+	e.afterAddDecisionTaskCompletedEvent(event, maxResetPoints)
 	return event
 }
 
-func (e *mutableStateBuilder) ReplicateDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64) {
-	e.BeforeAddDecisionTaskCompletedEvent()
-	e.AfterAddDecisionTaskCompletedEvent(startedEventID)
+func (e *mutableStateBuilder) ReplicateDecisionTaskCompletedEvent(event *workflow.HistoryEvent) {
+	e.beforeAddDecisionTaskCompletedEvent()
+	e.afterAddDecisionTaskCompletedEvent(event, math.MaxInt32)
 }
 
 func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
@@ -2562,16 +2636,34 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 	if err != nil {
 		return nil, nil, err
 	}
-	err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID, "", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion)
+	err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID, "", domainID, continueAsNewEvent,
+		startedEvent, di, newStateBuilder, eventStoreVersion, domainEntry.GetRetentionDays(e.executionInfo.WorkflowID))
 	if err != nil {
 		return nil, nil, err
 	}
 	return continueAsNewEvent, newStateBuilder, nil
 }
 
+func rolloverAutoResetPointsWithExpiringTime(resetPoints *workflow.ResetPoints, prevRunID string, domainRetentionDays int32) *workflow.ResetPoints {
+	if resetPoints == nil || resetPoints.Points == nil {
+		return resetPoints
+	}
+	newPoints := make([]*workflow.ResetPointInfo, 0, len(resetPoints.Points))
+	expiringTimeNano := time.Now().Add(time.Duration(domainRetentionDays) * time.Hour * 24).UnixNano()
+	for _, rp := range resetPoints.Points {
+		if rp.GetRunId() == prevRunID {
+			rp.ExpiringTimeNano = common.Int64Ptr(expiringTimeNano)
+		}
+		newPoints = append(newPoints, rp)
+	}
+	return &workflow.ResetPoints{
+		Points: newPoints,
+	}
+}
+
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firstEventID int64, sourceClusterName string, domainID string,
 	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
-	newStateBuilder mutableState, eventStoreVersion int32) error {
+	newStateBuilder mutableState, eventStoreVersion int32, domainRetentionDays int32) error {
 
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
@@ -2610,27 +2702,28 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 	continueAsNew := &persistence.CreateWorkflowExecutionRequest{
 		// NOTE: there is no replication task for the start / decision scheduled event,
 		// the above 2 events will be replicated along with previous continue as new event.
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            newExecution,
-		ParentDomainID:       parentDomainID,
-		ParentExecution:      parentExecution,
-		InitiatedID:          initiatedID,
-		TaskList:             newExecutionInfo.TaskList,
-		WorkflowTypeName:     newExecutionInfo.WorkflowTypeName,
-		WorkflowTimeout:      newExecutionInfo.WorkflowTimeout,
-		DecisionTimeoutValue: newExecutionInfo.DecisionTimeoutValue,
-		ExecutionContext:     nil,
-		LastEventTaskID:      newExecutionInfo.LastEventTaskID,
-		NextEventID:          newStateBuilder.GetNextEventID(),
-		LastProcessedEvent:   common.EmptyEventID,
-		CreateWorkflowMode:   persistence.CreateWorkflowModeContinueAsNew,
-		PreviousRunID:        prevRunID,
-		ReplicationState:     newStateBuilder.GetReplicationState(),
-		HasRetryPolicy:       startedAttributes.RetryPolicy != nil,
-		CronSchedule:         startedAttributes.GetCronSchedule(),
-		EventStoreVersion:    newStateBuilder.GetEventStoreVersion(),
-		BranchToken:          newStateBuilder.GetCurrentBranch(),
+		RequestID:               uuid.New(),
+		DomainID:                domainID,
+		Execution:               newExecution,
+		ParentDomainID:          parentDomainID,
+		ParentExecution:         parentExecution,
+		InitiatedID:             initiatedID,
+		TaskList:                newExecutionInfo.TaskList,
+		WorkflowTypeName:        newExecutionInfo.WorkflowTypeName,
+		WorkflowTimeout:         newExecutionInfo.WorkflowTimeout,
+		DecisionTimeoutValue:    newExecutionInfo.DecisionTimeoutValue,
+		ExecutionContext:        nil,
+		LastEventTaskID:         newExecutionInfo.LastEventTaskID,
+		NextEventID:             newStateBuilder.GetNextEventID(),
+		LastProcessedEvent:      common.EmptyEventID,
+		CreateWorkflowMode:      persistence.CreateWorkflowModeContinueAsNew,
+		PreviousRunID:           prevRunID,
+		ReplicationState:        newStateBuilder.GetReplicationState(),
+		HasRetryPolicy:          startedAttributes.RetryPolicy != nil,
+		CronSchedule:            startedAttributes.GetCronSchedule(),
+		EventStoreVersion:       newStateBuilder.GetEventStoreVersion(),
+		BranchToken:             newStateBuilder.GetCurrentBranch(),
+		PreviousAutoResetPoints: rolloverAutoResetPointsWithExpiringTime(startedAttributes.GetPrevAutoResetPoints(), prevRunID, domainRetentionDays),
 	}
 
 	if continueAsNew.HasRetryPolicy {

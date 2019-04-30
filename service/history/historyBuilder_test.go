@@ -705,7 +705,7 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 	e := s.msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflow.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: context,
 		Identity:         common.StringPtr(identity),
-	})
+	}, defaultHistoryMaxAutoResetPoints)
 
 	return e
 }

@@ -4832,7 +4832,7 @@ func addDecisionTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	e := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflow.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: context,
 		Identity:         common.StringPtr(identity),
-	})
+	}, defaultHistoryMaxAutoResetPoints)
 
 	builder.FlushBufferedEvents()
 

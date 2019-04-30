@@ -1245,7 +1245,16 @@ Update_History_Loop:
 		}
 
 		startedID := di.StartedID
-		completedEvent := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request)
+		maxResetPoints := e.config.MaxAutoResetPoints(domainEntry.GetInfo().Name)
+		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
+			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
+			e.throttledLogger.Warn("the number of auto-reset points is exceeding the limit, will do rotating.",
+				tag.WorkflowDomainName(domainEntry.GetInfo().Name),
+				tag.WorkflowID(workflowExecution.GetWorkflowId()),
+				tag.WorkflowDomainName(workflowExecution.GetRunId()),
+				tag.Number(int64(maxResetPoints)))
+		}
+		completedEvent := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 		if completedEvent == nil {
 			return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
 		}

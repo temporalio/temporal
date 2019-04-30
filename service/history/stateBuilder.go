@@ -164,9 +164,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			lastDecision = di
 
 		case shared.EventTypeDecisionTaskCompleted:
-			attributes := event.DecisionTaskCompletedEventAttributes
-			b.msBuilder.ReplicateDecisionTaskCompletedEvent(attributes.GetScheduledEventId(),
-				attributes.GetStartedEventId())
+			b.msBuilder.ReplicateDecisionTaskCompletedEvent(event)
 
 		case shared.EventTypeDecisionTaskTimedOut:
 			attributes := event.DecisionTaskTimedOutEventAttributes
@@ -442,8 +440,13 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.newRunTransferTasks = append(b.newRunTransferTasks, newRunStateBuilder.getTransferTasks()...)
 			b.newRunTimerTasks = append(b.newRunTimerTasks, newRunStateBuilder.getTimerTasks()...)
 
+			domainEntry, err := b.domainCache.GetDomainByID(domainID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
 			err = b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEvent.GetEventId(), sourceClusterName, domainID, event,
-				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion)
+				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion, domainEntry.GetRetentionDays(execution.GetWorkflowId()))
 			if err != nil {
 				return nil, nil, nil, err
 			}

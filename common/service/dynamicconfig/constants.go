@@ -104,6 +104,7 @@ var keys = map[Key]string{
 	HistoryVisibilityClosedMaxQPS:                         "history.historyVisibilityClosedMaxQPS",
 	HistoryLongPollExpirationInterval:                     "history.longPollExpirationInterval",
 	HistoryCacheInitialSize:                               "history.cacheInitialSize",
+	HistoryMaxAutoResetPoints:                             "history.historyMaxAutoResetPoints",
 	HistoryCacheMaxSize:                                   "history.cacheMaxSize",
 	HistoryCacheTTL:                                       "history.cacheTTL",
 	EventsCacheInitialSize:                                "history.eventsCacheInitialSize",
@@ -427,6 +428,8 @@ const (
 	EnableAdminProtection
 	// AdminOperationToken is the token to pass admin checking
 	AdminOperationToken
+	// HistoryMaxAutoResetPoints is the key for max number of auto reset points stored in mutableState
+	HistoryMaxAutoResetPoints
 
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2

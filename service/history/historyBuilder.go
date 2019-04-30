@@ -26,6 +26,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -71,8 +72,8 @@ func (b *historyBuilder) HasTransientEvents() bool {
 }
 
 func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *h.StartWorkflowExecutionRequest,
-	previousRunID *string) *workflow.HistoryEvent {
-	event := b.newWorkflowExecutionStartedEvent(request, previousRunID)
+	previousExecution *persistence.WorkflowExecutionInfo) *workflow.HistoryEvent {
+	event := b.newWorkflowExecutionStartedEvent(request, previousExecution)
 
 	return b.addEventToHistory(event)
 }
@@ -452,7 +453,13 @@ func (b *historyBuilder) addTransientEvent(event *workflow.HistoryEvent) *workfl
 }
 
 func (b *historyBuilder) newWorkflowExecutionStartedEvent(
-	startRequest *h.StartWorkflowExecutionRequest, previousRunID *string) *workflow.HistoryEvent {
+	startRequest *h.StartWorkflowExecutionRequest, previousExecution *persistence.WorkflowExecutionInfo) *workflow.HistoryEvent {
+	var prevRunID *string
+	var resetPoints *workflow.ResetPoints
+	if previousExecution != nil {
+		prevRunID = common.StringPtr(previousExecution.RunID)
+		resetPoints = previousExecution.AutoResetPoints
+	}
 	request := startRequest.StartRequest
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(workflow.EventTypeWorkflowExecutionStarted)
 	attributes := &workflow.WorkflowExecutionStartedEventAttributes{}
@@ -463,7 +470,8 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(*request.ExecutionStartToCloseTimeoutSeconds)
 	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(*request.TaskStartToCloseTimeoutSeconds)
 	attributes.ChildPolicy = request.ChildPolicy
-	attributes.ContinuedExecutionRunId = previousRunID
+	attributes.ContinuedExecutionRunId = prevRunID
+	attributes.PrevAutoResetPoints = resetPoints
 	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	attributes.RetryPolicy = request.RetryPolicy
 	attributes.Attempt = common.Int32Ptr(startRequest.GetAttempt())
