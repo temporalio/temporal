@@ -72,6 +72,7 @@ var keys = map[Key]string{
 	FrontendVisibilityMaxPageSize:  "frontend.visibilityMaxPageSize",
 	FrontendVisibilityListMaxQPS:   "frontend.visibilityListMaxQPS",
 	FrontendESVisibilityListMaxQPS: "frontend.esVisibilityListMaxQPS",
+	FrontendMaxBadBinaries:         "frontend.maxBadBinaries",
 	FrontendESIndexMaxResultWindow: "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:     "frontend.historyMaxPageSize",
 	FrontendRPS:                    "frontend.rps",
@@ -265,6 +266,8 @@ const (
 	MaxDecisionStartToCloseTimeout
 	// EnableClientVersionCheck enables client version check for frontend
 	EnableClientVersionCheck
+	// FrontendMaxBadBinaries is the max number of bad banaries in domain config
+	FrontendMaxBadBinaries
 
 	// key for matching
 

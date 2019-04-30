@@ -152,6 +152,8 @@ const (
 	FlagMemoKey                     = "memo_key"
 	FlagMemo                        = "memo"
 	FlagMemoFile                    = "memo_file"
+	FlagAddBadBinary                = "add_bad_binary"
+	FlagRemoveBadBinary             = "remove_bad_binary"
 )
 
 var flagsForExecution = []cli.Flag{

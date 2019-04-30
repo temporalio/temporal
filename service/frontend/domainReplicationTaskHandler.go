@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"errors"
+
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -91,6 +92,7 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 			EmitMetric:                             common.BoolPtr(config.EmitMetric),
 			ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
 			ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
+			BadBinaries:                            &config.BadBinaries,
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -408,6 +409,7 @@ func (d *domainHandlerImpl) updateDomain(ctx context.Context,
 		}
 		if updatedInfo.Data != nil {
 			configurationChanged = true
+			// only do merging
 			info.Data = d.mergeDomainData(info.Data, updatedInfo.Data)
 		}
 	}
@@ -426,7 +428,30 @@ func (d *domainHandlerImpl) updateDomain(ctx context.Context,
 			config.ArchivalBucket = nextArchivalState.bucket
 			config.ArchivalStatus = nextArchivalState.status
 		}
+		if updatedConfig.BadBinaries != nil {
+			maxLength := d.config.MaxBadBinaries(updateRequest.GetName())
+			// only do merging
+			config.BadBinaries = d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
+			if len(config.BadBinaries.Binaries) > maxLength {
+				return nil, &shared.BadRequestError{
+					Message: fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength),
+				}
+			}
+		}
 	}
+
+	if updateRequest.DeleteBadBinary != nil {
+		binChecksum := updateRequest.GetDeleteBadBinary()
+		_, ok := config.BadBinaries.Binaries[binChecksum]
+		if !ok {
+			return nil, &shared.BadRequestError{
+				Message: fmt.Sprintf("Bad binary checksum %v doesn't exists.", binChecksum),
+			}
+		}
+		configurationChanged = true
+		delete(config.BadBinaries.Binaries, binChecksum)
+	}
+
 	if updateRequest.ReplicationConfiguration != nil {
 		updateReplicationConfig := updateRequest.ReplicationConfiguration
 		if err := validateReplicationConfig(getResponse,
@@ -589,6 +614,7 @@ func (d *domainHandlerImpl) createResponse(
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
 		ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
 		ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
+		BadBinaries:                            &config.BadBinaries,
 	}
 	if d.clusterMetadata.ArchivalConfig().ConfiguredForArchival() && config.ArchivalBucket != "" {
 		metadata, err := d.blobstoreClient.BucketMetadata(ctx, config.ArchivalBucket)
@@ -611,6 +637,19 @@ func (d *domainHandlerImpl) createResponse(
 	}
 
 	return infoResult, configResult, replicationConfigResult
+}
+
+func (d *domainHandlerImpl) mergeBadBinaries(old map[string]*shared.BadBinaryInfo, new map[string]*shared.BadBinaryInfo, createTimeNano int64) shared.BadBinaries {
+	if old == nil {
+		old = map[string]*shared.BadBinaryInfo{}
+	}
+	for k, v := range new {
+		v.CreatedTimeNano = common.Int64Ptr(createTimeNano)
+		old[k] = v
+	}
+	return shared.BadBinaries{
+		Binaries: old,
+	}
 }
 
 func (d *domainHandlerImpl) mergeDomainData(old map[string]string, new map[string]string) map[string]string {

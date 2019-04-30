@@ -180,6 +180,9 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 			ArchivalBucket: task.Config.GetArchivalBucketName(),
 			ArchivalStatus: task.Config.GetArchivalStatus(),
 		}
+		if task.Config.GetBadBinaries() != nil {
+			request.Config.BadBinaries = *task.Config.GetBadBinaries()
+		}
 		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters)
 		request.ConfigVersion = task.GetConfigVersion()
 	}
