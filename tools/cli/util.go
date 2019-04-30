@@ -82,7 +82,7 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 	case reflect.Struct:
 		var buf bytes.Buffer
 		t := reflect.TypeOf(d)
-		buf.WriteString("(")
+		buf.WriteString("{")
 		for i := 0; i < v.NumField(); i++ {
 			f := v.Field(i)
 			if f.Kind() == reflect.Invalid {
@@ -109,7 +109,7 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 				buf.WriteString(fmt.Sprintf("%s:%s", fieldName, fieldValue))
 			}
 		}
-		buf.WriteString(")")
+		buf.WriteString("}")
 		return buf.String()
 	default:
 		return fmt.Sprint(d)
@@ -133,6 +133,23 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 			return fmt.Sprintf("[%v]", n)
 		}
 		return fmt.Sprintf("[len=%d]", v.Len())
+	case reflect.Map:
+		str := "map{"
+		for i, key := range v.MapKeys() {
+			str += key.String() + ":"
+			val := v.MapIndex(key)
+			switch val.Interface().(type) {
+			case []byte:
+				str += string(val.Interface().([]byte))
+			default:
+				str += val.String()
+			}
+			if i != len(v.MapKeys())-1 {
+				str += ", "
+			}
+		}
+		str += "}"
+		return str
 	default:
 		return fmt.Sprint(v.Interface())
 	}

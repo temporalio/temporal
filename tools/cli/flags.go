@@ -101,6 +101,8 @@ const (
 	FlagPrintDateTimeWithAlias      = FlagPrintDateTime + ", pdt"
 	FlagPrintMemo                   = "print_memo"
 	FlagPrintMemoWithAlias          = FlagPrintMemo + ", pme"
+	FlagPrintJSON                   = "print_json"
+	FlagPrintJSONWithAlias          = FlagPrintJSON + ", pjson"
 	FlagDescription                 = "description"
 	FlagDescriptionWithAlias        = FlagDescription + ", desc"
 	FlagOwnerEmail                  = "owner_email"
@@ -330,6 +332,14 @@ func getFlagsForListAll() []cli.Flag {
 		cli.BoolFlag{
 			Name:  FlagPrintMemoWithAlias,
 			Usage: "Print memo",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintFullyDetailWithAlias,
+			Usage: "Print full message without table format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintJSONWithAlias,
+			Usage: "Print in raw json format",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,

@@ -585,6 +585,23 @@ func (s *cliAppSuite) TestAnyToString() {
 	s.Equal(147, l)
 }
 
+func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
+	fields := map[string][]byte{
+		"TestKey": []byte("testValue"),
+	}
+	execution := &shared.WorkflowExecutionInfo{
+		Memo: &shared.Memo{Fields: fields},
+	}
+	s.Equal("{Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
+
+	fields["TestKey2"] = []byte(`anotherTestValue`)
+	execution.Memo = &shared.Memo{Fields: fields}
+	got := anyToString(execution, true, 0)
+	expected := got == "{Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
+	s.True(expected)
+}
+
 func (s *cliAppSuite) TestIsAttributeName() {
 	s.True(isAttributeName("WorkflowExecutionStartedEventAttributes"))
 	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))

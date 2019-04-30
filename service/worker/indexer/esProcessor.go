@@ -122,7 +122,7 @@ func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafka
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
-func (p *esProcessorImpl) bulkBeforeAction(executionId int64, requests []elastic.BulkableRequest) {
+func (p *esProcessorImpl) bulkBeforeAction(executionID int64, requests []elastic.BulkableRequest) {
 	p.metricsClient.AddCounter(metrics.ESProcessorScope, metrics.ESProcessorRequests, int64(len(requests)))
 }
 
