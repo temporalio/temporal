@@ -222,6 +222,44 @@ func newWorkflowCommands() []cli.Command {
 				ResetWorkflow(c)
 			},
 		},
+		{
+			Name:  "reset-batch",
+			Usage: "reset workflow in batch",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagInputFileWithAlias,
+					Usage: "Input file to use for resetting",
+				},
+				cli.StringFlag{
+					Name:  FlagExcludeFile,
+					Usage: "Another input file to use for excluding from resetting",
+				},
+				cli.StringFlag{
+					Name:  FlagInputSeparator,
+					Usage: "Separator for input file",
+				},
+				cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for reset",
+				},
+				cli.IntFlag{
+					Name:  FlagParallism,
+					Value: 1,
+					Usage: "batch in parallel",
+				},
+				cli.BoolFlag{
+					Name:  FlagSkipCurrent,
+					Usage: "skip current open",
+				},
+				cli.StringFlag{
+					Name:  FlagResetType,
+					Usage: "where to reset. Support one of these: LastDecisionCompleted,LastContinuedAsNew",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ResetInBatch(c)
+			},
+		},
 	}
 }
 

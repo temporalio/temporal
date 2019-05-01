@@ -21,6 +21,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -28,11 +29,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
@@ -1287,6 +1292,285 @@ func ResetWorkflow(c *cli.Context) {
 		ErrorAndExit("reset failed", err)
 	}
 	prettyPrintJSONObject(resp)
+}
+
+func processResets(c *cli.Context, domain string, wes chan shared.WorkflowExecution, done chan bool, wg *sync.WaitGroup, reason, resetType string, skipOpen bool) {
+	for {
+		select {
+		case we := <-wes:
+			fmt.Println("received: ", we.GetWorkflowId(), we.GetRunId())
+			wid := we.GetWorkflowId()
+			rid := we.GetRunId()
+			var err error
+			for i := 0; i < 3; i++ {
+				err = doReset(c, domain, wid, rid, reason, resetType, skipOpen)
+				if err == nil {
+					break
+				}
+				fmt.Println("failed and retry...: ", wid, rid, err)
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(2000)))
+			}
+			if err != nil {
+				fmt.Println("[ERROR] failed processing: ", wid, rid)
+			}
+		case <-done:
+			wg.Done()
+			return
+		}
+	}
+}
+
+func ResetInBatch(c *cli.Context) {
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	inFileName := getRequiredOption(c, FlagInputFile)
+	excFileName := getRequiredOption(c, FlagExcludeFile)
+	separator := getRequiredOption(c, FlagInputSeparator)
+	reason := getRequiredOption(c, FlagReason)
+	resetType := getRequiredOption(c, FlagResetType)
+	if resetType != "LastDecisionCompleted" && resetType != "LastContinuedAsNew" {
+		ErrorAndExit("Not supported reset type", nil)
+	}
+
+	if !c.IsSet(FlagSkipCurrent) {
+		ErrorAndExit("need to specify whether skip on current is open", nil)
+	}
+	skipOpen := c.Bool(FlagSkipCurrent)
+
+	parallel := c.Int(FlagParallism)
+	wg := &sync.WaitGroup{}
+
+	wes := make(chan shared.WorkflowExecution)
+	done := make(chan bool)
+	for i := 0; i < parallel; i++ {
+		wg.Add(1)
+		go processResets(c, domain, wes, done, wg, reason, resetType, skipOpen)
+	}
+
+	// read exclude
+	excFile, err := os.Open(excFileName)
+	if err != nil {
+		ErrorAndExit("Open failed2", err)
+	}
+	defer excFile.Close()
+	scanner := bufio.NewScanner(excFile)
+	idx := 0
+	excludes := map[string]string{}
+	for scanner.Scan() {
+		idx++
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 0 {
+			fmt.Printf("line %v is empty, skipped\n", idx)
+			continue
+		}
+		cols := strings.Split(line, separator)
+		if len(cols) < 1 {
+			ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 1 cols separated by comma, only %v ", idx, len(cols)))
+		}
+		wid := strings.TrimSpace(cols[0])
+		rid := "not-needed"
+		excludes[wid] = rid
+	}
+
+	fmt.Println("num of excludes:", len(excludes))
+
+	inFile, err := os.Open(inFileName)
+	if err != nil {
+		ErrorAndExit("Open failed", err)
+	}
+	defer inFile.Close()
+	scanner = bufio.NewScanner(inFile)
+	idx = 0
+	for scanner.Scan() {
+		idx++
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 0 {
+			fmt.Printf("line %v is empty, skipped\n", idx)
+			continue
+		}
+		cols := strings.Split(line, separator)
+		if len(cols) < 1 {
+			ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 1 cols separated by comma, only %v ", idx, len(cols)))
+		}
+		fmt.Printf("Start processing line %v ...\n", idx)
+		wid := strings.TrimSpace(cols[0])
+		rid := ""
+		if len(cols) > 1 {
+			rid = strings.TrimSpace(cols[1])
+		}
+
+		_, ok := excludes[wid]
+		if ok {
+			fmt.Println("already processed, skip: ", wid, rid)
+			continue
+		}
+
+		wes <- shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(rid),
+		}
+	}
+
+	close(done)
+	fmt.Println("wait for all goroutines...")
+	wg.Wait()
+}
+
+func printErrorAndReturn(msg string, err error) error {
+	fmt.Println(msg)
+	return err
+}
+
+func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, skipOpen bool) error {
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	frontendClient := cFactory.ServerFrontendClient(c)
+	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
+		Domain: common.StringPtr(domain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+		},
+	})
+	if err != nil {
+		return printErrorAndReturn("DescribeWorkflowExecution failed", err)
+	}
+
+	currentRunID := resp.WorkflowExecutionInfo.Execution.GetRunId()
+	if currentRunID == rid {
+		fmt.Println("current run is the reset run: ", wid, rid)
+		//return nil
+	}
+	if rid == "" {
+		rid = currentRunID
+	}
+
+	//reason := c.String(FlagReason)
+
+	if resp.WorkflowExecutionInfo.CloseStatus == nil || resp.WorkflowExecutionInfo.CloseTime == nil {
+		if skipOpen {
+			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
+			//skip and not terminate current if open
+			return nil
+		}
+	}
+
+	lastDecisionFinishID := int64(0)
+
+	resetBaseRunID := ""
+	fmt.Println("switch", resetType)
+	switch resetType {
+	case "LastDecisionCompleted":
+		resetBaseRunID, lastDecisionFinishID, err = getLastDecisionCompletedID(domain, wid, rid, ctx, frontendClient)
+		if err != nil {
+			return err
+		}
+	case "LastContinuedAsNew":
+		resetBaseRunID, lastDecisionFinishID, err = getLastContinueAsNewID(domain, wid, rid, ctx, frontendClient)
+		if err != nil {
+			return err
+		}
+	default:
+		panic("not supported resetType")
+	}
+
+	fmt.Println("DecisionFinishEventId for reset:", wid, rid, resetBaseRunID, lastDecisionFinishID)
+
+	resp2, err := frontendClient.ResetWorkflowExecution(ctx, &shared.ResetWorkflowExecutionRequest{
+		Domain: common.StringPtr(domain),
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(resetBaseRunID),
+		},
+		DecisionFinishEventId: common.Int64Ptr(lastDecisionFinishID),
+		RequestId:             common.StringPtr(uuid.New()),
+		Reason:                common.StringPtr(fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), reason)),
+	})
+
+	if err != nil {
+		return printErrorAndReturn("ResetWorkflowExecution failed", err)
+	}
+	fmt.Println("new runID for wid/rid is ,", wid, rid, resp2.GetRunId())
+	return nil
+}
+
+func getLastDecisionCompletedID(domain, wid, rid string, ctx context.Context, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, lastDecisionFinishID int64, err error) {
+	resetBaseRunID = rid
+	req := &shared.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(rid),
+		},
+		MaximumPageSize: common.Int32Ptr(1000),
+		NextPageToken:   nil,
+	}
+
+	for {
+		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
+		if err != nil {
+			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
+		}
+		for _, e := range resp.GetHistory().GetEvents() {
+			if e.GetEventType() == shared.EventTypeDecisionTaskCompleted {
+				lastDecisionFinishID = e.GetEventId()
+			}
+		}
+		if len(resp.NextPageToken) != 0 {
+			req.NextPageToken = resp.NextPageToken
+		} else {
+			break
+		}
+	}
+	return
+}
+
+func getLastContinueAsNewID(domain, wid, rid string, ctx context.Context, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, lastDecisionFinishID int64, err error) {
+	// get first event
+	req := &shared.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(rid),
+		},
+		MaximumPageSize: common.Int32Ptr(1),
+		NextPageToken:   nil,
+	}
+	resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
+	if err != nil {
+		return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
+	}
+	firstEvent := resp.History.Events[0]
+	resetBaseRunID = firstEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId()
+	if resetBaseRunID == "" {
+		return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", fmt.Errorf("cannot get resetBaseRunID"))
+	}
+
+	req = &shared.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(resetBaseRunID),
+		},
+		MaximumPageSize: common.Int32Ptr(1000),
+		NextPageToken:   nil,
+	}
+	for {
+		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
+		if err != nil {
+			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
+		}
+		for _, e := range resp.GetHistory().GetEvents() {
+			if e.GetEventType() == shared.EventTypeDecisionTaskCompleted {
+				lastDecisionFinishID = e.GetEventId()
+			}
+		}
+		if len(resp.NextPageToken) != 0 {
+			req.NextPageToken = resp.NextPageToken
+		} else {
+			break
+		}
+	}
+	return
 }
 
 // CompleteActivity completes an activity

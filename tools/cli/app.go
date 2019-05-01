@@ -20,7 +20,9 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import (
+	"github.com/urfave/cli"
+)
 
 const (
 	// Version is the controlled version string. It should be updated every time
