@@ -1539,6 +1539,9 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	const rangeSize = 10
 	s.matchingEngine.config.RangeSize = rangeSize
 	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskListInfo(2)
+	// set idle timer check to a really small value to assert that we don't accidentally drop tasks while blocking
+	// on enqueuing a task to task buffer
+	s.matchingEngine.config.IdleTasklistCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(time.Microsecond)
 
 	testCases := []struct {
 		batchSize          int
@@ -1560,7 +1563,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 				ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
 			}
 			if i%2 == 0 {
-				// simulates creating a task whos scheduledToStartTimeout is already expired
+				// simulates creating a task whose scheduledToStartTimeout is already expired
 				addRequest.ScheduleToStartTimeoutSeconds = common.Int32Ptr(-5)
 			}
 			_, err := s.matchingEngine.AddActivityTask(&addRequest)

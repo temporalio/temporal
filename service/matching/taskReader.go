@@ -197,9 +197,19 @@ func (c *taskListManagerImpl) addTasksToBuffer(
 			c.domainScope.IncCounter(metrics.ExpiredTasksCounter)
 			continue
 		}
-		c.taskAckManager.addTask(t.TaskID)
+		if !c.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {
+			return false // we are shutting down the task list
+		}
+	}
+	return true
+}
+
+func (c *taskListManagerImpl) addSingleTaskToBuffer(
+	task *persistence.TaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
+	c.taskAckManager.addTask(task.TaskID)
+	for {
 		select {
-		case c.taskBuffer <- t:
+		case c.taskBuffer <- task:
 			return true
 		case <-idleTimer.C:
 			if c.isIdle(lastWriteTime) {
@@ -210,5 +220,4 @@ func (c *taskListManagerImpl) addTasksToBuffer(
 			return false
 		}
 	}
-	return true
 }
