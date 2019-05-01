@@ -337,7 +337,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		TransferTasks:                 request.TransferTasks,
 		TimerTasks:                    request.TimerTasks,
 		ReplicationTasks:              request.ReplicationTasks,
-		DeleteTimerTask:               request.DeleteTimerTask,
 		Condition:                     request.Condition,
 		RangeID:                       request.RangeID,
 		ContinueAsNew:                 continueAsNew,

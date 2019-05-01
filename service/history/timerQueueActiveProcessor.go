@@ -306,7 +306,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		err = t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
+		err = t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -462,7 +462,7 @@ Update_History_Loop:
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
 			scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecisionTask()
-			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -535,7 +535,7 @@ Update_History_Loop:
 		if scheduleNewDecision {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, nil, nil)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, nil)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -580,7 +580,7 @@ Update_History_Loop:
 		}
 
 		// schedule first decision task
-		err = t.updateWorkflowExecution(context, msBuilder, true, false, nil, nil)
+		err = t.updateWorkflowExecution(context, msBuilder, true, false, nil)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -728,7 +728,7 @@ Update_History_Loop:
 
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			err = t.updateWorkflowExecution(context, msBuilder, false, true, nil, nil)
+			err = t.updateWorkflowExecution(context, msBuilder, false, true, nil)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -810,7 +810,6 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	scheduleNewDecision bool,
 	createDeletionTask bool,
 	timerTasks []persistence.Task,
-	clearTimerTask persistence.Task,
 ) error {
 	executionInfo := msBuilder.GetExecutionInfo()
 	var transferTasks []persistence.Task
@@ -842,7 +841,7 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 		return err1
 	}
 
-	err = context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask, transactionID)
+	err = context.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
 	if err != nil {
 		if isShardOwnershiptLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates

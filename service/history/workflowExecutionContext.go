@@ -63,7 +63,6 @@ type (
 		updateHelper(transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64, now time.Time, createReplicationTask bool, standbyHistoryBuilder *historyBuilder, sourceCluster string) error
 		updateWorkflowExecution(transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
 		updateWorkflowExecutionWithContext(context []byte, transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
-		updateWorkflowExecutionWithDeleteTask(transferTasks []persistence.Task, timerTasks []persistence.Task, deleteTimerTask persistence.Task, transactionID int64) error
 	}
 )
 
@@ -80,7 +79,6 @@ type (
 		locker                locks.Mutex
 		msBuilder             mutableState
 		updateCondition       int64
-		deleteTimerTask       persistence.Task
 		createReplicationTask bool
 	}
 )
@@ -320,13 +318,6 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewRunAndConte
 	c.msBuilder.GetExecutionInfo().ExecutionContext = context
 
 	return c.updateWorkflowExecutionWithNewRun(transferTasks, timerTasks, transactionID, newStateBuilder)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithDeleteTask(transferTasks []persistence.Task,
-	timerTasks []persistence.Task, deleteTimerTask persistence.Task, transactionID int64) error {
-	c.deleteTimerTask = deleteTimerTask
-
-	return c.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
 }
 
 func (c *workflowExecutionContextImpl) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
@@ -644,7 +635,6 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		ReplicationTasks:              replicationTasks,
 		TimerTasks:                    timerTasks,
 		Condition:                     c.updateCondition,
-		DeleteTimerTask:               c.deleteTimerTask,
 		UpsertActivityInfos:           updates.updateActivityInfos,
 		DeleteActivityInfos:           updates.deleteActivityInfos,
 		UpserTimerInfos:               updates.updateTimerInfos,
