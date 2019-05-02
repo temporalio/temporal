@@ -914,6 +914,21 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 		logger.Warn("Auto-Reset is skipped, because current run is deleted.")
 		return nil
 	}
+	if !currMutableState.IsWorkflowExecutionRunning() {
+		//it means this this might not be current anymore, we need to check
+		var resp *persistence.GetCurrentExecutionResponse
+		resp, retError = t.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+			DomainID:   task.DomainID,
+			WorkflowID: task.WorkflowID,
+		})
+		if retError != nil {
+			return
+		}
+		if resp.RunID != task.RunID {
+			logger.Warn("Auto-Reset is skipped, because current run is stale.")
+			return nil
+		}
+	}
 	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
 	if len(currMutableState.GetPendingChildExecutionInfos()) > 0 {
 		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")

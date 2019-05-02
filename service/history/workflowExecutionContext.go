@@ -386,7 +386,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(transfer
 	}
 
 	// compare with bad binaries and schedule a reset task
-	if len(c.msBuilder.GetPendingChildExecutionInfos()) > 0 {
+	if len(c.msBuilder.GetPendingChildExecutionInfos()) == 0 {
 		// only schedule reset task if current doesn't have childWFs.
 		// TODO: This will be removed once our reset allows childWFs
 
