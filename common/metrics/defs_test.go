@@ -36,31 +36,49 @@ func TestScopeDefsMapped(t *testing.T) {
 		key, ok := ScopeDefs[Common][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+		for tag := range key.tags {
+			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
+		}
 	}
 	for i := FrontendStartWorkflowExecutionScope; i < NumFrontendScopes; i++ {
 		key, ok := ScopeDefs[Frontend][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+		for tag := range key.tags {
+			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
+		}
 	}
 	for i := HistoryStartWorkflowExecutionScope; i < NumHistoryScopes; i++ {
 		key, ok := ScopeDefs[History][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+		for tag := range key.tags {
+			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
+		}
 	}
 	for i := MatchingPollForDecisionTaskScope; i < NumMatchingScopes; i++ {
 		key, ok := ScopeDefs[Matching][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+		for tag := range key.tags {
+			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
+		}
 	}
 	for i := ReplicatorScope; i < NumWorkerScopes; i++ {
 		key, ok := ScopeDefs[Worker][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+		for tag := range key.tags {
+			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
+		}
 	}
 	for i := NumWorkerScopes; i < NumBlobstoreScopes; i++ {
 		key, ok := ScopeDefs[Blobstore][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
+		for tag := range key.tags {
+			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
+		}
 	}
 }
 

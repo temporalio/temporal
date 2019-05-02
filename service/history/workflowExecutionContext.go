@@ -945,38 +945,6 @@ func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(stats *persist
 	allSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainAllTag())
 	allCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainAllTag())
 	emitWorkflowExecutionStats(allSizeScope, allCountScope, stats, executionInfoHistorySize)
-
-	// TODO: (@shreyassrivatsan) remove the below legacy style metrics
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.MutableStateSize,
-		time.Duration(stats.MutableStateSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.ExecutionInfoSize,
-		time.Duration(stats.MutableStateSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.ActivityInfoSize,
-		time.Duration(stats.ActivityInfoSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.TimerInfoSize,
-		time.Duration(stats.TimerInfoSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.ChildInfoSize,
-		time.Duration(stats.ChildInfoSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.SignalInfoSize,
-		time.Duration(stats.SignalInfoSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.BufferedEventsSize,
-		time.Duration(stats.BufferedEventsSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionSizeStatsScope, metrics.BufferedReplicationTasksSize,
-		time.Duration(stats.BufferedReplicationTasksSize))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.ActivityInfoCount,
-		time.Duration(stats.ActivityInfoCount))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.TimerInfoCount,
-		time.Duration(stats.TimerInfoCount))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.ChildInfoCount,
-		time.Duration(stats.ChildInfoCount))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.SignalInfoCount,
-		time.Duration(stats.SignalInfoCount))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.RequestCancelInfoCount,
-		time.Duration(stats.RequestCancelInfoCount))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.BufferedEventsCount,
-		time.Duration(stats.BufferedEventsCount))
-	c.metricsClient.RecordTimer(metrics.ExecutionCountStatsScope, metrics.BufferedReplicationTasksCount,
-		time.Duration(stats.BufferedReplicationTasksCount))
 }
 
 func (c *workflowExecutionContextImpl) emitSessionUpdateStats(stats *persistence.MutableStateUpdateSessionStats) {
@@ -1001,44 +969,6 @@ func (c *workflowExecutionContextImpl) emitSessionUpdateStats(stats *persistence
 	allSizeScope := c.metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainAllTag())
 	allCountScope := c.metricsClient.Scope(metrics.SessionCountStatsScope, metrics.DomainAllTag())
 	emitSessionUpdateStats(allSizeScope, allCountScope, stats)
-
-	// TODO: (@shreyassrivatsan) remove the below legacy style metrics
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.MutableStateSize,
-		time.Duration(stats.MutableStateSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.ExecutionInfoSize,
-		time.Duration(stats.ExecutionInfoSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.ActivityInfoSize,
-		time.Duration(stats.ActivityInfoSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.TimerInfoSize,
-		time.Duration(stats.TimerInfoSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.ChildInfoSize,
-		time.Duration(stats.ChildInfoSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.SignalInfoSize,
-		time.Duration(stats.SignalInfoSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.BufferedEventsSize,
-		time.Duration(stats.BufferedEventsSize))
-	c.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.BufferedReplicationTasksSize,
-		time.Duration(stats.BufferedReplicationTasksSize))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.ActivityInfoCount,
-		time.Duration(stats.ActivityInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.TimerInfoCount,
-		time.Duration(stats.TimerInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.ChildInfoCount,
-		time.Duration(stats.ChildInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.SignalInfoCount,
-		time.Duration(stats.SignalInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.RequestCancelInfoCount,
-		time.Duration(stats.RequestCancelInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.DeleteActivityInfoCount,
-		time.Duration(stats.DeleteActivityInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.DeleteTimerInfoCount,
-		time.Duration(stats.DeleteTimerInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.DeleteChildInfoCount,
-		time.Duration(stats.DeleteChildInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.DeleteSignalInfoCount,
-		time.Duration(stats.DeleteSignalInfoCount))
-	c.metricsClient.RecordTimer(metrics.SessionCountStatsScope, metrics.DeleteRequestCancelInfoCount,
-		time.Duration(stats.DeleteRequestCancelInfoCount))
 }
 
 func (c *workflowExecutionContextImpl) emitWorkflowCompletionStats(event *workflow.HistoryEvent) {
