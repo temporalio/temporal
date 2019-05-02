@@ -115,7 +115,7 @@ func (s *server) startService() common.Daemon {
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
 	svcCfg := s.cfg.Services[s.name]
-	params.MetricScope = svcCfg.Metrics.NewScope()
+	params.MetricScope = svcCfg.Metrics.NewScope(params.Logger)
 	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 	enableGlobalDomain := dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, s.cfg.ClustersInfo.EnableGlobalDomain)
