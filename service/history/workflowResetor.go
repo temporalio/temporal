@@ -860,3 +860,16 @@ func (w *workflowResetorImpl) replicateResetEvent(baseMutableState mutableState,
 	newMsBuilder.UpdateReplicationStateLastEventID(clusterMetadata.GetCurrentClusterName(), lastEvent.GetVersion(), lastEvent.GetEventId())
 	return
 }
+
+func FindAutoResetPoint(badBinaries *workflow.BadBinaries, autoResetPoints *workflow.ResetPoints) (reason string, pt *workflow.ResetPointInfo) {
+	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
+		return
+	}
+	for _, p := range autoResetPoints.Points {
+		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
+		if ok && p.GetResettable() {
+			return bin.GetReason(), p
+		}
+	}
+	return
+}

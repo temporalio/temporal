@@ -251,7 +251,7 @@ func (_m *mockWorkflowExecutionContext) unlock() {
 	_m.Called()
 }
 
-func (_m *mockWorkflowExecutionContext) updateHelper(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 time.Time, _a4 bool, _a5 *historyBuilder, _a6 string) error {
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionForStandby(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 time.Time, _a4 bool, _a5 *historyBuilder, _a6 string) error {
 	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 
 	var r0 error

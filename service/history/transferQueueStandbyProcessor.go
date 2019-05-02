@@ -166,7 +166,9 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo, shouldP
 			err = t.processRecordWorkflowStarted(task)
 		}
 		return metrics.TransferStandbyTaskRecordWorkflowStartedScope, err
-
+	case persistence.TransferTaskTypeResetWorkflow:
+		// no reset needed for standby
+		return metrics.TransferStandbyTaskResetWorkflowScope, err
 	default:
 		return metrics.TransferStandbyQueueProcessorScope, errUnknownTransferTask
 	}

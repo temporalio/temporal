@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"go.uber.org/cadence/.gen/go/shared"
 
 	"github.com/google/uuid"
@@ -4127,4 +4129,79 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Nil(resetReq.InsertSignalInfos)
 	s.Nil(resetReq.InsertSignalRequestedIDs)
 	s.Equal(0, len(resetReq.InsertRequestCancelInfos))
+}
+
+func TestFindAutoResetPoint(t *testing.T) {
+	// case 1
+	_, pt := FindAutoResetPoint(nil, nil)
+	assert.Nil(t, pt)
+
+	// case 2
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{}, &workflow.ResetPoints{})
+	assert.Nil(t, pt)
+
+	pt0 := &workflow.ResetPointInfo{
+		BinaryChecksum: common.StringPtr("abc"),
+		Resettable:     common.BoolPtr(true),
+	}
+	pt1 := &workflow.ResetPointInfo{
+		BinaryChecksum: common.StringPtr("def"),
+		Resettable:     common.BoolPtr(true),
+	}
+	pt3 := &workflow.ResetPointInfo{
+		BinaryChecksum: common.StringPtr("ghi"),
+		Resettable:     common.BoolPtr(false),
+	}
+
+	// case 3
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"abc": {},
+			"def": {},
+		},
+	}, &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			pt0, pt1, pt3,
+		},
+	})
+	assert.Equal(t, pt.String(), pt0.String())
+
+	// case 4
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"none": {},
+			"def":  {},
+		},
+	}, &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			pt0, pt1, pt3,
+		},
+	})
+	assert.Equal(t, pt.String(), pt1.String())
+
+	// case 4
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"none1": {},
+			"none2": {},
+		},
+	}, &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			pt0, pt1, pt3,
+		},
+	})
+	assert.Nil(t, pt)
+
+	// case 5
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"none1": {},
+			"ghi":   {},
+		},
+	}, &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			pt0, pt1, pt3,
+		},
+	})
+	assert.Nil(t, pt)
 }

@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -248,7 +249,11 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo, shouldPr
 			err = t.processRecordWorkflowStarted(task)
 		}
 		return metrics.TransferActiveTaskRecordWorkflowStartedScope, err
-
+	case persistence.TransferTaskTypeResetWorkflow:
+		if shouldProcessTask {
+			err = t.processResetWorkflow(task)
+		}
+		return metrics.TransferActiveTaskResetWorkflowScope, err
 	default:
 		return metrics.TransferActiveQueueProcessorScope, errUnknownTransferTask
 	}
@@ -880,6 +885,109 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(), workflowTimeout, task.GetTaskID(), visibilityMemo)
+}
+
+func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistence.TransferTaskInfo) (retError error) {
+	var err error
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
+
+	logger := t.logger.WithTags(
+		tag.WorkflowDomainID(task.DomainID),
+		tag.WorkflowID(execution.GetWorkflowId()),
+		tag.WorkflowRunID(execution.GetRunId()),
+	)
+	// get workflow timeout
+	currContext, currRelease, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	if err != nil {
+		return err
+	}
+	defer func() { currRelease(retError) }()
+
+	var currMutableState mutableState
+	currMutableState, err = loadMutableStateForTransferTask(currContext, task, t.metricsClient, t.logger)
+	if err != nil {
+		return err
+	} else if currMutableState == nil {
+		logger.Warn("Auto-Reset is skipped, because current run is deleted.")
+		return nil
+	}
+	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
+	if len(currMutableState.GetPendingChildExecutionInfos()) > 0 {
+		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")
+		return nil
+	}
+
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, currMutableState.GetStartVersion(), task.Version, task)
+	if err != nil {
+		return err
+	} else if !ok {
+		return nil
+	}
+
+	executionInfo := currMutableState.GetExecutionInfo()
+
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(executionInfo.DomainID)
+	if err != nil {
+		return err
+	}
+	logger = logger.WithTags(tag.WorkflowDomainName(domainEntry.GetInfo().Name))
+
+	reason, resetPt := FindAutoResetPoint(&domainEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
+	if resetPt == nil {
+		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
+		return nil
+	}
+
+	var baseExecution workflow.WorkflowExecution
+	var baseContext workflowExecutionContext
+	var baseMutableState mutableState
+	if resetPt.GetRunId() == executionInfo.RunID {
+		baseMutableState = currMutableState
+		baseContext = currContext
+		baseExecution = execution
+	} else {
+		baseExecution = workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(task.WorkflowID),
+			RunId:      common.StringPtr(resetPt.GetRunId()),
+		}
+		var baseRelease func(err error)
+		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecution(task.DomainID, baseExecution)
+		if err != nil {
+			return err
+		}
+		defer func() { baseRelease(retError) }()
+		baseMutableState, err = loadMutableStateForTransferTask(baseContext, task, t.metricsClient, t.logger)
+		if err != nil {
+			return err
+		}
+		// in case of base already deleted, we skip the reset task
+		// TODO in the future we may allow reset with archival history
+		if baseMutableState == nil {
+			logger.Warn("Auto-Reset is skipped, because the base run has been deleted.", tag.WorkflowResetBaseRunID(resetPt.GetRunId()))
+			return nil
+		}
+	}
+	logger = logger.WithTags(
+		tag.WorkflowResetBaseRunID(resetPt.GetRunId()),
+		tag.WorkflowBinaryChecksum(resetPt.GetBinaryChecksum()),
+		tag.WorkflowEventID(resetPt.GetFirstDecisionCompletedId()))
+
+	resp, err := t.historyService.resetor.ResetWorkflowExecution(context.Background(), &workflow.ResetWorkflowExecutionRequest{
+		Domain:                common.StringPtr(domainEntry.GetInfo().Name),
+		WorkflowExecution:     &baseExecution,
+		Reason:                common.StringPtr(fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPt.GetBinaryChecksum())),
+		DecisionFinishEventId: common.Int64Ptr(resetPt.GetFirstDecisionCompletedId()),
+		RequestId:             common.StringPtr(uuid.New()),
+	}, baseContext, baseMutableState, currContext, currMutableState)
+	if err != nil {
+		logger.Error("Auto-Reset workflow failed", tag.Error(err))
+		return err
+	}
+	logger.Info("Auto-Reset workflow finished", tag.WorkflowResetNewRunID(resp.GetRunId()))
+	return nil
 }
 
 func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *persistence.TransferTaskInfo,

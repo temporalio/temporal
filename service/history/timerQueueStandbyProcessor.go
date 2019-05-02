@@ -319,7 +319,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
 		msBuilder.UpdateReplicationStateVersion(lastWriteVersion, true)
-		err = context.updateHelper(nil, newTimerTasks, transactionID, now, false, nil, sourceCluster)
+		err = context.updateWorkflowExecutionForStandby(nil, newTimerTasks, transactionID, now, false, nil, sourceCluster)
 		if err == nil {
 			t.notifyNewTimers(newTimerTasks)
 		}

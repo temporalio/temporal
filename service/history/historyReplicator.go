@@ -1085,7 +1085,7 @@ func (r *historyReplicator) updateMutableStateWithTimer(context workflowExecutio
 	// so nothing on the replication state should be changed
 	lastWriteVersion := msBuilder.GetLastWriteVersion()
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	return context.updateHelper(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
+	return context.updateWorkflowExecutionForStandby(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
 }
 
 func (r *historyReplicator) notify(clusterName string, now time.Time, transferTasks []persistence.Task,

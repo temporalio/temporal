@@ -100,6 +100,7 @@ const (
 	TransferTaskTypeStartChildExecution
 	TransferTaskTypeSignalExecution
 	TransferTaskTypeRecordWorkflowStarted
+	TransferTaskTypeResetWorkflow
 )
 
 // Types of replication tasks
@@ -394,6 +395,13 @@ type (
 
 	// RecordWorkflowStartedTask identifites a transfer task for writing visibility open execution record
 	RecordWorkflowStartedTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
+	// ResetWorkflowTask identifites a transfer task to reset workflow
+	ResetWorkflowTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
@@ -1611,6 +1619,41 @@ func (a *RecordWorkflowStartedTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *RecordWorkflowStartedTask) SetVisibilityTimestamp(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the ResetWorkflowTask
+func (a *ResetWorkflowTask) GetType() int {
+	return TransferTaskTypeResetWorkflow
+}
+
+// GetVersion returns the version of the ResetWorkflowTask
+func (a *ResetWorkflowTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the ResetWorkflowTask
+func (a *ResetWorkflowTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the ResetWorkflowTask
+func (a *ResetWorkflowTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the ResetWorkflowTask
+func (a *ResetWorkflowTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
+func (a *ResetWorkflowTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (a *ResetWorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
