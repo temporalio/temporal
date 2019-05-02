@@ -228,14 +228,15 @@ func newWorkflowCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
-					Usage: "Input file to use for resetting",
+					Usage: "Input file to use for resetting, one workflow per line of WorkflowID and RunID. RunID is optional, default to current runID if not specified. ",
 				},
 				cli.StringFlag{
 					Name:  FlagExcludeFile,
-					Usage: "Another input file to use for excluding from resetting",
+					Usage: "Another input file to use for excluding from resetting, only workflowID is needed.",
 				},
 				cli.StringFlag{
 					Name:  FlagInputSeparator,
+					Value: ",",
 					Usage: "Separator for input file",
 				},
 				cli.StringFlag{
@@ -245,15 +246,15 @@ func newWorkflowCommands() []cli.Command {
 				cli.IntFlag{
 					Name:  FlagParallism,
 					Value: 1,
-					Usage: "batch in parallel",
+					Usage: "Number of goroutines to run in parallel. Each goroutine would process one line for every second.",
 				},
 				cli.BoolFlag{
 					Name:  FlagSkipCurrent,
-					Usage: "skip current open",
+					Usage: "Skip the workflow if the current run is open.",
 				},
 				cli.StringFlag{
 					Name:  FlagResetType,
-					Usage: "where to reset. Support one of these: LastDecisionCompleted,LastContinuedAsNew",
+					Usage: "How to reset, currently support: LastDecisionCompleted,LastContinuedAsNew",
 				},
 			},
 			Action: func(c *cli.Context) {

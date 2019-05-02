@@ -1310,6 +1310,7 @@ func processResets(c *cli.Context, domain string, wes chan shared.WorkflowExecut
 				fmt.Println("failed and retry...: ", wid, rid, err)
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(2000)))
 			}
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
 			if err != nil {
 				fmt.Println("[ERROR] failed processing: ", wid, rid)
 			}
