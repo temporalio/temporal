@@ -159,6 +159,7 @@ const (
 	FlagAddBadBinary                = "add_bad_binary"
 	FlagRemoveBadBinary             = "remove_bad_binary"
 	FlagResetType                   = "reset_type"
+	FlagResetPointsOnly             = "reset_points_only"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -206,6 +207,10 @@ func getFlagsForShowID() []cli.Flag {
 			Name:  FlagMaxFieldLengthWithAlias,
 			Usage: "Maximum length for each attribute field",
 			Value: defaultMaxFieldLength,
+		},
+		cli.BoolFlag{
+			Name:  FlagResetPointsOnly,
+			Usage: "Only show events that are eligible for reset",
 		},
 	}
 }
