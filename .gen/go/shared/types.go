@@ -7964,6 +7964,326 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) IsSetHeader() bool {
 	return v != nil && v.Header != nil
 }
 
+type CountWorkflowExecutionsRequest struct {
+	Domain *string `json:"domain,omitempty"`
+	Query  *string `json:"query,omitempty"`
+}
+
+// ToWire translates a CountWorkflowExecutionsRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *CountWorkflowExecutionsRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Query != nil {
+		w, err = wire.NewValueString(*(v.Query)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a CountWorkflowExecutionsRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a CountWorkflowExecutionsRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v CountWorkflowExecutionsRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *CountWorkflowExecutionsRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Query = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a CountWorkflowExecutionsRequest
+// struct.
+func (v *CountWorkflowExecutionsRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.Query != nil {
+		fields[i] = fmt.Sprintf("Query: %v", *(v.Query))
+		i++
+	}
+
+	return fmt.Sprintf("CountWorkflowExecutionsRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this CountWorkflowExecutionsRequest match the
+// provided CountWorkflowExecutionsRequest.
+//
+// This function performs a deep comparison.
+func (v *CountWorkflowExecutionsRequest) Equals(rhs *CountWorkflowExecutionsRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Query, rhs.Query) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of CountWorkflowExecutionsRequest.
+func (v *CountWorkflowExecutionsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Domain != nil {
+		enc.AddString("domain", *v.Domain)
+	}
+	if v.Query != nil {
+		enc.AddString("query", *v.Query)
+	}
+	return err
+}
+
+// GetDomain returns the value of Domain if it is set or its
+// zero value if it is unset.
+func (v *CountWorkflowExecutionsRequest) GetDomain() (o string) {
+	if v != nil && v.Domain != nil {
+		return *v.Domain
+	}
+
+	return
+}
+
+// IsSetDomain returns true if Domain is not nil.
+func (v *CountWorkflowExecutionsRequest) IsSetDomain() bool {
+	return v != nil && v.Domain != nil
+}
+
+// GetQuery returns the value of Query if it is set or its
+// zero value if it is unset.
+func (v *CountWorkflowExecutionsRequest) GetQuery() (o string) {
+	if v != nil && v.Query != nil {
+		return *v.Query
+	}
+
+	return
+}
+
+// IsSetQuery returns true if Query is not nil.
+func (v *CountWorkflowExecutionsRequest) IsSetQuery() bool {
+	return v != nil && v.Query != nil
+}
+
+type CountWorkflowExecutionsResponse struct {
+	Count *int64 `json:"count,omitempty"`
+}
+
+// ToWire translates a CountWorkflowExecutionsResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *CountWorkflowExecutionsResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Count != nil {
+		w, err = wire.NewValueI64(*(v.Count)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a CountWorkflowExecutionsResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a CountWorkflowExecutionsResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v CountWorkflowExecutionsResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *CountWorkflowExecutionsResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Count = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a CountWorkflowExecutionsResponse
+// struct.
+func (v *CountWorkflowExecutionsResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Count != nil {
+		fields[i] = fmt.Sprintf("Count: %v", *(v.Count))
+		i++
+	}
+
+	return fmt.Sprintf("CountWorkflowExecutionsResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this CountWorkflowExecutionsResponse match the
+// provided CountWorkflowExecutionsResponse.
+//
+// This function performs a deep comparison.
+func (v *CountWorkflowExecutionsResponse) Equals(rhs *CountWorkflowExecutionsResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Count, rhs.Count) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of CountWorkflowExecutionsResponse.
+func (v *CountWorkflowExecutionsResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Count != nil {
+		enc.AddInt64("count", *v.Count)
+	}
+	return err
+}
+
+// GetCount returns the value of Count if it is set or its
+// zero value if it is unset.
+func (v *CountWorkflowExecutionsResponse) GetCount() (o int64) {
+	if v != nil && v.Count != nil {
+		return *v.Count
+	}
+
+	return
+}
+
+// IsSetCount returns true if Count is not nil.
+func (v *CountWorkflowExecutionsResponse) IsSetCount() bool {
+	return v != nil && v.Count != nil
+}
+
 type DataBlob struct {
 	EncodingType *EncodingType `json:"EncodingType,omitempty"`
 	Data         []byte        `json:"Data,omitempty"`

@@ -222,6 +222,24 @@ func (c *metricClient) ScanWorkflowExecutions(
 	return resp, err
 }
 
+func (c *metricClient) CountWorkflowExecutions(
+	ctx context.Context,
+	request *shared.CountWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (*shared.CountWorkflowExecutionsResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendCountWorkflowExecutionsScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendCountWorkflowExecutionsScope, metrics.CadenceClientLatency)
+	resp, err := c.client.CountWorkflowExecutions(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendCountWorkflowExecutionsScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) PollForActivityTask(
 	ctx context.Context,
 	request *shared.PollForActivityTaskRequest,

@@ -981,6 +981,20 @@ func (p *visibilityPersistenceClient) ScanWorkflowExecutions(request *ListWorkfl
 	return response, err
 }
 
+func (p *visibilityPersistenceClient) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceCountWorkflowExecutionsScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceCountWorkflowExecutionsScope, metrics.PersistenceLatency)
+	response, err := p.persistence.CountWorkflowExecutions(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceCountWorkflowExecutionsScope, err)
+	}
+
+	return response, err
+}
+
 func (p *visibilityPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *ConditionFailedError:

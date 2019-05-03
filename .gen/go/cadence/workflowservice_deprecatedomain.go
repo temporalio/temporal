@@ -428,38 +428,8 @@ func (v *WorkflowService_DeprecateDomain_Result) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
-	var v shared.BadRequestError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
-	var v shared.InternalServiceError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, error) {
-	var v shared.EntityNotExistsError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _ServiceBusyError_Read(w wire.Value) (*shared.ServiceBusyError, error) {
-	var v shared.ServiceBusyError
-	err := v.FromWire(w)
-	return &v, err
-}
-
 func _DomainNotActiveError_Read(w wire.Value) (*shared.DomainNotActiveError, error) {
 	var v shared.DomainNotActiveError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _ClientVersionNotSupportedError_Read(w wire.Value) (*shared.ClientVersionNotSupportedError, error) {
-	var v shared.ClientVersionNotSupportedError
 	err := v.FromWire(w)
 	return &v, err
 }

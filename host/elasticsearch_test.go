@@ -359,6 +359,49 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, true)
 }
 
+func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
+	id := "es-integration-count-workflow-test"
+	wt := "es-integration-count-workflow-test-type"
+	tl := "es-integration-count-workflow-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	_, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+
+	countRequest := &workflow.CountWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
+		Query:  common.StringPtr(fmt.Sprintf(`WorkflowID = "%s"`, request.GetWorkflowId())),
+	}
+	var resp *workflow.CountWorkflowExecutionsResponse
+	for i := 0; i < 20; i++ {
+		resp, err = s.engine.CountWorkflowExecutions(createContext(), countRequest)
+		s.Nil(err)
+		if resp.GetCount() == int64(1) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.Equal(int64(1), resp.GetCount())
+}
+
 func (s *elasticsearchIntegrationSuite) createESClient() {
 	var err error
 	s.esClient, err = elastic.NewClient(

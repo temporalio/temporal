@@ -174,6 +174,10 @@ func (v *visibilityManagerImpl) ScanWorkflowExecutions(request *ListWorkflowExec
 	return v.convertInternalListResponse(internalResp), nil
 }
 
+func (v *visibilityManagerImpl) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
+	return v.persistence.CountWorkflowExecutions(request)
+}
+
 func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *InternalGetClosedWorkflowExecutionResponse) *GetClosedWorkflowExecutionResponse {
 	if internalResp == nil {
 		return nil

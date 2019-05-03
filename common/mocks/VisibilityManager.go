@@ -293,6 +293,29 @@ func (_m *VisibilityManager) ScanWorkflowExecutions(request *persistence.ListWor
 	return r0, r1
 }
 
+// CountWorkflowExecutions provides a mock function with given fields: request
+func (_m *VisibilityManager) CountWorkflowExecutions(request *persistence.CountWorkflowExecutionsRequest) (*persistence.CountWorkflowExecutionsResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.CountWorkflowExecutionsResponse
+	if rf, ok := ret.Get(0).(func(*persistence.CountWorkflowExecutionsRequest) *persistence.CountWorkflowExecutionsResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.CountWorkflowExecutionsResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.CountWorkflowExecutionsRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RecordWorkflowExecutionClosed provides a mock function with given fields: request
 func (_m *VisibilityManager) RecordWorkflowExecutionClosed(request *persistence.RecordWorkflowExecutionClosedRequest) error {
 	ret := _m.Called(request)

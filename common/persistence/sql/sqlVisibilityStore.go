@@ -252,6 +252,10 @@ func (s *sqlVisibilityStore) ScanWorkflowExecutions(request *p.ListWorkflowExecu
 	return nil, p.NewOperationNotSupportErrorForVis()
 }
 
+func (s *sqlVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExecutionsRequest) (*p.CountWorkflowExecutionsResponse, error) {
+	return nil, p.NewOperationNotSupportErrorForVis()
+}
+
 func (s *sqlVisibilityStore) rowToInfo(row *sqldb.VisibilityRow) *p.VisibilityWorkflowExecutionInfo {
 	if row.ExecutionTime.UnixNano() == 0 {
 		row.ExecutionTime = row.StartTime

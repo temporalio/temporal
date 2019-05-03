@@ -2525,6 +2525,55 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listReque
 	return resp, nil
 }
 
+// CountWorkflowExecutions - count number of workflow executions in a domain
+func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countRequest *gen.CountWorkflowExecutionsRequest) (resp *gen.CountWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope := wh.metricsClient.Scope(metrics.FrontendCountWorkflowExecutionsScope)
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if countRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if countRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domain := countRequest.GetDomain()
+	domainID, err := wh.domainCache.GetDomainID(domain)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// add domain tag to scope, so further metrics will have the domain tag
+	scope = scope.Tagged(metrics.DomainTag(domain))
+
+	req := &persistence.CountWorkflowExecutionsRequest{
+		DomainUUID: domainID,
+		Domain:     domain,
+		Query:      countRequest.GetQuery(),
+	}
+	persistenceResp, err := wh.visibilityMgr.CountWorkflowExecutions(req)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	resp = &gen.CountWorkflowExecutionsResponse{
+		Count: common.Int64Ptr(persistenceResp.Count),
+	}
+	return resp, nil
+}
+
 // ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
 func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest *gen.ResetStickyTaskListRequest) (resp *gen.ResetStickyTaskListResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)

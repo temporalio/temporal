@@ -35,6 +35,7 @@ type (
 		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
 		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
 		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
+		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error)
 	}
 
@@ -129,6 +130,10 @@ func (c *elasticWrapper) ScrollFirstPage(ctx context.Context, index, query strin
 	scrollService := elastic.NewScrollService(c.client)
 	result, err := scrollService.Index(index).Body(query).Do(ctx)
 	return result, &scrollServiceImpl{scrollService}, err
+}
+
+func (c *elasticWrapper) Count(ctx context.Context, index, query string) (int64, error) {
+	return c.client.Count(index).BodyString(query).Do(ctx)
 }
 
 func (c *elasticWrapper) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error) {

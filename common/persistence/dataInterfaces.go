@@ -1512,6 +1512,7 @@ func (e *TimeoutError) Error() string {
 	return e.Msg
 }
 
+// IsTimeoutError check whether error is TimeoutError
 func IsTimeoutError(err error) bool {
 	_, ok := err.(*TimeoutError)
 	return ok

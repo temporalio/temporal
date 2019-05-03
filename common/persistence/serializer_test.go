@@ -253,9 +253,9 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			resetPointsJson, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeJSON)
+			resetPointsJSON, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeJSON)
 			s.Nil(err)
-			s.NotNil(resetPointsJson)
+			s.NotNil(resetPointsJSON)
 
 			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeThriftRW)
 			s.Nil(err)
@@ -275,7 +275,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Equal(&workflow.ResetPoints{}, dNilResetPoints2)
 
-			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJson)
+			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJSON)
 			s.Nil(err)
 			s.True(resetPoints1.Equals(resetPoints0))
 
@@ -298,9 +298,9 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			badBinariesJson, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeJSON)
+			badBinariesJSON, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeJSON)
 			s.Nil(err)
-			s.NotNil(badBinariesJson)
+			s.NotNil(badBinariesJSON)
 
 			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeThriftRW)
 			s.Nil(err)
@@ -320,7 +320,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.Equal(&workflow.BadBinaries{}, dNilBadBinaries2)
 
-			badBinaries1, err := serializer.DeserializeBadBinaries(badBinariesJson)
+			badBinaries1, err := serializer.DeserializeBadBinaries(badBinariesJSON)
 			s.Nil(err)
 			s.True(badBinaries1.Equals(badBinaries0))
 

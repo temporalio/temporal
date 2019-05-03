@@ -62,6 +62,39 @@ func (m *MockClient) EXPECT() *_MockClientRecorder {
 	return m.recorder
 }
 
+// CountWorkflowExecutions responds to a CountWorkflowExecutions call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().CountWorkflowExecutions(gomock.Any(), ...).Return(...)
+// 	... := client.CountWorkflowExecutions(...)
+func (m *MockClient) CountWorkflowExecutions(
+	ctx context.Context,
+	_CountRequest *shared.CountWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.CountWorkflowExecutionsResponse, err error) {
+
+	args := []interface{}{ctx, _CountRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "CountWorkflowExecutions", args...)
+	success, _ = ret[i].(*shared.CountWorkflowExecutionsResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) CountWorkflowExecutions(
+	ctx interface{},
+	_CountRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _CountRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "CountWorkflowExecutions", args...)
+}
+
 // DeprecateDomain responds to a DeprecateDomain call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

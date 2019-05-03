@@ -225,6 +225,10 @@ func (p *visibilitySamplingClient) ScanWorkflowExecutions(request *ListWorkflowE
 	return p.persistence.ScanWorkflowExecutions(request)
 }
 
+func (p *visibilitySamplingClient) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
+	return p.persistence.CountWorkflowExecutions(request)
+}
+
 func (p *visibilitySamplingClient) Close() {
 	p.persistence.Close()
 }

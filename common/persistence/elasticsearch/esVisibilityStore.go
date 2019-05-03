@@ -387,6 +387,26 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 	return v.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
 }
 
+func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExecutionsRequest) (
+	*p.CountWorkflowExecutionsResponse, error) {
+
+	queryDSL, err := getESQueryDSLForCount(request)
+	if err != nil {
+		return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
+	}
+
+	ctx := context.Background()
+	count, err := v.esClient.Count(ctx, v.index, queryDSL)
+	if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err),
+		}
+	}
+
+	response := &p.CountWorkflowExecutionsResponse{Count: count}
+	return response, nil
+}
+
 const (
 	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
 	jsonSortForOpen        = `[{"StartTime":"desc"},{"WorkflowID":"desc"}]`
@@ -396,6 +416,8 @@ const (
 	dslFieldSort        = "sort"
 	dslFieldSearchAfter = "search_after"
 	dslFieldFrom        = "from"
+	dslFieldSize        = "size"
+	dslFieldMust        = "must"
 )
 
 func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, bool, error) {
@@ -406,8 +428,31 @@ func getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibili
 	return getESQueryDSLHelper(request, token, false)
 }
 
+func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, error) {
+	sql := getSQLFromCountRequest(request)
+	dslStr, _, err := elasticsql.Convert(sql)
+	if err != nil {
+		return "", err
+	}
+
+	dsl := fastjson.MustParse(dslStr) // dsl.String() will be a compact json without spaces
+	isOpen := strings.Contains(dsl.String(), jsonMissingCloseTime)
+	if isOpen {
+		dsl = replaceQueryForOpen(dsl)
+	}
+
+	addDomainToQuery(dsl, request.DomainUUID)
+
+	// remove not needed fields
+	dsl.Del(dslFieldFrom)
+	dsl.Del(dslFieldSize)
+	dsl.Del(dslFieldSort)
+
+	return dsl.String(), nil
+}
+
 func getESQueryDSLHelper(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken, isScan bool) (string, bool, error) {
-	sql := getSQLFromRequest(request)
+	sql := getSQLFromListRequest(request)
 	dslStr, _, err := elasticsql.Convert(sql)
 	if err != nil {
 		return "", false, err
@@ -418,6 +463,8 @@ func getESQueryDSLHelper(request *p.ListWorkflowExecutionsRequestV2, token *esVi
 	if isOpen {
 		dsl = replaceQueryForOpen(dsl)
 	}
+
+	addDomainToQuery(dsl, request.DomainUUID)
 
 	if isScan { // no need to sort for scan
 		dsl.Del(dslFieldSort)
@@ -444,12 +491,22 @@ func getESQueryDSLHelper(request *p.ListWorkflowExecutionsRequestV2, token *esVi
 	return dsl.String(), isOpen, nil
 }
 
-func getSQLFromRequest(request *p.ListWorkflowExecutionsRequestV2) string {
+func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
 	var sql string
 	if strings.TrimSpace(request.Query) == "" {
 		sql = fmt.Sprintf("select * from dumy limit %d", request.PageSize)
 	} else {
 		sql = fmt.Sprintf("select * from dumy where %s limit %d", request.Query, request.PageSize)
+	}
+	return sql
+}
+
+func getSQLFromCountRequest(request *p.CountWorkflowExecutionsRequest) string {
+	var sql string
+	if strings.TrimSpace(request.Query) == "" {
+		sql = "select * from dumy"
+	} else {
+		sql = fmt.Sprintf("select * from dumy where %s", request.Query)
 	}
 	return sql
 }
@@ -463,6 +520,15 @@ func replaceQueryForOpen(dsl *fastjson.Value) *fastjson.Value {
 	dsl = fastjson.MustParse(newDslStr)
 	dsl.Get("query").Get("bool").Set("must_not", fastjson.MustParse(`{"exists": {"field": "CloseTime"}}`))
 	return dsl
+}
+
+func addDomainToQuery(dsl *fastjson.Value, domainID string) {
+	if len(domainID) == 0 {
+		return
+	}
+	valOfBool := dsl.Get("query").Get("bool")
+	lenOfMust := len(valOfBool.GetArray(dslFieldMust))
+	valOfBool.Get(dslFieldMust).SetArrayItem(lenOfMust, fastjson.MustParse(fmt.Sprintf(`{"match_phrase":{"DomainID":{"query":"%s"}}}`, domainID)))
 }
 
 func shouldSearchAfter(token *esVisibilityPageToken) bool {

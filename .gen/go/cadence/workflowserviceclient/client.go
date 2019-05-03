@@ -36,6 +36,12 @@ import (
 
 // Interface is a client for the WorkflowService service.
 type Interface interface {
+	CountWorkflowExecutions(
+		ctx context.Context,
+		CountRequest *shared.CountWorkflowExecutionsRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.CountWorkflowExecutionsResponse, error)
+
 	DeprecateDomain(
 		ctx context.Context,
 		DeprecateRequest *shared.DeprecateDomainRequest,
@@ -257,6 +263,29 @@ func init() {
 
 type client struct {
 	c thrift.Client
+}
+
+func (c client) CountWorkflowExecutions(
+	ctx context.Context,
+	_CountRequest *shared.CountWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.CountWorkflowExecutionsResponse, err error) {
+
+	args := cadence.WorkflowService_CountWorkflowExecutions_Helper.Args(_CountRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_CountWorkflowExecutions_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_CountWorkflowExecutions_Helper.UnwrapResponse(&result)
+	return
 }
 
 func (c client) DeprecateDomain(

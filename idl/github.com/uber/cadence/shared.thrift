@@ -1241,6 +1241,15 @@ struct ListWorkflowExecutionsResponse {
   20: optional binary nextPageToken
 }
 
+struct CountWorkflowExecutionsRequest {
+  10: optional string domain
+  20: optional string query
+}
+
+struct CountWorkflowExecutionsResponse {
+  10: optional i64 count
+}
+
 struct QueryWorkflowRequest {
   10: optional string domain
   20: optional WorkflowExecution execution

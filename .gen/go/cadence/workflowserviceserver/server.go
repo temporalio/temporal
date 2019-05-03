@@ -34,6 +34,11 @@ import (
 
 // Interface is the server-side interface for the WorkflowService service.
 type Interface interface {
+	CountWorkflowExecutions(
+		ctx context.Context,
+		CountRequest *shared.CountWorkflowExecutionsRequest,
+	) (*shared.CountWorkflowExecutionsResponse, error)
+
 	DeprecateDomain(
 		ctx context.Context,
 		DeprecateRequest *shared.DeprecateDomainRequest,
@@ -210,6 +215,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 	service := thrift.Service{
 		Name: "WorkflowService",
 		Methods: []thrift.Method{
+
+			thrift.Method{
+				Name: "CountWorkflowExecutions",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.CountWorkflowExecutions),
+				},
+				Signature:    "CountWorkflowExecutions(CountRequest *shared.CountWorkflowExecutionsRequest) (*shared.CountWorkflowExecutionsResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
 
 			thrift.Method{
 				Name: "DeprecateDomain",
@@ -576,12 +592,31 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 33)
+	procedures := make([]transport.Procedure, 0, 34)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
 
 type handler struct{ impl Interface }
+
+func (h handler) CountWorkflowExecutions(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_CountWorkflowExecutions_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.CountWorkflowExecutions(ctx, args.CountRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_CountWorkflowExecutions_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
 
 func (h handler) DeprecateDomain(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args cadence.WorkflowService_DeprecateDomain_Args

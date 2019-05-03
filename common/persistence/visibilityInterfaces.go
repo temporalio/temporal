@@ -94,6 +94,18 @@ type (
 		NextPageToken []byte
 	}
 
+	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
+	CountWorkflowExecutionsRequest struct {
+		DomainUUID string
+		Domain     string // domain name is not persisted, but used as config filter key
+		Query      string
+	}
+
+	// CountWorkflowExecutionsResponse is response to CountWorkflowExecutions
+	CountWorkflowExecutionsResponse struct {
+		Count int64
+	}
+
 	// ListWorkflowExecutionsByTypeRequest is used to list executions of
 	// a specific type in a domain
 	ListWorkflowExecutionsByTypeRequest struct {
@@ -152,6 +164,7 @@ type (
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
+		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
 	}
 )
 
