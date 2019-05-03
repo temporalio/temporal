@@ -21,7 +21,7 @@
 package history
 
 import (
-	"context"
+	ctx "context"
 	"fmt"
 	"time"
 
@@ -394,13 +394,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	completionEvent, ok := msBuilder.GetCompletionEvent()
 	var wfCloseTime int64
 	if !ok {
-		if replyToParentWorkflow {
-			return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
-		}
-
-		// This is need for backwards compatibility
-		// TODO: remove usage of getLastUpdatedTimestamp after release 0.5.4, only use completionEvent timestamp
-		wfCloseTime = getLastUpdatedTimestamp(msBuilder)
+		return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
 	} else {
 		wfCloseTime = completionEvent.GetTimestamp()
 	}
@@ -416,7 +410,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	workflowHistoryLength := msBuilder.GetNextEventID() - 1
 
 	startEvent, ok := msBuilder.GetStartEvent()
-	if !ok && replyToParentWorkflow {
+	if !ok {
 		return &workflow.InternalServiceError{Message: "Unable to get workflow start event."}
 	}
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
@@ -990,7 +984,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 		tag.WorkflowBinaryChecksum(resetPt.GetBinaryChecksum()),
 		tag.WorkflowEventID(resetPt.GetFirstDecisionCompletedId()))
 
-	resp, err := t.historyService.resetor.ResetWorkflowExecution(context.Background(), &workflow.ResetWorkflowExecutionRequest{
+	resp, err := t.historyService.resetor.ResetWorkflowExecution(ctx.Background(), &workflow.ResetWorkflowExecutionRequest{
 		Domain:                common.StringPtr(domainEntry.GetInfo().Name),
 		WorkflowExecution:     &baseExecution,
 		Reason:                common.StringPtr(fmt.Sprintf("auto-reset reason:%v, binaryChecksum:%v ", reason, resetPt.GetBinaryChecksum())),
@@ -1262,18 +1256,4 @@ func getWorkflowExecutionCloseStatus(status int) workflow.WorkflowExecutionClose
 	default:
 		panic("Invalid value for enum WorkflowExecutionCloseStatus")
 	}
-}
-
-// TODO: remove this after release 0.5.4
-func getLastUpdatedTimestamp(msBuilder mutableState) int64 {
-	executionInfo := msBuilder.GetExecutionInfo()
-
-	lastUpdated := executionInfo.LastUpdatedTimestamp.UnixNano()
-	if executionInfo.StartTimestamp.UnixNano() >= lastUpdated {
-		// This could happen due to clock skews
-		// ensure that the lastUpdatedTimestamp is always greater than the StartTimestamp
-		lastUpdated = executionInfo.StartTimestamp.UnixNano() + 1
-	}
-
-	return lastUpdated
 }
