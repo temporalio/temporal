@@ -989,6 +989,7 @@
     "github.com/hashicorp/go-version.git",
     "github.com/iancoleman/strcase",
     "github.com/jmoiron/sqlx",
+    "github.com/m3db/prometheus_client_golang/prometheus",
     "github.com/olekukonko/tablewriter",
     "github.com/olivere/elastic",
     "github.com/pborman/uuid",

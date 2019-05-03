@@ -70,7 +70,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(ctx context.Context, reques
 
 	resetNewRunID := uuid.New()
 	response = &workflow.ResetWorkflowExecutionResponse{
-		RunId: common.StringPtr(uuid.New()),
+		RunId: common.StringPtr(resetNewRunID),
 	}
 
 	// before changing mutable state
