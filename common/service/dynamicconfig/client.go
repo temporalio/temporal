@@ -22,8 +22,9 @@ package dynamicconfig
 
 import (
 	"errors"
-	"github.com/uber/cadence/common/log"
 	"time"
+
+	"github.com/uber/cadence/common/log"
 )
 
 // Client allows fetching values from a dynamic configuration system NOTE: This does not have async

@@ -1,0 +1,43 @@
+testGetBoolPropertyKey:
+  - value: false
+  - value: true
+    constraints:
+      domainName: "global-samples-domain"
+  - value: false
+    constraints:
+      domainName: "samples-domain"
+testGetIntPropertyKey:
+  - value: 1000
+  - value: 1000.1
+    constraints:
+      domainName: "global-samples-domain"
+testGetDurationPropertyKey:
+  - value: "1m"
+  - value: "wrong duration string"
+    constraints:
+      domainName: "samples-domain"
+      taskListName: "longIdleTimeTasklist"
+  - value: 2.0
+    constraints:
+      domainName: "samples-domain"
+testGetFloat64PropertyKey:
+  - value: 12.0
+  - value: 2
+    constraints:
+      domainName: "samples-domain"
+testGetStringPropertyKey:
+  - value: some random string
+  - value: "constrained-string"
+    constraints:
+      taskListName: "random tasklist"
+testGetMapPropertyKey:
+  - value:
+      key1: "1"
+      key2: 1
+      key3:
+        - false
+        - key4: true
+          key5: 2.0
+  - value: "1"
+    constraints:
+      taskListName: "random tasklist"
