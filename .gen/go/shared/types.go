@@ -9545,6 +9545,7 @@ const (
 	DecisionTaskFailedCauseFailoverCloseDecision                               DecisionTaskFailedCause = 17
 	DecisionTaskFailedCauseBadSignalInputSize                                  DecisionTaskFailedCause = 18
 	DecisionTaskFailedCauseResetWorkflow                                       DecisionTaskFailedCause = 19
+	DecisionTaskFailedCauseBadBinary                                           DecisionTaskFailedCause = 20
 )
 
 // DecisionTaskFailedCause_Values returns all recognized values of DecisionTaskFailedCause.
@@ -9570,6 +9571,7 @@ func DecisionTaskFailedCause_Values() []DecisionTaskFailedCause {
 		DecisionTaskFailedCauseFailoverCloseDecision,
 		DecisionTaskFailedCauseBadSignalInputSize,
 		DecisionTaskFailedCauseResetWorkflow,
+		DecisionTaskFailedCauseBadBinary,
 	}
 }
 
@@ -9640,6 +9642,9 @@ func (v *DecisionTaskFailedCause) UnmarshalText(value []byte) error {
 	case "RESET_WORKFLOW":
 		*v = DecisionTaskFailedCauseResetWorkflow
 		return nil
+	case "BAD_BINARY":
+		*v = DecisionTaskFailedCauseBadBinary
+		return nil
 	default:
 		val, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
@@ -9698,6 +9703,8 @@ func (v DecisionTaskFailedCause) MarshalText() ([]byte, error) {
 		return []byte("BAD_SIGNAL_INPUT_SIZE"), nil
 	case 19:
 		return []byte("RESET_WORKFLOW"), nil
+	case 20:
+		return []byte("BAD_BINARY"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -9749,6 +9756,8 @@ func (v DecisionTaskFailedCause) MarshalLogObject(enc zapcore.ObjectEncoder) err
 		enc.AddString("name", "BAD_SIGNAL_INPUT_SIZE")
 	case 19:
 		enc.AddString("name", "RESET_WORKFLOW")
+	case 20:
+		enc.AddString("name", "BAD_BINARY")
 	}
 	return nil
 }
@@ -9829,6 +9838,8 @@ func (v DecisionTaskFailedCause) String() string {
 		return "BAD_SIGNAL_INPUT_SIZE"
 	case 19:
 		return "RESET_WORKFLOW"
+	case 20:
+		return "BAD_BINARY"
 	}
 	return fmt.Sprintf("DecisionTaskFailedCause(%d)", w)
 }
@@ -9887,6 +9898,8 @@ func (v DecisionTaskFailedCause) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"BAD_SIGNAL_INPUT_SIZE\""), nil
 	case 19:
 		return ([]byte)("\"RESET_WORKFLOW\""), nil
+	case 20:
+		return ([]byte)("\"BAD_BINARY\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -25870,9 +25883,10 @@ func (v *PollForActivityTaskResponse) IsSetHeader() bool {
 }
 
 type PollForDecisionTaskRequest struct {
-	Domain   *string   `json:"domain,omitempty"`
-	TaskList *TaskList `json:"taskList,omitempty"`
-	Identity *string   `json:"identity,omitempty"`
+	Domain         *string   `json:"domain,omitempty"`
+	TaskList       *TaskList `json:"taskList,omitempty"`
+	Identity       *string   `json:"identity,omitempty"`
+	BinaryChecksum *string   `json:"binaryChecksum,omitempty"`
 }
 
 // ToWire translates a PollForDecisionTaskRequest struct into a Thrift-level intermediate
@@ -25892,7 +25906,7 @@ type PollForDecisionTaskRequest struct {
 //   }
 func (v *PollForDecisionTaskRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -25920,6 +25934,14 @@ func (v *PollForDecisionTaskRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.BinaryChecksum != nil {
+		w, err = wire.NewValueString(*(v.BinaryChecksum)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -25976,6 +25998,16 @@ func (v *PollForDecisionTaskRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.BinaryChecksum = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -25989,7 +26021,7 @@ func (v *PollForDecisionTaskRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -26001,6 +26033,10 @@ func (v *PollForDecisionTaskRequest) String() string {
 	}
 	if v.Identity != nil {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+	if v.BinaryChecksum != nil {
+		fields[i] = fmt.Sprintf("BinaryChecksum: %v", *(v.BinaryChecksum))
 		i++
 	}
 
@@ -26026,6 +26062,9 @@ func (v *PollForDecisionTaskRequest) Equals(rhs *PollForDecisionTaskRequest) boo
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
 		return false
 	}
+	if !_String_EqualsPtr(v.BinaryChecksum, rhs.BinaryChecksum) {
+		return false
+	}
 
 	return true
 }
@@ -26044,6 +26083,9 @@ func (v *PollForDecisionTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder)
 	}
 	if v.Identity != nil {
 		enc.AddString("identity", *v.Identity)
+	}
+	if v.BinaryChecksum != nil {
+		enc.AddString("binaryChecksum", *v.BinaryChecksum)
 	}
 	return err
 }
@@ -26091,6 +26133,21 @@ func (v *PollForDecisionTaskRequest) GetIdentity() (o string) {
 // IsSetIdentity returns true if Identity is not nil.
 func (v *PollForDecisionTaskRequest) IsSetIdentity() bool {
 	return v != nil && v.Identity != nil
+}
+
+// GetBinaryChecksum returns the value of BinaryChecksum if it is set or its
+// zero value if it is unset.
+func (v *PollForDecisionTaskRequest) GetBinaryChecksum() (o string) {
+	if v != nil && v.BinaryChecksum != nil {
+		return *v.BinaryChecksum
+	}
+
+	return
+}
+
+// IsSetBinaryChecksum returns true if BinaryChecksum is not nil.
+func (v *PollForDecisionTaskRequest) IsSetBinaryChecksum() bool {
+	return v != nil && v.BinaryChecksum != nil
 }
 
 type PollForDecisionTaskResponse struct {

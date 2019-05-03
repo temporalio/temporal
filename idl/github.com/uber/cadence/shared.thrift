@@ -198,6 +198,7 @@ enum DecisionTaskFailedCause {
   FAILOVER_CLOSE_DECISION,
   BAD_SIGNAL_INPUT_SIZE,
   RESET_WORKFLOW,
+  BAD_BINARY,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {
@@ -994,6 +995,7 @@ struct PollForDecisionTaskRequest {
   10: optional string domain
   20: optional TaskList taskList
   30: optional string identity
+  40: optional string binaryChecksum
 }
 
 struct PollForDecisionTaskResponse {
