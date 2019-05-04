@@ -945,6 +945,7 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 	frontendClient := cFactory.ServerFrontendClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	printRawTime := c.Bool(FlagPrintRawTime) // default show datetime instead of raw time
+	resetPontsOnly := c.Bool(FlagResetPointsOnly)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -966,7 +967,31 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 	} else {
 		o = convertDescribeWorkflowExecutionResponse(resp)
 	}
-	prettyPrintJSONObject(o)
+
+	if !resetPontsOnly {
+		prettyPrintJSONObject(o)
+	} else {
+		fmt.Println("Auto Reset Points:")
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetBorder(true)
+		table.SetColumnSeparator("|")
+		header := []string{"Binary Checksum", "Create Time", "RunID", "EventID"}
+		headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
+		table.SetHeader(header)
+		table.SetHeaderColor(headerColor...)
+		if resp.WorkflowExecutionInfo.AutoResetPoints != nil && len(resp.WorkflowExecutionInfo.AutoResetPoints.Points) > 0 {
+			for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
+				var row []string
+				row = append(row, pt.GetBinaryChecksum())
+				row = append(row, time.Unix(0, pt.GetCreatedTimeNano()).String())
+				row = append(row, pt.GetRunId())
+				row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
+				table.Append(row)
+			}
+		}
+		table.Render()
+	}
+
 }
 
 func prettyPrintJSONObject(o interface{}) {
@@ -996,6 +1021,7 @@ type workflowExecutionInfo struct {
 	HistoryLength   *int64
 	ParentDomainID  *string
 	ParentExecution *shared.WorkflowExecution
+	AutoResetPoints *shared.ResetPoints
 }
 
 // pendingActivityInfo has same fields as shared.PendingActivityInfo, but different field type for better display
@@ -1023,6 +1049,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		HistoryLength:   info.HistoryLength,
 		ParentDomainID:  info.ParentDomainId,
 		ParentExecution: info.ParentExecution,
+		AutoResetPoints: info.AutoResetPoints,
 	}
 	var pendingActs []*pendingActivityInfo
 	var tmpAct *pendingActivityInfo

@@ -48376,6 +48376,7 @@ type WorkflowExecutionInfo struct {
 	ParentExecution *WorkflowExecution            `json:"parentExecution,omitempty"`
 	ExecutionTime   *int64                        `json:"executionTime,omitempty"`
 	Memo            *Memo                         `json:"memo,omitempty"`
+	AutoResetPoints *ResetPoints                  `json:"autoResetPoints,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionInfo struct into a Thrift-level intermediate
@@ -48395,7 +48396,7 @@ type WorkflowExecutionInfo struct {
 //   }
 func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [10]wire.Field
+		fields [11]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -48481,8 +48482,22 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 100, Value: w}
 		i++
 	}
+	if v.AutoResetPoints != nil {
+		w, err = v.AutoResetPoints.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ResetPoints_Read(w wire.Value) (*ResetPoints, error) {
+	var v ResetPoints
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a WorkflowExecutionInfo struct from its Thrift-level
@@ -48599,6 +48614,14 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 110:
+			if field.Value.Type() == wire.TStruct {
+				v.AutoResetPoints, err = _ResetPoints_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -48612,7 +48635,7 @@ func (v *WorkflowExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [10]string
+	var fields [11]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -48652,6 +48675,10 @@ func (v *WorkflowExecutionInfo) String() string {
 	}
 	if v.Memo != nil {
 		fields[i] = fmt.Sprintf("Memo: %v", v.Memo)
+		i++
+	}
+	if v.AutoResetPoints != nil {
+		fields[i] = fmt.Sprintf("AutoResetPoints: %v", v.AutoResetPoints)
 		i++
 	}
 
@@ -48698,6 +48725,9 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !((v.Memo == nil && rhs.Memo == nil) || (v.Memo != nil && rhs.Memo != nil && v.Memo.Equals(rhs.Memo))) {
 		return false
 	}
+	if !((v.AutoResetPoints == nil && rhs.AutoResetPoints == nil) || (v.AutoResetPoints != nil && rhs.AutoResetPoints != nil && v.AutoResetPoints.Equals(rhs.AutoResetPoints))) {
+		return false
+	}
 
 	return true
 }
@@ -48737,6 +48767,9 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.Memo != nil {
 		err = multierr.Append(err, enc.AddObject("memo", v.Memo))
+	}
+	if v.AutoResetPoints != nil {
+		err = multierr.Append(err, enc.AddObject("autoResetPoints", v.AutoResetPoints))
 	}
 	return err
 }
@@ -48889,6 +48922,21 @@ func (v *WorkflowExecutionInfo) GetMemo() (o *Memo) {
 // IsSetMemo returns true if Memo is not nil.
 func (v *WorkflowExecutionInfo) IsSetMemo() bool {
 	return v != nil && v.Memo != nil
+}
+
+// GetAutoResetPoints returns the value of AutoResetPoints if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetAutoResetPoints() (o *ResetPoints) {
+	if v != nil && v.AutoResetPoints != nil {
+		return v.AutoResetPoints
+	}
+
+	return
+}
+
+// IsSetAutoResetPoints returns true if AutoResetPoints is not nil.
+func (v *WorkflowExecutionInfo) IsSetAutoResetPoints() bool {
+	return v != nil && v.AutoResetPoints != nil
 }
 
 type WorkflowExecutionSignaledEventAttributes struct {
@@ -49350,12 +49398,6 @@ func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _ResetPoints_Read(w wire.Value) (*ResetPoints, error) {
-	var v ResetPoints
-	err := v.FromWire(w)
-	return &v, err
 }
 
 // FromWire deserializes a WorkflowExecutionStartedEventAttributes struct from its Thrift-level

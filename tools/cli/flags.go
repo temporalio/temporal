@@ -407,6 +407,10 @@ func getFlagsForDescribeID() []cli.Flag {
 			Name:  FlagPrintRawTimeWithAlias,
 			Usage: "Print raw time stamp",
 		},
+		cli.BoolFlag{
+			Name:  FlagResetPointsOnly,
+			Usage: "Only show auto-reset points",
+		},
 	}
 }
 
