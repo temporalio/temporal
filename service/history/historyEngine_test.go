@@ -5140,34 +5140,82 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		ExecutionContext:             sourceInfo.ExecutionContext,
 		State:                        sourceInfo.State,
 		CloseStatus:                  sourceInfo.CloseStatus,
+		LastFirstEventID:             sourceInfo.LastFirstEventID,
 		LastEventTaskID:              sourceInfo.LastEventTaskID,
 		NextEventID:                  sourceInfo.NextEventID,
 		LastProcessedEvent:           sourceInfo.LastProcessedEvent,
+		StartTimestamp:               sourceInfo.StartTimestamp,
 		LastUpdatedTimestamp:         sourceInfo.LastUpdatedTimestamp,
 		CreateRequestID:              sourceInfo.CreateRequestID,
+		SignalCount:                  sourceInfo.SignalCount,
+		HistorySize:                  sourceInfo.HistorySize,
 		DecisionVersion:              sourceInfo.DecisionVersion,
 		DecisionScheduleID:           sourceInfo.DecisionScheduleID,
 		DecisionStartedID:            sourceInfo.DecisionStartedID,
 		DecisionRequestID:            sourceInfo.DecisionRequestID,
 		DecisionTimeout:              sourceInfo.DecisionTimeout,
+		DecisionAttempt:              sourceInfo.DecisionAttempt,
+		DecisionTimestamp:            sourceInfo.DecisionTimestamp,
+		CancelRequested:              sourceInfo.CancelRequested,
+		CancelRequestID:              sourceInfo.CancelRequestID,
+		CronSchedule:                 sourceInfo.CronSchedule,
+		ClientLibraryVersion:         sourceInfo.ClientLibraryVersion,
+		ClientFeatureVersion:         sourceInfo.ClientFeatureVersion,
+		ClientImpl:                   sourceInfo.ClientImpl,
+		AutoResetPoints:              sourceInfo.AutoResetPoints,
+		Attempt:                      sourceInfo.Attempt,
+		HasRetryPolicy:               sourceInfo.HasRetryPolicy,
+		InitialInterval:              sourceInfo.InitialInterval,
+		BackoffCoefficient:           sourceInfo.BackoffCoefficient,
+		MaximumInterval:              sourceInfo.MaximumInterval,
+		ExpirationTime:               sourceInfo.ExpirationTime,
+		MaximumAttempts:              sourceInfo.MaximumAttempts,
+		NonRetriableErrors:           sourceInfo.NonRetriableErrors,
 		EventStoreVersion:            sourceInfo.EventStoreVersion,
 		BranchToken:                  sourceInfo.BranchToken,
-		HasRetryPolicy:               sourceInfo.HasRetryPolicy,
-		CronSchedule:                 sourceInfo.CronSchedule,
+		ExpirationSeconds:            sourceInfo.ExpirationSeconds,
 	}
 }
 
 func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.ActivityInfo {
+	details := make([]byte, len(sourceInfo.Details))
+	copy(details, sourceInfo.Details)
+
+	var scheduledEvent *workflow.HistoryEvent
+	var startedEvent *workflow.HistoryEvent
+	if sourceInfo.ScheduledEvent != nil {
+		scheduledEvent = &workflow.HistoryEvent{}
+		wv, err := sourceInfo.ScheduledEvent.ToWire()
+		if err != nil {
+			panic(err)
+		}
+		err = scheduledEvent.FromWire(wv)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if sourceInfo.StartedEvent != nil {
+		startedEvent = &workflow.HistoryEvent{}
+		wv, err := sourceInfo.StartedEvent.ToWire()
+		if err != nil {
+			panic(err)
+		}
+		err = startedEvent.FromWire(wv)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return &persistence.ActivityInfo{
 		Version:                  sourceInfo.Version,
 		ScheduleID:               sourceInfo.ScheduleID,
 		ScheduledEventBatchID:    sourceInfo.ScheduledEventBatchID,
-		ScheduledEvent:           sourceInfo.ScheduledEvent,
+		ScheduledEvent:           scheduledEvent,
 		StartedID:                sourceInfo.StartedID,
-		StartedEvent:             sourceInfo.StartedEvent,
+		StartedEvent:             startedEvent,
 		ActivityID:               sourceInfo.ActivityID,
 		RequestID:                sourceInfo.RequestID,
-		Details:                  sourceInfo.Details,
+		Details:                  details,
 		ScheduledTime:            sourceInfo.ScheduledTime,
 		StartedTime:              sourceInfo.StartedTime,
 		ScheduleToStartTimeout:   sourceInfo.ScheduleToStartTimeout,
@@ -5179,6 +5227,7 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		CancelRequestID:          sourceInfo.CancelRequestID,
 		TimerTaskStatus:          sourceInfo.TimerTaskStatus,
 		Attempt:                  sourceInfo.Attempt,
+		DomainID:                 sourceInfo.DomainID,
 		StartedIdentity:          sourceInfo.StartedIdentity,
 		TaskList:                 sourceInfo.TaskList,
 		HasRetryPolicy:           sourceInfo.HasRetryPolicy,
@@ -5187,6 +5236,9 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		MaximumInterval:          sourceInfo.MaximumInterval,
 		ExpirationTime:           sourceInfo.ExpirationTime,
 		MaximumAttempts:          sourceInfo.MaximumAttempts,
+		NonRetriableErrors:       sourceInfo.NonRetriableErrors,
+		//// Not written to database - This is used only for deduping heartbeat timer creation
+		// LastHeartbeatTimeoutVisibility: sourceInfo.LastHeartbeatTimeoutVisibility,
 	}
 }
 
@@ -5261,11 +5313,22 @@ func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.Chil
 }
 
 func copyReplicationState(source *persistence.ReplicationState) *persistence.ReplicationState {
+	var lastReplicationInfo map[string]*persistence.ReplicationInfo
+	if source.LastReplicationInfo != nil {
+		lastReplicationInfo = map[string]*persistence.ReplicationInfo{}
+		for k, v := range source.LastReplicationInfo {
+			lastReplicationInfo[k] = &persistence.ReplicationInfo{
+				Version:     v.Version,
+				LastEventID: v.LastEventID,
+			}
+		}
+	}
+
 	return &persistence.ReplicationState{
 		CurrentVersion:      source.CurrentVersion,
 		StartVersion:        source.StartVersion,
 		LastWriteVersion:    source.LastWriteVersion,
 		LastWriteEventID:    source.LastWriteEventID,
-		LastReplicationInfo: source.LastReplicationInfo,
+		LastReplicationInfo: lastReplicationInfo,
 	}
 }

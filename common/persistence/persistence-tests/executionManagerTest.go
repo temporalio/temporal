@@ -524,7 +524,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 			RunId:      common.StringPtr(uuid.New()),
 		},
 		ParentDomainID: uuid.New(),
-		ParentExecution: &gen.WorkflowExecution{
+		ParentExecution: gen.WorkflowExecution{
 			WorkflowId: common.StringPtr("get-workflow-test-parent"),
 			RunId:      common.StringPtr(uuid.New()),
 		},
@@ -575,11 +575,11 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.NotNil(info, "Valid Workflow response expected.")
 	s.Equal(createReq.RequestID, info.CreateRequestID)
 	s.Equal(createReq.DomainID, info.DomainID)
-	s.Equal(*createReq.Execution.WorkflowId, info.WorkflowID)
-	s.Equal(*createReq.Execution.RunId, info.RunID)
+	s.Equal(createReq.Execution.GetWorkflowId(), info.WorkflowID)
+	s.Equal(createReq.Execution.GetRunId(), info.RunID)
 	s.Equal(createReq.ParentDomainID, info.ParentDomainID)
-	s.Equal(*createReq.ParentExecution.WorkflowId, info.ParentWorkflowID)
-	s.Equal(*createReq.ParentExecution.RunId, info.ParentRunID)
+	s.Equal(createReq.ParentExecution.GetWorkflowId(), info.ParentWorkflowID)
+	s.Equal(createReq.ParentExecution.GetRunId(), info.ParentRunID)
 	s.Equal(createReq.InitiatedID, info.InitiatedID)
 	s.Equal(createReq.TaskList, info.TaskList)
 	s.Equal(createReq.WorkflowTypeName, info.WorkflowTypeName)
@@ -1872,7 +1872,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	}
 
 	parentDomainID := "6036ded3-e541-42c9-8f69-3d9354dad081"
-	parentExecution := &gen.WorkflowExecution{
+	parentExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("test-workflow-mutable-child-executions-child-test"),
 		RunId:      common.StringPtr("73e89362-25ec-4305-bcb8-d9448b90856c"),
 	}

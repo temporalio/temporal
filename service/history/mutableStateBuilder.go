@@ -499,8 +499,12 @@ func (e *mutableStateBuilder) DeleteBufferedReplicationTask(firstEventID int64) 
 	e.deleteBufferedReplicationEvent = common.Int64Ptr(firstEventID)
 }
 
-func (e *mutableStateBuilder) CreateReplicationTask(newRunEventStoreVersion int32, newRunBranchToken []byte) *persistence.HistoryReplicationTask {
-	t := &persistence.HistoryReplicationTask{
+func (e *mutableStateBuilder) CreateReplicationTask(replicationTask []persistence.Task, newRunEventStoreVersion int32, newRunBranchToken []byte) []persistence.Task {
+	if e.replicationState == nil {
+		return replicationTask
+	}
+
+	return append(replicationTask, &persistence.HistoryReplicationTask{
 		FirstEventID:            e.GetLastFirstEventID(),
 		NextEventID:             e.GetNextEventID(),
 		Version:                 e.replicationState.CurrentVersion,
@@ -509,8 +513,7 @@ func (e *mutableStateBuilder) CreateReplicationTask(newRunEventStoreVersion int3
 		BranchToken:             e.GetCurrentBranch(),
 		NewRunEventStoreVersion: newRunEventStoreVersion,
 		NewRunBranchToken:       newRunBranchToken,
-	}
-	return t
+	})
 }
 
 func (e *mutableStateBuilder) checkAndClearTimerFiredEvent(timerID string) *workflow.HistoryEvent {
@@ -1411,12 +1414,15 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 	e.executionInfo.State = persistence.WorkflowStateCreated
 	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusNone
 	e.executionInfo.LastProcessedEvent = common.EmptyEventID
+	e.executionInfo.LastFirstEventID = startEvent.GetEventId()
 	e.executionInfo.CreateRequestID = requestID
 	e.executionInfo.DecisionVersion = common.EmptyVersion
 	e.executionInfo.DecisionScheduleID = common.EmptyEventID
 	e.executionInfo.DecisionStartedID = common.EmptyEventID
 	e.executionInfo.DecisionRequestID = emptyUUID
 	e.executionInfo.DecisionTimeout = 0
+
+	e.executionInfo.CronSchedule = event.GetCronSchedule()
 
 	if parentDomainID != nil {
 		e.executionInfo.ParentDomainID = *parentDomainID
@@ -1427,22 +1433,22 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 	}
 	if event.ParentInitiatedEventId != nil {
 		e.executionInfo.InitiatedID = event.GetParentInitiatedEventId()
+	} else {
+		e.executionInfo.InitiatedID = common.EmptyEventID
 	}
 
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
-		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
 		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
-		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
+		e.executionInfo.ExpirationSeconds = event.RetryPolicy.GetExpirationIntervalInSeconds()
+		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
+		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
 		e.executionInfo.NonRetriableErrors = event.RetryPolicy.NonRetriableErrorReasons
+
 		if event.RetryPolicy.GetExpirationIntervalInSeconds() > 0 && event.GetExpirationTimestamp() > 0 {
 			e.executionInfo.ExpirationTime = time.Unix(0, event.GetExpirationTimestamp())
 		}
-	}
-
-	if event.CronSchedule != nil {
-		e.executionInfo.CronSchedule = event.GetCronSchedule()
 	}
 
 	e.writeEventToCache(startEvent)
@@ -2686,13 +2692,15 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 	e.writeEventToCache(continueAsNewEvent)
 
 	parentDomainID := ""
-	var parentExecution *workflow.WorkflowExecution
+	parentExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(""),
+		RunId:      common.StringPtr(""),
+	}
 	initiatedID := common.EmptyEventID
-
 	newExecutionInfo := newStateBuilder.GetExecutionInfo()
 	if newStateBuilder.HasParentExecution() {
 		parentDomainID = newExecutionInfo.ParentDomainID
-		parentExecution = &workflow.WorkflowExecution{
+		parentExecution = workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(newExecutionInfo.ParentWorkflowID),
 			RunId:      common.StringPtr(newExecutionInfo.ParentRunID),
 		}

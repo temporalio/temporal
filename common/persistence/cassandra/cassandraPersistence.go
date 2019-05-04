@@ -1253,10 +1253,10 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Int
 	initiatedID := emptyInitiatedID
 	state := p.WorkflowStateRunning
 	closeStatus := p.WorkflowCloseStatusNone
-	if request.ParentExecution != nil {
+	if request.ParentDomainID != "" {
 		parentDomainID = request.ParentDomainID
-		parentWorkflowID = *request.ParentExecution.WorkflowId
-		parentRunID = *request.ParentExecution.RunId
+		parentWorkflowID = request.ParentExecution.GetWorkflowId()
+		parentRunID = request.ParentExecution.GetRunId()
 		initiatedID = request.InitiatedID
 		state = p.WorkflowStateCreated
 	}
@@ -3740,10 +3740,16 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 			info.RunID = v.(gocql.UUID).String()
 		case "parent_domain_id":
 			info.ParentDomainID = v.(gocql.UUID).String()
+			if info.ParentDomainID == emptyDomainID {
+				info.ParentDomainID = ""
+			}
 		case "parent_workflow_id":
 			info.ParentWorkflowID = v.(string)
 		case "parent_run_id":
 			info.ParentRunID = v.(gocql.UUID).String()
+			if info.ParentRunID == emptyRunID {
+				info.ParentRunID = ""
+			}
 		case "initiated_id":
 			info.InitiatedID = v.(int64)
 		case "completion_event_batch_id":

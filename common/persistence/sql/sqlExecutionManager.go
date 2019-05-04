@@ -1432,7 +1432,7 @@ func createExecutionFromRequest(
 			info.LastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
 		}
 	}
-	if request.ParentExecution != nil {
+	if request.ParentDomainID != "" {
 		info.InitiatedID = &request.InitiatedID
 		info.ParentDomainID = sqldb.MustParseUUID(request.ParentDomainID)
 		info.ParentWorkflowID = request.ParentExecution.WorkflowId
@@ -1484,7 +1484,7 @@ func createOrUpdateCurrentExecution(
 		row.StartVersion = replicationState.StartVersion
 		row.LastWriteVersion = replicationState.LastWriteVersion
 	}
-	if request.ParentExecution != nil {
+	if request.ParentDomainID != "" {
 		row.State = p.WorkflowStateCreated
 	}
 

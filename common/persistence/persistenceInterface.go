@@ -154,7 +154,7 @@ type (
 		DomainID                    string
 		Execution                   workflow.WorkflowExecution
 		ParentDomainID              string
-		ParentExecution             *workflow.WorkflowExecution
+		ParentExecution             workflow.WorkflowExecution
 		InitiatedID                 int64
 		TaskList                    string
 		WorkflowTypeName            string
