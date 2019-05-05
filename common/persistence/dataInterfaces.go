@@ -741,16 +741,14 @@ type (
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
 	UpdateWorkflowExecutionRequest struct {
-		ExecutionInfo        *WorkflowExecutionInfo
-		ReplicationState     *ReplicationState
-		TransferTasks        []Task
-		TimerTasks           []Task
-		ReplicationTasks     []Task
-		Condition            int64
-		RangeID              int64
-		ContinueAsNew        *CreateWorkflowExecutionRequest
-		FinishExecution      bool
-		FinishedExecutionTTL int32
+		ExecutionInfo    *WorkflowExecutionInfo
+		ReplicationState *ReplicationState
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+		Condition        int64
+		RangeID          int64
+		ContinueAsNew    *CreateWorkflowExecutionRequest
 
 		// Mutable state
 		UpsertActivityInfos           []*ActivityInfo
@@ -829,6 +827,13 @@ type (
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
+		DomainID   string
+		WorkflowID string
+		RunID      string
+	}
+
+	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
+	DeleteCurrentWorkflowExecutionRequest struct {
 		DomainID   string
 		WorkflowID string
 		RunID      string
@@ -1381,6 +1386,7 @@ type (
 		ResetMutableState(request *ResetMutableStateRequest) error
 		ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
+		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 
 		// Transfer task related methods

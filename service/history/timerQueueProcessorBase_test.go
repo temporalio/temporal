@@ -22,6 +22,8 @@ package history
 
 import (
 	"errors"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 	"testing"
 	"time"
 
@@ -43,16 +45,17 @@ import (
 
 type (
 	timerQueueProcessorBaseSuite struct {
-		clusterName         string
-		logger              log.Logger
-		mockService         service.Service
-		mockShard           ShardContext
-		mockMetadataMgr     *mocks.MetadataManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockMessagingClient messaging.Client
-		mockProcessor       *MockTimerProcessor
-		mockQueueAckMgr     *MockTimerQueueAckMgr
-		mockClientBean      *client.MockClientBean
+		clusterName          string
+		logger               log.Logger
+		mockService          service.Service
+		mockShard            ShardContext
+		mockMetadataMgr      *mocks.MetadataManager
+		mockClusterMetadata  *mocks.ClusterMetadata
+		mockMessagingClient  messaging.Client
+		mockProcessor        *MockTimerProcessor
+		mockQueueAckMgr      *MockTimerQueueAckMgr
+		mockClientBean       *client.MockClientBean
+		mockExecutionManager *mocks.ExecutionManager
 
 		scope            int
 		notificationChan chan struct{}
@@ -98,6 +101,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
 	}
+	s.mockExecutionManager = &mocks.ExecutionManager{}
 
 	s.scope = 0
 	s.notificationChan = make(chan struct{})
@@ -179,6 +183,30 @@ func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainTrue_ProcessE
 	s.mockProcessor.On("process", task).Return(s.scope, nil).Once()
 	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
+}
+
+func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
+	task := &persistence.TimerTaskInfo{
+		DomainID:            uuid.New().String(),
+		WorkflowID:          uuid.New().String(),
+		RunID:               uuid.New().String(),
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now()}
+	executionInfo := workflow.WorkflowExecution{
+		WorkflowId: &task.WorkflowID,
+		RunId:      &task.RunID,
+	}
+	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ms := &mockMutableState{}
+	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.On("DeleteWorkflowExecutionHistoryV2", mock.Anything, mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.On("DeleteExecutionFromVisibility", mock.Anything).Return(nil).Once()
+	ms.On("GetEventStoreVersion").Return(persistence.EventStoreVersionV2).Once()
+	ms.On("GetCurrentBranch").Return([]byte{}).Once()
+
+	err := s.timerQueueProcessor.deleteWorkflow(task, ms, ctx)
+	s.NoError(err)
 }
 
 func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_EntiryNotExists() {

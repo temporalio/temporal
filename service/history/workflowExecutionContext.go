@@ -696,20 +696,7 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	} // end of update history events for active builder
 
 	continueAsNew := updates.continueAsNew
-	finishExecution := false
-	var finishExecutionTTL int32
 	if executionInfo.State == persistence.WorkflowStateCompleted {
-		// Workflow execution completed as part of this transaction.
-		// Also transactionally delete workflow execution representing
-		// current run for the execution using cassandra TTL
-		finishExecution = true
-		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(executionInfo.DomainID)
-		if err != nil {
-			return err
-		}
-		// NOTE: domain retention is in days, so we need to do a conversion
-		finishExecutionTTL = domainEntry.GetRetentionDays(executionInfo.WorkflowID) * secondsInDay
-
 		// clear stickness
 		c.msBuilder.ClearStickyness()
 	}
@@ -759,8 +746,6 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		NewBufferedReplicationTask:    updates.newBufferedReplicationEventsInfo,
 		DeleteBufferedReplicationTask: updates.deleteBufferedReplicationEvent,
 		ContinueAsNew:                 continueAsNew,
-		FinishExecution:               finishExecution,
-		FinishedExecutionTTL:          finishExecutionTTL,
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:
