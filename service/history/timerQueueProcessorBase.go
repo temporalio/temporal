@@ -654,12 +654,13 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 			tag.TaskType(task.GetTaskType()))
 		return err
 	}
-	err := t.deleteWorkflowExecution(task)
-	if err != nil {
+	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
 		return err
 	}
-	err = t.deleteWorkflowVisibility(task)
-	if err != nil {
+	if err := t.deleteWorkflowExecution(task); err != nil {
+		return err
+	}
+	if err := t.deleteWorkflowVisibility(task); err != nil {
 		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
