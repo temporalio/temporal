@@ -4132,11 +4132,11 @@ func (s *resetorSuite) TestApplyReset() {
 }
 
 func TestFindAutoResetPoint(t *testing.T) {
-	// case 1
+	// case 1: nil
 	_, pt := FindAutoResetPoint(nil, nil)
 	assert.Nil(t, pt)
 
-	// case 2
+	// case 2: empty
 	_, pt = FindAutoResetPoint(&workflow.BadBinaries{}, &workflow.ResetPoints{})
 	assert.Nil(t, pt)
 
@@ -4153,7 +4153,21 @@ func TestFindAutoResetPoint(t *testing.T) {
 		Resettable:     common.BoolPtr(false),
 	}
 
-	// case 3
+	expiredNowNano := time.Now().UnixNano() - int64(time.Hour)
+	notExpiredNowNano := time.Now().UnixNano() + int64(time.Hour)
+	pt4 := &workflow.ResetPointInfo{
+		BinaryChecksum:   common.StringPtr("expired"),
+		Resettable:       common.BoolPtr(true),
+		ExpiringTimeNano: common.Int64Ptr(expiredNowNano),
+	}
+
+	pt5 := &workflow.ResetPointInfo{
+		BinaryChecksum:   common.StringPtr("notExpired"),
+		Resettable:       common.BoolPtr(true),
+		ExpiringTimeNano: common.Int64Ptr(notExpiredNowNano),
+	}
+
+	// case 3: two intersection
 	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"abc": {},
@@ -4166,20 +4180,21 @@ func TestFindAutoResetPoint(t *testing.T) {
 	})
 	assert.Equal(t, pt.String(), pt0.String())
 
-	// case 4
+	// case 4: one intersection
 	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
-			"none": {},
-			"def":  {},
+			"none":    {},
+			"def":     {},
+			"expired": {},
 		},
 	}, &workflow.ResetPoints{
 		Points: []*workflow.ResetPointInfo{
-			pt0, pt1, pt3,
+			pt4, pt0, pt1, pt3,
 		},
 	})
 	assert.Equal(t, pt.String(), pt1.String())
 
-	// case 4
+	// case 4: no intersection
 	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none1": {},
@@ -4192,7 +4207,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	})
 	assert.Nil(t, pt)
 
-	// case 5
+	// case 5: not resettable
 	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none1": {},
@@ -4204,4 +4219,30 @@ func TestFindAutoResetPoint(t *testing.T) {
 		},
 	})
 	assert.Nil(t, pt)
+
+	// case 6: one intersection of expired
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"none":    {},
+			"expired": {},
+		},
+	}, &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			pt0, pt1, pt3, pt4, pt5,
+		},
+	})
+	assert.Nil(t, pt)
+
+	// case 7: one intersection of not expred
+	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+		Binaries: map[string]*workflow.BadBinaryInfo{
+			"none":       {},
+			"notExpired": {},
+		},
+	}, &workflow.ResetPoints{
+		Points: []*workflow.ResetPointInfo{
+			pt0, pt1, pt3, pt4, pt5,
+		},
+	})
+	assert.Equal(t, pt.String(), pt5.String())
 }
