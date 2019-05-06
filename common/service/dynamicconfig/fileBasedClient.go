@@ -46,8 +46,8 @@ type constrainedValue struct {
 // It specifies where the config file is stored and how often the config should be
 // updated by checking the config file again.
 type FileBasedClientConfig struct {
-	Filepath     string
-	PollInterval time.Duration
+	Filepath     string        `yaml:"filepath"`
+	PollInterval time.Duration `yaml:"pollInterval"`
 }
 
 type fileBasedClient struct {
@@ -79,9 +79,7 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 			case <-ticker.C:
 				err := client.update()
 				if err != nil {
-					client.logger.Error("Failed to update dynamic config", tag.Timestamp(time.Now()))
-				} else {
-					client.logger.Info("Updated dynamic config", tag.Timestamp(time.Now()))
+					client.logger.Error("Failed to update dynamic config", tag.Error(err))
 				}
 			case <-client.doneCh:
 				ticker.Stop()
@@ -220,7 +218,7 @@ func (fc *fileBasedClient) update() error {
 	}
 
 	fc.values.Store(newValues)
-
+	fc.logger.Info("Updated dynamic config")
 	return nil
 }
 

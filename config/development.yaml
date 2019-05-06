@@ -125,3 +125,7 @@ elasticsearch:
 publicClient:
   hostPort: "127.0.0.1:7933"
 
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development.yaml"
+  pollInterval: "10s"
+

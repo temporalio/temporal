@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service"
@@ -111,7 +112,11 @@ func (s *server) startService() common.Daemon {
 		log.Fatalf("error creating ringpop factory: %v", err)
 	}
 
-	params.DynamicConfig = dynamicconfig.NewNopClient()
+	params.DynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.cfg.DynamicConfigClient, params.Logger.WithTags(tag.Service(params.Name)), s.doneC)
+	if err != nil {
+		log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
+		params.DynamicConfig = dynamicconfig.NewNopClient()
+	}
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
 	svcCfg := s.cfg.Services[s.name]
@@ -199,5 +204,5 @@ func (s *server) startService() common.Daemon {
 // execute runs the daemon in a separate go routine
 func execute(d common.Daemon, doneC chan struct{}) {
 	d.Start()
-	doneC <- struct{}{}
+	close(doneC)
 }
