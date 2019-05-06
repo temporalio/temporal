@@ -991,11 +991,6 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(blob []byte
 		return false, nil
 	}
 
-	err = failInFlightDecisionToClearBufferedEvents(c.msBuilder)
-	if err != nil {
-		return false, err
-	}
-
 	attributes := &workflow.FailWorkflowExecutionDecisionAttributes{
 		Reason:  common.StringPtr(common.FailureReasonDecisionBlobSizeExceedsLimit),
 		Details: []byte(message),
@@ -1006,22 +1001,6 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(blob []byte
 	}
 
 	return true, nil
-}
-
-// Before closing workflow, if there is a in-flight decision, fail the decision first. So that we don't close the workflow with buffered events
-func failInFlightDecisionToClearBufferedEvents(msBuilder mutableState) error {
-	if msBuilder.HasInFlightDecisionTask() {
-		di, _ := msBuilder.GetInFlightDecisionTask()
-
-		event := msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, workflow.DecisionTaskFailedCauseResetWorkflow, nil,
-			identityHistoryService, decisionFailureForBuffered, "", "", 0)
-		if event == nil {
-			return &workflow.InternalServiceError{Message: "Failed to add decision failed event."}
-		}
-
-		return msBuilder.FlushBufferedEvents()
-	}
-	return nil
 }
 
 // RespondDecisionTaskCompleted completes a decision task
@@ -2420,11 +2399,6 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(ctx ctx.Context, terminat
 		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
-			}
-
-			err := failInFlightDecisionToClearBufferedEvents(msBuilder)
-			if err != nil {
-				return nil, err
 			}
 
 			if msBuilder.AddWorkflowExecutionTerminatedEvent(request) == nil {

@@ -645,11 +645,6 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 					return err1
 				}
 
-				err = failInFlightDecisionToClearBufferedEvents(c.msBuilder)
-				if err != nil {
-					return err
-				}
-
 				c.msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
 					Reason:   common.StringPtr(common.TerminateReasonSizeExceedsLimit),
 					Identity: common.StringPtr("cadence-history-server"),

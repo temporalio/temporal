@@ -332,12 +332,6 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(currMutableState mutableS
 
 	if currMutableState.IsWorkflowExecutionRunning() {
 		terminateCurr = true
-
-		retError = failInFlightDecisionToClearBufferedEvents(currMutableState)
-		if retError != nil {
-			return
-		}
-
 		currMutableState.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
 			Reason:   common.StringPtr(reason),
 			Details:  nil,

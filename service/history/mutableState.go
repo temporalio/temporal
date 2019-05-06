@@ -29,10 +29,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-const (
-	decisionFailureForBuffered = "FailDecisionToClearBufferedEvents"
-)
-
 type (
 	// TODO: This should be part of persistence layer
 	decisionInfo struct {
