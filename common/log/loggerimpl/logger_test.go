@@ -99,3 +99,35 @@ func TestThrottleLogger(t *testing.T) {
 	fmt.Println(out, lineNum)
 	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
 }
+
+func TestEmptyMsg(t *testing.T) {
+	old := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	outC := make(chan string)
+	// copy the output in a separate goroutine so logging can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		outC <- buf.String()
+	}()
+
+	var zapLogger *zap.Logger
+	zapLogger = zap.NewExample()
+
+	logger := NewLogger(zapLogger)
+	preCaller := caller(1)
+	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
+
+	// back to normal state
+	w.Close()
+	os.Stdout = old // restoring the real stdout
+	out := <-outC
+	sps := strings.Split(preCaller, ":")
+	par, err := strconv.Atoi(sps[1])
+	assert.Nil(t, err)
+	lineNum := fmt.Sprintf("%v", par+1)
+	fmt.Println(out, lineNum)
+	assert.Equal(t, out, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+
+}

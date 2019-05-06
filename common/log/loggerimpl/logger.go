@@ -36,7 +36,11 @@ type loggerImpl struct {
 	skip      int
 }
 
-const skipForDefaultLogger = 3
+const (
+	skipForDefaultLogger = 3
+	// we put a default message when it is empty so that the log can be searchable/filterable
+	defaultMsgForEmpty = "message is empty"
+)
 
 // NewNopLogger returns a no-op logger
 func NewNopLogger() log.Logger {
@@ -98,27 +102,39 @@ func (lg *loggerImpl) buildFields(tags []tag.Tag) []zap.Field {
 	return fs
 }
 
+func setDefaultMsg(msg string) string {
+	if msg == "" {
+		return defaultMsgForEmpty
+	}
+	return msg
+}
+
 func (lg *loggerImpl) Debug(msg string, tags ...tag.Tag) {
+	msg = setDefaultMsg(msg)
 	fields := lg.buildFieldsWithCallat(tags)
 	lg.zapLogger.Debug(msg, fields...)
 }
 
 func (lg *loggerImpl) Info(msg string, tags ...tag.Tag) {
+	msg = setDefaultMsg(msg)
 	fields := lg.buildFieldsWithCallat(tags)
 	lg.zapLogger.Info(msg, fields...)
 }
 
 func (lg *loggerImpl) Warn(msg string, tags ...tag.Tag) {
+	msg = setDefaultMsg(msg)
 	fields := lg.buildFieldsWithCallat(tags)
 	lg.zapLogger.Warn(msg, fields...)
 }
 
 func (lg *loggerImpl) Error(msg string, tags ...tag.Tag) {
+	msg = setDefaultMsg(msg)
 	fields := lg.buildFieldsWithCallat(tags)
 	lg.zapLogger.Error(msg, fields...)
 }
 
 func (lg *loggerImpl) Fatal(msg string, tags ...tag.Tag) {
+	msg = setDefaultMsg(msg)
 	fields := lg.buildFieldsWithCallat(tags)
 	lg.zapLogger.Fatal(msg, fields...)
 }
