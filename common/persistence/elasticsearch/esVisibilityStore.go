@@ -419,6 +419,22 @@ const (
 	dslFieldFrom        = "from"
 	dslFieldSize        = "size"
 	dslFieldMust        = "must"
+
+	defaultDateTimeFormat = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
+)
+
+var (
+	timeKeys = map[string]bool{
+		"StartTime":     true,
+		"CloseTime":     true,
+		"ExecutionTime": true,
+	}
+	rangeKeys = map[string]bool{
+		"from": true,
+		"to":   true,
+		"gt":   true,
+		"lt":   true,
+	}
 )
 
 func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, bool, error) {
@@ -512,6 +528,9 @@ func getCustomizedDSLFromSQL(sql string, domainID string) (*fastjson.Value, bool
 		addQueryForExecutionTime(dsl)
 	}
 	addDomainToQuery(dsl, domainID)
+	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
+		return nil, false, err
+	}
 	return dsl, isOpen, nil
 }
 
@@ -810,4 +829,65 @@ func checkPageSize(request *p.ListWorkflowExecutionsRequestV2) {
 	if request.PageSize == 0 {
 		request.PageSize = 1000
 	}
+}
+
+func processAllValuesForKey(dsl *fastjson.Value, keyFilter func(k string) bool,
+	processFunc func(obj *fastjson.Object, key string, v *fastjson.Value) error,
+) error {
+	switch dsl.Type() {
+	case fastjson.TypeArray:
+		for _, val := range dsl.GetArray() {
+			if err := processAllValuesForKey(val, keyFilter, processFunc); err != nil {
+				return err
+			}
+		}
+	case fastjson.TypeObject:
+		objectVal := dsl.GetObject()
+		keys := []string{}
+		objectVal.Visit(func(key []byte, val *fastjson.Value) {
+			keys = append(keys, string(key))
+		})
+
+		for _, key := range keys {
+			var err error
+			val := objectVal.Get(key)
+			if keyFilter(key) {
+				err = processFunc(objectVal, key, val)
+			} else {
+				err = processAllValuesForKey(val, keyFilter, processFunc)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	default:
+		// do nothing, since there's no key
+	}
+	return nil
+}
+
+func timeKeyFilter(key string) bool {
+	return timeKeys[key]
+}
+
+func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) error {
+	return processAllValuesForKey(value, func(key string) bool {
+		return rangeKeys[key]
+	}, func(obj *fastjson.Object, key string, v *fastjson.Value) error {
+		timeStr := string(v.GetStringBytes())
+
+		// first check if already in int64 format
+		if _, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
+			return nil
+		}
+
+		// try to parse time
+		parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
+		if err != nil {
+			return err
+		}
+
+		obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%v"`, parsedTime.UnixNano())))
+		return nil
+	})
 }
