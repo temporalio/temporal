@@ -160,7 +160,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
 		rateLimiter:     tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
-		blobstoreClient: blobstoreClient,
+		blobstoreClient: blobstore.NewMetricClient(blobstoreClient, sVice.GetMetricsClient()),
 		versionChecker:  &versionChecker{checkVersion: config.EnableClientVersionCheck()},
 		domainHandler: newDomainHandler(
 			config,

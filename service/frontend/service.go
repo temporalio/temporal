@@ -185,8 +185,7 @@ func (s *Service) Start() {
 		kafkaProducer = &mocks.KafkaProducer{}
 	}
 
-	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer,
-		params.BlobstoreClient)
+	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, params.BlobstoreClient)
 	wfHandler.Start()
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	base.GetDispatcher().Register(workflowserviceserver.New(dcRedirectionHandler))
