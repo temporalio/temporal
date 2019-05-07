@@ -76,7 +76,12 @@ func (c *metricClient) GetTags(ctx context.Context, bucket string, key blob.Key)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceClientFailures)
+		// it is expected to call this API on blobs which do not exist, so emit different metric on ErrBlobNotExists
+		if err != ErrBlobNotExists {
+			c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceClientFailures)
+		} else {
+			c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceErrEntityNotExistsCounter)
+		}
 	}
 	return resp, err
 }
