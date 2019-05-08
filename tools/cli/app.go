@@ -27,7 +27,7 @@ import (
 const (
 	// Version is the controlled version string. It should be updated every time
 	// before we release a new version.
-	Version = "0.6.0"
+	Version = "0.6.2"
 )
 
 // NewCliApp instantiates a new instance of the CLI application.

@@ -160,6 +160,7 @@ const (
 	FlagRemoveBadBinary             = "remove_bad_binary"
 	FlagResetType                   = "reset_type"
 	FlagResetPointsOnly             = "reset_points_only"
+	FlagResetBadBinaryChecksum      = "reset_bad_binary_checksum"
 )
 
 var flagsForExecution = []cli.Flag{
