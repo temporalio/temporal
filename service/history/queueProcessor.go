@@ -425,15 +425,15 @@ func (p *queueProcessorBase) initializeLoggerForTask(task queueTaskInfo) log.Log
 	switch task := task.(type) {
 	case *persistence.TransferTaskInfo:
 		logger = logger.WithTags(
-			tag.WorkflowID(task.RunID),
-			tag.WorkflowRunID(task.WorkflowID),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
 			tag.WorkflowDomainID(task.DomainID))
 
 		logger.Debug("Processing transfer task")
 	case *persistence.ReplicationTaskInfo:
 		logger = logger.WithTags(
-			tag.WorkflowID(task.RunID),
-			tag.WorkflowRunID(task.WorkflowID),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
 			tag.WorkflowDomainID(task.DomainID))
 
 		logger.Debug("Processing replication task")
