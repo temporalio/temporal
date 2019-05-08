@@ -315,15 +315,42 @@
   version = "v1.0.2"
 
 [[projects]]
-  digest = "1:4142d94383572e74b42352273652c62afec5b23f325222ed09198f46009022d1"
+  digest = "1:2b62d63ca71f89685c4f41373391319f6b67de7c61bbe7fdf2d89526a72fcb42"
   name = "github.com/m3db/prometheus_client_golang"
   packages = [
     "prometheus",
     "prometheus/promhttp",
   ]
   pruneopts = ""
-  revision = "c5b7fccd204277076155f10851dad72b76a49317"
-  version = "v0.8.0"
+  revision = "8ae269d24972b8695572fa6b2e3718b5ea82d6b4"
+
+[[projects]]
+  branch = "master"
+  digest = "1:954b01b825d4edc1b3e838e9faadfb8f70b308b000425d634d72896a81d3ce9f"
+  name = "github.com/m3db/prometheus_client_model"
+  packages = ["go"]
+  pruneopts = ""
+  revision = "8b2299a4bf7d7fc10835527021716d4b4a6e8700"
+
+[[projects]]
+  branch = "master"
+  digest = "1:192c7420ce9083d46de731826d5908a2f571ce1a7be3188428ce388d4f12c16d"
+  name = "github.com/m3db/prometheus_common"
+  packages = [
+    "expfmt",
+    "internal/bitbucket.org/ww/goautoneg",
+    "model",
+  ]
+  pruneopts = ""
+  revision = "25aaa3dff79bb48116615ebe1dea6a494b74ce77"
+
+[[projects]]
+  branch = "master"
+  digest = "1:61df0898746840afc7be5dc2c3eeec83022fab70df11ecee5b16c85e912cf5ed"
+  name = "github.com/m3db/prometheus_procfs"
+  packages = ["."]
+  pruneopts = ""
+  revision = "1878d9fbb537119d24b21ca07effd591627cd160"
 
 [[projects]]
   branch = "master"
@@ -990,6 +1017,7 @@
     "github.com/iancoleman/strcase",
     "github.com/jmoiron/sqlx",
     "github.com/m3db/prometheus_client_golang/prometheus",
+    "github.com/m3db/prometheus_client_golang/prometheus/promhttp",
     "github.com/olekukonko/tablewriter",
     "github.com/olivere/elastic",
     "github.com/pborman/uuid",

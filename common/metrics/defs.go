@@ -91,15 +91,15 @@ const (
 // Common service base metrics
 const (
 	RestartCount         = "restarts"
-	NumGoRoutinesGauge   = "num-goroutines"
+	NumGoRoutinesGauge   = "num_goroutines"
 	GoMaxProcsGauge      = "gomaxprocs"
-	MemoryAllocatedGauge = "memory.allocated"
-	MemoryHeapGauge      = "memory.heap"
-	MemoryHeapIdleGauge  = "memory.heapidle"
-	MemoryHeapInuseGauge = "memory.heapinuse"
-	MemoryStackGauge     = "memory.stack"
-	NumGCCounter         = "memory.num-gc"
-	GcPauseMsTimer       = "memory.gc-pause-ms"
+	MemoryAllocatedGauge = "memory_allocated"
+	MemoryHeapGauge      = "memory_heap"
+	MemoryHeapIdleGauge  = "memory_heapidle"
+	MemoryHeapInuseGauge = "memory_heapinuse"
+	MemoryStackGauge     = "memory_stack"
+	NumGCCounter         = "memory_num_gc"
+	GcPauseMsTimer       = "memory_gc_pause_ms"
 )
 
 // ServiceMetrics are types for common service base metrics

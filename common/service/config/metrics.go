@@ -27,6 +27,7 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 	prom "github.com/m3db/prometheus_client_golang/prometheus"
+	"github.com/m3db/prometheus_client_golang/prometheus/promhttp"
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
@@ -34,6 +35,32 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	statsdreporter "github.com/uber/cadence/common/metrics/tally/statsd"
 )
+
+/*
+// N.B - if we ever need a sanitizer these can be used to create M3 and prom
+// compatible metrics. Keeping this around for emergencies, but ideally we
+// ensure our base metrics are emitted correctly.
+// tally sanitizer options that satisfy both Prometheus and M3 restrictions
+var (
+	_safeCharacters = []rune{'_'}
+
+	_sanitizeOptions = tally.SanitizeOptions{
+		NameCharacters: tally.ValidCharacters{
+			Ranges:     tally.AlphanumericRange,
+			Characters: _safeCharacters,
+		},
+		KeyCharacters: tally.ValidCharacters{
+			Ranges:     tally.AlphanumericRange,
+			Characters: _safeCharacters,
+		},
+		ValueCharacters: tally.ValidCharacters{
+			Ranges:     tally.AlphanumericRange,
+			Characters: _safeCharacters,
+		},
+		ReplacementCharacter: tally.DefaultReplacementCharacter,
+	}
+)
+*/
 
 // NewScope builds a new tally scope
 // for this metrics configuration
@@ -150,7 +177,8 @@ func NewPrometheusReporter(
 		opts.DefaultSummaryObjectives = values
 	}
 
-	opts.Registerer = prom.NewRegistry()
+	registry := prom.NewRegistry()
+	opts.Registerer = registry
 
 	reporter := prometheus.NewReporter(opts)
 
@@ -160,10 +188,10 @@ func NewPrometheusReporter(
 	}
 
 	if addr := strings.TrimSpace(config.ListenAddress); addr == "" {
-		http.Handle(path, reporter.HTTPHandler())
+		http.Handle(path, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	} else {
 		mux := http.NewServeMux()
-		mux.Handle(path, reporter.HTTPHandler())
+		mux.Handle(path, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 		go func() {
 			if err := http.ListenAndServe(addr, mux); err != nil {
 				configOpts.OnError(err)
