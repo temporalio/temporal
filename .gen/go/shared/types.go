@@ -37996,6 +37996,7 @@ type SignalWithStartWorkflowExecutionRequest struct {
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
 	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
 	Memo                                *Memo                  `json:"memo,omitempty"`
+	Header                              *Header                `json:"header,omitempty"`
 }
 
 // ToWire translates a SignalWithStartWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -38015,7 +38016,7 @@ type SignalWithStartWorkflowExecutionRequest struct {
 //   }
 func (v *SignalWithStartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [16]wire.Field
+		fields [17]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -38147,6 +38148,14 @@ func (v *SignalWithStartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 160, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 170, Value: w}
 		i++
 	}
 
@@ -38333,6 +38342,14 @@ func (v *SignalWithStartWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 170:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -38346,7 +38363,7 @@ func (v *SignalWithStartWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [16]string
+	var fields [17]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -38410,6 +38427,10 @@ func (v *SignalWithStartWorkflowExecutionRequest) String() string {
 	}
 	if v.Memo != nil {
 		fields[i] = fmt.Sprintf("Memo: %v", v.Memo)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -38484,6 +38505,9 @@ func (v *SignalWithStartWorkflowExecutionRequest) Equals(rhs *SignalWithStartWor
 	if !((v.Memo == nil && rhs.Memo == nil) || (v.Memo != nil && rhs.Memo != nil && v.Memo.Equals(rhs.Memo))) {
 		return false
 	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
+		return false
+	}
 
 	return true
 }
@@ -38541,6 +38565,9 @@ func (v *SignalWithStartWorkflowExecutionRequest) MarshalLogObject(enc zapcore.O
 	}
 	if v.Memo != nil {
 		err = multierr.Append(err, enc.AddObject("memo", v.Memo))
+	}
+	if v.Header != nil {
+		err = multierr.Append(err, enc.AddObject("header", v.Header))
 	}
 	return err
 }
@@ -38783,6 +38810,21 @@ func (v *SignalWithStartWorkflowExecutionRequest) GetMemo() (o *Memo) {
 // IsSetMemo returns true if Memo is not nil.
 func (v *SignalWithStartWorkflowExecutionRequest) IsSetMemo() bool {
 	return v != nil && v.Memo != nil
+}
+
+// GetHeader returns the value of Header if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetHeader() (o *Header) {
+	if v != nil && v.Header != nil {
+		return v.Header
+	}
+
+	return
+}
+
+// IsSetHeader returns true if Header is not nil.
+func (v *SignalWithStartWorkflowExecutionRequest) IsSetHeader() bool {
+	return v != nil && v.Header != nil
 }
 
 type SignalWorkflowExecutionRequest struct {

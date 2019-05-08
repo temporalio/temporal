@@ -1074,6 +1074,10 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	taskList := &workflow.TaskList{}
 	taskList.Name = common.StringPtr(tl)
 
+	header := &workflow.Header{
+		Fields: map[string][]byte{"tracing": []byte("sample data")},
+	}
+
 	// Start a workflow
 	request := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
@@ -1097,7 +1101,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	activityScheduled := false
 	activityData := int32(1)
 	newWorkflowStarted := false
-	var signalEvent *workflow.HistoryEvent
+	var signalEvent, startedEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 
@@ -1128,11 +1132,18 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			}
 		} else if newWorkflowStarted {
 			newWorkflowStarted = false
-			for _, event := range history.Events {
+			signalEvent = nil
+			startedEvent = nil
+			for _, event := range history.Events[previousStartedEventID:] {
 				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
 					signalEvent = event
-					return nil, []*workflow.Decision{}, nil
 				}
+				if *event.EventType == workflow.EventTypeWorkflowExecutionStarted {
+					startedEvent = event
+				}
+			}
+			if signalEvent != nil && startedEvent != nil {
+				return nil, []*workflow.Decision{}, nil
 			}
 		}
 
@@ -1179,6 +1190,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
+		Header:                              header,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		SignalName:                          common.StringPtr(signalName),
@@ -1236,6 +1248,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
 	s.Equal(signalInput, signalEvent.WorkflowExecutionSignaledEventAttributes.Input)
 	s.Equal(identity, *signalEvent.WorkflowExecutionSignaledEventAttributes.Identity)
+	s.True(startedEvent != nil)
+	s.Equal(header, startedEvent.WorkflowExecutionStartedEventAttributes.Header)
 
 	// Send signal to not existed workflow
 	id = "integration-signal-with-start-workflow-test-non-exist"
