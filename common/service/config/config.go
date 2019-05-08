@@ -44,7 +44,10 @@ type (
 		// Log is the logging config
 		Log Logger `yaml:"log"`
 		// ClustersInfo is the config containing all valid clusters and active cluster
+		// Deprecated: please use ClusterMetadata instead
 		ClustersInfo ClustersInfo `yaml:"clustersInfo"`
+		// ClusterMetadata is the config containing all valid clusters and active cluster
+		ClusterMetadata ClusterMetadata `yaml:"clusterMetadata"`
 		// DCRedirectionPolicy contains the frontend datacenter redirection policy
 		DCRedirectionPolicy DCRedirectionPolicy `yaml:"dcRedirectionPolicy"`
 		// Services is a map of service name to service config items
@@ -219,6 +222,8 @@ type (
 	}
 
 	// ClustersInfo contains the all cluster names and active cluster
+	//
+	// Deprecated: please use ClustersMetadata instead
 	ClustersInfo struct {
 		// EnableGlobalDomain whether the global domain is enabled, this attr should be discarded when
 		// cross DC is made public
@@ -237,7 +242,33 @@ type (
 	}
 
 	// Address indicate the remote cluster's service name and address
+	//
+	// Deprecated: please use ClusterInformation instead
 	Address struct {
+		// RPCName indicate the remote service name
+		RPCName string `yaml:"rpcName"`
+		// Address indicate the remote service IP address
+		RPCAddress string `yaml:"rpcAddress"`
+	}
+
+	// ClusterMetadata contains the all cluster which participated in cross DC
+	ClusterMetadata struct {
+		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
+		// FailoverVersionIncrement is the increment of each cluster version when failover happens
+		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
+		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
+		// all clusters can do domain failover
+		MasterClusterName string `yaml:"masterClusterName"`
+		// CurrentClusterName is the name of the current cluster
+		CurrentClusterName string `yaml:"currentClusterName"`
+		// ClusterInformation contains all cluster names to corresponding information about that cluster
+		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+	}
+
+	// ClusterInformation contains the information about each cluster which participated in cross DC
+	ClusterInformation struct {
+		Enabled                bool  `yaml:"enabled"`
+		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// RPCName indicate the remote service name
 		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service IP address

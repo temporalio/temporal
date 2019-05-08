@@ -1,20 +1,21 @@
 - persisence:
     dbname: integration_active
-  clusterinfo:
+  clustermetadata:
     enableGlobalDomain: true
     failoverVersionIncrement: 10
-    masterClusterName: active
-    currentClusterName: active
-    clusterInitialFailoverVersion:
-      active: 0
-      standby: 1
-    clusterAddress:
+    masterClusterName: "active"
+    currentClusterName: "active"
+    clusterInformation:
       active:
-        rpcName: cadence-frontend
-        rpcAddress: 127.0.0.1:7104
+        enabled: true
+        initialFailoverVersion: 0
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:7104"
       standby:
-        rpcName: cadence-frontend
-        rpcAddress: 127.0.0.1:8104
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:8104"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -37,41 +38,36 @@
           cluster: test
         active-dlq:
           cluster: test
-        active-retry:
-          cluster: test
         standby:
           cluster: test
         standby-dlq:
           cluster: test
-        standby-retry:
-          cluster: test
       cadence-cluster-topics:
         active:
           topic: active
-          retry-topic: active-retry
           dlq-topic: active-dlq
         standby:
           topic: standby
-          retry-topic: standby-retry
           dlq-topic: standby-dlq
       applications: {}
 - persistence:
     dbname: integration_standby
-  clusterinfo:
+  clustermetadata:
     enableGlobalDomain: true
     failoverVersionIncrement: 10
-    masterClusterName: active
-    currentClusterName: standby
-    clusterInitialFailoverVersion:
-      active: 0
-      standby: 1
-    clusterAddress:
+    masterClusterName: "active"
+    currentClusterName: "standby"
+    clusterInformation:
       active:
-        rpcName: cadence-frontend
-        rpcAddress: 127.0.0.1:7104
+        enabled: true
+        initialFailoverVersion: 0
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:7104"
       standby:
-        rpcName: cadence-frontend
-        rpcAddress: 127.0.0.1:8104
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:8104"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -94,21 +90,15 @@
           cluster: test
         active-dlq:
           cluster: test
-        active-retry:
-          cluster: test
         standby:
           cluster: test
         standby-dlq:
           cluster: test
-        standby-retry:
-          cluster: test
       cadence-cluster-topics:
         active:
           topic: active
-          retry-topic: active-retry
           dlq-topic: active-dlq
         standby:
           topic: standby
-          retry-topic: standby-retry
           dlq-topic: standby-dlq
       applications: {}

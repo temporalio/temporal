@@ -21,7 +21,7 @@
 package mocks
 
 import (
-	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/mock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -45,16 +45,16 @@ func (_m *ClusterMetadata) ClusterNameForFailoverVersion(failoverVersion int64) 
 	return r0
 }
 
-// GetAllClusterFailoverVersions provides a mock function with given fields:
-func (_m *ClusterMetadata) GetAllClusterFailoverVersions() map[string]int64 {
+// GetAllClusterInfo provides a mock function with given fields:
+func (_m *ClusterMetadata) GetAllClusterInfo() map[string]config.ClusterInformation {
 	ret := _m.Called()
 
-	var r0 map[string]int64
-	if rf, ok := ret.Get(0).(func() map[string]int64); ok {
+	var r0 map[string]config.ClusterInformation
+	if rf, ok := ret.Get(0).(func() map[string]config.ClusterInformation); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]int64)
+			r0 = ret.Get(0).(map[string]config.ClusterInformation)
 		}
 	}
 
@@ -154,20 +154,6 @@ func (_m *ClusterMetadata) IsMasterCluster() bool {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// GetAllClientAddress provides a mock function with given fields:
-func (_m *ClusterMetadata) GetAllClientAddress() map[string]config.Address {
-	ret := _m.Called()
-
-	var r0 map[string]config.Address
-	if rf, ok := ret.Get(0).(func() map[string]config.Address); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(map[string]config.Address)
 	}
 
 	return r0

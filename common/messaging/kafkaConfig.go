@@ -78,7 +78,6 @@ func (k *KafkaConfig) Validate(checkCluster bool, checkApp bool) {
 		}
 		for _, topics := range k.ClusterToTopic {
 			validateTopicsFn(topics.Topic)
-			validateTopicsFn(topics.RetryTopic)
 			validateTopicsFn(topics.DLQTopic)
 		}
 	}

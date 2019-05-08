@@ -663,7 +663,7 @@ func (d *domainHandlerImpl) mergeDomainData(old map[string]string, new map[strin
 }
 
 func (d *domainHandlerImpl) validateClusterName(clusterName string) error {
-	if _, ok := d.clusterMetadata.GetAllClusterFailoverVersions()[clusterName]; !ok {
+	if info, ok := d.clusterMetadata.GetAllClusterInfo()[clusterName]; !ok || !info.Enabled {
 		errMsg := "Invalid cluster name: %s"
 		return &shared.BadRequestError{Message: fmt.Sprintf(errMsg, clusterName)}
 	}

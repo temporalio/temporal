@@ -1130,7 +1130,11 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	// initialize the cluster current time to be the same as ack level
 	standbyClusterCurrentTime := make(map[string]time.Time)
 	timerMaxReadLevelMap := make(map[string]time.Time)
-	for clusterName := range shardItem.service.GetClusterMetadata().GetAllClusterFailoverVersions() {
+	for clusterName, info := range shardItem.service.GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
 		if clusterName != shardItem.service.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
 				standbyClusterCurrentTime[clusterName] = currentTime

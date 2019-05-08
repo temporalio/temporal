@@ -137,7 +137,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	historyCache := newHistoryCache(s.mockShard)
 	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
 	h := &historyEngineImpl{

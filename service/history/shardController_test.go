@@ -174,7 +174,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.controller.acquireShards()
 	count := 0
 	for _, shardID := range myShards {
@@ -260,7 +260,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.controller.acquireShards()
 
 	for shardID := 0; shardID < numShards; shardID++ {
@@ -335,7 +335,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.controller.acquireShards()
 
 	for shardID := 0; shardID < numShards; shardID++ {
@@ -364,7 +364,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 		mock.Anything).Return(nil)
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.controller.Start()
 	var workerWG sync.WaitGroup
 	for w := 0; w < 10; w++ {
@@ -457,7 +457,7 @@ func (s *shardControllerSuite) TestRingUpdated() {
 		mock.Anything).Return(nil)
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.controller.Start()
 
 	differentHostInfo := membership.NewHostInfo("another-host", nil)
@@ -537,7 +537,7 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 		mock.Anything).Return(nil)
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestSingleDCAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.controller.Start()
 
 	var workerWG sync.WaitGroup

@@ -22,6 +22,7 @@ package cluster
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -45,12 +46,10 @@ type (
 		GetMasterClusterName() string
 		// GetCurrentClusterName return the current cluster name
 		GetCurrentClusterName() string
-		// GetAllClusterFailoverVersions return the all cluster name -> corresponding initial failover version
-		GetAllClusterFailoverVersions() map[string]int64
+		// GetAllClusterInfo return the all cluster name -> corresponding info
+		GetAllClusterInfo() map[string]config.ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
-		// GetAllClientAddress return the frontend address for each cluster name
-		GetAllClientAddress() map[string]config.Address
 
 		// ArchivalConfig returns the archival config of the cluster
 		ArchivalConfig() *ArchivalConfig
@@ -62,17 +61,17 @@ type (
 		// EnableGlobalDomain whether the global domain is enabled,
 		// this attr should be discarded when cross DC is made public
 		enableGlobalDomain dynamicconfig.BoolPropertyFn
-		// failoverVersionIncrement is the increment of each cluster failover version
+		// failoverVersionIncrement is the increment of each cluster's version when failover happen
 		failoverVersionIncrement int64
 		// masterClusterName is the name of the master cluster, only the master cluster can register / update domain
 		// all clusters can do domain failover
 		masterClusterName string
 		// currentClusterName is the name of the current cluster
 		currentClusterName string
-		// clusterInitialFailoverVersions contains all cluster name -> corresponding initial failover version
-		clusterInitialFailoverVersions map[string]int64
-		// clusterInitialFailoverVersions contains all initial failover version -> corresponding cluster name
-		initialFailoverVersionClusters map[int64]string
+		// clusterInfo contains all cluster name -> corresponding information
+		clusterInfo map[string]config.ClusterInformation
+		// versionToClusterName contains all initial version -> corresponding cluster name
+		versionToClusterName map[int64]string
 		// clusterToAddress contains the cluster name to corresponding frontend client
 		clusterToAddress map[string]config.Address
 
@@ -93,50 +92,49 @@ func NewMetadata(
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
-	clusterInitialFailoverVersions map[string]int64,
-	clusterToAddress map[string]config.Address,
+	clusterInfo map[string]config.ClusterInformation,
 	archivalStatus dynamicconfig.StringPropertyFn,
 	defaultBucket string,
 	enableReadFromArchival dynamicconfig.BoolPropertyFn,
 ) Metadata {
 
-	if len(clusterInitialFailoverVersions) == 0 {
-		panic("Empty initial failover versions for cluster")
+	if len(clusterInfo) == 0 {
+		panic("Empty cluster information")
 	} else if len(masterClusterName) == 0 {
 		panic("Master cluster name is empty")
 	} else if len(currentClusterName) == 0 {
 		panic("Current cluster name is empty")
+	} else if failoverVersionIncrement == 0 {
+		panic("Version increment is 0")
 	}
-	initialFailoverVersionClusters := make(map[int64]string)
-	for clusterName, initialFailoverVersion := range clusterInitialFailoverVersions {
-		if failoverVersionIncrement <= initialFailoverVersion {
+
+	versionToClusterName := make(map[int64]string)
+	for clusterName, info := range clusterInfo {
+		if failoverVersionIncrement <= info.InitialFailoverVersion || info.InitialFailoverVersion < 0 {
 			panic(fmt.Sprintf(
-				"Failover version increment %v is smaller than initial value: %v.",
+				"Version increment %v is smaller than initial version: %v.",
 				failoverVersionIncrement,
-				clusterInitialFailoverVersions,
+				info.InitialFailoverVersion,
 			))
 		}
 		if len(clusterName) == 0 {
 			panic("Cluster name in all cluster names is empty")
 		}
-		initialFailoverVersionClusters[initialFailoverVersion] = clusterName
-	}
+		versionToClusterName[info.InitialFailoverVersion] = clusterName
 
-	if _, ok := clusterInitialFailoverVersions[currentClusterName]; !ok {
-		panic("Current cluster is not specified in all cluster names")
-	}
-	if _, ok := clusterInitialFailoverVersions[masterClusterName]; !ok {
-		panic("Master cluster is not specified in all cluster names")
-	}
-	if len(initialFailoverVersionClusters) != len(clusterInitialFailoverVersions) {
-		panic("Cluster to initial failover versions have duplicate initial versions")
-	}
-
-	// only check whether a cluster in cluster -> initial failover versions exists in cluster -> address
-	for clusterName := range clusterInitialFailoverVersions {
-		if _, ok := clusterToAddress[clusterName]; !ok {
-			panic("Cluster -> initial failover version does not have an address")
+		if info.Enabled && (len(info.RPCName) == 0 || len(info.RPCAddress) == 0) {
+			panic(fmt.Sprintf("Cluster %v: rpc name / address is empty", clusterName))
 		}
+	}
+
+	if _, ok := clusterInfo[currentClusterName]; !ok {
+		panic("Current cluster is not specified in cluster info")
+	}
+	if _, ok := clusterInfo[masterClusterName]; !ok {
+		panic("Master cluster is not specified in cluster info")
+	}
+	if len(versionToClusterName) != len(clusterInfo) {
+		panic("Cluster info initial versions have duplicates")
 	}
 
 	status, err := getArchivalStatus(archivalStatus())
@@ -149,18 +147,17 @@ func NewMetadata(
 	}
 
 	return &metadataImpl{
-		logger:                         logger,
-		metricsClient:                  metricsClient,
-		enableGlobalDomain:             enableGlobalDomain,
-		failoverVersionIncrement:       failoverVersionIncrement,
-		masterClusterName:              masterClusterName,
-		currentClusterName:             currentClusterName,
-		clusterInitialFailoverVersions: clusterInitialFailoverVersions,
-		initialFailoverVersionClusters: initialFailoverVersionClusters,
-		clusterToAddress:               clusterToAddress,
-		archivalStatus:                 archivalStatus,
-		defaultBucket:                  defaultBucket,
-		enableReadFromArchival:         enableReadFromArchival,
+		logger:                   logger,
+		metricsClient:            metricsClient,
+		enableGlobalDomain:       enableGlobalDomain,
+		failoverVersionIncrement: failoverVersionIncrement,
+		masterClusterName:        masterClusterName,
+		currentClusterName:       currentClusterName,
+		clusterInfo:              clusterInfo,
+		versionToClusterName:     versionToClusterName,
+		archivalStatus:           archivalStatus,
+		defaultBucket:            defaultBucket,
+		enableReadFromArchival:   enableReadFromArchival,
 	}
 }
 
@@ -172,15 +169,15 @@ func (metadata *metadataImpl) IsGlobalDomainEnabled() bool {
 
 // GetNextFailoverVersion return the next failover version based on input
 func (metadata *metadataImpl) GetNextFailoverVersion(cluster string, currentFailoverVersion int64) int64 {
-	initialFailoverVersion, ok := metadata.clusterInitialFailoverVersions[cluster]
+	info, ok := metadata.clusterInfo[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
 			"Unknown cluster name: %v with given cluster initial failover version map: %v.",
 			cluster,
-			metadata.clusterInitialFailoverVersions,
+			metadata.clusterInfo,
 		))
 	}
-	failoverVersion := currentFailoverVersion/metadata.failoverVersionIncrement*metadata.failoverVersionIncrement + initialFailoverVersion
+	failoverVersion := currentFailoverVersion/metadata.failoverVersionIncrement*metadata.failoverVersionIncrement + info.InitialFailoverVersion
 	if failoverVersion < currentFailoverVersion {
 		return failoverVersion + metadata.failoverVersionIncrement
 	}
@@ -206,29 +203,24 @@ func (metadata *metadataImpl) GetCurrentClusterName() string {
 	return metadata.currentClusterName
 }
 
-// GetAllClusterFailoverVersions return the all cluster name -> corresponding initial failover version
-func (metadata *metadataImpl) GetAllClusterFailoverVersions() map[string]int64 {
-	return metadata.clusterInitialFailoverVersions
+// GetAllClusterInfo return the all cluster name -> corresponding information
+func (metadata *metadataImpl) GetAllClusterInfo() map[string]config.ClusterInformation {
+	return metadata.clusterInfo
 }
 
 // ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int64) string {
 	initialFailoverVersion := failoverVersion % metadata.failoverVersionIncrement
-	clusterName, ok := metadata.initialFailoverVersionClusters[initialFailoverVersion]
+	clusterName, ok := metadata.versionToClusterName[initialFailoverVersion]
 	if !ok {
 		panic(fmt.Sprintf(
 			"Unknown initial failover version %v with given cluster initial failover version map: %v and failover version increment %v.",
 			initialFailoverVersion,
-			metadata.clusterInitialFailoverVersions,
+			metadata.clusterInfo,
 			metadata.failoverVersionIncrement,
 		))
 	}
 	return clusterName
-}
-
-// GetAllClientAddress return the frontend address for each cluster name
-func (metadata *metadataImpl) GetAllClientAddress() map[string]config.Address {
-	return metadata.clusterToAddress
 }
 
 // ArchivalConfig returns the archival config of the cluster.

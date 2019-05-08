@@ -217,7 +217,7 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{},
 	}
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster).Once()
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
 	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
 		Execution:     execution,

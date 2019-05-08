@@ -58,7 +58,7 @@ type (
 		EnableArchival        bool
 		IsMasterCluster       bool
 		ClusterNo             int
-		ClusterInfo           config.ClustersInfo
+		ClusterMetadata       config.ClusterMetadata
 		MessagingClientConfig *MessagingClientConfig
 		Persistence           persistencetests.TestBaseOptions
 		HistoryConfig         *HistoryConfig
@@ -84,18 +84,21 @@ const defaultTestValueOfESIndexMaxResultWindow = 5
 
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-	clusterInfo := options.ClusterInfo
-	clusterMetadata := cluster.GetTestClusterMetadata(clusterInfo.EnableGlobalDomain, options.IsMasterCluster, options.EnableArchival)
-	if !options.IsMasterCluster && options.ClusterInfo.MasterClusterName != "" { // xdc cluster metadata setup
+
+	clusterMetadata := cluster.GetTestClusterMetadata(
+		options.ClusterMetadata.EnableGlobalDomain,
+		options.IsMasterCluster,
+		options.EnableArchival,
+	)
+	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
 			logger,
 			&metricsmocks.Client{},
-			dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
-			clusterInfo.FailoverVersionIncrement,
-			clusterInfo.MasterClusterName,
-			clusterInfo.CurrentClusterName,
-			clusterInfo.ClusterInitialFailoverVersions,
-			clusterInfo.ClusterAddress,
+			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalDomain),
+			options.ClusterMetadata.FailoverVersionIncrement,
+			options.ClusterMetadata.MasterClusterName,
+			options.ClusterMetadata.CurrentClusterName,
+			options.ClusterMetadata.ClusterInformation,
 			dynamicconfig.GetStringPropertyFn("disabled"),
 			"",
 			dynamicconfig.GetBoolPropertyFn(false),

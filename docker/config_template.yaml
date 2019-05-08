@@ -61,15 +61,15 @@ services:
         hostPort: "${STATSD_ENDPOINT}"
         prefix: "cadence-worker"
 
-clustersInfo:
+clusterMetadata:
   enableGlobalDomain: false
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
-  clusterInitialFailoverVersion:
-    active: 0
-  clusterAddress:
+  clusterInformation:
     active:
+      enabled: true
+      initialFailoverVersion: 0
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:7933"
 

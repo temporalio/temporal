@@ -48,26 +48,32 @@ const (
 var (
 	// TestAllClusterNames is the all cluster names used for test
 	TestAllClusterNames = []string{TestCurrentClusterName, TestAlternativeClusterName}
-	// TestAllClusterFailoverVersions is the same as above, juse convinent for test mocking
-	TestAllClusterFailoverVersions = map[string]int64{
-		TestCurrentClusterName:     TestCurrentClusterInitialFailoverVersion,
-		TestAlternativeClusterName: TestAlternativeClusterInitialFailoverVersion,
-	}
-	// TestAllClusterAddress is the same as above, juse convinent for test mocking
-	TestAllClusterAddress = map[string]config.Address{
-		TestCurrentClusterName:     config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestCurrentClusterFrontendAddress},
-		TestAlternativeClusterName: config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestAlternativeClusterFrontendAddress},
+	// TestAllClusterInfo is the same as above, just convenient for test mocking
+	TestAllClusterInfo = map[string]config.ClusterInformation{
+		TestCurrentClusterName: config.ClusterInformation{
+			Enabled:                true,
+			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
+			RPCName:                common.FrontendServiceName,
+			RPCAddress:             TestCurrentClusterFrontendAddress,
+		},
+		TestAlternativeClusterName: config.ClusterInformation{
+			Enabled:                true,
+			InitialFailoverVersion: TestAlternativeClusterInitialFailoverVersion,
+			RPCName:                common.FrontendServiceName,
+			RPCAddress:             TestAlternativeClusterFrontendAddress,
+		},
 	}
 
 	// TestSingleDCAllClusterNames is the all cluster names used for test
 	TestSingleDCAllClusterNames = []string{TestCurrentClusterName}
-	// TestSingleDCAllClusterFailoverVersions is the same as above, juse convinent for test mocking
-	TestSingleDCAllClusterFailoverVersions = map[string]int64{
-		TestCurrentClusterName: TestCurrentClusterInitialFailoverVersion,
-	}
-	// TestSingleDCAllClusterAddress is the same as above, juse convinent for test mocking
-	TestSingleDCAllClusterAddress = map[string]config.Address{
-		TestCurrentClusterName: config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestCurrentClusterFrontendAddress},
+	// TestSingleDCClusterInfo is the same as above, just convenient for test mocking
+	TestSingleDCClusterInfo = map[string]config.ClusterInformation{
+		TestCurrentClusterName: config.ClusterInformation{
+			Enabled:                true,
+			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
+			RPCName:                common.FrontendServiceName,
+			RPCAddress:             TestCurrentClusterFrontendAddress,
+		},
 	}
 )
 
@@ -92,8 +98,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 			TestFailoverVersionIncrement,
 			masterClusterName,
 			TestCurrentClusterName,
-			TestAllClusterFailoverVersions,
-			TestAllClusterAddress,
+			TestAllClusterInfo,
 			dynamicconfig.GetStringPropertyFn(archivalStatus),
 			clusterDefaultBucket,
 			dynamicconfig.GetBoolPropertyFn(enableArchival),
@@ -107,8 +112,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 		TestFailoverVersionIncrement,
 		TestCurrentClusterName,
 		TestCurrentClusterName,
-		TestSingleDCAllClusterFailoverVersions,
-		TestSingleDCAllClusterAddress,
+		TestSingleDCClusterInfo,
 		dynamicconfig.GetStringPropertyFn(archivalStatus),
 		clusterDefaultBucket,
 		dynamicconfig.GetBoolPropertyFn(enableArchival),

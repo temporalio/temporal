@@ -69,7 +69,11 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
-	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
+	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
 		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
 			historyRereplicator := xdc.NewHistoryRereplicator(
 				currentClusterName,
@@ -151,11 +155,15 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 func (t *timerQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) {
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
-	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
-		ackLevel := t.shard.GetTimerClusterAckLevel(cluster)
+	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
+		ackLevel := t.shard.GetTimerClusterAckLevel(clusterName)
 		if ackLevel.Before(minLevel) {
 			minLevel = ackLevel
-			standbyClusterName = cluster
+			standbyClusterName = clusterName
 		}
 	}
 	// the ack manager is exclusive, so just add a cassandra min precision

@@ -150,12 +150,17 @@ func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
 }
 
 // NewDomainCacheEntryWithReplicationForTest returns an entry with test data
-func NewDomainCacheEntryWithReplicationForTest(info *persistence.DomainInfo, config *persistence.DomainConfig, repConfig *persistence.DomainReplicationConfig, clusterMetadata cluster.Metadata) *DomainCacheEntry {
+func NewDomainCacheEntryWithReplicationForTest(info *persistence.DomainInfo,
+	config *persistence.DomainConfig,
+	repConfig *persistence.DomainReplicationConfig,
+	failoverVersion int64,
+	clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{
 		info:              info,
 		config:            config,
 		isGlobalDomain:    true,
 		replicationConfig: repConfig,
+		failoverVersion:   failoverVersion,
 		clusterMetadata:   clusterMetadata,
 	}
 }

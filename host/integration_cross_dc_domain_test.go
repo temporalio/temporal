@@ -94,7 +94,7 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 			EnableIndexer:    false,
 		},
 		IsMasterCluster: isMasterCluster,
-		ClusterInfo: config.ClustersInfo{
+		ClusterMetadata: config.ClusterMetadata{
 			EnableGlobalDomain: enableGlobalDomain,
 		},
 		HistoryConfig: &HistoryConfig{
@@ -291,7 +291,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainD
 		activeClusterName := ""
 		currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
 		var clusters []*workflow.ClusterReplicationConfiguration
-		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+		for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
 			})
@@ -342,7 +342,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 	emitMetric := true
 	activeClusterName := ""
 	var clusters []*workflow.ClusterReplicationConfiguration
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -374,7 +374,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
 	emitMetric := true
 	activeClusterName := ""
 	var clusters []*workflow.ClusterReplicationConfiguration
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -447,7 +447,7 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 	emitMetric := true
 	activeClusterName := ""
 	var clusters []*workflow.ClusterReplicationConfiguration
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -501,7 +501,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainDis
 		emitMetric := true
 		currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
 		var clusters []*workflow.ClusterReplicationConfiguration
-		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+		for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
 			})
@@ -655,7 +655,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	retention := int32(7)
 	emitMetric := true
 	var clusters []*workflow.ClusterReplicationConfiguration
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -685,7 +685,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 
 	domainName := "some random domain name"
 	var clusters []*workflow.ClusterReplicationConfiguration
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -857,7 +857,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	retention := int32(7)
 	emitMetric := true
 	var clusters []*workflow.ClusterReplicationConfiguration
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -916,7 +916,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		activeClusterName := ""
 		failoverVersion := int64(59)
 		var persistenceClusters []*persistence.ClusterReplicationConfig
-		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+		for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
 			})

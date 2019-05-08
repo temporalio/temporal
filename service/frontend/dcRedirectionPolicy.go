@@ -70,8 +70,7 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata,
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicyForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		clusterAddress := clusterMetadata.GetAllClientAddress()
-		if _, ok := clusterAddress[policy.ToDC]; !ok {
+		if _, ok := clusterMetadata.GetAllClusterInfo()[policy.ToDC]; !ok {
 			panic(fmt.Sprintf("Incorrect to DC: %v", policy.ToDC))
 		}
 		return NewForwardingDCRedirectionPolicy(

@@ -65,19 +65,20 @@ services:
     pprof:
       port: 7941
 
-clustersInfo:
+clusterMetadata:
   enableGlobalDomain: true
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
-  clusterInitialFailoverVersion:
-    active: 1
-    standby: 0
-  clusterAddress:
+  clusterInformation:
     active:
+      enabled: true
+      initialFailoverVersion: 1
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:7933"
     standby:
+      enabled: true
+      initialFailoverVersion: 0
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:8933"
 
@@ -93,24 +94,18 @@ kafka:
   topics:
     active:
       cluster: test
-    active-retry:
-      cluster: test
     active-dlq:
       cluster: test
     standby:
-      cluster: test
-    standby-retry:
       cluster: test
     standby-dlq:
       cluster: test
   cadence-cluster-topics:
     active:
       topic: active
-      retry-topic: active-retry
       dlq-topic: active-dlq
     standby:
       topic: standby
-      retry-topic: standby-retry
       dlq-topic: standby-dlq
 
 archival:

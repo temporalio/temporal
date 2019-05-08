@@ -100,7 +100,11 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 	// initialize the cluster current time to be the same as ack level
 	standbyClusterCurrentTime := make(map[string]time.Time)
 	timerMaxReadLevelMap := make(map[string]time.Time)
-	for clusterName := range clusterMetadata.GetAllClusterFailoverVersions() {
+	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
 		if clusterName != clusterMetadata.GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
 				standbyClusterCurrentTime[clusterName] = currentTime

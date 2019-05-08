@@ -276,12 +276,10 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		}
 
 		completionEvent, ok := msBuilder.GetCompletionEvent()
-		var wfCloseTime int64
 		if !ok {
 			return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
-		} else {
-			wfCloseTime = completionEvent.GetTimestamp()
 		}
+		wfCloseTime := completionEvent.GetTimestamp()
 
 		executionInfo := msBuilder.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName

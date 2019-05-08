@@ -72,7 +72,11 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	taskAllocator := newTaskAllocator(shard)
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
-	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
+	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
 		if clusterName != currentClusterName {
 			historyRereplicator := xdc.NewHistoryRereplicator(
 				currentClusterName,
@@ -162,11 +166,14 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, transferT
 func (t *transferQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) {
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
-	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
-		ackLevel := t.shard.GetTransferClusterAckLevel(cluster)
+	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+		ackLevel := t.shard.GetTransferClusterAckLevel(clusterName)
 		if ackLevel < minLevel {
 			minLevel = ackLevel
-			standbyClusterName = cluster
+			standbyClusterName = clusterName
 		}
 	}
 
