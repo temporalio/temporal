@@ -23,6 +23,7 @@ package frontend
 import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
@@ -185,7 +186,8 @@ func (s *Service) Start() {
 		kafkaProducer = &mocks.KafkaProducer{}
 	}
 
-	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, params.BlobstoreClient)
+	metricsBlobstore := blobstore.NewMetricClient(params.BlobstoreClient, base.GetMetricsClient())
+	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, metricsBlobstore)
 	wfHandler.Start()
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	base.GetDispatcher().Register(workflowserviceserver.New(dcRedirectionHandler))
