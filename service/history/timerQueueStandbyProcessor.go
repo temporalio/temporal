@@ -528,8 +528,8 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(timerTask *persi
 	)
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
-			tag.WorkflowID(timerTask.RunID),
-			tag.WorkflowRunID(timerTask.WorkflowID),
+			tag.WorkflowID(timerTask.WorkflowID),
+			tag.WorkflowRunID(timerTask.RunID),
 			tag.WorkflowDomainID(timerTask.DomainID),
 			tag.ShardID(t.shard.GetShardID()),
 			tag.WorkflowNextEventID(nextEventID),

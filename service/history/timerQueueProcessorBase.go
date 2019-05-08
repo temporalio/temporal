@@ -539,8 +539,8 @@ func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, s
 
 func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo) log.Logger {
 	logger := t.logger.WithTags(
-		tag.WorkflowID(task.RunID),
-		tag.WorkflowRunID(task.WorkflowID),
+		tag.WorkflowID(task.WorkflowID),
+		tag.WorkflowRunID(task.RunID),
 		tag.WorkflowDomainID(task.DomainID),
 		tag.ShardID(t.shard.GetShardID()),
 		tag.TaskID(task.GetTaskID()),
@@ -645,8 +645,8 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 	// send signal before deleting mutable state to make sure archival is idempotent
 	if err := t.historyService.archivalClient.Archive(req); err != nil {
 		t.logger.Error("failed to initiate archival", tag.Error(err),
-			tag.WorkflowID(task.RunID),
-			tag.WorkflowRunID(task.WorkflowID),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
 			tag.WorkflowDomainID(task.DomainID),
 			tag.ShardID(t.shard.GetShardID()),
 			tag.TaskID(task.GetTaskID()),
@@ -695,8 +695,8 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op := func() error {
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			logger := t.logger.WithTags(tag.WorkflowID(task.RunID),
-				tag.WorkflowRunID(task.WorkflowID),
+			logger := t.logger.WithTags(tag.WorkflowID(task.WorkflowID),
+				tag.WorkflowRunID(task.RunID),
 				tag.WorkflowDomainID(task.DomainID),
 				tag.ShardID(t.shard.GetShardID()),
 				tag.TaskID(task.GetTaskID()),

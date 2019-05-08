@@ -105,9 +105,9 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 
 	p.logger.Info("Request for open workflow is sampled",
 		tag.WorkflowDomainID(domain),
-		tag.WorkflowType(request.Execution.GetWorkflowId()),
-		tag.WorkflowID(request.Execution.GetRunId()),
-		tag.WorkflowRunID(request.WorkflowTypeName),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
 	)
 	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter)
 	return nil
@@ -124,9 +124,9 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 
 	p.logger.Info("Request for closed workflow is sampled",
 		tag.WorkflowDomainID(domain),
-		tag.WorkflowType(request.Execution.GetWorkflowId()),
-		tag.WorkflowID(request.Execution.GetRunId()),
-		tag.WorkflowRunID(request.WorkflowTypeName),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
 	)
 	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter)
 	return nil

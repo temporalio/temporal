@@ -103,9 +103,9 @@ func newWorkflowExecutionContext(
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
 	lg := logger.WithTags(
-		tag.WorkflowID(domainID),
-		tag.WorkflowRunID(execution.GetWorkflowId()),
-		tag.WorkflowDomainID(execution.GetRunId()))
+		tag.WorkflowID(execution.GetWorkflowId()),
+		tag.WorkflowRunID(execution.GetRunId()),
+		tag.WorkflowDomainID(domainID))
 
 	return &workflowExecutionContextImpl{
 		domainID:          domainID,
