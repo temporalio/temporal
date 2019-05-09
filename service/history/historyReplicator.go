@@ -652,13 +652,8 @@ func (r *historyReplicator) ApplyReplicationTask(ctx ctx.Context, context workfl
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.GetSourceCluster(), request.History, sBuilder,
 			logger)
 	default:
-		// Generate a transaction ID for appending events to history
-		transactionID, err2 := r.shard.GetNextTransferTaskID()
-		if err2 != nil {
-			return err2
-		}
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), transactionID, now)
+		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now)
 	}
 
 	if err == nil {

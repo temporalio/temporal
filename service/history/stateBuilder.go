@@ -62,6 +62,8 @@ type (
 )
 
 const (
+	// ErrMessageHistorySizeZero indicate that history is empty
+	ErrMessageHistorySizeZero = "encounter history size being zero"
 	// ErrMessageNewRunHistorySizeZero indicate that new run history is empty
 	ErrMessageNewRunHistorySizeZero = "encounter new run history size being zero"
 )
@@ -102,20 +104,23 @@ func (b *stateBuilderImpl) getNewRunTimerTasks() []persistence.Task {
 func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution shared.WorkflowExecution,
 	history []*shared.HistoryEvent, newRunHistory []*shared.HistoryEvent, eventStoreVersion, newRunEventStoreVersion int32) (*shared.HistoryEvent,
 	*decisionInfo, mutableState, error) {
-	var lastEvent *shared.HistoryEvent
+
+	if len(history) == 0 {
+		return nil, nil, nil, errors.NewInternalFailureError(ErrMessageHistorySizeZero)
+	}
+	firstEvent := history[0]
+	lastEvent := history[len(history)-1]
 	var lastDecision *decisionInfo
 	var newRunMutableStateBuilder mutableState
-	var firstEvent *shared.HistoryEvent
-	if len(history) > 0 {
-		firstEvent = history[0]
-	}
 
 	// need to clear the stickiness since workflow turned to passive
 	b.msBuilder.ClearStickyness()
+
 	for _, event := range history {
-		lastEvent = event
 		// NOTE: stateBuilder is also being used in the active side
 		if b.msBuilder.GetReplicationState() != nil {
+			// this function must be called within the for loop, in case
+			// history event version changed during for loop
 			b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
 			sourceClusterName := b.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
 			b.msBuilder.UpdateReplicationStateLastEventID(sourceClusterName, lastEvent.GetVersion(), lastEvent.GetEventId())
@@ -463,6 +468,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 		}
 	}
+
+	b.msBuilder.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
+	b.msBuilder.GetExecutionInfo().SetNextEventID(lastEvent.GetEventId() + 1)
 
 	return lastEvent, lastDecision, newRunMutableStateBuilder, nil
 }

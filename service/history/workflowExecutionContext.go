@@ -60,7 +60,7 @@ type (
 		getLogger() log.Logger
 		loadWorkflowExecution() (mutableState, error)
 		lock(context.Context) error
-		replicateWorkflowExecution(request *h.ReplicateEventsRequest, transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID, transactionID int64, now time.Time) error
+		replicateWorkflowExecution(request *h.ReplicateEventsRequest, transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID int64, now time.Time) error
 		resetMutableState(prevRunID string, resetBuilder mutableState) (mutableState, error)
 		resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task, newMutableState mutableState, transferTasks, timerTasks, currReplicationTasks, insertReplicationTasks []persistence.Task, baseRunID string, forkRunNextEventID, prevRunVersion int64) (retError error)
 		scheduleNewDecision(transferTasks []persistence.Task, timerTasks []persistence.Task) ([]persistence.Task, []persistence.Task, error)
@@ -406,7 +406,13 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewRunAndConte
 }
 
 func (c *workflowExecutionContextImpl) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
-	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID, transactionID int64, now time.Time) error {
+	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID int64, now time.Time) error {
+
+	transactionID, err := c.shard.GetNextTransferTaskID()
+	if err != nil {
+		return err
+	}
+
 	nextEventID := lastEventID + 1
 	c.msBuilder.GetExecutionInfo().SetNextEventID(nextEventID)
 
