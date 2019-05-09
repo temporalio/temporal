@@ -158,6 +158,16 @@ There are a lot of use cases:
 - Rerun a failed workflow from the failing point without losing the achieved progress(history).
 - After deploying new code, reset an open workflow to let the workflow run to different flows.
 
+You can reset to some predefined event types:
+```
+./cadence workflow reset -w <wid> -r <rid> --reset_type <reset_type> --reason "some_reason"
+```
+
+- FirstDecisionCompleted: reset to the beginning of the history.
+- LastDecisionCompleted: reset to the end of the history.
+- LastContinuedAsNew: reset to the end of the history for the previous run.
+
+If you are familiar with the Cadence history event, You can also reset to any decision finish event by using:
 ```
 ./cadence workflow reset -w <wid> -r <rid> --event_id <decision_finish_event_id> --reason "some_reason"
 ```
@@ -165,3 +175,8 @@ Some things to note:
 - When reset, a new run will be kicked off with the same workflowID. But if there is a running execution for the workflow(workflowID), the current run will be terminated.
 - decision_finish_event_id is the ID of events of the type: DecisionTaskComplete/DecisionTaskFailed/DecisionTaskTimeout.
 - To restart a workflow from the beginning, reset to the first decision task finish event.
+
+To reset multiple workflows, you can use batch reset command:
+```
+./cadence workflow reset-batch --input_file <file_of_workflows_to_reset> --reset_type <reset_type> --reason "some_reason"
+```
