@@ -246,7 +246,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 	// although there will be an task syncing activity from remote, the task is not an event,
 	// and cannot attempt to recreate a new activity timer task.
 	//
-	// the overall solution is to attampt to generate a new activity timer task whenever the
+	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
 
 	var nextEventID *int64
@@ -357,7 +357,7 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 		// standby cluster should just call ack manager to retry this task
 		// since we are stilling waiting for the decision timeout event / decision completion to be replicated
 		//
-		// we do not need to notity new timer to base, since if there is no new event being replicated
+		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
 
 		if t.discardTask(timerTask) {
