@@ -100,3 +100,6 @@ archival:
       - name: "custom-bucket-2"
         owner: "custom-owner-2"
         retentionDays: 5
+
+publicClient:
+  hostPort: ${BIND_ON_IP}:7933

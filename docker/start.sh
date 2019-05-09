@@ -51,10 +51,14 @@ setup_cassandra_schema() {
 }
 
 setup_mysql_schema() {
-    mysql -h $MYSQL_SEEDS -u$MYSQL_USER -p$MYSQL_PWD < $CADENCE_HOME/schema/mysql/v57/cadence/database.sql
-    mysql -h $MYSQL_SEEDS -u$MYSQL_USER -p$MYSQL_PWD $DBNAME < $CADENCE_HOME/schema/mysql/v57/cadence/schema.sql
-    mysql -h $MYSQL_SEEDS -u$MYSQL_USER -p$MYSQL_PWD < $CADENCE_HOME/schema/mysql/v57/visibility/database.sql
-    mysql -h $MYSQL_SEEDS -u$MYSQL_USER -p$MYSQL_PWD $VISIBILITY_DBNAME < $CADENCE_HOME/schema/mysql/v57/visibility/schema.sql
+    SCHEMA_DIR=$CADENCE_HOME/schema/mysql/v57/cadence/versioned
+    $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $DBNAME
+    $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME setup-schema -v 0.0
+    $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/mysql/v57/visibility/versioned
+    $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $VISIBILITY_DBNAME
+    $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_schema() {

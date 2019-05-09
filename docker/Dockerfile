@@ -60,6 +60,7 @@ COPY ./config_template_mysql.yaml $CADENCE_HOME/config/docker_template_mysql.yam
 RUN chmod a+x $CADENCE_HOME/start.sh
 
 COPY --from=builder /go/src/github.com/uber/cadence/cadence-cassandra-tool /cadence
+COPY --from=builder /go/src/github.com/uber/cadence/cadence-sql-tool /cadence
 COPY --from=builder /go/src/github.com/uber/cadence/cadence /cadence
 COPY --from=builder /go/src/github.com/uber/cadence/cadence-server /cadence
 COPY --from=builder /go/src/github.com/uber/cadence/schema/ /cadence/schema/
