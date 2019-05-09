@@ -153,7 +153,6 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionCanceled {
@@ -337,7 +336,6 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if *lastEvent.EventType != workflow.EventTypeExternalWorkflowExecutionCancelRequested {
@@ -374,7 +372,6 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionCanceled {
@@ -507,7 +504,6 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if *lastEvent.EventType != workflow.EventTypeRequestCancelExternalWorkflowExecutionFailed {

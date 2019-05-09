@@ -1674,7 +1674,6 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	})
 	s.Nil(err)
 	history := historyResponse.History
-	common.PrettyPrintHistory(history, s.logger)
 
 	activityRetryFound := false
 	for _, event := range history.Events {

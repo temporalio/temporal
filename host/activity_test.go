@@ -494,10 +494,6 @@ func (s *integrationSuite) TestActivityRetry() {
 		}
 	}
 
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(id),
-		RunId:      common.StringPtr(we.GetRunId()),
-	})
 	s.True(workflowComplete)
 	s.True(activityExecutedCount == 2)
 }
@@ -836,10 +832,6 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		}
 	}
 
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(id),
-		RunId:      common.StringPtr(we.GetRunId()),
-	})
 	s.True(workflowComplete)
 }
 
@@ -1024,10 +1016,6 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		}
 	}
 
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(id),
-		RunId:      common.StringPtr(we.GetRunId()),
-	})
 	s.True(workflowComplete)
 	s.False(failWorkflow, failReason)
 	s.Equal(activityCount, activitiesTimedout)
@@ -1286,9 +1274,4 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	requestCancellation = false
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
-
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(id),
-		RunId:      common.StringPtr(we.GetRunId()),
-	})
 }

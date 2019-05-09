@@ -226,8 +226,6 @@ func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
 
 	history := &workflow.History{}
 	history.Events = historyEvents
-
-	common.PrettyPrintHistory(history, s.logger)
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeKey() {

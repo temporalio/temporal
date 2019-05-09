@@ -215,7 +215,6 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTimedOut {
@@ -479,12 +478,4 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
 
 	s.Logger.Info("Parent Workflow Execution History: ")
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(parentID),
-		RunId:      common.StringPtr(*we.RunId),
-	})
-
-	s.Logger.Info("Child Workflow Execution History: ")
-	s.printWorkflowHistory(s.domainName,
-		startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution)
 }

@@ -22,6 +22,7 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -256,9 +257,9 @@ func PrettyPrintHistory(history *workflow.History, logger log.Logger) {
 		logger.Error("Error serializing history: %v\n", tag.Error(err))
 	}
 
-	logger.Info("******************************************")
-	logger.Info("History", tag.DetailInfo(string(data)))
-	logger.Info("******************************************")
+	fmt.Println("******************************************")
+	fmt.Println("History", tag.DetailInfo(string(data)))
+	fmt.Println("******************************************")
 }
 
 // IsValidContext checks that the thrift context is not expired on cancelled.

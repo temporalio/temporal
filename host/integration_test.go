@@ -226,7 +226,6 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTerminated {
@@ -1175,8 +1174,6 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
-	s.printWorkflowHistory(s.domainName, workflowExecution)
-
 	s.True(workflowComplete)
 	s.Equal(101, signalCount) // check that all 101 signals are received.
 }
@@ -1736,14 +1733,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
 
 	s.Logger.Info("Parent Workflow Execution History: ")
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(parentID),
-		RunId:      common.StringPtr(*we.RunId),
-	})
-
-	s.Logger.Info("Child Workflow Execution History: ")
-	s.printWorkflowHistory(s.domainName,
-		startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution)
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
@@ -1997,7 +1986,6 @@ GetHistoryLoop:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTimedOut {
@@ -2214,8 +2202,6 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Nil(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
-
-	s.printWorkflowHistory(s.domainName, workflowExecution)
 
 	events := s.getHistory(s.domainName, workflowExecution)
 	var lastEvent *workflow.HistoryEvent
@@ -2455,12 +2441,6 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 
-	// Print history after dropping decision
-	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(id),
-		RunId:      common.StringPtr(we.GetRunId()),
-	})
-
 	// Now process signal and complete workflow execution
 	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
@@ -2649,7 +2629,6 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	}
 	// verify relay decision task timeout
 	s.True(decisionTaskTimeout)
-	s.printWorkflowHistory(s.domainName, workflowExecution)
 
 	// Now complete workflow
 	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
@@ -2771,8 +2750,6 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 0)
 	s.Logger.Info("pollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
-
-	s.printWorkflowHistory(s.domainName, workflowExecution)
 
 	s.True(workflowComplete)
 	s.Equal(102, signalCount)
@@ -2950,7 +2927,6 @@ WaitForStickyTimeoutLoop:
 	}
 	s.True(workflowComplete, "Workflow not complete")
 	s.Equal(2, failedDecisions, "Mismatched failed decision count")
-	s.printWorkflowHistory(s.domainName, workflowExecution)
 }
 
 func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
@@ -3119,7 +3095,6 @@ WaitForStickyTimeoutLoop:
 	}
 	s.True(workflowComplete, "Workflow not complete")
 	s.Equal(2, failedDecisions, "Mismatched failed decision count")
-	s.printWorkflowHistory(s.domainName, workflowExecution)
 }
 
 func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
@@ -3269,8 +3244,6 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	s.Equal(scheduleEvent.GetEventId(), completedEvent.ActivityTaskCompletedEventAttributes.GetScheduledEventId())
 	s.Equal(startedEvent.GetEventId(), completedEvent.ActivityTaskCompletedEventAttributes.GetStartedEventId())
 	s.True(workflowComplete)
-
-	s.printWorkflowHistory(s.domainName, workflowExecution)
 }
 
 type startFunc func() (*workflow.StartWorkflowExecutionResponse, error)

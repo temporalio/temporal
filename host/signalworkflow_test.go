@@ -553,7 +553,7 @@ CheckHistoryLoopForSignalSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
+		//common.PrettyPrintHistory(history, s.Logger)
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
 		if *signalRequestedEvent.EventType != workflow.EventTypeExternalWorkflowExecutionSignaled {
@@ -771,7 +771,6 @@ CheckHistoryLoopForSignalSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
 		if *signalRequestedEvent.EventType != workflow.EventTypeExternalWorkflowExecutionSignaled {
@@ -911,7 +910,6 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
 		if *signalFailedEvent.EventType != workflow.EventTypeSignalExternalWorkflowExecutionFailed {
@@ -1039,7 +1037,6 @@ CheckHistoryLoopForCancelSent:
 		})
 		s.Nil(err)
 		history := historyResponse.History
-		common.PrettyPrintHistory(history, s.Logger)
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
 		if *signalFailedEvent.EventType != workflow.EventTypeSignalExternalWorkflowExecutionFailed {
