@@ -172,8 +172,10 @@ var keys = map[Key]string{
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
 	WorkerReplicatorTaskConcurrency:                 "worker.replicatorTaskConcurrency",
 	WorkerReplicatorMessageConcurrency:              "worker.replicatorMessageConcurrency",
+	WorkerReplicatorActivityBufferRetryCount:        "worker.replicatorActivityBufferRetryCount",
 	WorkerReplicatorHistoryBufferRetryCount:         "worker.replicatorHistoryBufferRetryCount",
-	WorkerReplicationTaskMaxRetry:                   "worker.replicationTaskMaxRetry",
+	WorkerReplicationTaskMaxRetryCount:              "worker.replicationTaskMaxRetryCount",
+	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -450,10 +452,14 @@ const (
 	WorkerReplicatorTaskConcurrency
 	// WorkerReplicatorMessageConcurrency is the max concurrent tasks provided by messaging client
 	WorkerReplicatorMessageConcurrency
+	// WorkerReplicatorActivityBufferRetryCount is the retry attempt when encounter retry error on activity
+	WorkerReplicatorActivityBufferRetryCount
 	// WorkerReplicatorHistoryBufferRetryCount is the retry attempt when encounter retry error on history
 	WorkerReplicatorHistoryBufferRetryCount
-	// WorkerReplicationTaskMaxRetry is the max retry for any task
-	WorkerReplicationTaskMaxRetry
+	// WorkerReplicationTaskMaxRetryCount is the max retry count for any task
+	WorkerReplicationTaskMaxRetryCount
+	// WorkerReplicationTaskMaxRetryDuration is the max retry duration for any task
+	WorkerReplicationTaskMaxRetryDuration
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor

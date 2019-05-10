@@ -437,6 +437,9 @@ const (
 	// ElasticsearchCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to persistence layer
 	ElasticsearchCountWorkflowExecutionsScope
 
+	// SequentialTaskProcessingScope is used by sequential task processing logic
+	SequentialTaskProcessingScope
+
 	NumCommonScopes
 )
 
@@ -939,6 +942,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
 		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		ElasticsearchCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
+		SequentialTaskProcessingScope:                              {operation: "SequentialTaskProcessing"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1160,6 +1164,14 @@ const (
 	ElasticsearchLatency
 	ElasticsearchErrBadRequestCounter
 	ElasticsearchErrBusyCounter
+
+	SequentialTaskSubmitRequest
+	SequentialTaskSubmitRequestTaskQueueExist
+	SequentialTaskSubmitRequestTaskQueueMissing
+	SequentialTaskSubmitLatency
+	SequentialTaskQueueSize
+	SequentialTaskQueueProcessingLatency
+	SequentialTaskTaskProcessingLatency
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1400,6 +1412,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchLatency:                                {metricName: "elasticsearch_latency", metricType: Timer},
 		ElasticsearchErrBadRequestCounter:                   {metricName: "elasticsearch_errors_bad_request", metricType: Counter},
 		ElasticsearchErrBusyCounter:                         {metricName: "elasticsearch_errors_busy", metricType: Counter},
+		SequentialTaskSubmitRequest:                         {metricName: "sequentialtask_submit_request", metricType: Counter},
+		SequentialTaskSubmitRequestTaskQueueExist:           {metricName: "sequentialtask_submit_request_taskqueue_exist", metricType: Counter},
+		SequentialTaskSubmitRequestTaskQueueMissing:         {metricName: "sequentialtask_submit_request_taskqueue_missing", metricType: Counter},
+		SequentialTaskSubmitLatency:                         {metricName: "sequentialtask_submit_latency", metricType: Timer},
+		SequentialTaskQueueSize:                             {metricName: "sequentialtask_queue_size", metricType: Timer},
+		SequentialTaskQueueProcessingLatency:                {metricName: "sequentialtask_queue_processing_latency", metricType: Timer},
+		SequentialTaskTaskProcessingLatency:                 {metricName: "sequentialtask_task_processing_latency", metricType: Timer},
 	},
 	Frontend: {},
 	History: {

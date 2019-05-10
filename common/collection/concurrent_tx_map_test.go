@@ -49,28 +49,28 @@ func (s *ConcurrentTxMapSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
-func (s *ConcurrentTxMapSuite) TestSize() {
+func (s *ConcurrentTxMapSuite) TestLen() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 
 	key1 := "0001"
 	testMap.Put(key1, boolType(true))
-	s.Equal(1, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.Put(key1, boolType(false))
-	s.Equal(1, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
 
 	key2 := "0002"
 	testMap.Put(key2, boolType(false))
-	s.Equal(2, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(2, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.PutIfNotExist(key2, boolType(false))
-	s.Equal(2, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(2, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.Remove(key2)
-	s.Equal(1, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.Remove(key2)
-	s.Equal(1, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
 }
 
 func (s *ConcurrentTxMapSuite) TestGetAndDo() {
@@ -149,7 +149,7 @@ func (s *ConcurrentTxMapSuite) TestRemoveIf() {
 		}
 		return false
 	})
-	s.Equal(1, testMap.Size(), "TestRemoveIf should only entry if condition is met")
+	s.Equal(1, testMap.Len(), "TestRemoveIf should only entry if condition is met")
 	s.False(removed, "TestRemoveIf should return false if key is not deleted")
 
 	removed = testMap.RemoveIf(key, func(key interface{}, value interface{}) bool {
@@ -159,7 +159,7 @@ func (s *ConcurrentTxMapSuite) TestRemoveIf() {
 		}
 		return false
 	})
-	s.Equal(0, testMap.Size(), "TestRemoveIf should only entry if condition is met")
+	s.Equal(0, testMap.Len(), "TestRemoveIf should only entry if condition is met")
 	s.True(removed, "TestRemoveIf should return true if key is deleted")
 }
 
@@ -181,7 +181,7 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 		s.True(bool(boolValue), "Wrong value returned from map")
 	}
 
-	s.Equal(len(countMap), testMap.Size(), "Size() returned wrong value")
+	s.Equal(len(countMap), testMap.Len(), "Size() returned wrong value")
 
 	it := testMap.Iter()
 	for entry := range it.Entries() {
@@ -197,7 +197,7 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 		testMap.Remove(k)
 	}
 
-	s.Equal(0, testMap.Size(), "Map returned non-zero size after deleting all entries")
+	s.Equal(0, testMap.Len(), "Map returned non-zero size after deleting all entries")
 }
 
 func (s *ConcurrentTxMapSuite) TestPutIfNotExist() {
@@ -244,7 +244,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 	startWG.Done()
 	doneWG.Wait()
 
-	s.Equal(nKeys, testMap.Size(), "Wrong concurrent map size")
+	s.Equal(nKeys, testMap.Len(), "Wrong concurrent map size")
 
 	var gotTotal int32
 	for i := 0; i < nKeys; i++ {

@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/clock"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -60,6 +62,7 @@ type (
 		historyRereplicator     xdc.HistoryRereplicator
 		historyClient           history.Client
 		msgEncoder              codec.BinaryEncoder
+		timeSource              clock.TimeSource
 		sequentialTaskProcessor task.SequentialTaskProcessor
 	}
 )
@@ -98,6 +101,7 @@ func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string,
 		historyRereplicator:     historyRereplicator,
 		historyClient:           retryableHistoryClient,
 		msgEncoder:              codec.NewThriftRWEncoder(),
+		timeSource:              clock.NewRealTimeSource(),
 		sequentialTaskProcessor: sequentialTaskProcessor,
 	}
 }
@@ -270,30 +274,37 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	return &replicationTask, nil
 }
 
-func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
+func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	logger.Debug("Received domain replication task")
+	defer func() {
+		if retError == nil {
+			p.ackMsg(msg, logger)
+		}
+	}()
+
 	err := p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 	if err != nil {
 		return err
 	}
-	p.ackMsg(msg, logger)
 	return nil
 }
 
-func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
+func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	attr := task.SyncShardStatusTaskAttributes
-	logger.Debug("Received sync shard task.")
+	defer func() {
+		if retError == nil {
+			p.ackMsg(msg, logger)
+		}
+	}()
 
+	attr := task.SyncShardStatusTaskAttributes
 	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
-		p.ackMsg(msg, logger)
 		return nil
 	}
 
@@ -304,29 +315,24 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
-	err := p.historyClient.SyncShardStatus(ctx, req)
-	if err != nil {
-		return err
-	}
-	p.ackMsg(msg, logger)
-	return nil
+	return p.historyClient.SyncShardStatus(ctx, req)
 }
 
 func (p *replicationTaskProcessor) handleActivityTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	activityReplicationTask := newActivityReplicationTask(task, msg, logger,
-		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
+		p.config, p.timeSource, p.historyClient, p.metricsClient, p.historyRereplicator)
 	return p.sequentialTaskProcessor.Submit(activityReplicationTask)
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	historyReplicationTask := newHistoryReplicationTask(task, msg, p.sourceCluster, logger,
-		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
+		p.config, p.timeSource, p.historyClient, p.metricsClient, p.historyRereplicator)
 	return p.sequentialTaskProcessor.Submit(historyReplicationTask)
 }
 
 func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
 	historyMetadataReplicationTask := newHistoryMetadataReplicationTask(task, msg, p.sourceCluster, logger,
-		p.config, p.historyClient, p.metricsClient, p.historyRereplicator)
+		p.config, p.timeSource, p.historyClient, p.metricsClient, p.historyRereplicator)
 	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)
 }
 

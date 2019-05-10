@@ -25,16 +25,15 @@ import (
 )
 
 type (
-	// SequentialTaskProcessor is the generic goroutines interface
+	// SequentialTaskProcessor is the generic coroutine pool interface
 	// which process sequential task
-	// for the definition of sequential task, see SequentialTask
 	SequentialTaskProcessor interface {
 		common.Daemon
 		Submit(task SequentialTask) error
 	}
 
-	// Task is the generic task representation
-	Task interface {
+	// SequentialTask is the interface for tasks which should be executed sequentially
+	SequentialTask interface {
 		// Execute process this task
 		Execute() error
 		// HandleErr handle the error returned by Execute
@@ -47,19 +46,22 @@ type (
 		Nack()
 	}
 
-	// SequentialTaskPartitionID is the interface representing the ID of SequentialTask
-	SequentialTaskPartitionID interface {
-		PartitionID() interface{} // MUST be go primitive type or struct with primitive types
-		HashCode() uint32
-	}
+	// SequentialTaskQueueFactory is the function which generate a new SequentialTaskQueue
+	// for a give SequentialTask
+	SequentialTaskQueueFactory func(task SequentialTask) SequentialTaskQueue
 
-	// SequentialTask is the interface for tasks which should be executed sequentially
-	// one common example is the workflow replication task (containing workflow history),
-	// which must be executed one by one, in the order of the first event ID)
-	SequentialTask interface {
-		Task
-		SequentialTaskPartitionID
-		// TaskID return the ID of the task, this task ID is used for sorting
-		TaskID() int64
+	// SequentialTaskQueue is the generic task queue interface which group
+	// sequential tasks to be executed one by one
+	SequentialTaskQueue interface {
+		// QueueID return the ID of the queue, as well as the tasks inside (same)
+		QueueID() interface{}
+		// Offer push an task to the task set
+		Add(task SequentialTask)
+		// Poll pop an task from the task set
+		Remove() SequentialTask
+		// IsEmpty indicate if the task set is empty
+		IsEmpty() bool
+		// Len return the size of the queue
+		Len() int
 	}
 )

@@ -60,12 +60,14 @@ type (
 
 	// Config contains all the replication config for worker
 	Config struct {
-		PersistenceMaxQPS                 dynamicconfig.IntPropertyFn
-		ReplicatorMetaTaskConcurrency     dynamicconfig.IntPropertyFn
-		ReplicatorTaskConcurrency         dynamicconfig.IntPropertyFn
-		ReplicatorMessageConcurrency      dynamicconfig.IntPropertyFn
-		ReplicatorHistoryBufferRetryCount dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetry           dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                  dynamicconfig.IntPropertyFn
+		ReplicatorMetaTaskConcurrency      dynamicconfig.IntPropertyFn
+		ReplicatorTaskConcurrency          dynamicconfig.IntPropertyFn
+		ReplicatorMessageConcurrency       dynamicconfig.IntPropertyFn
+		ReplicatorActivityBufferRetryCount dynamicconfig.IntPropertyFn
+		ReplicatorHistoryBufferRetryCount  dynamicconfig.IntPropertyFn
+		ReplicationTaskMaxRetryCount       dynamicconfig.IntPropertyFn
+		ReplicationTaskMaxRetryDuration    dynamicconfig.DurationPropertyFn
 	}
 )
 
@@ -131,7 +133,9 @@ func (r *Replicator) Start() error {
 				historyRereplicator, r.historyClient,
 				task.NewSequentialTaskProcessor(
 					r.config.ReplicatorTaskConcurrency(),
-					r.config.ReplicatorMessageConcurrency(),
+					replicationSequentialTaskQueueHashFn,
+					newReplicationSequentialTaskQueue,
+					r.metricsClient,
 					logger,
 				),
 			))
