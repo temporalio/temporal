@@ -622,14 +622,22 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		historyCount := int(c.msBuilder.GetNextEventID()) - 1
 		historySize := int(c.msBuilder.GetHistorySize()) + newHistorySize
 
+		// All execution stats are emitted under emitWorkflowExecutionStats which is only invoked when the mutableState
+		// is loaded.  Looks like MutableStateStats are returned by persistence layer when mutableState is loaded from DB.
+		// It is much better to emit the entire execution stats on each update.  So for now we are explicitly emitting
+		// historySize and historyCount metric for execution on each update explicitly.
 		// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 		// domains along with the individual domains stats
-		c.metricsClient.RecordTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.HistorySize, time.Duration(historySize))
-		c.metricsClient.RecordTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.HistoryCount, time.Duration(historyCount))
+		allDomainSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainAllTag())
+		allDomainCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainAllTag())
+		allDomainSizeScope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
+		allDomainCountScope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
 		if entry, err := c.shard.GetDomainCache().GetDomainByID(executionInfo.DomainID); err == nil && entry != nil && entry.GetInfo() != nil {
-			scope := c.metricsClient.Scope(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.DomainTag(entry.GetInfo().Name))
-			scope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
-			scope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
+			domain := entry.GetInfo().Name
+			domainSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domain))
+			domainCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domain))
+			domainSizeScope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
+			domainCountScope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
 		}
 
 		if historySize > sizeLimitWarn || historyCount > countLimitWarn {
