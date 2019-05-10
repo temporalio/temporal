@@ -143,9 +143,9 @@ func hashesEqual(a []uint64, b []uint64) bool {
 func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger {
 	return logger.WithTags(
 		tag.ShardID(request.ShardID),
-		tag.WorkflowDomainID(request.DomainID),
-		tag.WorkflowID(request.WorkflowID),
-		tag.WorkflowRunID(request.RunID),
+		tag.ArchivalRequestDomainID(request.DomainID),
+		tag.ArchivalRequestWorkflowID(request.WorkflowID),
+		tag.ArchivalRequestRunID(request.RunID),
 		tag.ArchivalRequestEventStoreVersion(request.EventStoreVersion),
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestNextEventID(request.NextEventID),

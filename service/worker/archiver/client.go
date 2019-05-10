@@ -86,12 +86,10 @@ func (c *client) Archive(request *ArchiveRequest) error {
 		DecisionTaskStartToCloseTimeout: workflowTaskStartToCloseTimeout,
 		WorkflowIDReusePolicy:           cclient.WorkflowIDReusePolicyAllowDuplicate,
 	}
-	exec, err := c.cadenceClient.SignalWithStartWorkflow(context.Background(), workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
+	_, err := c.cadenceClient.SignalWithStartWorkflow(context.Background(), workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
-		tagLoggerWithRequest(c.logger, *request).WithTags(tag.Error(err),
-			tag.WorkflowID(exec.ID),
-			tag.WorkflowRunID(exec.RunID),
-		).Error("failed to SignalWithStartWorkflow to archival system workflow")
+		taggedLogger := tagLoggerWithRequest(c.logger, *request).WithTags(tag.WorkflowID(workflowID), tag.Error(err))
+		taggedLogger.Error("failed to send signal to archival system workflow")
 		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceFailures)
 	}
 	return err
