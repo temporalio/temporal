@@ -73,9 +73,13 @@ func NewHandler(sVice service.Service, config *Config, taskPersistence persisten
 	return handler
 }
 
+// RegisterHandler register this handler, must be called before Start()
+func (h *Handler) RegisterHandler() {
+	h.Service.GetDispatcher().Register(matchingserviceserver.New(h))
+}
+
 // Start starts the handler
 func (h *Handler) Start() error {
-	h.Service.GetDispatcher().Register(matchingserviceserver.New(h))
 	h.Service.Start()
 
 	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())

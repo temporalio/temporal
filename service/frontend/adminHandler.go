@@ -79,6 +79,11 @@ func NewAdminHandler(
 	return handler
 }
 
+// RegisterHandler register this handler, must be called before Start()
+func (adh *AdminHandler) RegisterHandler() {
+	adh.Service.GetDispatcher().Register(adminserviceserver.New(adh))
+}
+
 // Start starts the handler
 func (adh *AdminHandler) Start() error {
 	if !atomic.CompareAndSwapInt32(&adh.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
@@ -86,8 +91,6 @@ func (adh *AdminHandler) Start() error {
 	}
 
 	adh.domainCache.Start()
-	adh.Service.GetDispatcher().Register(adminserviceserver.New(adh))
-	adh.Service.Start()
 
 	adh.history = adh.GetClientBean().GetHistoryClient()
 	adh.metricsClient = adh.Service.GetMetricsClient()

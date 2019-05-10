@@ -30,7 +30,6 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -75,7 +74,6 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		initLock            sync.Mutex
 		adminHandler        *frontend.AdminHandler
 		frontendHandler     *frontend.WorkflowHandler
 		matchingHandler     *matching.Handler
@@ -350,26 +348,30 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		kafkaProducer.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	c.initLock.Lock()
 	c.frontEndService = service.New(params)
+
 	c.adminHandler = frontend.NewAdminHandler(
 		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
+	c.adminHandler.RegisterHandler()
+
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, c.logger)
 	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.workerConfig.EnableIndexer, true)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
 		c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
-	err = c.frontendHandler.Start()
-	if err != nil {
-		c.logger.Fatal("Failed to start frontend", tag.Error(err))
-	}
 	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
-	c.frontEndService.GetDispatcher().Register(workflowserviceserver.New(dcRedirectionHandler))
+	dcRedirectionHandler.RegisterHandler()
+
+	// must start base service first
+	c.frontEndService.Start()
 	err = c.adminHandler.Start()
 	if err != nil {
 		c.logger.Fatal("Failed to start admin", tag.Error(err))
 	}
-	c.initLock.Unlock()
+	err = dcRedirectionHandler.Start()
+	if err != nil {
+		c.logger.Fatal("Failed to start frontend", tag.Error(err))
+	}
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -400,7 +402,6 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		}
 		params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
-		c.initLock.Lock()
 		service := service.New(params)
 		hConfig := c.historyConfig
 		historyConfig := history.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), hConfig.NumHistoryShards, c.workerConfig.EnableIndexer, config.StoreTypeCassandra)
@@ -415,8 +416,13 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		}
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
 			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, params.PublicClient)
-		handler.Start()
-		c.initLock.Unlock()
+		handler.RegisterHandler()
+
+		service.Start()
+		err = handler.Start()
+		if err != nil {
+			c.logger.Fatal("Failed to start history", tag.Error(err))
+		}
 
 		c.historyHandlers = append(c.historyHandlers, handler)
 	}
@@ -441,13 +447,17 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 
-	c.initLock.Lock()
 	service := service.New(params)
 	c.matchingHandler = matching.NewHandler(
 		service, matching.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger)), c.taskMgr, c.metadataMgr,
 	)
-	c.matchingHandler.Start()
-	c.initLock.Unlock()
+	c.matchingHandler.RegisterHandler()
+
+	service.Start()
+	err := c.matchingHandler.Start()
+	if err != nil {
+		c.logger.Fatal("Failed to start history", tag.Error(err))
+	}
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -474,7 +484,6 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		c.logger.Fatal("Failed to get dispatcher for frontend", tag.Error(err))
 	}
 	params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
-	c.initLock.Lock()
 	service := service.New(params)
 	service.Start()
 
@@ -497,8 +506,6 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	if c.workerConfig.EnableIndexer {
 		c.startWorkerIndexer(params, service)
 	}
-
-	c.initLock.Unlock()
 
 	startWG.Done()
 	<-c.shutdownCh

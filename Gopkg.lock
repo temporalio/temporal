@@ -326,7 +326,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:954b01b825d4edc1b3e838e9faadfb8f70b308b000425d634d72896a81d3ce9f"
+  digest = "1:e7cbd89ddb6da590f44f1ef4cf18c9eec334c4e85d1b8f392981218f827dd19c"
   name = "github.com/m3db/prometheus_client_model"
   packages = ["go"]
   pruneopts = ""
@@ -334,7 +334,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:192c7420ce9083d46de731826d5908a2f571ce1a7be3188428ce388d4f12c16d"
+  digest = "1:639e2e34e996b908cec41d3e86aa15a62cc7161405a1312b0c80d9d25a559954"
   name = "github.com/m3db/prometheus_common"
   packages = [
     "expfmt",
@@ -346,7 +346,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:61df0898746840afc7be5dc2c3eeec83022fab70df11ecee5b16c85e912cf5ed"
+  digest = "1:a944f55a708b66c2eb6705eab880c71b0a053f76b4f3e02d4d47689f7774fb32"
   name = "github.com/m3db/prometheus_procfs"
   packages = ["."]
   pruneopts = ""

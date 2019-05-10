@@ -176,14 +176,15 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 	return handler
 }
 
+// RegisterHandler register this handler, must be called before Start()
+// if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
+func (wh *WorkflowHandler) RegisterHandler() {
+	wh.Service.GetDispatcher().Register(workflowserviceserver.New(wh))
+	wh.Service.GetDispatcher().Register(metaserver.New(wh))
+}
+
 // Start starts the handler
 func (wh *WorkflowHandler) Start() error {
-	// previously we call wh.Service.GetDispatcher().Register(workflowserviceserver.New(dcRediectionHandle)) here
-	// which does the registration of this handler
-	// however due to the introduction of dc redirection handler,
-	// the registration needs to be specially handled, in the service.go
-	wh.Service.GetDispatcher().Register(metaserver.New(wh))
-	wh.Service.Start()
 	wh.domainCache.Start()
 
 	wh.history = wh.GetClientBean().GetHistoryClient()

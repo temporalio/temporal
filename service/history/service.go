@@ -326,7 +326,14 @@ func (s *Service) Start() {
 	}
 
 	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, params.PublicClient)
-	handler.Start()
+	handler.RegisterHandler()
+
+	// must start base service first
+	base.Start()
+	err = handler.Start()
+	if err != nil {
+		log.Fatal("History handler failed to start", tag.Error(err))
+	}
 
 	log.Info("started", tag.Service(common.HistoryServiceName))
 

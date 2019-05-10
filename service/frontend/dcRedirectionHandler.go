@@ -23,6 +23,9 @@ package frontend
 import (
 	"context"
 
+	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
+	"github.com/uber/cadence/.gen/go/health"
+	"github.com/uber/cadence/.gen/go/health/metaserver"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -62,6 +65,12 @@ func NewDCRedirectionHandler(wfHandler *WorkflowHandler, policy config.DCRedirec
 	}
 }
 
+// RegisterHandler register this handler, must be called before Start()
+func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
+	handler.frontendHandler.Service.GetDispatcher().Register(workflowserviceserver.New(handler))
+	handler.frontendHandler.Service.GetDispatcher().Register(metaserver.New(handler))
+}
+
 // Start starts the handler
 func (handler *DCRedirectionHandlerImpl) Start() error {
 	return handler.frontendHandler.Start()
@@ -70,6 +79,12 @@ func (handler *DCRedirectionHandlerImpl) Start() error {
 // Stop stops the handler
 func (handler *DCRedirectionHandlerImpl) Stop() {
 	handler.frontendHandler.Stop()
+}
+
+// Health is for health check
+func (handler *DCRedirectionHandlerImpl) Health(ctx context.Context) (*health.HealthStatus, error) {
+	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("dc redirection good")}
+	return hs, nil
 }
 
 // Domain APIs, domain APIs does not require redirection

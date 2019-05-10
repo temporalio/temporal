@@ -119,7 +119,14 @@ func (s *Service) Start() {
 	}
 
 	handler := NewHandler(base, s.config, taskPersistence, metadata)
-	handler.Start()
+	handler.RegisterHandler()
+
+	// must start base service first
+	base.Start()
+	err = handler.Start()
+	if err != nil {
+		log.Fatal("Matching handler failed to start", tag.Error(err))
+	}
 
 	log.Info("started", tag.Service(common.MatchingServiceName))
 	<-s.stopC

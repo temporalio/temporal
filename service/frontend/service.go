@@ -21,7 +21,6 @@
 package frontend
 
 import (
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -188,11 +187,24 @@ func (s *Service) Start() {
 
 	metricsBlobstore := blobstore.NewMetricClient(params.BlobstoreClient, base.GetMetricsClient())
 	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, metricsBlobstore)
-	wfHandler.Start()
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
-	base.GetDispatcher().Register(workflowserviceserver.New(dcRedirectionHandler))
+	dcRedirectionHandler.RegisterHandler()
+
 	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, metadata, history, historyV2)
-	adminHandler.Start()
+	adminHandler.RegisterHandler()
+
+	// must start base service first
+	base.Start()
+	err = dcRedirectionHandler.Start()
+	if err != nil {
+		log.Fatal("DC redirection handler failed to start", tag.Error(err))
+	}
+	err = adminHandler.Start()
+	if err != nil {
+		log.Fatal("Admin handler failed to start", tag.Error(err))
+	}
+
+	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 
 	log.Info("started", tag.Service(common.FrontendServiceName))
 
