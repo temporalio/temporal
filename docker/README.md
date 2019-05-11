@@ -82,23 +82,4 @@ docker run -e CASSANDRA_CONSISTENCY=Quorum \            -- Default cassandra con
     -e LOG_LEVEL=debug,info \                           -- Logging level
     ubercadence/server:<tag>
 ```
-Update docker-compose.yml when releasing new version
-=========================
-0. Create new version tag in the repo
-1. Build the new docker image and push into docker hub
-```bash
-docker build . -t ubercadence/server:THE.LATEST.VERSION  --build-arg git_branch=vTHE.LATEST.VERSION 
-docker login
-docker push ubercadence/server:THE.LATEST.VERSION
-```
-2. Remember to update the docker-compose.yml to use latest version and check in to master
-```yaml
-  cadence:
-    image: ubercadence/server:THE.LATEST.VERSION 
-    ports
-```
-3. Create the tar.gz file and upload to release page
-```bash
-cd github.com/uber/cadence/docker
-tar -cvf docker.tar.gz *
-```
+

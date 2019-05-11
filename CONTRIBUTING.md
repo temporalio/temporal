@@ -95,4 +95,3 @@ go test -v <path> -run <TestSuite> -testify.m <TestSpercificTaskName>
 # example:
 go test -v github.com/uber/cadence/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```
-
