@@ -545,6 +545,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(decisionFinishEventID int64, r
 		for _, batch := range readResp.History {
 			history := batch.Events
 			firstEvent := history[0]
+			lastEvent := history[len(history)-1]
 
 			// for saving received signals only
 			if firstEvent.GetEventId() >= decisionFinishEventID {
@@ -588,7 +589,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(decisionFinishEventID int64, r
 			}
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
-			if firstEvent.GetEventType() == workflow.EventTypeWorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == workflow.EventTypeWorkflowExecutionContinuedAsNew {
 				retError = &workflow.BadRequestError{
 					Message: fmt.Sprintf("wrong DecisionFinishEventId, cannot replay history to continueAsNew"),
 				}
