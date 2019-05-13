@@ -933,22 +933,6 @@ func (_m *mockMutableState) CreateNewHistoryEventWithTimestamp(eventType shared.
 	return r0
 }
 
-// CreateReplicationTask provides a mock function with given fields:
-func (_m *mockMutableState) CreateReplicationTask(_a0 []persistence.Task, _a1 int32, _a2 []byte) []persistence.Task {
-	ret := _m.Called(_a0, _a1)
-
-	var r0 []persistence.Task
-	if rf, ok := ret.Get(0).(func(_a0 []persistence.Task, _a1 int32, _a2 []byte) []persistence.Task); ok {
-		r0 = rf(_a0, _a1, _a2)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]persistence.Task)
-		}
-	}
-
-	return r0
-}
-
 // CreateActivityRetryTimer provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) CreateActivityRetryTimer(_a0 *persistence.ActivityInfo, _a1 string) persistence.Task {
 	ret := _m.Called(_a0, _a1)

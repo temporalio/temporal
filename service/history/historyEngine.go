@@ -419,9 +419,14 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx ctx.Context, startRequest
 
 	context := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
 	createReplicationTask := domainEntry.CanReplicateEvent()
-	_, retError = context.appendFirstBatchEventsForActive(msBuilder)
+	replicationTasks := []persistence.Task{}
+	var replicationTask persistence.Task
+	_, replicationTask, retError = context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
 	if retError != nil {
 		return
+	}
+	if replicationTask != nil {
+		replicationTasks = append(replicationTasks, replicationTask)
 	}
 
 	// delete history if createWorkflow failed, otherwise history will leak
@@ -438,7 +443,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx ctx.Context, startRequest
 	prevLastWriteVersion := int64(0)
 	retError = context.createWorkflowExecution(
 		msBuilder, e.currentClusterName, createReplicationTask, time.Now(),
-		transferTasks, timerTasks,
+		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if retError != nil {
@@ -470,7 +475,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx ctx.Context, startRequest
 			}
 			retError = context.createWorkflowExecution(
 				msBuilder, e.currentClusterName, createReplicationTask, time.Now(),
-				transferTasks, timerTasks,
+				transferTasks, replicationTasks, timerTasks,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
 		}
@@ -2307,9 +2312,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx ctx.Context, si
 
 	context = newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
 	createReplicationTask := domainEntry.CanReplicateEvent()
-	_, retError = context.appendFirstBatchEventsForActive(msBuilder)
+	replicationTasks := []persistence.Task{}
+	var replicationTask persistence.Task
+	_, replicationTask, retError = context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
 	if retError != nil {
 		return
+	}
+	if replicationTask != nil {
+		replicationTasks = append(replicationTasks, replicationTask)
 	}
 
 	// delete history if createWorkflow failed, otherwise history will leak
@@ -2330,7 +2340,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx ctx.Context, si
 	}
 	retError = context.createWorkflowExecution(
 		msBuilder, e.currentClusterName, createReplicationTask, time.Now(),
-		transferTasks, timerTasks,
+		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 
