@@ -160,3 +160,7 @@ func (h *VersionHistories) AddHistory(item VersionHistoryItem, local VersionHist
 	}
 	return nil
 }
+
+func (h *VersionHistories) GetHistories() []VersionHistory {
+	return h.versionHistories
+}
