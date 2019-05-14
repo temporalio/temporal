@@ -56,6 +56,7 @@ type (
 	// needed to bootstrap a service
 	BootstrapParams struct {
 		Name            string
+		InstanceID      string
 		Logger          log.Logger
 		ThrottledLogger log.Logger
 
@@ -132,7 +133,7 @@ func New(params *BootstrapParams) Service {
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 	}
 
-	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger())
+	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)
 	sVice.dispatcher = sVice.rpcFactory.CreateDispatcher()
 	if sVice.dispatcher == nil {
 		sVice.logger.Fatal("Unable to create yarpc dispatcher")

@@ -21,6 +21,7 @@
 package metrics
 
 const (
+	instance       = "instance"
 	domain         = "domain"
 	domainAllValue = "all"
 )
@@ -34,8 +35,6 @@ type Tag interface {
 type domainTag struct {
 	value string
 }
-
-type domainAllTag struct{}
 
 // DomainTag returns a new domain tag
 func DomainTag(value string) Tag {
@@ -52,6 +51,8 @@ func (d domainTag) Value() string {
 	return d.value
 }
 
+type domainAllTag struct{}
+
 // DomainAllTag returns a new domain all tag-value
 func DomainAllTag() Tag {
 	return domainAllTag{}
@@ -65,4 +66,23 @@ func (d domainAllTag) Key() string {
 // Value returns the value of the domain all tag
 func (d domainAllTag) Value() string {
 	return domainAllValue
+}
+
+type instanceTag struct {
+	value string
+}
+
+// InstanceTag returns a new instance tag
+func InstanceTag(value string) Tag {
+	return instanceTag{value}
+}
+
+// Key returns the key of the instance tag
+func (i instanceTag) Key() string {
+	return instance
+}
+
+// Value returns the value of a instance tag
+func (i instanceTag) Value() string {
+	return i.value
 }

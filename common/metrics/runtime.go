@@ -40,7 +40,12 @@ type RuntimeMetricsReporter struct {
 }
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
-func NewRuntimeMetricsReporter(scope tally.Scope, reportInterval time.Duration, logger log.Logger) *RuntimeMetricsReporter {
+func NewRuntimeMetricsReporter(
+	scope tally.Scope,
+	reportInterval time.Duration,
+	logger log.Logger,
+	instanceID string,
+) *RuntimeMetricsReporter {
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 	rReporter := &RuntimeMetricsReporter{
@@ -49,6 +54,9 @@ func NewRuntimeMetricsReporter(scope tally.Scope, reportInterval time.Duration, 
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
+	}
+	if len(instanceID) > 0 {
+		rReporter.scope = scope.Tagged(map[string]string{instance: instanceID})
 	}
 	return rReporter
 }
