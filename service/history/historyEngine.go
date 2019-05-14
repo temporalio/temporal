@@ -2097,45 +2097,55 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx ctx.Context, signalReque
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
-		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
-			}
+	return e.updateWorkflowExecutionWithAction(ctx, domainID, execution, func(msBuilder mutableState, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
+		executionInfo := msBuilder.GetExecutionInfo()
+		createDecisionTask := true
+		// Do not create decision task when the workflow is cron and the cron has not been started yet
+		if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingDecisionTask() {
+			createDecisionTask = false
+		}
+		postActions := &updateWorkflowAction{
+			deleteWorkflow: false,
+			createDecision: createDecisionTask,
+			timerTasks:     nil,
+		}
 
-			executionInfo := msBuilder.GetExecutionInfo()
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
-			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
-				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.WorkflowDomainID(domainID))
-				return nil, ErrSignalsLimitExceeded
-			}
+		if !msBuilder.IsWorkflowExecutionRunning() {
+			return nil, ErrWorkflowCompleted
+		}
 
-			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowID
-				parentRunID := executionInfo.ParentRunID
-				if parentExecution.GetWorkflowId() != parentWorkflowID ||
-					parentExecution.GetRunId() != parentRunID {
-					return nil, ErrWorkflowParent
-				}
-			}
+		maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
+		if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
+			e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.WorkflowDomainID(domainID))
+			return nil, ErrSignalsLimitExceeded
+		}
 
-			// deduplicate by request id for signal decision
-			if requestID := request.GetRequestId(); requestID != "" {
-				if msBuilder.IsSignalRequested(requestID) {
-					return nil, nil
-				}
-				msBuilder.AddSignalRequested(requestID)
+		if childWorkflowOnly {
+			parentWorkflowID := executionInfo.ParentWorkflowID
+			parentRunID := executionInfo.ParentRunID
+			if parentExecution.GetWorkflowId() != parentWorkflowID ||
+				parentExecution.GetRunId() != parentRunID {
+				return nil, ErrWorkflowParent
 			}
+		}
 
-			if msBuilder.AddWorkflowExecutionSignaled(request.GetSignalName(), request.GetInput(), request.GetIdentity()) == nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+		// deduplicate by request id for signal decision
+		if requestID := request.GetRequestId(); requestID != "" {
+			if msBuilder.IsSignalRequested(requestID) {
+				return postActions, nil
 			}
+			msBuilder.AddSignalRequested(requestID)
+		}
 
-			return nil, nil
-		})
+		if msBuilder.AddWorkflowExecutionSignaled(request.GetSignalName(), request.GetInput(), request.GetIdentity()) == nil {
+			return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+		}
+
+		return postActions, nil
+	})
 }
 
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx ctx.Context, signalWithStartRequest *h.SignalWithStartWorkflowExecutionRequest) (

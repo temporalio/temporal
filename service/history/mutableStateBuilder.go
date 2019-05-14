@@ -1159,6 +1159,10 @@ func (e *mutableStateBuilder) HasPendingDecisionTask() bool {
 	return e.executionInfo.DecisionScheduleID != common.EmptyEventID
 }
 
+func (e *mutableStateBuilder) HasProcessedOrPendingDecisionTask() bool {
+	return e.HasPendingDecisionTask() || e.GetPreviousStartedEventID() != common.EmptyEventID
+}
+
 func (e *mutableStateBuilder) HasInFlightDecisionTask() bool {
 	return e.executionInfo.DecisionStartedID > 0
 }
