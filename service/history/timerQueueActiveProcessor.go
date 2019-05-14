@@ -573,8 +573,7 @@ Update_History_Loop:
 			return nil
 		}
 
-		if msBuilder.GetPreviousStartedEventID() != common.EmptyEventID ||
-			msBuilder.HasPendingDecisionTask() {
+		if msBuilder.HasProcessedOrPendingDecisionTask() {
 			// already has decision task
 			return nil
 		}

@@ -145,6 +145,7 @@ type (
 		HasInFlightDecisionTask() bool
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool
+		HasProcessedOrPendingDecisionTask() bool
 		IncrementHistorySize(int)
 		IsCancelRequested() (bool, string)
 		IsSignalRequested(requestID string) bool
