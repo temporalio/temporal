@@ -123,6 +123,8 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.
 						workflowID, runIDStr, request.PreviousRunID),
 				}
 			}
+		default:
+			return nil, fmt.Errorf("Unknown workflow creation mode: %v", request.CreateWorkflowMode)
 		}
 	}
 

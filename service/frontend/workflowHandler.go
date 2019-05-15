@@ -219,8 +219,8 @@ func (wh *WorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, er
 // domain.
 func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *gen.RegisterDomainRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
-	scope := wh.metricsClient.Scope(metrics.FrontendRegisterDomainScope)
-	sw := wh.startRequestProfile(scope)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterDomainScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -238,8 +238,8 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 func (wh *WorkflowHandler) ListDomains(ctx context.Context,
 	listRequest *gen.ListDomainsRequest) (response *gen.ListDomainsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
-	scope := wh.metricsClient.Scope(metrics.FrontendListDomainsScope)
-	sw := wh.startRequestProfile(scope)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -257,8 +257,8 @@ func (wh *WorkflowHandler) ListDomains(ctx context.Context,
 func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 	describeRequest *gen.DescribeDomainRequest) (response *gen.DescribeDomainResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
-	scope := wh.metricsClient.Scope(metrics.FrontendDescribeDomainScope)
-	sw := wh.startRequestProfile(scope)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -277,8 +277,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	updateRequest *gen.UpdateDomainRequest) (resp *gen.UpdateDomainResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendUpdateDomainScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -298,8 +297,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest *gen.DeprecateDomainRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendDeprecateDomainScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateDomainScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -321,8 +319,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 
 	callTime := time.Now()
 
-	scope := wh.metricsClient.Scope(metrics.FrontendPollForActivityTaskScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendPollForActivityTaskScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -404,8 +401,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 
 	callTime := time.Now()
 
-	scope := wh.metricsClient.Scope(metrics.FrontendPollForDecisionTaskScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendPollForDecisionTaskScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -540,8 +536,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRecordActivityTaskHeartbeatScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRecordActivityTaskHeartbeatScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -622,8 +617,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatByIDRequest) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRecordActivityTaskHeartbeatByIDScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRecordActivityTaskHeartbeatByIDScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -729,8 +723,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	completeRequest *gen.RespondActivityTaskCompletedRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskCompletedScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCompletedScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -812,8 +805,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 	completeRequest *gen.RespondActivityTaskCompletedByIDRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskCompletedByIDScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCompletedByIDScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -921,8 +913,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	failedRequest *gen.RespondActivityTaskFailedRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskFailedScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskFailedScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -993,8 +984,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 	failedRequest *gen.RespondActivityTaskFailedByIDRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskFailedByIDScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskFailedByIDScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1090,8 +1080,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	cancelRequest *gen.RespondActivityTaskCanceledRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskCanceledScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCanceledScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1174,8 +1163,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 	cancelRequest *gen.RespondActivityTaskCanceledByIDRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondActivityTaskCanceledScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCanceledScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1282,8 +1270,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) (resp *gen.RespondDecisionTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondDecisionTaskCompletedScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondDecisionTaskCompletedScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1361,8 +1348,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	failedRequest *gen.RespondDecisionTaskFailedRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondDecisionTaskFailedScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondDecisionTaskFailedScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1432,8 +1418,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	completeRequest *gen.RespondQueryTaskCompletedRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRespondQueryTaskCompletedScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRespondQueryTaskCompletedScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1486,8 +1471,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	startRequest *gen.StartWorkflowExecutionRequest) (resp *gen.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendStartWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendStartWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1624,8 +1608,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (resp *gen.GetWorkflowExecutionHistoryResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendGetWorkflowExecutionHistoryScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendGetWorkflowExecutionHistoryScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1829,8 +1812,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 	signalRequest *gen.SignalWorkflowExecutionRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendSignalWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendSignalWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1912,8 +1894,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	signalWithStartRequest *gen.SignalWithStartWorkflowExecutionRequest) (resp *gen.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendSignalWithStartWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendSignalWithStartWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2069,8 +2050,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 	terminateRequest *gen.TerminateWorkflowExecutionRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendTerminateWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendTerminateWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2118,8 +2098,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
 	resetRequest *gen.ResetWorkflowExecutionRequest) (resp *gen.ResetWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendResetWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendResetWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2167,8 +2146,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	cancelRequest *gen.RequestCancelWorkflowExecutionRequest) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendRequestCancelWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRequestCancelWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2215,8 +2193,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 	listRequest *gen.ListOpenWorkflowExecutionsRequest) (resp *gen.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendListOpenWorkflowExecutionsScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendListOpenWorkflowExecutionsScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2317,8 +2294,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	listRequest *gen.ListClosedWorkflowExecutionsRequest) (resp *gen.ListClosedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendListClosedWorkflowExecutionsScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendListClosedWorkflowExecutionsScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2437,8 +2413,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listRequest *gen.ListWorkflowExecutionsRequest) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendListWorkflowExecutionsScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendListWorkflowExecutionsScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2492,8 +2467,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listReque
 func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listRequest *gen.ListWorkflowExecutionsRequest) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendScanWorkflowExecutionsScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendScanWorkflowExecutionsScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2547,8 +2521,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listReque
 func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countRequest *gen.CountWorkflowExecutionsRequest) (resp *gen.CountWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendCountWorkflowExecutionsScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendCountWorkflowExecutionsScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2596,8 +2569,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countReq
 func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest *gen.ResetStickyTaskListRequest) (resp *gen.ResetStickyTaskListResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendResetStickyTaskListScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendResetStickyTaskListScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2639,8 +2611,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 	queryRequest *gen.QueryWorkflowRequest) (resp *gen.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendQueryWorkflowScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendQueryWorkflowScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2745,8 +2716,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, request *gen.DescribeWorkflowExecutionRequest) (resp *gen.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendDescribeWorkflowExecutionScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeWorkflowExecutionScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2794,8 +2764,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.DescribeTaskListRequest) (resp *gen.DescribeTaskListResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope := wh.metricsClient.Scope(metrics.FrontendDescribeTaskListScope)
-	sw := wh.startRequestProfile(scope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeTaskListScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -2930,11 +2899,13 @@ func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) log.Logger {
 }
 
 // startRequestProfile initiates recording of request metrics
-func (wh *WorkflowHandler) startRequestProfile(scope metrics.Scope) tally.Stopwatch {
+func (wh *WorkflowHandler) startRequestProfile(scope int) (metrics.Scope, tally.Stopwatch) {
 	wh.startWG.Wait()
-	sw := scope.StartTimer(metrics.CadenceLatency)
-	scope.IncCounter(metrics.CadenceRequests)
-	return sw
+
+	metricsScope := wh.metricsClient.Scope(scope)
+	sw := metricsScope.StartTimer(metrics.CadenceLatency)
+	metricsScope.IncCounter(metrics.CadenceRequests)
+	return metricsScope, sw
 }
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
