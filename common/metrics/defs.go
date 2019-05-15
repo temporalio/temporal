@@ -695,6 +695,8 @@ const (
 	HistoryProcessDeleteHistoryEventScope
 	// WorkflowCompletionStatsScope tracks workflow completion updates
 	WorkflowCompletionStatsScope
+	// ArchiverClientScope is scope used by all metrics emitted by archiver.Client
+	ArchiverClientScope
 
 	NumHistoryScopes
 )
@@ -751,8 +753,6 @@ const (
 	ArchiverPumpScope
 	// ArchiverArchivalWorkflowScope is scope used by all metrics emitted by archiver.ArchivalWorkflow
 	ArchiverArchivalWorkflowScope
-	// ArchiverClientScope is scope used by all metrics emitted by archiver.Client
-	ArchiverClientScope
 	// TaskListScavengerScope is scope used by all metrics emitted by worker.tasklist.Scavenger module
 	TaskListScavengerScope
 
@@ -1070,6 +1070,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SessionSizeStatsScope:                         {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
 		SessionCountStatsScope:                        {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
 		WorkflowCompletionStatsScope:                  {operation: "CompletionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
+		ArchiverClientScope:                           {operation: "ArchiverClient"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -1098,7 +1099,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverScope:                       {operation: "Archiver"},
 		ArchiverPumpScope:                   {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
-		ArchiverClientScope:                 {operation: "ArchiverClient"},
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
 	},
 	// Blobstore Scope Names
