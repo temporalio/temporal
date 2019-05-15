@@ -22,44 +22,64 @@ package tag
 
 // Pre-defined values for TagWorkflowAction
 var (
-	WorkflowActionWorkflowStarted                 = workflowAction("add-workflowexecution-started-event")
-	WorkflowActionDecisionTaskScheduled           = workflowAction("add-decisiontask-scheduled-event")
-	WorkflowActionDecisionTaskStarted             = workflowAction("add-decisiontask-started-event")
-	WorkflowActionDecisionTaskCompleted           = workflowAction("add-decisiontask-completed-event")
-	WorkflowActionDecisionTaskTimedOut            = workflowAction("add-decisiontask-timedout-event")
-	WorkflowActionDecisionTaskFailed              = workflowAction("add-decisiontask-failed-event")
-	WorkflowActionActivityTaskScheduled           = workflowAction("add-activitytask-scheduled-event")
-	WorkflowActionActivityTaskStarted             = workflowAction("add-activitytask-started-event")
-	WorkflowActionActivityTaskCompleted           = workflowAction("add-activitytask-completed-event")
-	WorkflowActionActivityTaskFailed              = workflowAction("add-activitytask-failed-event")
-	WorkflowActionActivityTaskTimedOut            = workflowAction("add-activitytask-timed-event")
-	WorkflowActionActivityTaskCanceled            = workflowAction("add-activitytask-canceled-event")
-	WorkflowActionActivityTaskCancelRequest       = workflowAction("add-activitytask-cancel-request-event")
-	WorkflowActionActivityTaskCancelRequestFailed = workflowAction("add-activitytask-cancel-request-failed-event")
-	WorkflowActionCompleteWorkflow                = workflowAction("add-complete-workflow-event")
-	WorkflowActionFailWorkflow                    = workflowAction("add-fail-workflow-event")
-	WorkflowActionTimeoutWorkflow                 = workflowAction("add-timeout-workflow-event")
-	WorkflowActionCancelWorkflow                  = workflowAction("add-cancel-workflow-event")
-	WorkflowActionTimerStarted                    = workflowAction("add-timer-started-event")
-	WorkflowActionTimerFired                      = workflowAction("add-timer-fired-event")
-	WorkflowActionTimerCanceled                   = workflowAction("add-timer-Canceled-event")
-	WorkflowActionWorkflowTerminated              = workflowAction("add-workflowexecution-terminated-event")
-	WorkflowActionWorkflowSignaled                = workflowAction("add-workflowexecution-signaled-event")
-	WorkflowActionContinueAsNew                   = workflowAction("add-continue-as-new-event")
-	WorkflowActionWorkflowCanceled                = workflowAction("add-workflowexecution-canceled-event")
-	WorkflowActionChildExecutionStarted           = workflowAction("add-childexecution-started-event")
-	WorkflowActionStartChildExecutionFailed       = workflowAction("add-start-childexecution-failed-event")
-	WorkflowActionChildExecutionCompleted         = workflowAction("add-childexecution-completed-event")
-	WorkflowActionChildExecutionFailed            = workflowAction("add-childexecution-failed-event")
-	WorkflowActionChildExecutionCanceled          = workflowAction("add-childexecution-canceled-event")
-	WorkflowActionChildExecutionTerminated        = workflowAction("add-childexecution-terminated-event")
-	WorkflowActionChildExecutionTimedOut          = workflowAction("add-childexecution-timedout-event")
-	WorkflowActionRequestCancelWorkflow           = workflowAction("add-request-cancel-workflow-event")
-	WorkflowActionWorkflowCancelRequested         = workflowAction("add-workflow-execution-cancel-requested-event")
-	WorkflowActionWorkflowCancelFailed            = workflowAction("add-workflow-execution-cancel-failed-event")
-	WorkflowActionWorkflowSignalRequested         = workflowAction("add-workflow-execution-signal-requested-event")
-	WorkflowActionWorkflowSignalFailed            = workflowAction("add-workflow-execution-signal-failed-event")
-	WorkflowActionUnknownEvent                    = workflowAction("add-unknown-event")
+	// workflow start / finish
+	WorkflowActionWorkflowStarted       = workflowAction("add-workflow-started-event")
+	WorkflowActionWorkflowCanceled      = workflowAction("add-workflow-canceled-event")
+	WorkflowActionWorkflowCompleted     = workflowAction("add-workflow-completed--event")
+	WorkflowActionWorkflowFailed        = workflowAction("add-workflow-failed-event")
+	WorkflowActionWorkflowTimeout       = workflowAction("add-workflow-timeout-event")
+	WorkflowActionWorkflowTerminated    = workflowAction("add-workflow-terminated-event")
+	WorkflowActionWorkflowContinueAsNew = workflowAction("add-workflow-continue-as-new-event")
+
+	// workflow cancellation / sign
+	WorkflowActionWorkflowCancelRequested = workflowAction("add-workflow-cancel-requested-event")
+	WorkflowActionWorkflowSignaled        = workflowAction("add-workflow-signaled-event")
+	WorkflowActionWorkflowRecordMarker    = workflowAction("add-workflow-marker-record-event")
+
+	// decision
+	WorkflowActionDecisionTaskScheduled = workflowAction("add-decisiontask-scheduled-event")
+	WorkflowActionDecisionTaskStarted   = workflowAction("add-decisiontask-started-event")
+	WorkflowActionDecisionTaskCompleted = workflowAction("add-decisiontask-completed-event")
+	WorkflowActionDecisionTaskTimedOut  = workflowAction("add-decisiontask-timedout-event")
+	WorkflowActionDecisionTaskFailed    = workflowAction("add-decisiontask-failed-event")
+
+	// activity
+	WorkflowActionActivityTaskScheduled       = workflowAction("add-activitytask-scheduled-event")
+	WorkflowActionActivityTaskStarted         = workflowAction("add-activitytask-started-event")
+	WorkflowActionActivityTaskCompleted       = workflowAction("add-activitytask-completed-event")
+	WorkflowActionActivityTaskFailed          = workflowAction("add-activitytask-failed-event")
+	WorkflowActionActivityTaskTimedOut        = workflowAction("add-activitytask-timed-event")
+	WorkflowActionActivityTaskCanceled        = workflowAction("add-activitytask-canceled-event")
+	WorkflowActionActivityTaskCancelRequested = workflowAction("add-activitytask-cancel-requested-event")
+	WorkflowActionActivityTaskCancelFailed    = workflowAction("add-activitytask-cancel-failed-event")
+
+	// timer
+	WorkflowActionTimerStarted      = workflowAction("add-timer-started-event")
+	WorkflowActionTimerFired        = workflowAction("add-timer-fired-event")
+	WorkflowActionTimerCanceled     = workflowAction("add-timer-canceled-event")
+	WorkflowActionTimerCancelFailed = workflowAction("add-timer-cancel-failed-event")
+
+	// child workflow start / finish
+	WorkflowActionChildWorkflowInitiated        = workflowAction("add-childworkflow-initiated-event")
+	WorkflowActionChildWorkflowStarted          = workflowAction("add-childworkflow-started-event")
+	WorkflowActionChildWorkflowInitiationFailed = workflowAction("add-childworkflow-initiation-failed-event")
+	WorkflowActionChildWorkflowCanceled         = workflowAction("add-childworkflow-canceled-event")
+	WorkflowActionChildWorkflowCompleted        = workflowAction("add-childworkflow-completed-event")
+	WorkflowActionChildWorkflowFailed           = workflowAction("add-childworkflow-failed-event")
+	WorkflowActionChildWorkflowTerminated       = workflowAction("add-childworkflow-terminated-event")
+	WorkflowActionChildWorkflowTimedOut         = workflowAction("add-childworkflow-timedout-event")
+
+	// external workflow cancellation
+	WorkflowActionExternalWorkflowCancelInitiated = workflowAction("add-externalworkflow-cancel-initiated-event")
+	WorkflowActionExternalWorkflowCancelRequested = workflowAction("add-externalworkflow-cancel-requested-event")
+	WorkflowActionExternalWorkflowCancelFailed    = workflowAction("add-externalworkflow-cancel-failed-event")
+
+	// external workflow signal
+	WorkflowActionExternalWorkflowSignalInitiated = workflowAction("add-externalworkflow-signal-initiated-event")
+	WorkflowActionExternalWorkflowSignalRequested = workflowAction("add-externalworkflow-signal-requested-event")
+	WorkflowActionExternalWorkflowSignalFailed    = workflowAction("add-externalworkflow-signal-failed-event")
+
+	WorkflowActionUnknown = workflowAction("add-unknown-event")
 )
 
 // Pre-defined values for TagWorkflowListFilterType

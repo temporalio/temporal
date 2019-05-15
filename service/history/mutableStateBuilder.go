@@ -39,6 +39,8 @@ import (
 
 const (
 	emptyUUID = "emptyUuid"
+
+	mutableStateInvalidHistoryActionMsg = "Invalid history builder state for action"
 )
 
 type (
@@ -1384,10 +1386,11 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(execution workflo
 	request := startRequest.StartRequest
 	eventID := e.GetNextEventID()
 	if eventID != common.FirstEventID {
-		e.logger.Warn("Invalid history builder state for action",
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(eventID),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionWorkflowStarted)
+			tag.WorkflowActionWorkflowStarted,
+		)
 		return nil
 	}
 
@@ -1459,8 +1462,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 }
 
 func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
-	if e.HasPendingDecisionTask() {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if e.HasPendingDecisionTask() || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionDecisionTaskScheduled,
@@ -1551,10 +1555,11 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, sched
 
 func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64, requestID string,
 	request *workflow.PollForDecisionTaskRequest) (*workflow.HistoryEvent, *decisionInfo) {
+
 	hasPendingDecision := e.HasPendingDecisionTask()
 	di, ok := e.GetPendingDecision(scheduleEventID)
-	if !hasPendingDecision || !ok || di.StartedID != common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !hasPendingDecision || !ok || di.StartedID != common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionDecisionTaskStarted,
@@ -1707,10 +1712,11 @@ func (e *mutableStateBuilder) CheckResettable() (retError error) {
 
 func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondDecisionTaskCompletedRequest, maxResetPoints int) *workflow.HistoryEvent {
+
 	hasPendingDecision := e.HasPendingDecisionTask()
 	di, ok := e.GetPendingDecision(scheduleEventID)
-	if !hasPendingDecision || !ok || di.StartedID != startedEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !hasPendingDecision || !ok || di.StartedID != startedEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionDecisionTaskCompleted,
@@ -1744,10 +1750,11 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskCompletedEvent(event *workflo
 
 func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
 	startedEventID int64) *workflow.HistoryEvent {
+
 	hasPendingDecision := e.HasPendingDecisionTask()
 	dt, ok := e.GetPendingDecision(scheduleEventID)
-	if !hasPendingDecision || !ok || dt.StartedID != startedEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !hasPendingDecision || !ok || dt.StartedID != startedEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionDecisionTaskTimedOut,
@@ -1777,12 +1784,16 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskTimedOutEvent(timeoutType wor
 }
 
 func (e *mutableStateBuilder) AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) *workflow.HistoryEvent {
-	if e.executionInfo.DecisionScheduleID != scheduleEventID || e.executionInfo.DecisionStartedID > 0 {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if e.executionInfo.DecisionScheduleID != scheduleEventID || e.executionInfo.DecisionStartedID > 0 ||
+		!e.IsWorkflowExecutionRunning() {
+
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionDecisionTaskTimedOut,
-			tag.WorkflowScheduleID(scheduleEventID))
+			tag.WorkflowScheduleID(scheduleEventID),
+		)
 		return nil
 	}
 
@@ -1812,8 +1823,8 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64, 
 	hasPendingDecision := e.HasPendingDecisionTask()
 
 	dt, ok := e.GetPendingDecision(scheduleEventID)
-	if !hasPendingDecision || !ok || dt.StartedID != startedEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !hasPendingDecision || !ok || dt.StartedID != startedEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionDecisionTaskFailed,
@@ -1843,8 +1854,9 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskFailedEvent() {
 
 func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEventID int64,
 	attributes *workflow.ScheduleActivityTaskDecisionAttributes) (*workflow.HistoryEvent, *persistence.ActivityInfo) {
-	if ai, ok := e.GetActivityInfo(e.GetNextEventID()); ok {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if ai, ok := e.GetActivityInfo(e.GetNextEventID()); ok || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionActivityTaskScheduled,
@@ -1928,6 +1940,16 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(scheduleEventID i
 func (e *mutableStateBuilder) AddActivityTaskStartedEvent(ai *persistence.ActivityInfo, scheduleEventID int64,
 	requestID string, identity string) *workflow.HistoryEvent {
 
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionActivityTaskStarted,
+			tag.WorkflowScheduleID(ai.ScheduleID),
+			tag.WorkflowStartedID(ai.StartedID))
+		return nil
+	}
+
 	if !ai.HasRetryPolicy {
 		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity)
 		e.ReplicateActivityTaskStartedEvent(event)
@@ -1962,8 +1984,9 @@ func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(event *workflow.
 
 func (e *mutableStateBuilder) AddActivityTaskCompletedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondActivityTaskCompletedRequest) *workflow.HistoryEvent {
-	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedID != startedEventID {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedID != startedEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionActivityTaskCompleted,
@@ -1991,8 +2014,9 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCompletedEvent(event *workflo
 
 func (e *mutableStateBuilder) AddActivityTaskFailedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondActivityTaskFailedRequest) *workflow.HistoryEvent {
-	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedID != startedEventID {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedID != startedEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionActivityTaskFailed,
@@ -2020,10 +2044,13 @@ func (e *mutableStateBuilder) ReplicateActivityTaskFailedEvent(event *workflow.H
 
 func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID int64,
 	timeoutType workflow.TimeoutType, lastHeartBeatDetails []byte) *workflow.HistoryEvent {
-	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedID != startedEventID ||
-		((timeoutType == workflow.TimeoutTypeStartToClose || timeoutType == workflow.TimeoutTypeHeartbeat) &&
-			ai.StartedID == common.EmptyEventID) {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok ||
+		ai.StartedID != startedEventID ||
+		((timeoutType == workflow.TimeoutTypeStartToClose || timeoutType == workflow.TimeoutTypeHeartbeat) && ai.StartedID == common.EmptyEventID) ||
+		!e.IsWorkflowExecutionRunning() {
+
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionActivityTaskTimedOut,
@@ -2055,11 +2082,11 @@ func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(decisionComple
 	actCancelReqEvent := e.hBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEventID, activityID)
 
 	ai, isRunning := e.GetActivityByActivityID(activityID)
-	if !isRunning || ai.CancelRequested {
-		e.logger.Warn("Invalid history builder state for action",
+	if !isRunning || ai.CancelRequested || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionActivityTaskCanceled,
+			tag.WorkflowActionActivityTaskCancelRequested,
 			tag.Bool(isRunning),
 			tag.WorkflowActivityID(activityID))
 
@@ -2089,14 +2116,26 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(event *w
 
 func (e *mutableStateBuilder) AddRequestCancelActivityTaskFailedEvent(decisionCompletedEventID int64,
 	activityID string, cause string) *workflow.HistoryEvent {
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionActivityTaskCancelFailed,
+			tag.WorkflowActivityID(activityID))
+
+		return nil
+	}
+
 	return e.hBuilder.AddRequestCancelActivityTaskFailedEvent(decisionCompletedEventID, activityID, cause)
 }
 
 func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(scheduleEventID, startedEventID int64,
 	latestCancelRequestedEventID int64, details []byte, identity string) *workflow.HistoryEvent {
+
 	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedID != startedEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ai.StartedID != startedEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionActivityTaskCanceled,
@@ -2106,7 +2145,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(scheduleEventID, star
 
 	// Verify cancel request as well.
 	if !ai.CancelRequested {
-		e.logger.Warn("Invalid history builder state for action",
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionActivityTaskCanceled,
@@ -2135,11 +2174,12 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCanceledEvent(event *workflow
 
 func (e *mutableStateBuilder) AddCompletedWorkflowEvent(decisionCompletedEventID int64,
 	attributes *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionCompleteWorkflow,
+			tag.WorkflowActionWorkflowCompleted,
 			tag.WorkflowState(e.executionInfo.State))
 		return nil
 	}
@@ -2159,11 +2199,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(firstEven
 
 func (e *mutableStateBuilder) AddFailWorkflowEvent(decisionCompletedEventID int64,
 	attributes *workflow.FailWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionFailWorkflow,
+			tag.WorkflowActionWorkflowFailed,
 			tag.WorkflowState(e.executionInfo.State))
 
 		return nil
@@ -2183,12 +2224,13 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(firstEventID
 }
 
 func (e *mutableStateBuilder) AddTimeoutWorkflowEvent() *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted {
-		e.logger.Warn("Invalid history builder state for action",
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionTimeoutWorkflow,
-			tag.WorkflowState(e.executionInfo.State))
+			tag.WorkflowActionWorkflowTimeout,
+			tag.WorkflowState(e.executionInfo.State),
+		)
 		return nil
 	}
 
@@ -2207,14 +2249,16 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(firstEvent
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(cause string,
 	request *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted || e.executionInfo.CancelRequested {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if e.executionInfo.CancelRequested || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionWorkflowCancelRequested,
 			tag.WorkflowState(e.executionInfo.State),
 			tag.Bool(e.executionInfo.CancelRequested),
-			tag.Key(e.executionInfo.CancelRequestID))
+			tag.Key(e.executionInfo.CancelRequestID),
+		)
 		return nil
 	}
 
@@ -2232,12 +2276,13 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCancelRequestedEvent(eve
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID int64,
 	attributes *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted {
-		e.logger.Warn("Invalid history builder state for action",
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionCancelWorkflow,
-			tag.WorkflowState(e.executionInfo.State))
+			tag.WorkflowActionWorkflowCanceled,
+			tag.WorkflowState(e.executionInfo.State),
+		)
 	}
 
 	event := e.hBuilder.AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID, attributes)
@@ -2256,6 +2301,15 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(firstEvent
 func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64, cancelRequestID string,
 	request *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.RequestCancelInfo) {
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionExternalWorkflowCancelInitiated,
+			tag.WorkflowState(e.executionInfo.State))
+	}
+
 	event := e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, request)
 	if event == nil {
 		return nil, nil
@@ -2283,12 +2337,13 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 
 func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(initiatedID int64,
 	domain, workflowID, runID string) *workflow.HistoryEvent {
+
 	_, ok := e.GetRequestCancelInfo(initiatedID)
-	if !ok {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionWorkflowCancelRequested,
+			tag.WorkflowActionExternalWorkflowCancelRequested,
 			tag.WorkflowInitiatedID(initiatedID),
 			tag.Bool(ok))
 		return nil
@@ -2308,12 +2363,13 @@ func (e *mutableStateBuilder) ReplicateExternalWorkflowExecutionCancelRequested(
 func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 	decisionTaskCompletedEventID, initiatedID int64,
 	domain, workflowID, runID string, cause workflow.CancelExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
+
 	_, ok := e.GetRequestCancelInfo(initiatedID)
-	if !ok {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionWorkflowCancelFailed,
+			tag.WorkflowActionExternalWorkflowCancelFailed,
 			tag.WorkflowInitiatedID(initiatedID),
 			tag.Bool(ok))
 
@@ -2334,6 +2390,15 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionFai
 
 func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID int64,
 	signalRequestID string, request *workflow.SignalExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.SignalInfo) {
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionExternalWorkflowSignalInitiated,
+		)
+		return nil, nil
+	}
 
 	event := e.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, request)
 	if event == nil {
@@ -2367,11 +2432,11 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(initiatedID int64,
 	domain, workflowID, runID string, control []byte) *workflow.HistoryEvent {
 	_, ok := e.GetSignalInfo(initiatedID)
-	if !ok {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionWorkflowSignaled,
+			tag.WorkflowActionExternalWorkflowSignalRequested,
 			tag.WorkflowInitiatedID(initiatedID),
 			tag.Bool(ok))
 		return nil
@@ -2392,11 +2457,11 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	decisionTaskCompletedEventID, initiatedID int64, domain, workflowID, runID string,
 	control []byte, cause workflow.SignalExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
 	_, ok := e.GetSignalInfo(initiatedID)
-	if !ok {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionWorkflowSignalFailed,
+			tag.WorkflowActionExternalWorkflowSignalFailed,
 			tag.WorkflowInitiatedID(initiatedID),
 			tag.Bool(ok))
 
@@ -2417,10 +2482,11 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionFailedEven
 
 func (e *mutableStateBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
 	request *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo) {
+
 	timerID := request.GetTimerId()
 	isTimerRunning, ti := e.GetUserTimer(timerID)
-	if isTimerRunning {
-		e.logger.Warn("Invalid history builder state for action",
+	if isTimerRunning || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionTimerStarted,
@@ -2459,8 +2525,8 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(event *workflow.History
 
 func (e *mutableStateBuilder) AddTimerFiredEvent(startedEventID int64, timerID string) *workflow.HistoryEvent {
 	isTimerRunning, _ := e.GetUserTimer(timerID)
-	if !isTimerRunning {
-		e.logger.Warn("Invalid history builder state for action",
+	if !isTimerRunning || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionTimerFired,
@@ -2489,16 +2555,17 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 	attributes *workflow.CancelTimerDecisionAttributes,
 	identity string,
 ) *workflow.HistoryEvent {
+
 	var timerStartedID int64
 	timerID := attributes.GetTimerId()
 	isTimerRunning, ti := e.GetUserTimer(timerID)
-	if !isTimerRunning {
+	if !isTimerRunning || !e.IsWorkflowExecutionRunning() {
 		// if timer is not running then check if it has fired in the mutable state.
 		// If so clear the timer from the mutable state. We need to check both the
 		// bufferedEvents and the history builder
 		timerFiredEvent := e.checkAndClearTimerFiredEvent(timerID)
 		if timerFiredEvent == nil {
-			e.logger.Warn("Invalid history builder state for action",
+			e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 				tag.WorkflowEventID(e.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
 				tag.WorkflowActionTimerCanceled,
@@ -2527,8 +2594,20 @@ func (e *mutableStateBuilder) ReplicateTimerCanceledEvent(event *workflow.Histor
 
 func (e *mutableStateBuilder) AddCancelTimerFailedEvent(decisionCompletedEventID int64,
 	attributes *workflow.CancelTimerDecisionAttributes, identity string) *workflow.HistoryEvent {
+
 	// No Operation: We couldn't cancel it probably TIMER_ID_UNKNOWN
 	timerID := attributes.GetTimerId()
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionTimerCancelFailed,
+			// TODO timer ID?
+		)
+		return nil
+	}
+
 	return e.hBuilder.AddCancelTimerFailedEvent(timerID, decisionCompletedEventID,
 		timerCancellationMsgTimerIDUnknown, identity)
 }
@@ -2536,13 +2615,23 @@ func (e *mutableStateBuilder) AddCancelTimerFailedEvent(decisionCompletedEventID
 func (e *mutableStateBuilder) AddRecordMarkerEvent(decisionCompletedEventID int64,
 	attributes *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent {
 
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionWorkflowRecordMarker,
+			// TODO decision ID?
+		)
+		return nil
+	}
+
 	return e.hBuilder.AddMarkerRecordedEvent(decisionCompletedEventID, attributes)
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	request *workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted {
-		e.logger.Warn("Invalid history builder state for action",
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionWorkflowTerminated,
@@ -2565,12 +2654,14 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(firstEve
 
 func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 	signalName string, input []byte, identity string) *workflow.HistoryEvent {
-	if e.executionInfo.State == persistence.WorkflowStateCompleted {
-		e.logger.Warn("Invalid history builder state for action",
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowActionWorkflowSignaled,
-			tag.WorkflowState(e.executionInfo.State))
+			tag.WorkflowState(e.executionInfo.State),
+		)
 		return nil
 	}
 
@@ -2587,6 +2678,16 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(event *workflow
 func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
 	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32) (*workflow.HistoryEvent, mutableState,
 	error) {
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionWorkflowContinueAsNew,
+			tag.WorkflowState(e.executionInfo.State),
+		)
+		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution continue as new event."}
+	}
 
 	newRunID := uuid.New()
 	newExecution := workflow.WorkflowExecution{
@@ -2825,6 +2926,16 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedEventID int64,
 	createRequestID string, attributes *workflow.StartChildWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent,
 	*persistence.ChildExecutionInfo) {
+
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionChildWorkflowInitiated,
+		)
+		return nil, nil
+	}
+
 	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedEventID, attributes)
 	// Write the event to cache only on active cluster
 	e.eventsCache.putEvent(e.executionInfo.DomainID, e.executionInfo.WorkflowID, e.executionInfo.RunID,
@@ -2867,12 +2978,13 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
 	initiatedID int64,
 	header *workflow.Header,
 ) *workflow.HistoryEvent {
+
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID != common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID != common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionChildExecutionStarted,
+			tag.WorkflowActionChildWorkflowStarted,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(ci.InitiatedID))
 		return nil
@@ -2902,11 +3014,11 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(initiate
 	cause workflow.ChildWorkflowExecutionFailedCause,
 	initiatedEventAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes) *workflow.HistoryEvent {
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID != common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID != common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionStartChildExecutionFailed,
+			tag.WorkflowActionChildWorkflowInitiationFailed,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil
@@ -2928,12 +3040,13 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionFailedEvent(ev
 func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(initiatedID int64,
 	childExecution *workflow.WorkflowExecution,
 	attributes *workflow.WorkflowExecutionCompletedEventAttributes) *workflow.HistoryEvent {
+
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID == common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionChildExecutionCompleted,
+			tag.WorkflowActionChildWorkflowCompleted,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(ci.InitiatedID))
 		return nil
@@ -2964,12 +3077,13 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCompletedEvent(even
 func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(initiatedID int64,
 	childExecution *workflow.WorkflowExecution,
 	attributes *workflow.WorkflowExecutionFailedEventAttributes) *workflow.HistoryEvent {
+
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID == common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionChildExecutionFailed,
+			tag.WorkflowActionChildWorkflowFailed,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(ci.InitiatedID))
 		return nil
@@ -3000,12 +3114,13 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionFailedEvent(event *
 func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(initiatedID int64,
 	childExecution *workflow.WorkflowExecution,
 	attributes *workflow.WorkflowExecutionCanceledEventAttributes) *workflow.HistoryEvent {
+
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID == common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionChildExecutionCanceled,
+			tag.WorkflowActionChildWorkflowCanceled,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(ci.InitiatedID))
 		return nil
@@ -3036,12 +3151,13 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCanceledEvent(event
 func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(initiatedID int64,
 	childExecution *workflow.WorkflowExecution,
 	attributes *workflow.WorkflowExecutionTerminatedEventAttributes) *workflow.HistoryEvent {
+
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID == common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionChildExecutionTerminated,
+			tag.WorkflowActionChildWorkflowTerminated,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(ci.InitiatedID))
 		return nil
@@ -3072,12 +3188,13 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTerminatedEvent(eve
 func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(initiatedID int64,
 	childExecution *workflow.WorkflowExecution,
 	attributes *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent {
+
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn("Invalid history builder state for action",
+	if !ok || ci.StartedID == common.EmptyEventID || !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowActionChildExecutionTimedOut,
+			tag.WorkflowActionChildWorkflowTimedOut,
 			tag.Bool(ok),
 			tag.WorkflowInitiatedID(ci.InitiatedID))
 		return nil

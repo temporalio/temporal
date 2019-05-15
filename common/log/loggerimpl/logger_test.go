@@ -63,7 +63,7 @@ func TestDefaultLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
 
 }
 
@@ -97,7 +97,7 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflow-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
 }
 
 func TestEmptyMsg(t *testing.T) {
@@ -128,6 +128,6 @@ func TestEmptyMsg(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflowexecution-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+	assert.Equal(t, out, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
 
 }
