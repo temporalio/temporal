@@ -101,8 +101,6 @@ func (a *archiver) Finished() []uint64 {
 
 func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metrics.Client, request ArchiveRequest) {
 	sw := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleRequestLatency)
-	defer sw.Stop()
-
 	logger = tagLoggerWithRequest(logger, request)
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: 10 * time.Minute,
@@ -134,11 +132,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 		},
 	}
 	deleteSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
-	defer deleteSW.Stop()
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	err := workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
 	if err == nil {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount)
+		sw.Stop()
+		deleteSW.Stop()
 		return
 	}
 	metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalFailedAllRetriesCount)
@@ -160,4 +159,6 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
 	}
+	sw.Stop()
+	deleteSW.Stop()
 }
