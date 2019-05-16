@@ -63,8 +63,9 @@ func (s *workflowSuite) SetupTest() {
 	workflowTestArchiver = &MockArchiver{}
 	workflowTestPump = &PumpMock{}
 	workflowTestConfig = &Config{
-		ArchiverConcurrency:   dynamicconfig.GetIntPropertyFn(0),
-		ArchivalsPerIteration: dynamicconfig.GetIntPropertyFn(0),
+		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(0),
+		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(0),
+		TimeLimitPerArchivalIteration: dynamicconfig.GetDurationPropertyFn(MaxArchivalIterationTimeout()),
 	}
 }
 

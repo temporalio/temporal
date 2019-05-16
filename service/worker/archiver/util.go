@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -109,6 +110,11 @@ func ConvertHeaderToTags(header *HistoryBlobHeader) (map[string]string, error) {
 func IsLast(tags map[string]string) bool {
 	last, ok := tags["is_last"]
 	return ok && last == "true"
+}
+
+// MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
+func MaxArchivalIterationTimeout() time.Duration {
+	return workflowStartToCloseTimeout / 2
 }
 
 func modifyBlobForConstCheck(historyBlob *HistoryBlob, existingTags map[string]string) {

@@ -73,6 +73,7 @@ type (
 		ArchiverConcurrency                       dynamicconfig.IntPropertyFn
 		ArchivalsPerIteration                     dynamicconfig.IntPropertyFn
 		DeterministicConstructionCheckProbability dynamicconfig.FloatPropertyFn
+		TimeLimitPerArchivalIteration             dynamicconfig.DurationPropertyFn
 	}
 
 	contextKey int

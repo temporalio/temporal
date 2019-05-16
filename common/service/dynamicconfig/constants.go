@@ -187,6 +187,7 @@ var keys = map[Key]string{
 	WorkerArchiverConcurrency:                       "worker.ArchiverConcurrency",
 	WorkerArchivalsPerIteration:                     "worker.ArchivalsPerIteration",
 	WorkerDeterministicConstructionCheckProbability: "worker.DeterministicConstructionCheckProbability",
+	WorkerTimeLimitPerArchivalIteration:             "worker.TimeLimitPerArchivalIteration",
 	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
 	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
 }
@@ -482,6 +483,8 @@ const (
 	WorkerArchivalsPerIteration
 	// WorkerDeterministicConstructionCheckProbability controls the probability of running a deterministic construction check for any given archival
 	WorkerDeterministicConstructionCheckProbability
+	// WorkerTimeLimitPerArchivalIteration controls the time limit of each iteration of archival workflow
+	WorkerTimeLimitPerArchivalIteration
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS
 	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
