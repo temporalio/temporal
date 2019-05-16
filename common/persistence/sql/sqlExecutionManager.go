@@ -21,6 +21,7 @@
 package sql
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -76,11 +77,14 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.
 		request.CloseStatus); err != nil {
 		return nil, err
 	}
-	if request.CreateWorkflowMode == p.CreateWorkflowModeContinueAsNew {
+	switch request.CreateWorkflowMode {
+	case p.CreateWorkflowModeContinueAsNew:
+		// cannot create workflow with continue as new mode
 		return nil, &workflow.InternalServiceError{
 			Message: "CreateWorkflowExecution operation failed. Invalid CreateWorkflowModeContinueAsNew is used",
 		}
 	}
+
 	var err error
 	var row *sqldb.CurrentExecutionsRow
 	workflowID := *request.Execution.WorkflowId
@@ -544,11 +548,42 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 	}
 
 	if request.ContinueAsNew != nil {
-		newDomainID := sqldb.MustParseUUID(request.ContinueAsNew.DomainID)
-		newRunID := sqldb.MustParseUUID(request.ContinueAsNew.Execution.GetRunId())
-		if err := createOrUpdateCurrentExecution(tx, request.ContinueAsNew, shardID, newDomainID, newRunID,
-			request.ContinueAsNew.State, request.ContinueAsNew.CloseStatus); err != nil {
+		// validate workflow state & close status
+		if err := p.ValidateCreateWorkflowStateCloseStatus(
+			request.ContinueAsNew.State,
+			request.ContinueAsNew.CloseStatus); err != nil {
 			return err
+		}
+		newDomainID := sqldb.MustParseUUID(request.ContinueAsNew.DomainID)
+		if !bytes.Equal(domainID, newDomainID) {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateWorkflowExecution. Cannot continue as new to another domain"),
+			}
+		}
+
+		newRunID := sqldb.MustParseUUID(request.ContinueAsNew.Execution.GetRunId())
+
+		startVersion := common.EmptyVersion
+		lastWriteVersion := common.EmptyVersion
+		if request.ContinueAsNew.ReplicationState != nil {
+			startVersion = request.ReplicationState.StartVersion
+			lastWriteVersion = request.ReplicationState.LastWriteVersion
+		}
+
+		if err := assertAndUpdateCurrentExecution(tx,
+			shardID,
+			domainID,
+			workflowID,
+			newRunID,
+			runID,
+			request.ContinueAsNew.RequestID,
+			request.ContinueAsNew.State,
+			request.ContinueAsNew.CloseStatus,
+			startVersion,
+			lastWriteVersion); err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateWorkflowExecution. Failed to continue as new current execution. Error: %v", err),
+			}
 		}
 
 		if err := createExecutionFromRequest(tx, request.ContinueAsNew, shardID, newDomainID, newRunID, time.Now()); err != nil {
@@ -581,12 +616,12 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 			lastWriteVersion = request.ReplicationState.LastWriteVersion
 		}
 		// this is only to update the current record
-		if err := continueAsNew(tx,
-			m.shardID,
+		if err := assertAndUpdateCurrentExecution(tx,
+			shardID,
 			domainID,
-			executionInfo.WorkflowID,
+			workflowID,
 			runID,
-			executionInfo.RunID,
+			runID,
 			executionInfo.CreateRequestID,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -656,7 +691,6 @@ func (m *sqlExecutionManager) ResetWorkflowExecution(request *p.InternalResetWor
 		}
 
 		// 1. update current execution
-		// TODO: https://github.com/uber/cadence/issues/1679
 		if err := updateCurrentExecution(tx,
 			shardID,
 			domainID,
@@ -1841,7 +1875,7 @@ func createTimerTasks(
 	return nil
 }
 
-func continueAsNew(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, newRunID sqldb.UUID, previousRunID string,
+func assertAndUpdateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, newRunID sqldb.UUID, previousRunID sqldb.UUID,
 	createRequestID string, state int, closeStatus int, startVersion int64, lastWriteVersion int64) error {
 	runID, err := tx.LockCurrentExecutions(&sqldb.CurrentExecutionsFilter{
 		ShardID: int64(shardID), DomainID: domainID, WorkflowID: workflowID})
@@ -1850,7 +1884,7 @@ func continueAsNew(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID str
 			Message: fmt.Sprintf("ContinueAsNew failed. Failed to check current run ID. Error: %v", err),
 		}
 	}
-	if runID.String() != previousRunID {
+	if !bytes.Equal(runID, previousRunID) {
 		return &p.ConditionFailedError{
 			Msg: fmt.Sprintf("ContinueAsNew failed. Current run ID was %v, expected %v", runID, previousRunID),
 		}
