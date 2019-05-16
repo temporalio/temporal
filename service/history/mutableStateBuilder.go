@@ -1472,6 +1472,10 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 		return nil
 	}
 
+	// set workflow state to running
+	// since decision is scheduled
+	e.executionInfo.State = persistence.WorkflowStateRunning
+
 	// Tasklist and decision timeout should already be set from workflow execution started event
 	taskList := e.executionInfo.TaskList
 	if e.IsStickyTaskListEnabled() {
@@ -2827,6 +2831,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 		DecisionTimeoutValue:    newExecutionInfo.DecisionTimeoutValue,
 		ExecutionContext:        nil,
 		LastEventTaskID:         newExecutionInfo.LastEventTaskID,
+		State:                   newExecutionInfo.State,
+		CloseStatus:             newExecutionInfo.CloseStatus,
 		NextEventID:             newStateBuilder.GetNextEventID(),
 		LastProcessedEvent:      common.EmptyEventID,
 		CreateWorkflowMode:      persistence.CreateWorkflowModeContinueAsNew,

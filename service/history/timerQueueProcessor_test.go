@@ -265,6 +265,7 @@ func (s *timerQueueProcessorSuite) closeWorkflow(domainID string, we workflow.Wo
 	s.NoError(err)
 
 	state.ExecutionInfo.State = persistence.WorkflowStateCompleted
+	state.ExecutionInfo.CloseStatus = persistence.WorkflowCloseStatusCompleted
 
 	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, state.ExecutionInfo.NextEventID, nil, nil, nil, nil, nil)
 	s.NoError(err2, "No error expected.")

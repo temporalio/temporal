@@ -239,6 +239,8 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		DecisionScheduleID:          executionInfo.DecisionScheduleID,
 		DecisionStartedID:           executionInfo.DecisionStartedID,
 		DecisionStartToCloseTimeout: executionInfo.DecisionTimeout,
+		State:                       executionInfo.State,
+		CloseStatus:                 executionInfo.CloseStatus,
 		EventStoreVersion:           executionInfo.EventStoreVersion,
 		BranchToken:                 executionInfo.BranchToken,
 		CronSchedule:                executionInfo.CronSchedule,

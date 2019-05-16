@@ -687,6 +687,8 @@ type (
 		DecisionScheduleID          int64
 		DecisionStartedID           int64
 		DecisionStartToCloseTimeout int32
+		State                       int
+		CloseStatus                 int
 		CreateWorkflowMode          int
 		PreviousRunID               string
 		PreviousLastWriteVersion    int64

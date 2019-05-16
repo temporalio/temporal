@@ -663,6 +663,8 @@ func (m *executionManagerImpl) SerializeCreateWorkflowExecutionRequest(request *
 		DecisionScheduleID:          request.DecisionScheduleID,
 		DecisionStartedID:           request.DecisionStartedID,
 		DecisionStartToCloseTimeout: request.DecisionStartToCloseTimeout,
+		State:                       request.State,
+		CloseStatus:                 request.CloseStatus,
 		CreateWorkflowMode:          request.CreateWorkflowMode,
 		PreviousRunID:               request.PreviousRunID,
 		PreviousLastWriteVersion:    request.PreviousLastWriteVersion,
