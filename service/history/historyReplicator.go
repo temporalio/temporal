@@ -679,7 +679,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
 	executionInfo.SetNextEventID(lastEvent.GetEventId() + 1)
 
-	_, err := context.appendFirstBatchEventsForStandby(msBuilder, history.Events)
+	_, _, err := context.appendFirstBatchEventsForStandby(msBuilder, history.Events)
 	if err != nil {
 		return err
 	}
@@ -687,6 +687,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	// workflow passive side logic should not generate any replication task
 	createReplicationTask := false
 	transferTasks := sBuilder.getTransferTasks()
+	var replicationTasks []persistence.Task // passive side generates no replication tasks
 	timerTasks := sBuilder.getTimerTasks()
 	now := time.Unix(0, lastEvent.GetTimestamp())
 
@@ -711,7 +712,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, timerTasks,
+		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -744,7 +745,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, sourceCluster, createReplicationTask, now, transferTasks, timerTasks,
+			msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -794,7 +795,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	prevRunID = currentRunID
 	prevLastWriteVersion = incomingVersion
 	return context.createWorkflowExecution(
-		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, timerTasks,
+		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }

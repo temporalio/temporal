@@ -24,7 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
@@ -73,6 +75,83 @@ func (s *mutableStateSuite) SetupTest() {
 
 func (s *mutableStateSuite) TearDownTest() {
 
+}
+
+func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_ReplicateDecisionCompleted() {
+	version := int64(12)
+	runID := uuid.New()
+	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
+		cluster.TestCurrentClusterName,
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		runID,
+	)
+
+	newDecisionScheduleEvent, newDecisionStartedEvent := s.prepareTransientDecisionCompletionFirstBatchReplicated(version, runID)
+
+	newDecisionCompletedEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(newDecisionStartedEvent.GetEventId() + 1),
+		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+		EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+		DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
+			ScheduledEventId: common.Int64Ptr(newDecisionScheduleEvent.GetEventId()),
+			StartedEventId:   common.Int64Ptr(newDecisionStartedEvent.GetEventId()),
+			Identity:         common.StringPtr("some random identity"),
+		},
+	}
+	s.msBuilder.ReplicateDecisionTaskCompletedEvent(newDecisionCompletedEvent)
+	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
+	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().history))
+}
+
+func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_FailoverDecisionTimeout() {
+	version := int64(12)
+	runID := uuid.New()
+	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
+		cluster.TestCurrentClusterName,
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		runID,
+	)
+
+	newDecisionScheduleEvent, newDecisionStartedEvent := s.prepareTransientDecisionCompletionFirstBatchReplicated(version, runID)
+
+	s.msBuilder.UpdateReplicationStateVersion(version+1, true)
+	s.NotNil(s.msBuilder.AddDecisionTaskTimedOutEvent(newDecisionScheduleEvent.GetEventId(), newDecisionStartedEvent.GetEventId()))
+	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
+	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
+}
+
+func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_FailoverDecisionFailed() {
+	version := int64(12)
+	runID := uuid.New()
+	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
+		cluster.TestCurrentClusterName,
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		runID,
+	)
+
+	newDecisionScheduleEvent, newDecisionStartedEvent := s.prepareTransientDecisionCompletionFirstBatchReplicated(version, runID)
+
+	s.msBuilder.UpdateReplicationStateVersion(version+1, true)
+	s.NotNil(s.msBuilder.AddDecisionTaskFailedEvent(
+		newDecisionScheduleEvent.GetEventId(),
+		newDecisionStartedEvent.GetEventId(),
+		workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
+		[]byte("some random decision failure details"),
+		"some random decision failure identity",
+		"", "", "", 0,
+	))
+	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
+	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
 }
 
 func (s *mutableStateSuite) TestShouldBufferEvent() {
@@ -244,7 +323,6 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	s.Equal(int64(9), s.msBuilder.hBuilder.history[1].GetEventId())
 	s.Equal(int64(8), s.msBuilder.hBuilder.history[1].ActivityTaskCompletedEventAttributes.GetStartedEventId())
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[1].ActivityTaskCompletedEventAttributes.GetScheduledEventId())
-
 }
 
 func (s *mutableStateSuite) TestTrimEvents() {
@@ -292,4 +370,143 @@ func (s *mutableStateSuite) TestTrimEvents() {
 			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
 		},
 	}, output)
+}
+
+func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*shared.HistoryEvent, *shared.HistoryEvent) {
+	domainID := validDomainID
+	execution := shared.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(runID),
+	}
+
+	now := time.Now()
+	workflowType := "some random workflow type"
+	tasklist := "some random tasklist"
+	workflowTimeoutSecond := int32(222)
+	decisionTimeoutSecond := int32(11)
+	decisionAttempt := int64(0)
+
+	eventID := int64(1)
+	workflowStartEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(eventID),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
+		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+			Input:                               nil,
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(workflowTimeoutSecond),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(decisionTimeoutSecond),
+		},
+	}
+	eventID++
+
+	decisionScheduleEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(eventID),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
+			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
+			StartToCloseTimeoutSeconds: common.Int32Ptr(decisionTimeoutSecond),
+			Attempt:                    common.Int64Ptr(decisionAttempt),
+		},
+	}
+	eventID++
+
+	decisionStartedEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(eventID),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
+		DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
+			ScheduledEventId: common.Int64Ptr(decisionScheduleEvent.GetEventId()),
+			RequestId:        common.StringPtr(uuid.New()),
+		},
+	}
+	eventID++
+
+	_ = &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(eventID),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskFailed.Ptr(),
+		DecisionTaskFailedEventAttributes: &shared.DecisionTaskFailedEventAttributes{
+			ScheduledEventId: common.Int64Ptr(decisionScheduleEvent.GetEventId()),
+			StartedEventId:   common.Int64Ptr(decisionStartedEvent.GetEventId()),
+		},
+	}
+	eventID++
+
+	s.mockEventsCache.On("putEvent", domainID, execution.GetWorkflowId(), execution.GetRunId(),
+		workflowStartEvent.GetEventId(), workflowStartEvent).Return(nil).Once()
+	s.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, nil, execution, uuid.New(), workflowStartEvent)
+
+	// setup transient decision
+	di := s.msBuilder.ReplicateDecisionTaskScheduledEvent(
+		decisionScheduleEvent.GetVersion(),
+		decisionScheduleEvent.GetEventId(),
+		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
+		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds(),
+		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt(),
+	)
+	s.NotNil(di)
+
+	di = s.msBuilder.ReplicateDecisionTaskStartedEvent(nil,
+		decisionStartedEvent.GetVersion(),
+		decisionScheduleEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(),
+		decisionStartedEvent.DecisionTaskStartedEventAttributes.GetRequestId(),
+		decisionStartedEvent.GetTimestamp(),
+	)
+	s.NotNil(di)
+
+	s.msBuilder.ReplicateDecisionTaskFailedEvent()
+
+	decisionAttempt = int64(123)
+	newDecisionScheduleEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(eventID),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
+			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
+			StartToCloseTimeoutSeconds: common.Int32Ptr(decisionTimeoutSecond),
+			Attempt:                    common.Int64Ptr(decisionAttempt),
+		},
+	}
+	eventID++
+
+	newDecisionStartedEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(eventID),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
+		DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
+			ScheduledEventId: common.Int64Ptr(decisionScheduleEvent.GetEventId()),
+			RequestId:        common.StringPtr(uuid.New()),
+		},
+	}
+	eventID++
+
+	di = s.msBuilder.ReplicateDecisionTaskScheduledEvent(
+		newDecisionScheduleEvent.GetVersion(),
+		newDecisionScheduleEvent.GetEventId(),
+		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
+		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds(),
+		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt(),
+	)
+	s.NotNil(di)
+
+	di = s.msBuilder.ReplicateDecisionTaskStartedEvent(nil,
+		newDecisionStartedEvent.GetVersion(),
+		newDecisionScheduleEvent.GetEventId(),
+		newDecisionStartedEvent.GetEventId(),
+		newDecisionStartedEvent.DecisionTaskStartedEventAttributes.GetRequestId(),
+		newDecisionStartedEvent.GetTimestamp(),
+	)
+	s.NotNil(di)
+
+	return newDecisionScheduleEvent, newDecisionStartedEvent
 }

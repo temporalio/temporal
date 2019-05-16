@@ -189,7 +189,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 		return err
 	}
 
-	_, err = context.appendFirstBatchEventsForStandby(msBuilder, task.getEvents())
+	_, _, err = context.appendFirstBatchEventsForStandby(msBuilder, task.getEvents())
 	if err != nil {
 		return err
 	}
@@ -197,6 +197,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 	// workflow passive side logic should not generate any replication task
 	createReplicationTask := false
 	transferTasks := sBuilder.getTransferTasks()
+	var replicationTasks []persistence.Task // passive side generates no replication tasks
 	timerTasks := sBuilder.getTimerTasks()
 	defer func() {
 		if retError == nil {
@@ -209,7 +210,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, timerTasks,
+		msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -238,7 +239,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, timerTasks,
+			msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -294,7 +295,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 	prevRunID = currentRunID
 	prevLastWriteVersion = task.getVersion()
 	return context.createWorkflowExecution(
-		msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, timerTasks,
+		msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }
