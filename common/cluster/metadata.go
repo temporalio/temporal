@@ -226,12 +226,12 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 // ArchivalConfig returns the archival config of the cluster.
 // This method always return a well formed ArchivalConfig (this means ArchivalConfig().IsValid always returns true).
 func (metadata *metadataImpl) ArchivalConfig() (retCfg *ArchivalConfig) {
-	status, err := getArchivalStatus(metadata.archivalStatus())
+	inputStatus := metadata.archivalStatus()
+	status, err := getArchivalStatus(inputStatus)
 	if err != nil {
 		metadata.logger.Error("error getting archival config, invalid archival status in dynamic config",
-			tag.ArchivalClusterArchivalStatus(metadata.archivalStatus),
+			tag.ArchivalClusterArchivalStatus(inputStatus),
 			tag.Error(err))
-
 		metadata.metricsClient.IncCounter(metrics.ClusterMetadataArchivalConfigScope, metrics.ArchivalConfigFailures)
 	}
 	return NewArchivalConfig(status, metadata.defaultBucket, metadata.enableReadFromArchival())
