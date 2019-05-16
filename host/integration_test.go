@@ -27,6 +27,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -596,6 +597,9 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	taskList := &workflow.TaskList{}
 	taskList.Name = common.StringPtr(tl)
 
+	initialIntervalInSeconds := 1
+	backoffCoefficient := 1.5
+	maximumAttempts := 5
 	request := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
 		Domain:                              common.StringPtr(s.domainName),
@@ -607,11 +611,11 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
 		RetryPolicy: &workflow.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			MaximumAttempts:             common.Int32Ptr(5),
+			InitialIntervalInSeconds:    common.Int32Ptr(int32(initialIntervalInSeconds)),
+			MaximumAttempts:             common.Int32Ptr(int32(maximumAttempts)),
 			MaximumIntervalInSeconds:    common.Int32Ptr(1),
 			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          common.Float64Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(backoffCoefficient),
 			ExpirationIntervalInSeconds: common.Int32Ptr(100),
 		},
 	}
@@ -629,7 +633,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		executions = append(executions, execution)
 		attemptCount++
-		if attemptCount == 5 {
+		if attemptCount == maximumAttempts {
 			return nil, []*workflow.Decision{
 				{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -658,35 +662,33 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		T:               s.T(),
 	}
 
-	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-	events := s.getHistory(s.domainName, executions[0])
-	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
-	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	describeWorkflowExecution := func(execution *workflow.WorkflowExecution) (*workflow.DescribeWorkflowExecutionResponse, error) {
+		return s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
+			Domain:    common.StringPtr(s.domainName),
+			Execution: execution,
+		})
+	}
 
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[1])
-	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
-	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	for i := 0; i != maximumAttempts; i++ {
+		_, err := poller.PollAndProcessDecisionTask(false, false)
+		s.True(err == nil, err)
+		events := s.getHistory(s.domainName, executions[i])
+		if i == maximumAttempts-1 {
+			s.Equal(workflow.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
+		} else {
+			s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+		}
+		s.Equal(int32(i), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[2])
-	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
-	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
-
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[3])
-	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
-	s.Equal(int32(3), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
-
-	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[4])
-	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
-	s.Equal(int32(4), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+		dweResponse, err := describeWorkflowExecution(executions[i])
+		s.Nil(err)
+		backoff := time.Duration(0)
+		if i > 0 {
+			backoff = time.Duration(float64(initialIntervalInSeconds)*math.Pow(backoffCoefficient, float64(i-1))) * time.Second
+		}
+		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime() + backoff.Nanoseconds()
+		s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
+	}
 }
 
 func (s *integrationSuite) TestWorkflowRetryFailures() {
@@ -859,6 +861,14 @@ func (s *integrationSuite) TestCronWorkflow() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
 		CronSchedule:                        common.StringPtr("@every 3s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		RetryPolicy: &workflow.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			MaximumAttempts:             common.Int32Ptr(5),
+			MaximumIntervalInSeconds:    common.Int32Ptr(1),
+			NonRetriableErrorReasons:    []string{"cron-test-error"},
+			BackoffCoefficient:          common.Float64Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(100),
+		},
 	}
 
 	startWorkflowTS := time.Now()
@@ -997,6 +1007,17 @@ func (s *integrationSuite) TestCronWorkflow() {
 		executionInfo := closedExecutions[i]
 		s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
 	}
+
+	dweResponse, err := s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      we.RunId,
+		},
+	})
+	s.Nil(err)
+	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime() + 3*time.Second.Nanoseconds()
+	s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {
@@ -1338,6 +1359,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Nil(err)
 	s.True(nil == dweResponse.WorkflowExecutionInfo.CloseTime)
 	s.Equal(int64(2), *dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, DecisionScheduled
+	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 
 	// decider logic
 	workflowComplete := false
