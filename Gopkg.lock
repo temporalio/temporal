@@ -622,7 +622,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:7ebd2ed0996b640ecc36fb9a4015c50d47a6e743b34faab0250d94d7ffb07805"
+  digest = "1:18020c7e20e3d378391daa91b5a7e382dc2fb965b554a144c69c43f2821f9942"
   name = "github.com/uber-go/tally"
   packages = [
     ".",
@@ -634,8 +634,8 @@
     "statsd",
   ]
   pruneopts = ""
-  revision = "e9a67ec1839e1f6e5133dbcca2f57bec12fdeda2"
-  version = "v3.3.8"
+  revision = "f331b65108ed41d0a83a6ce650c1ea9c0fe2878f"
+  version = "v3.3.9"
 
 [[projects]]
   digest = "1:86555acbb9507153d3cd0d032e07279ba89e38aadc8200cfca3b5d14c98b4daf"

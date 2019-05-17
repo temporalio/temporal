@@ -88,7 +88,7 @@ ignored = ["github.com/uber/cadence/.gen"]
 
 [[constraint]]
   name = "github.com/uber-go/tally"
-  version = "3.3.7"
+  version = "3.3.9"
 
 [[constraint]]
   name = "github.com/uber/ringpop-go"
@@ -150,7 +150,3 @@ ignored = ["github.com/uber/cadence/.gen"]
 [[constraint]]
   name = "github.com/valyala/fastjson"
   version = "1.4.1"
-
-[[override]]
-  name = "github.com/m3db/prometheus_client_golang"
-  revision = "8ae269d24972b8695572fa6b2e3718b5ea82d6b4"
