@@ -6,7 +6,7 @@ start workflow, show workflow history, and signal workflow.
 ## How
 - Run `make bins`
 - You should see an executable `cadence`
-- (Optional) You could also use docker image `ubercadence/cli`, by replacing all the following `./cadence ...` with `docker run --rm ubercadence/cli:master ...`
+- (Optional) You could also use docker image `ubercadence/cli`, by replacing all the following `./cadence ...` with `docker run --rm ubercadence/cli:master --address <HOST_DNS>:7933 ...` . For old versions of docker, HOST_DNS is just 127.0.0.1; for 18.03 onwards, you may have to use host.docker.internal. For more info check https://docs.docker.com/docker-for-mac/networking/#use-cases-and-workarounds  
 
 ## Quick Start
 Run `./cadence` for help on top level commands and global options   
