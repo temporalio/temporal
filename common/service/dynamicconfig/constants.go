@@ -165,6 +165,7 @@ var keys = map[Key]string{
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
+	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 
@@ -430,6 +431,8 @@ const (
 	DefaultEventEncoding
 	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
 	NumArchiveSystemWorkflows
+	// ArchiveRequestRPS is the rate limit on the number of archive request per second
+	ArchiveRequestRPS
 
 	// EnableAdminProtection is whether to enable admin checking
 	EnableAdminProtection
