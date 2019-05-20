@@ -3478,16 +3478,16 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent1 := gen.WorkflowExecution{
+	workflowExecutionCurrent := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"),
 	}
-	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent1, int64(3), int64(2), nil)
+	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent, int64(3), int64(2), nil)
 	s.NoError(err)
 
 	runID1, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
-	s.Equal(workflowExecutionCurrent1.GetRunId(), runID1)
-	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent1)
+	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
+	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent)
 	s.NoError(err)
 	updatedInfo1 := copyWorkflowExecutionInfo(state.ExecutionInfo)
 	updatedInfo1.State = p.WorkflowStateCompleted
@@ -3497,7 +3497,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
 	s.NoError(err3)
 	runID1, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
-	s.Equal(workflowExecutionCurrent1.GetRunId(), runID1)
+	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
 
 	resetExecutionInfo := &p.WorkflowExecutionInfo{
 		DomainID:             domainID,
@@ -3530,7 +3530,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		StartVersion:   int64(8780),
 	}
 
-	err = s.ResetMutableState(workflowExecutionCurrent1.GetRunId(), resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+	err = s.ResetMutableState(workflowExecutionCurrent.GetRunId(), resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NoError(err)
 
@@ -3563,6 +3563,91 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	// this test only assert whether the current workflow execution record is reseted
 	runID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionReset.GetRunId(), runID)
+}
+
+// TestResetMutableStateCurrentIsNotSelf test
+func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
+	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
+	workflowID := "test-reset-mutable-state-test-mismatch"
+
+	// first create a workflow and continue as new it
+	workflowExecutionReset := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0"),
+	}
+	task, err := s.CreateWorkflowExecution(domainID, workflowExecutionReset, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.NoError(err)
+	s.NotNil(task, "Expected non empty task identifier.")
+
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
+	s.NoError(err)
+
+	info := state.ExecutionInfo
+	continueAsNewInfo := copyWorkflowExecutionInfo(info)
+	continueAsNewInfo.State = p.WorkflowStateRunning
+	continueAsNewInfo.NextEventID = int64(5)
+	continueAsNewInfo.LastProcessedEvent = int64(2)
+
+	workflowExecutionCurrent := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"),
+	}
+	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent, int64(3), int64(2), nil)
+	s.NoError(err)
+
+	runID1, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
+	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent)
+	s.NoError(err)
+	updatedInfo1 := copyWorkflowExecutionInfo(state.ExecutionInfo)
+	updatedInfo1.State = p.WorkflowStateCompleted
+	updatedInfo1.CloseStatus = p.WorkflowCloseStatusCompleted
+	updatedInfo1.NextEventID = int64(6)
+	updatedInfo1.LastProcessedEvent = int64(2)
+	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
+	s.NoError(err3)
+	runID1, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
+
+	resetExecutionInfo := &p.WorkflowExecutionInfo{
+		DomainID:             domainID,
+		WorkflowID:           workflowExecutionReset.GetWorkflowId(),
+		RunID:                workflowExecutionReset.GetRunId(),
+		ParentDomainID:       uuid.New(),
+		ParentWorkflowID:     "some random parent workflow ID",
+		ParentRunID:          uuid.New(),
+		InitiatedID:          12345,
+		TaskList:             "some random tasklist",
+		WorkflowTypeName:     "some random workflow type name",
+		WorkflowTimeout:      1112,
+		DecisionTimeoutValue: 14,
+		State:                p.WorkflowStateRunning,
+		NextEventID:          123,
+		CreateRequestID:      uuid.New(),
+		DecisionVersion:      common.EmptyVersion,
+		DecisionScheduleID:   111,
+		DecisionStartedID:    222,
+		DecisionRequestID:    uuid.New(),
+		DecisionTimeout:      0,
+	}
+	resetActivityInfos := []*p.ActivityInfo{}
+	resetTimerInfos := []*p.TimerInfo{}
+	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
+	resetRequestCancelInfos := []*p.RequestCancelInfo{}
+	resetSignalInfos := []*p.SignalInfo{}
+	rState := &p.ReplicationState{
+		CurrentVersion: int64(8789),
+		StartVersion:   int64(8780),
+	}
+
+	wrongPrevRunID := uuid.New()
+	err = s.ResetMutableState(wrongPrevRunID, resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
+	s.NotNil(err)
+
+	// this test only assert whether the current workflow execution record is reset
+	runID, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Equal(workflowExecutionCurrent.GetRunId(), runID)
 }
 
 // TestCreateGetShardBackfill test

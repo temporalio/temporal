@@ -897,20 +897,21 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx sqldb.Tx, request *p.Intern
 	replicationState := request.ReplicationState
 	domainID := sqldb.MustParseUUID(info.DomainID)
 	runID := sqldb.MustParseUUID(info.RunID)
+	prevRunID := sqldb.MustParseUUID(request.PrevRunID)
 
-	if err := updateCurrentExecution(tx,
+	if err := assertAndUpdateCurrentExecution(tx,
 		m.shardID,
 		domainID,
 		info.WorkflowID,
 		runID,
+		prevRunID,
 		info.CreateRequestID,
 		info.State,
 		info.CloseStatus,
 		replicationState.StartVersion,
-		replicationState.LastWriteVersion,
-	); err != nil {
+		replicationState.LastWriteVersion); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Failed to continue as new. Error: %v", err),
+			Message: fmt.Sprintf("ResetMutableState. Failed to comare and swat the current record. Error: %v", err),
 		}
 	}
 
