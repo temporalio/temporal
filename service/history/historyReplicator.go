@@ -134,7 +134,7 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 			)
 		},
 	}
-	replicator.resetor = newWorkflowResetor(historyEngine, replicator)
+	replicator.resetor = newWorkflowResetor(historyEngine)
 
 	return replicator
 }
@@ -658,7 +658,7 @@ func (r *historyReplicator) ApplyReplicationTask(ctx ctx.Context, context workfl
 
 	if err == nil {
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		r.notify(request.GetSourceCluster(), now, sBuilder.getTransferTasks(), sBuilder.getTimerTasks())
+		notify(r.shard, r.historyEngine, request.GetSourceCluster(), now, sBuilder.getTransferTasks(), sBuilder.getTimerTasks())
 	}
 
 	return err
@@ -996,14 +996,6 @@ func (r *historyReplicator) updateMutableStateWithTimer(context workflowExecutio
 	return context.updateWorkflowExecutionForStandby(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
 }
 
-func (r *historyReplicator) notify(clusterName string, now time.Time, transferTasks []persistence.Task,
-	timerTasks []persistence.Task) {
-	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
-	r.shard.SetCurrentTime(clusterName, now)
-	r.historyEngine.txProcessor.NotifyNewTask(clusterName, transferTasks)
-	r.historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
-}
-
 func (r *historyReplicator) deserializeBlob(blob *workflow.DataBlob) ([]*workflow.HistoryEvent, error) {
 
 	if blob.GetEncodingType() != workflow.EncodingTypeThriftRW {
@@ -1101,4 +1093,13 @@ func newRetryTaskErrorWithHint(msg string, domainID string, workflowID string, r
 		RunId:       common.StringPtr(runID),
 		NextEventId: common.Int64Ptr(nextEventID),
 	}
+}
+
+func notify(shard ShardContext, historyEngine *historyEngineImpl,
+	clusterName string, now time.Time, transferTasks []persistence.Task, timerTasks []persistence.Task) {
+
+	now = now.Add(-shard.GetConfig().StandbyClusterDelay())
+	shard.SetCurrentTime(clusterName, now)
+	historyEngine.txProcessor.NotifyNewTask(clusterName, transferTasks)
+	historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
 }

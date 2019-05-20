@@ -50,11 +50,8 @@ type (
 
 var _ workflowResetor = (*workflowResetorImpl)(nil)
 
-func newWorkflowResetor(historyEngine *historyEngineImpl, repl *historyReplicator) *workflowResetorImpl {
-	return &workflowResetorImpl{
-		eng:        historyEngine,
-		replicator: repl,
-	}
+func newWorkflowResetor(historyEngine *historyEngineImpl) *workflowResetorImpl {
+	return &workflowResetorImpl{eng: historyEngine}
 }
 
 // ResetWorkflowExecution only allows resetting to decisionTaskCompleted, but exclude that batch of decisionTaskCompleted/decisionTaskFailed/decisionTaskTimeout.
@@ -734,7 +731,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(ctx context.Context, request *h.Re
 	newMsBuilder.GetExecutionInfo().BranchToken = forkResp.NewBranchToken
 
 	// prepare to append history to new branch
-	hBuilder := newHistoryBuilder(newMsBuilder, w.replicator.logger)
+	hBuilder := newHistoryBuilder(newMsBuilder, w.eng.logger)
 	hBuilder.history = historyAfterReset
 	newMsBuilder.SetHistoryBuilder(hBuilder)
 
@@ -743,7 +740,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(ctx context.Context, request *h.Re
 		return
 	}
 	now := time.Unix(0, lastEvent.GetTimestamp())
-	w.replicator.notify(request.GetSourceCluster(), now, newRunTransferTasks, newRunTimerTasks)
+	notify(w.eng.shard, w.eng, request.GetSourceCluster(), now, newRunTransferTasks, newRunTimerTasks)
 	return nil
 }
 
