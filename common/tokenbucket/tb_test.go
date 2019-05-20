@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -59,20 +60,7 @@ func (s *TokenBucketSuite) TestRpsEnforced() {
 	ts := &mockTimeSource{currTime: time.Now()}
 	tb := New(99, ts)
 	for i := 0; i < 2; i++ {
-		total := 0
-		attempts := 1
-		for ; attempts < 11; attempts++ {
-			for c := 0; c < 2; c++ {
-				if ok, _ := tb.TryConsume(10); ok {
-					total += 10
-				}
-			}
-
-			if total >= 90 {
-				break
-			}
-			ts.advance(time.Millisecond * 101)
-		}
+		total, attempts := s.testRpsEnforcedHelper(tb, ts, 11, 90, 10)
 		s.Equal(90, total, "Token bucket failed to enforce limit")
 		s.Equal(9, attempts, "Token bucket gave out tokens too quickly")
 		ts.advance(time.Millisecond * 101)
@@ -88,21 +76,48 @@ func (s *TokenBucketSuite) TestLowRpsEnforced() {
 	ts := &mockTimeSource{currTime: time.Now()}
 	tb := New(3, ts)
 
-	total := 0
-	attempts := 1
-	for ; attempts < 10; attempts++ {
+	total, attempts := s.testRpsEnforcedHelper(tb, ts, 10, 3, 1)
+	s.Equal(3, total, "Token bucket failed to enforce limit")
+	s.Equal(3, attempts, "Token bucket gave out tokens too quickly")
+}
+
+func (s *TokenBucketSuite) TestDynamicRpsEnforced() {
+	rpsConfigFn, rpsPtr := s.getTestRPSConfigFn(99)
+	ts := &mockTimeSource{currTime: time.Now()}
+	dtb := NewDynamicTokenBucket(rpsConfigFn, ts)
+	total, attempts := s.testRpsEnforcedHelper(dtb, ts, 11, 90, 10)
+	s.Equal(90, total, "Token bucket failed to enforce limit")
+	s.Equal(9, attempts, "Token bucket gave out tokens too quickly")
+	ts.advance(time.Second)
+
+	*rpsPtr = 3
+	total, attempts = s.testRpsEnforcedHelper(dtb, ts, 10, 3, 1)
+	s.Equal(3, total, "Token bucket failed to enforce limit")
+	s.Equal(3, attempts, "Token bucket gave out tokens too quickly")
+}
+
+func (s *TokenBucketSuite) testRpsEnforcedHelper(tb TokenBucket, ts *mockTimeSource, maxAttempts, tokenNeeded, consumeRate int) (total, attempts int) {
+	total = 0
+	attempts = 1
+	for ; attempts < maxAttempts+1; attempts++ {
 		for c := 0; c < 2; c++ {
-			if ok, _ := tb.TryConsume(1); ok {
-				total++
+			if ok, _ := tb.TryConsume(consumeRate); ok {
+				total += consumeRate
 			}
 		}
-		if total >= 3 {
+		if total >= tokenNeeded {
 			break
 		}
 		ts.advance(time.Millisecond * 101)
 	}
-	s.Equal(3, total, "Token bucket failed to enforce limit")
-	s.Equal(3, attempts, "Token bucket gave out tokens too quickly")
+	return
+}
+
+func (s *TokenBucketSuite) getTestRPSConfigFn(defaultValue int) (dynamicconfig.IntPropertyFn, *int) {
+	rps := defaultValue
+	return func(_ ...dynamicconfig.FilterOption) int {
+		return rps
+	}, &rps
 }
 
 func (s *TokenBucketSuite) TestPriorityRpsEnforced() {

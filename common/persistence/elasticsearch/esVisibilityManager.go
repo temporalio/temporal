@@ -43,7 +43,7 @@ func NewESVisibilityManager(indexName string, esClient es.Client, config *config
 	if config != nil {
 		// wrap with rate limiter
 		if config.MaxQPS() != 0 {
-			esRateLimiter := tokenbucket.New(config.MaxQPS(), clock.NewRealTimeSource())
+			esRateLimiter := tokenbucket.NewDynamicTokenBucket(config.MaxQPS, clock.NewRealTimeSource())
 			visibilityFromES = p.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
 		}
 		// wrap with advanced rate limit for list

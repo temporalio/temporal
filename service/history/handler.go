@@ -105,7 +105,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		visibilityMgr:       visibilityMgr,
 		executionMgrFactory: executionMgrFactory,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
-		rateLimiter:         tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
+		rateLimiter:         tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
 		publicClient:        publicClient,
 	}
 

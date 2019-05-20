@@ -66,7 +66,7 @@ func NewHandler(sVice service.Service, config *Config, taskPersistence persisten
 		taskPersistence: taskPersistence,
 		metadataMgr:     metadataMgr,
 		config:          config,
-		rateLimiter:     tokenbucket.New(config.RPS(), clock.NewRealTimeSource()),
+		rateLimiter:     tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)

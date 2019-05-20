@@ -34,9 +34,6 @@ type throttledLogger struct {
 	rps int32
 	tb  tokenbucket.TokenBucket
 	log log.Logger
-	cfg struct {
-		rps dynamicconfig.IntPropertyFn
-	}
 }
 
 var _ log.Logger = (*throttledLogger)(nil)
@@ -62,13 +59,12 @@ func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) log.
 	}
 
 	rate := rps()
-	tb := tokenbucket.New(rate, clock.NewRealTimeSource())
+	tb := tokenbucket.NewDynamicTokenBucket(rps, clock.NewRealTimeSource())
 	tl := &throttledLogger{
 		tb:  tb,
 		rps: int32(rate),
 		log: log,
 	}
-	tl.cfg.rps = rps
 	return tl
 }
 
@@ -109,28 +105,11 @@ func (tl *throttledLogger) WithTags(tags ...tag.Tag) log.Logger {
 		tb:  tl.tb,
 		log: tl.log.WithTags(tags...),
 	}
-	result.cfg.rps = tl.cfg.rps
 	return result
 }
 
 func (tl *throttledLogger) rateLimit(f func()) {
-	tl.resetRateIfChanged()
-	ok, _ := tl.tb.TryConsume(1)
-	if ok {
+	if ok, _ := tl.tb.TryConsume(1); ok {
 		f()
-	}
-}
-
-// resetLimitIfChanged resets the underlying token bucket if the
-// current rps quota is different from the actual rps quota obtained
-// from dynamic config
-func (tl *throttledLogger) resetRateIfChanged() {
-	curr := atomic.LoadInt32(&tl.rps)
-	actual := tl.cfg.rps()
-	if int(curr) == actual {
-		return
-	}
-	if atomic.CompareAndSwapInt32(&tl.rps, curr, int32(actual)) {
-		tl.tb.Reset(actual)
 	}
 }

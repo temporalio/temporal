@@ -95,7 +95,7 @@ func newQueueProcessorBase(clusterName string, shard ShardContext, options *Queu
 		shard:                   shard,
 		options:                 options,
 		processor:               processor,
-		rateLimiter:             tokenbucket.New(options.MaxPollRPS(), clock.NewRealTimeSource()),
+		rateLimiter:             tokenbucket.NewDynamicTokenBucket(options.MaxPollRPS, clock.NewRealTimeSource()),
 		workerNotificationChans: workerNotificationChans,
 		status:                  common.DaemonStatusInitialized,
 		notifyCh:                make(chan struct{}, 1),

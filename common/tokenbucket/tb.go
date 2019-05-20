@@ -22,9 +22,11 @@ package tokenbucket
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -44,8 +46,6 @@ type (
 		// tokens were acquired before timeout, false
 		// otherwise
 		Consume(count int, timeout time.Duration) bool
-		// Reset resets the token bucket rps limit to the given value
-		Reset(rps int)
 	}
 
 	// PriorityTokenBucket is the interface for rate limiter with priority
@@ -74,6 +74,12 @@ type (
 		nextRefillTime         int64
 		nextOverflowRefillTime int64
 		timeSource             clock.TimeSource
+	}
+
+	dynamicTokenBucketImpl struct {
+		tb         *tokenBucketImpl
+		currentRPS int32
+		rps        dynamicconfig.IntPropertyFn
 	}
 
 	priorityTokenBucketImpl struct {
@@ -124,9 +130,13 @@ const (
 // BenchmarkGolangRateParallel-8 	10000000	       208 ns/op
 //
 func New(rps int, timeSource clock.TimeSource) TokenBucket {
+	return newTokenBucket(rps, timeSource)
+}
+
+func newTokenBucket(rps int, timeSource clock.TimeSource) *tokenBucketImpl {
 	tb := new(tokenBucketImpl)
 	tb.timeSource = timeSource
-	tb.Reset(rps)
+	tb.reset(rps)
 	return tb
 }
 
@@ -183,7 +193,7 @@ func (tb *tokenBucketImpl) Consume(count int, timeout time.Duration) bool {
 	}
 }
 
-func (tb *tokenBucketImpl) Reset(rps int) {
+func (tb *tokenBucketImpl) reset(rps int) {
 	tb.Lock()
 	defer tb.Unlock()
 	tb.fillInterval = int64(time.Millisecond * 100)
@@ -220,6 +230,42 @@ func (tb *tokenBucketImpl) isRefillDue(now int64) bool {
 
 func (tb *tokenBucketImpl) isOverflowRefillDue(now int64) bool {
 	return now >= tb.nextOverflowRefillTime
+}
+
+// NewDynamicTokenBucket creates and returns a token bucket
+// rate limiter that supports dynamic change of RPS. Thread safe.
+// @param rps
+//    Dynamic config function for rate per second
+func NewDynamicTokenBucket(rps dynamicconfig.IntPropertyFn, timeSource clock.TimeSource) TokenBucket {
+	initialRPS := rps()
+	return &dynamicTokenBucketImpl{
+		rps:        rps,
+		currentRPS: int32(initialRPS),
+		tb:         newTokenBucket(initialRPS, timeSource),
+	}
+}
+
+func (dtb *dynamicTokenBucketImpl) TryConsume(count int) (bool, time.Duration) {
+	dtb.resetRateIfChanged(dtb.rps())
+	return dtb.tb.TryConsume(count)
+}
+
+func (dtb *dynamicTokenBucketImpl) Consume(count int, timeout time.Duration) bool {
+	dtb.resetRateIfChanged(dtb.rps())
+	return dtb.tb.Consume(count, timeout)
+}
+
+// resetLimitIfChanged resets the underlying token bucket if the
+// current rps quota is different from the actual rps quota obtained
+// from dynamic config
+func (dtb *dynamicTokenBucketImpl) resetRateIfChanged(newRPS int) {
+	currentRPS := atomic.LoadInt32(&dtb.currentRPS)
+	if int(currentRPS) == newRPS {
+		return
+	}
+	if atomic.CompareAndSwapInt32(&dtb.currentRPS, currentRPS, int32(newRPS)) {
+		dtb.tb.reset(newRPS)
+	}
 }
 
 // NewPriorityTokenBucket creates and returns a
