@@ -46,7 +46,8 @@ CREATE TYPE workflow_execution (
   decision_request_id              text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
   decision_timeout                 int,
   decision_attempt                 bigint,
-  decision_timestamp               bigint,
+  decision_timestamp               bigint,  -- this is decision started time
+  decision_scheduled_timestamp     bigint,   -- this is decision scheduled time
   cancel_requested                 boolean,
   cancel_request_id                text,
   sticky_task_list                 text,   -- sticky worker task list

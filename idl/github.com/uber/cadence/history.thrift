@@ -169,6 +169,8 @@ struct RecordDecisionTaskStartedResponse {
   90: optional shared.TaskList WorkflowExecutionTaskList
   100: optional i32 eventStoreVersion
   110: optional binary branchToken
+  120:  optional i64 (js.type = "Long") scheduledTimestamp
+  130:  optional i64 (js.type = "Long") startedTimestamp
 }
 
 struct SignalWorkflowExecutionRequest {

@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.16",
+  "MinCompatibleVersion": "0.16",
+  "Description": "Added schema for decision_scheduled_timestamp",
+  "SchemaUpdateCqlFiles": [
+    "decision_scheduled_timestamp.cql"
+  ]
+}

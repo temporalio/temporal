@@ -244,6 +244,8 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
+	expectedResponse.StartedTimestamp = response.StartedTimestamp
+	expectedResponse.ScheduledTimestamp = common.Int64Ptr(0)
 	s.Equal(&expectedResponse, response)
 }
 

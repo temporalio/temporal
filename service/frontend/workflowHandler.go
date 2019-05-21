@@ -3099,6 +3099,8 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		History:                   history,
 		NextPageToken:             continuation,
 		WorkflowExecutionTaskList: matchingResp.WorkflowExecutionTaskList,
+		ScheduledTimestamp:        matchingResp.ScheduledTimestamp,
+		StartedTimestamp:          matchingResp.StartedTimestamp,
 	}
 
 	return resp, nil

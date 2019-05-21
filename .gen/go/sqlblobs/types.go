@@ -7246,60 +7246,61 @@ func (v *TransferTaskInfo) IsSetVisibilityTimestampNanos() bool {
 }
 
 type WorkflowExecutionInfo struct {
-	ParentDomainID               []byte                      `json:"parentDomainID,omitempty"`
-	ParentWorkflowID             *string                     `json:"parentWorkflowID,omitempty"`
-	ParentRunID                  []byte                      `json:"parentRunID,omitempty"`
-	InitiatedID                  *int64                      `json:"initiatedID,omitempty"`
-	CompletionEventBatchID       *int64                      `json:"completionEventBatchID,omitempty"`
-	CompletionEvent              []byte                      `json:"completionEvent,omitempty"`
-	CompletionEventEncoding      *string                     `json:"completionEventEncoding,omitempty"`
-	TaskList                     *string                     `json:"taskList,omitempty"`
-	WorkflowTypeName             *string                     `json:"workflowTypeName,omitempty"`
-	WorkflowTimeoutSeconds       *int32                      `json:"workflowTimeoutSeconds,omitempty"`
-	DecisionTaskTimeoutSeconds   *int32                      `json:"decisionTaskTimeoutSeconds,omitempty"`
-	ExecutionContext             []byte                      `json:"executionContext,omitempty"`
-	State                        *int32                      `json:"state,omitempty"`
-	CloseStatus                  *int32                      `json:"closeStatus,omitempty"`
-	StartVersion                 *int64                      `json:"startVersion,omitempty"`
-	CurrentVersion               *int64                      `json:"currentVersion,omitempty"`
-	LastWriteEventID             *int64                      `json:"lastWriteEventID,omitempty"`
-	LastReplicationInfo          map[string]*ReplicationInfo `json:"lastReplicationInfo,omitempty"`
-	LastEventTaskID              *int64                      `json:"lastEventTaskID,omitempty"`
-	LastFirstEventID             *int64                      `json:"lastFirstEventID,omitempty"`
-	LastProcessedEvent           *int64                      `json:"lastProcessedEvent,omitempty"`
-	StartTimeNanos               *int64                      `json:"startTimeNanos,omitempty"`
-	LastUpdatedTimeNanos         *int64                      `json:"lastUpdatedTimeNanos,omitempty"`
-	DecisionVersion              *int64                      `json:"decisionVersion,omitempty"`
-	DecisionScheduleID           *int64                      `json:"decisionScheduleID,omitempty"`
-	DecisionStartedID            *int64                      `json:"decisionStartedID,omitempty"`
-	DecisionTimeout              *int32                      `json:"decisionTimeout,omitempty"`
-	DecisionAttempt              *int64                      `json:"decisionAttempt,omitempty"`
-	DecisionTimestampNanos       *int64                      `json:"decisionTimestampNanos,omitempty"`
-	CancelRequested              *bool                       `json:"cancelRequested,omitempty"`
-	CreateRequestID              *string                     `json:"createRequestID,omitempty"`
-	DecisionRequestID            *string                     `json:"decisionRequestID,omitempty"`
-	CancelRequestID              *string                     `json:"cancelRequestID,omitempty"`
-	StickyTaskList               *string                     `json:"stickyTaskList,omitempty"`
-	StickyScheduleToStartTimeout *int64                      `json:"stickyScheduleToStartTimeout,omitempty"`
-	RetryAttempt                 *int64                      `json:"retryAttempt,omitempty"`
-	RetryInitialIntervalSeconds  *int32                      `json:"retryInitialIntervalSeconds,omitempty"`
-	RetryMaximumIntervalSeconds  *int32                      `json:"retryMaximumIntervalSeconds,omitempty"`
-	RetryMaximumAttempts         *int32                      `json:"retryMaximumAttempts,omitempty"`
-	RetryExpirationSeconds       *int32                      `json:"retryExpirationSeconds,omitempty"`
-	RetryBackoffCoefficient      *float64                    `json:"retryBackoffCoefficient,omitempty"`
-	RetryExpirationTimeNanos     *int64                      `json:"retryExpirationTimeNanos,omitempty"`
-	RetryNonRetryableErrors      []string                    `json:"retryNonRetryableErrors,omitempty"`
-	HasRetryPolicy               *bool                       `json:"hasRetryPolicy,omitempty"`
-	CronSchedule                 *string                     `json:"cronSchedule,omitempty"`
-	EventStoreVersion            *int32                      `json:"eventStoreVersion,omitempty"`
-	EventBranchToken             []byte                      `json:"eventBranchToken,omitempty"`
-	SignalCount                  *int64                      `json:"signalCount,omitempty"`
-	HistorySize                  *int64                      `json:"historySize,omitempty"`
-	ClientLibraryVersion         *string                     `json:"clientLibraryVersion,omitempty"`
-	ClientFeatureVersion         *string                     `json:"clientFeatureVersion,omitempty"`
-	ClientImpl                   *string                     `json:"clientImpl,omitempty"`
-	AutoResetPoints              []byte                      `json:"autoResetPoints,omitempty"`
-	AutoResetPointsEncoding      *string                     `json:"autoResetPointsEncoding,omitempty"`
+	ParentDomainID                  []byte                      `json:"parentDomainID,omitempty"`
+	ParentWorkflowID                *string                     `json:"parentWorkflowID,omitempty"`
+	ParentRunID                     []byte                      `json:"parentRunID,omitempty"`
+	InitiatedID                     *int64                      `json:"initiatedID,omitempty"`
+	CompletionEventBatchID          *int64                      `json:"completionEventBatchID,omitempty"`
+	CompletionEvent                 []byte                      `json:"completionEvent,omitempty"`
+	CompletionEventEncoding         *string                     `json:"completionEventEncoding,omitempty"`
+	TaskList                        *string                     `json:"taskList,omitempty"`
+	WorkflowTypeName                *string                     `json:"workflowTypeName,omitempty"`
+	WorkflowTimeoutSeconds          *int32                      `json:"workflowTimeoutSeconds,omitempty"`
+	DecisionTaskTimeoutSeconds      *int32                      `json:"decisionTaskTimeoutSeconds,omitempty"`
+	ExecutionContext                []byte                      `json:"executionContext,omitempty"`
+	State                           *int32                      `json:"state,omitempty"`
+	CloseStatus                     *int32                      `json:"closeStatus,omitempty"`
+	StartVersion                    *int64                      `json:"startVersion,omitempty"`
+	CurrentVersion                  *int64                      `json:"currentVersion,omitempty"`
+	LastWriteEventID                *int64                      `json:"lastWriteEventID,omitempty"`
+	LastReplicationInfo             map[string]*ReplicationInfo `json:"lastReplicationInfo,omitempty"`
+	LastEventTaskID                 *int64                      `json:"lastEventTaskID,omitempty"`
+	LastFirstEventID                *int64                      `json:"lastFirstEventID,omitempty"`
+	LastProcessedEvent              *int64                      `json:"lastProcessedEvent,omitempty"`
+	StartTimeNanos                  *int64                      `json:"startTimeNanos,omitempty"`
+	LastUpdatedTimeNanos            *int64                      `json:"lastUpdatedTimeNanos,omitempty"`
+	DecisionVersion                 *int64                      `json:"decisionVersion,omitempty"`
+	DecisionScheduleID              *int64                      `json:"decisionScheduleID,omitempty"`
+	DecisionStartedID               *int64                      `json:"decisionStartedID,omitempty"`
+	DecisionTimeout                 *int32                      `json:"decisionTimeout,omitempty"`
+	DecisionAttempt                 *int64                      `json:"decisionAttempt,omitempty"`
+	DecisionTimestampNanos          *int64                      `json:"decisionTimestampNanos,omitempty"`
+	DecisionScheduledTimestampNanos *int64                      `json:"decisionScheduledTimestampNanos,omitempty"`
+	CancelRequested                 *bool                       `json:"cancelRequested,omitempty"`
+	CreateRequestID                 *string                     `json:"createRequestID,omitempty"`
+	DecisionRequestID               *string                     `json:"decisionRequestID,omitempty"`
+	CancelRequestID                 *string                     `json:"cancelRequestID,omitempty"`
+	StickyTaskList                  *string                     `json:"stickyTaskList,omitempty"`
+	StickyScheduleToStartTimeout    *int64                      `json:"stickyScheduleToStartTimeout,omitempty"`
+	RetryAttempt                    *int64                      `json:"retryAttempt,omitempty"`
+	RetryInitialIntervalSeconds     *int32                      `json:"retryInitialIntervalSeconds,omitempty"`
+	RetryMaximumIntervalSeconds     *int32                      `json:"retryMaximumIntervalSeconds,omitempty"`
+	RetryMaximumAttempts            *int32                      `json:"retryMaximumAttempts,omitempty"`
+	RetryExpirationSeconds          *int32                      `json:"retryExpirationSeconds,omitempty"`
+	RetryBackoffCoefficient         *float64                    `json:"retryBackoffCoefficient,omitempty"`
+	RetryExpirationTimeNanos        *int64                      `json:"retryExpirationTimeNanos,omitempty"`
+	RetryNonRetryableErrors         []string                    `json:"retryNonRetryableErrors,omitempty"`
+	HasRetryPolicy                  *bool                       `json:"hasRetryPolicy,omitempty"`
+	CronSchedule                    *string                     `json:"cronSchedule,omitempty"`
+	EventStoreVersion               *int32                      `json:"eventStoreVersion,omitempty"`
+	EventBranchToken                []byte                      `json:"eventBranchToken,omitempty"`
+	SignalCount                     *int64                      `json:"signalCount,omitempty"`
+	HistorySize                     *int64                      `json:"historySize,omitempty"`
+	ClientLibraryVersion            *string                     `json:"clientLibraryVersion,omitempty"`
+	ClientFeatureVersion            *string                     `json:"clientFeatureVersion,omitempty"`
+	ClientImpl                      *string                     `json:"clientImpl,omitempty"`
+	AutoResetPoints                 []byte                      `json:"autoResetPoints,omitempty"`
+	AutoResetPointsEncoding         *string                     `json:"autoResetPointsEncoding,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionInfo struct into a Thrift-level intermediate
@@ -7319,7 +7320,7 @@ type WorkflowExecutionInfo struct {
 //   }
 func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [54]wire.Field
+		fields [55]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7555,6 +7556,14 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 68, Value: w}
+		i++
+	}
+	if v.DecisionScheduledTimestampNanos != nil {
+		w, err = wire.NewValueI64(*(v.DecisionScheduledTimestampNanos)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 69, Value: w}
 		i++
 	}
 	if v.CancelRequested != nil {
@@ -8063,6 +8072,16 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 69:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.DecisionScheduledTimestampNanos = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 70:
 			if field.Value.Type() == wire.TBool {
 				var x bool
@@ -8320,7 +8339,7 @@ func (v *WorkflowExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [54]string
+	var fields [55]string
 	i := 0
 	if v.ParentDomainID != nil {
 		fields[i] = fmt.Sprintf("ParentDomainID: %v", v.ParentDomainID)
@@ -8436,6 +8455,10 @@ func (v *WorkflowExecutionInfo) String() string {
 	}
 	if v.DecisionTimestampNanos != nil {
 		fields[i] = fmt.Sprintf("DecisionTimestampNanos: %v", *(v.DecisionTimestampNanos))
+		i++
+	}
+	if v.DecisionScheduledTimestampNanos != nil {
+		fields[i] = fmt.Sprintf("DecisionScheduledTimestampNanos: %v", *(v.DecisionScheduledTimestampNanos))
 		i++
 	}
 	if v.CancelRequested != nil {
@@ -8639,6 +8662,9 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !_I64_EqualsPtr(v.DecisionTimestampNanos, rhs.DecisionTimestampNanos) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.DecisionScheduledTimestampNanos, rhs.DecisionScheduledTimestampNanos) {
+		return false
+	}
 	if !_Bool_EqualsPtr(v.CancelRequested, rhs.CancelRequested) {
 		return false
 	}
@@ -8810,6 +8836,9 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.DecisionTimestampNanos != nil {
 		enc.AddInt64("decisionTimestampNanos", *v.DecisionTimestampNanos)
+	}
+	if v.DecisionScheduledTimestampNanos != nil {
+		enc.AddInt64("decisionScheduledTimestampNanos", *v.DecisionScheduledTimestampNanos)
 	}
 	if v.CancelRequested != nil {
 		enc.AddBool("cancelRequested", *v.CancelRequested)
@@ -9322,6 +9351,21 @@ func (v *WorkflowExecutionInfo) GetDecisionTimestampNanos() (o int64) {
 // IsSetDecisionTimestampNanos returns true if DecisionTimestampNanos is not nil.
 func (v *WorkflowExecutionInfo) IsSetDecisionTimestampNanos() bool {
 	return v != nil && v.DecisionTimestampNanos != nil
+}
+
+// GetDecisionScheduledTimestampNanos returns the value of DecisionScheduledTimestampNanos if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetDecisionScheduledTimestampNanos() (o int64) {
+	if v != nil && v.DecisionScheduledTimestampNanos != nil {
+		return *v.DecisionScheduledTimestampNanos
+	}
+
+	return
+}
+
+// IsSetDecisionScheduledTimestampNanos returns true if DecisionScheduledTimestampNanos is not nil.
+func (v *WorkflowExecutionInfo) IsSetDecisionScheduledTimestampNanos() bool {
+	return v != nil && v.DecisionScheduledTimestampNanos != nil
 }
 
 // GetCancelRequested returns the value of CancelRequested if it is set or its

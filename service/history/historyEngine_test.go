@@ -5155,7 +5155,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		DecisionRequestID:            sourceInfo.DecisionRequestID,
 		DecisionTimeout:              sourceInfo.DecisionTimeout,
 		DecisionAttempt:              sourceInfo.DecisionAttempt,
-		DecisionTimestamp:            sourceInfo.DecisionTimestamp,
+		DecisionStartedTimestamp:     sourceInfo.DecisionStartedTimestamp,
 		CancelRequested:              sourceInfo.CancelRequested,
 		CancelRequestID:              sourceInfo.CancelRequestID,
 		CronSchedule:                 sourceInfo.CronSchedule,

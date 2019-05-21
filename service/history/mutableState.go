@@ -39,7 +39,10 @@ type (
 		DecisionTimeout int32
 		TaskList        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
 		Attempt         int64
-		Timestamp       int64
+		// They are useful for transient decision: when transient decision finally completes, use these timestamp to create scheduled/started events.
+		// Also used for recording latency metrics
+		ScheduledTimestamp int64
+		StartedTimestamp   int64
 	}
 
 	mutableState interface {
@@ -168,7 +171,7 @@ type (
 		ReplicateChildWorkflowExecutionTimedOutEvent(*workflow.HistoryEvent)
 		ReplicateDecisionTaskCompletedEvent(*workflow.HistoryEvent)
 		ReplicateDecisionTaskFailedEvent()
-		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64) *decisionInfo
+		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64, int64) *decisionInfo
 		ReplicateDecisionTaskStartedEvent(*decisionInfo, int64, int64, int64, string, int64) *decisionInfo
 		ReplicateDecisionTaskTimedOutEvent(workflow.TimeoutType)
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent)

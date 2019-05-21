@@ -21,6 +21,9 @@
 package history
 
 import (
+	"testing"
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -38,8 +41,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"testing"
-	"time"
 )
 
 type (
@@ -209,32 +210,32 @@ func (s *conflictResolverV2Suite) TestReset() {
 	createRequestID := uuid.New()
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:             domainID,
-		WorkflowID:           execution.GetWorkflowId(),
-		RunID:                execution.GetRunId(),
-		ParentDomainID:       "",
-		ParentWorkflowID:     "",
-		ParentRunID:          "",
-		InitiatedID:          common.EmptyEventID,
-		TaskList:             event1.WorkflowExecutionStartedEventAttributes.TaskList.GetName(),
-		WorkflowTypeName:     event1.WorkflowExecutionStartedEventAttributes.WorkflowType.GetName(),
-		WorkflowTimeout:      *event1.WorkflowExecutionStartedEventAttributes.ExecutionStartToCloseTimeoutSeconds,
-		DecisionTimeoutValue: *event1.WorkflowExecutionStartedEventAttributes.TaskStartToCloseTimeoutSeconds,
-		State:                persistence.WorkflowStateCreated,
-		CloseStatus:          persistence.WorkflowCloseStatusNone,
-		LastFirstEventID:     event1.GetEventId(),
-		NextEventID:          nextEventID,
-		LastProcessedEvent:   common.EmptyEventID,
-		StartTimestamp:       startTime,
-		LastUpdatedTimestamp: startTime,
-		DecisionVersion:      common.EmptyVersion,
-		DecisionScheduleID:   common.EmptyEventID,
-		DecisionStartedID:    common.EmptyEventID,
-		DecisionRequestID:    emptyUUID,
-		DecisionTimeout:      0,
-		DecisionAttempt:      0,
-		DecisionTimestamp:    0,
-		CreateRequestID:      createRequestID,
+		DomainID:                 domainID,
+		WorkflowID:               execution.GetWorkflowId(),
+		RunID:                    execution.GetRunId(),
+		ParentDomainID:           "",
+		ParentWorkflowID:         "",
+		ParentRunID:              "",
+		InitiatedID:              common.EmptyEventID,
+		TaskList:                 event1.WorkflowExecutionStartedEventAttributes.TaskList.GetName(),
+		WorkflowTypeName:         event1.WorkflowExecutionStartedEventAttributes.WorkflowType.GetName(),
+		WorkflowTimeout:          *event1.WorkflowExecutionStartedEventAttributes.ExecutionStartToCloseTimeoutSeconds,
+		DecisionTimeoutValue:     *event1.WorkflowExecutionStartedEventAttributes.TaskStartToCloseTimeoutSeconds,
+		State:                    persistence.WorkflowStateCreated,
+		CloseStatus:              persistence.WorkflowCloseStatusNone,
+		LastFirstEventID:         event1.GetEventId(),
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       common.EmptyEventID,
+		StartTimestamp:           startTime,
+		LastUpdatedTimestamp:     startTime,
+		DecisionVersion:          common.EmptyVersion,
+		DecisionScheduleID:       common.EmptyEventID,
+		DecisionStartedID:        common.EmptyEventID,
+		DecisionRequestID:        emptyUUID,
+		DecisionTimeout:          0,
+		DecisionAttempt:          0,
+		DecisionStartedTimestamp: 0,
+		CreateRequestID:          createRequestID,
 	}
 	// this is only a shallow test, meaning
 	// the mutable state only has the minimal information

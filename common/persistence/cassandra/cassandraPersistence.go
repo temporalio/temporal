@@ -144,6 +144,7 @@ const (
 		`decision_timeout: ?, ` +
 		`decision_attempt: ?, ` +
 		`decision_timestamp: ?, ` +
+		`decision_scheduled_timestamp: ?, ` +
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?, ` +
 		`sticky_task_list: ?, ` +
@@ -1382,15 +1383,16 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Int
 			request.DecisionStartedID,
 			"", // Decision Start Request ID
 			request.DecisionStartToCloseTimeout,
-			0,
-			0,
-			false,
-			"",
-			"", // sticky_task_list (no sticky tasklist for new workflow execution)
-			0,  // sticky_schedule_to_start_timeout
-			"", // client_library_version
-			"", // client_feature_version
-			"", // client_impl
+			0,     // decision attempts
+			0,     // decision timestamp(started time)
+			0,     // decision scheduled timestamp
+			false, // cancel_requested
+			"",    // cancel_request_id
+			"",    // sticky_task_list (no sticky tasklist for new workflow execution)
+			0,     // sticky_schedule_to_start_timeout
+			"",    // client_library_version
+			"",    // client_feature_version
+			"",    // client_impl
 			request.PreviousAutoResetPoints.Data,
 			request.PreviousAutoResetPoints.GetEncoding(),
 			request.Attempt,
@@ -1451,15 +1453,16 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Int
 			request.DecisionStartedID,
 			"", // Decision Start Request ID
 			request.DecisionStartToCloseTimeout,
-			0,
-			0,
-			false,
-			"",
-			"", // sticky_task_list (no sticky tasklist for new workflow execution)
-			0,  // sticky_schedule_to_start_timeout
-			"", // client_library_version
-			"", // client_feature_version
-			"", // client_impl
+			0,     // decision attempts
+			0,     // decision timestamp(started time)
+			0,     // decision scheduled timestamp
+			false, // cancel_requested
+			"",    // cancel_request_id
+			"",    // sticky_task_list (no sticky tasklist for new workflow execution)
+			0,     // sticky_schedule_to_start_timeout
+			"",    // client_library_version
+			"",    // client_feature_version
+			"",    // client_impl
 			request.PreviousAutoResetPoints.Data,
 			request.PreviousAutoResetPoints.GetEncoding(),
 			request.Attempt,
@@ -1643,7 +1646,8 @@ func (d *cassandraPersistence) updateMutableState(batch *gocql.Batch, executionI
 			executionInfo.DecisionRequestID,
 			executionInfo.DecisionTimeout,
 			executionInfo.DecisionAttempt,
-			executionInfo.DecisionTimestamp,
+			executionInfo.DecisionStartedTimestamp,
+			executionInfo.DecisionScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -1712,7 +1716,8 @@ func (d *cassandraPersistence) updateMutableState(batch *gocql.Batch, executionI
 			executionInfo.DecisionRequestID,
 			executionInfo.DecisionTimeout,
 			executionInfo.DecisionAttempt,
-			executionInfo.DecisionTimestamp,
+			executionInfo.DecisionStartedTimestamp,
+			executionInfo.DecisionScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -3791,7 +3796,9 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 		case "decision_attempt":
 			info.DecisionAttempt = v.(int64)
 		case "decision_timestamp":
-			info.DecisionTimestamp = v.(int64)
+			info.DecisionStartedTimestamp = v.(int64)
+		case "decision_scheduled_timestamp":
+			info.DecisionScheduledTimestamp = v.(int64)
 		case "cancel_requested":
 			info.CancelRequested = v.(bool)
 		case "cancel_request_id":

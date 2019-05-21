@@ -522,13 +522,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent,
 		newRunStartedEvent,
 		&decisionInfo{
-			Version:         newRunDecisionEvent.GetVersion(),
-			ScheduleID:      newRunDecisionEvent.GetEventId(),
-			StartedID:       common.EmptyEventID,
-			RequestID:       emptyUUID,
-			DecisionTimeout: decisionTimeoutSecond,
-			TaskList:        tasklist,
-			Attempt:         newRunDecisionAttempt,
+			Version:            newRunDecisionEvent.GetVersion(),
+			ScheduleID:         newRunDecisionEvent.GetEventId(),
+			StartedID:          common.EmptyEventID,
+			RequestID:          emptyUUID,
+			DecisionTimeout:    decisionTimeoutSecond,
+			TaskList:           tasklist,
+			Attempt:            newRunDecisionAttempt,
+			ScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
 		},
 		mock.Anything,
 		int32(0), mock.Anything,
@@ -565,6 +566,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		tasklist,
 		decisionTimeoutSecond,
 		newRunDecisionAttempt,
+		newRunDecisionEvent.GetTimestamp(),
 	)
 	expectedNewRunStateBuilder.GetExecutionInfo().LastFirstEventID = newRunStartedEvent.GetEventId()
 	expectedNewRunStateBuilder.GetExecutionInfo().NextEventID = newRunDecisionEvent.GetEventId() + 1
@@ -894,6 +896,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		tasklist,
 		decisionTimeoutSecond,
 		newRunDecisionAttempt,
+		newRunDecisionEvent.GetTimestamp(),
 	)
 	expectedNewRunStateBuilder.GetExecutionInfo().LastFirstEventID = newRunStartedEvent.GetEventId()
 	expectedNewRunStateBuilder.GetExecutionInfo().NextEventID = newRunDecisionEvent.GetEventId() + 1
@@ -1650,7 +1653,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	}
 	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
 	s.mockMutableState.On("ReplicateDecisionTaskScheduledEvent",
-		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt,
+		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt, event.GetTimestamp(),
 	).Return(di).Once()
 	s.mockMutableState.On("UpdateDecision", di).Once()
 	s.mockUpdateVersion(event)
