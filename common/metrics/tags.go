@@ -21,8 +21,15 @@
 package metrics
 
 const (
-	instance       = "instance"
-	domain         = "domain"
+	revisionTag     = "revision"
+	branchTag       = "branch"
+	buildDateTag    = "build_date"
+	buildVersionTag = "build_version"
+	goVersionTag    = "go_version"
+
+	instance = "instance"
+	domain   = "domain"
+
 	domainAllValue = "all"
 )
 

@@ -22,6 +22,7 @@ package metrics
 
 import (
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -29,14 +30,47 @@ import (
 	"github.com/uber/cadence/common/log"
 )
 
+var (
+	// Revision is the VCS revision associated with this build. Overridden using ldflags
+	// at compile time. Example:
+	// $ go build -ldflags "-X github.com/uber/cadence/common/metrics.Revision=abcdef" ...
+	// Adapted from: https://www.atatus.com/blog/golang-auto-build-versioning/
+	Revision = "unknown"
+
+	// Branch is the VCS branch associated with this build.
+	Branch = "unknown"
+
+	// Version is the version associated with this build.
+	Version = "unknown"
+
+	// BuildDate is the date this build was created.
+	BuildDate = "unknown"
+
+	// BuildTimeUnix is the seconds since epoch representing the date this build was created.
+	BuildTimeUnix = "0"
+
+	// goVersion is the current runtime version.
+	goVersion = runtime.Version()
+)
+
+const (
+	// buildInfoMetricName is the emitted build information metric's name.
+	buildInfoMetricName = "build_information"
+
+	// buildAgeMetricName is the emitted build age metric's name.
+	buildAgeMetricName = "build_age"
+)
+
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
 type RuntimeMetricsReporter struct {
 	scope          tally.Scope
+	buildInfoScope tally.Scope
 	reportInterval time.Duration
 	started        int32
 	quit           chan struct{}
 	logger         log.Logger
 	lastNumGC      uint32
+	buildTime      time.Time
 }
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
@@ -46,6 +80,13 @@ func NewRuntimeMetricsReporter(
 	logger log.Logger,
 	instanceID string,
 ) *RuntimeMetricsReporter {
+	const (
+		base    = 10
+		bitSize = 64
+	)
+	if len(instanceID) > 0 {
+		scope = scope.Tagged(map[string]string{instance: instanceID})
+	}
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 	rReporter := &RuntimeMetricsReporter{
@@ -55,9 +96,20 @@ func NewRuntimeMetricsReporter(
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
 	}
-	if len(instanceID) > 0 {
-		rReporter.scope = scope.Tagged(map[string]string{instance: instanceID})
+	rReporter.buildInfoScope = scope.Tagged(
+		map[string]string{
+			revisionTag:     Revision,
+			branchTag:       Branch,
+			buildDateTag:    BuildDate,
+			buildVersionTag: Version,
+			goVersionTag:    goVersion,
+		},
+	)
+	sec, err := strconv.ParseInt(BuildTimeUnix, base, bitSize)
+	if err != nil || sec < 0 {
+		sec = 0
 	}
+	rReporter.buildTime = time.Unix(sec, 0)
 	return rReporter
 }
 
@@ -88,6 +140,12 @@ func (r *RuntimeMetricsReporter) report() {
 			r.scope.Timer(GcPauseMsTimer).Record(time.Duration(pause))
 		}
 	}
+
+	// report build info
+	buildInfoGauge := r.buildInfoScope.Gauge(buildInfoMetricName)
+	buildAgeGauge := r.buildInfoScope.Gauge(buildAgeMetricName)
+	buildInfoGauge.Update(1.0)
+	buildAgeGauge.Update(float64(time.Since(r.buildTime)))
 }
 
 // Start Starts the reporter thread that periodically emits metrics.

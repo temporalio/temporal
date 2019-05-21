@@ -30,6 +30,9 @@ INTEG_TEST_DIR=host
 INTEG_TEST_XDC_ROOT=./hostxdc
 INTEG_TEST_XDC_DIR=hostxdc
 
+GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
+GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
+
 ifndef EVENTSV2
 override EVENTSV2 = false
 endif
@@ -104,7 +107,7 @@ cadence: dep-ensured $(TOOLS_SRC)
 	go build -i -o cadence cmd/tools/cli/main.go
 
 cadence-server: dep-ensured $(ALL_SRC)
-	go build -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
 bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
