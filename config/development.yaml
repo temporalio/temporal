@@ -112,6 +112,10 @@ archival:
       - name: "custom-bucket-2"
         owner: "custom-owner-2"
         retentionDays: 5
+#  s3store:
+#    region: "us-east-1"
+#    endpoint: "http://127.0.0.1:4572"
+#    s3ForcePathStyle: true
 
 kafka:
   clusters:

@@ -51,8 +51,6 @@ var (
 	ErrDeleteFile = &shared.BadRequestError{Message: "could not delete file"}
 	// ErrListFiles could not list files
 	ErrListFiles = &shared.BadRequestError{Message: "could not list files"}
-	// ErrConstructKey could not construct key
-	ErrConstructKey = &shared.BadRequestError{Message: "could not construct key"}
 	// ErrBucketConfigDeserialization bucket config could not be deserialized
 	ErrBucketConfigDeserialization = &shared.BadRequestError{Message: "bucket config could not be deserialized"}
 )
@@ -192,7 +190,7 @@ func (c *client) ListByPrefix(_ context.Context, bucket string, prefix string) (
 		if strings.HasPrefix(f, prefix) {
 			key, err := blob.NewKeyFromString(f)
 			if err != nil {
-				return nil, ErrConstructKey
+				return nil, blobstore.ErrConstructKey
 			}
 			matchingKeys = append(matchingKeys, key)
 		}

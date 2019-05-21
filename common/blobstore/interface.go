@@ -37,6 +37,8 @@ var (
 	ErrBlobSerialization = &shared.BadRequestError{Message: "failed to serialize blob"}
 	// ErrBlobDeserialization indicates that a failure occurred in deserializing blob
 	ErrBlobDeserialization = &shared.BadRequestError{Message: "failed to deserialize blob"}
+	// ErrConstructKey could not construct key
+	ErrConstructKey = &shared.BadRequestError{Message: "could not construct key"}
 )
 
 // BucketMetadataResponse contains information relating to a bucket's configuration
