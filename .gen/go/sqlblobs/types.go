@@ -7274,7 +7274,7 @@ type WorkflowExecutionInfo struct {
 	DecisionStartedID               *int64                      `json:"decisionStartedID,omitempty"`
 	DecisionTimeout                 *int32                      `json:"decisionTimeout,omitempty"`
 	DecisionAttempt                 *int64                      `json:"decisionAttempt,omitempty"`
-	DecisionTimestampNanos          *int64                      `json:"decisionTimestampNanos,omitempty"`
+	DecisionStartedTimestampNanos   *int64                      `json:"decisionStartedTimestampNanos,omitempty"`
 	DecisionScheduledTimestampNanos *int64                      `json:"decisionScheduledTimestampNanos,omitempty"`
 	CancelRequested                 *bool                       `json:"cancelRequested,omitempty"`
 	CreateRequestID                 *string                     `json:"createRequestID,omitempty"`
@@ -7550,8 +7550,8 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 66, Value: w}
 		i++
 	}
-	if v.DecisionTimestampNanos != nil {
-		w, err = wire.NewValueI64(*(v.DecisionTimestampNanos)), error(nil)
+	if v.DecisionStartedTimestampNanos != nil {
+		w, err = wire.NewValueI64(*(v.DecisionStartedTimestampNanos)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -8066,7 +8066,7 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 			if field.Value.Type() == wire.TI64 {
 				var x int64
 				x, err = field.Value.GetI64(), error(nil)
-				v.DecisionTimestampNanos = &x
+				v.DecisionStartedTimestampNanos = &x
 				if err != nil {
 					return err
 				}
@@ -8453,8 +8453,8 @@ func (v *WorkflowExecutionInfo) String() string {
 		fields[i] = fmt.Sprintf("DecisionAttempt: %v", *(v.DecisionAttempt))
 		i++
 	}
-	if v.DecisionTimestampNanos != nil {
-		fields[i] = fmt.Sprintf("DecisionTimestampNanos: %v", *(v.DecisionTimestampNanos))
+	if v.DecisionStartedTimestampNanos != nil {
+		fields[i] = fmt.Sprintf("DecisionStartedTimestampNanos: %v", *(v.DecisionStartedTimestampNanos))
 		i++
 	}
 	if v.DecisionScheduledTimestampNanos != nil {
@@ -8659,7 +8659,7 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !_I64_EqualsPtr(v.DecisionAttempt, rhs.DecisionAttempt) {
 		return false
 	}
-	if !_I64_EqualsPtr(v.DecisionTimestampNanos, rhs.DecisionTimestampNanos) {
+	if !_I64_EqualsPtr(v.DecisionStartedTimestampNanos, rhs.DecisionStartedTimestampNanos) {
 		return false
 	}
 	if !_I64_EqualsPtr(v.DecisionScheduledTimestampNanos, rhs.DecisionScheduledTimestampNanos) {
@@ -8834,8 +8834,8 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	if v.DecisionAttempt != nil {
 		enc.AddInt64("decisionAttempt", *v.DecisionAttempt)
 	}
-	if v.DecisionTimestampNanos != nil {
-		enc.AddInt64("decisionTimestampNanos", *v.DecisionTimestampNanos)
+	if v.DecisionStartedTimestampNanos != nil {
+		enc.AddInt64("decisionStartedTimestampNanos", *v.DecisionStartedTimestampNanos)
 	}
 	if v.DecisionScheduledTimestampNanos != nil {
 		enc.AddInt64("decisionScheduledTimestampNanos", *v.DecisionScheduledTimestampNanos)
@@ -9338,19 +9338,19 @@ func (v *WorkflowExecutionInfo) IsSetDecisionAttempt() bool {
 	return v != nil && v.DecisionAttempt != nil
 }
 
-// GetDecisionTimestampNanos returns the value of DecisionTimestampNanos if it is set or its
+// GetDecisionStartedTimestampNanos returns the value of DecisionStartedTimestampNanos if it is set or its
 // zero value if it is unset.
-func (v *WorkflowExecutionInfo) GetDecisionTimestampNanos() (o int64) {
-	if v != nil && v.DecisionTimestampNanos != nil {
-		return *v.DecisionTimestampNanos
+func (v *WorkflowExecutionInfo) GetDecisionStartedTimestampNanos() (o int64) {
+	if v != nil && v.DecisionStartedTimestampNanos != nil {
+		return *v.DecisionStartedTimestampNanos
 	}
 
 	return
 }
 
-// IsSetDecisionTimestampNanos returns true if DecisionTimestampNanos is not nil.
-func (v *WorkflowExecutionInfo) IsSetDecisionTimestampNanos() bool {
-	return v != nil && v.DecisionTimestampNanos != nil
+// IsSetDecisionStartedTimestampNanos returns true if DecisionStartedTimestampNanos is not nil.
+func (v *WorkflowExecutionInfo) IsSetDecisionStartedTimestampNanos() bool {
+	return v != nil && v.DecisionStartedTimestampNanos != nil
 }
 
 // GetDecisionScheduledTimestampNanos returns the value of DecisionScheduledTimestampNanos if it is set or its
