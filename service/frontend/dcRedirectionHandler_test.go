@@ -22,14 +22,12 @@ package frontend
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
+
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -39,7 +37,6 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -49,17 +46,19 @@ type (
 	dcRedirectionHandlerSuite struct {
 		suite.Suite
 		logger                 log.Logger
+		domainName             string
+		domainID               string
 		currentClusterName     string
 		alternativeClusterName string
 		config                 *Config
-		redirectionPolicy      config.DCRedirectionPolicy
 		service                service.Service
 		domainCache            cache.DomainCache
 
+		mockDCRedirectionPolicy  *MockDCRedirectionPolicy
 		mockClusterMetadata      *mocks.ClusterMetadata
 		mockMetadataMgr          *mocks.MetadataManager
 		mockClientBean           *client.MockClientBean
-		mockHistoryClient        *mocks.HistoryClient
+		mockFrontendHandler      *MockWorkflowHandler
 		mockRemoteFrontendClient *mocks.FrontendClient
 
 		frontendHandler *WorkflowHandler
@@ -83,10 +82,11 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	var err error
 	s.logger, err = loggerimpl.NewDevelopment()
 	s.Require().NoError(err)
+	s.domainName = "some random domain name"
+	s.domainID = "some random domain ID"
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), 0, false, false)
-	s.redirectionPolicy = config.DCRedirectionPolicy{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -94,584 +94,697 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
-	s.mockClientBean.On("GetHistoryClient").Return(s.mockHistoryClient)
 	s.mockRemoteFrontendClient = &mocks.FrontendClient{}
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
-	s.frontendHandler = NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, nil)
-	s.frontendHandler.metricsClient = metricsClient
-	s.frontendHandler.history = s.mockHistoryClient
-	s.frontendHandler.startWG.Done()
 
-	s.handler = NewDCRedirectionHandler(s.frontendHandler, s.redirectionPolicy)
+	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, nil)
+	frontendHandler.metricsClient = metricsClient
+	frontendHandler.startWG.Done()
+
+	s.handler = NewDCRedirectionHandler(frontendHandler, config.DCRedirectionPolicy{})
+	s.mockDCRedirectionPolicy = &MockDCRedirectionPolicy{}
+	s.mockFrontendHandler = &MockWorkflowHandler{}
+	s.handler.frontendHandler = s.mockFrontendHandler
+	s.handler.redirectionPolicy = s.mockDCRedirectionPolicy
+
 }
 
 func (s *dcRedirectionHandlerSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
+	s.mockDCRedirectionPolicy.AssertExpectations(s.T())
+	s.mockFrontendHandler.AssertExpectations(s.T())
+	s.mockRemoteFrontendClient.AssertExpectations(s.T())
 }
 
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainActive_LocalDomain() {
-	s.setupLocalDomain()
-	req := s.getSignalRequest()
+func (s *dcRedirectionHandlerSuite) TestDescribeTaskList() {
+	apiName := "DescribeTaskList"
 
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
 
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainNotActive_LocalDomain() {
-	s.setupLocalDomain()
-	req := s.getSignalRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(domainNotActiveErr).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainActive_GlobalDomain_OneCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
-	req := s.getSignalRequest()
-
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainNotActive_GlobalDomain_OneCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
-	req := s.getSignalRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(domainNotActiveErr).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getSignalRequest()
-
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordNotActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, false)
-	req := s.getSignalRequest()
-
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getSignalRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(domainNotActiveErr).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordNotActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, false)
-	req := s.getSignalRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(domainNotActiveErr).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordActive() {
-	req := s.getSignalRequest()
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordNotActive() {
-	req := s.getSignalRequest()
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
-	s.mockRemoteFrontendClient.On("SignalWorkflowExecution", mock.Anything, req).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordActive() {
-	req := s.getSignalRequest()
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
-	domainNotActiveErr := &shared.DomainNotActiveError{ActiveCluster: s.alternativeClusterName}
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(domainNotActiveErr).Once()
-	s.mockRemoteFrontendClient.On("SignalWorkflowExecution", mock.Anything, req).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordNotActive() {
-	req := s.getSignalRequest()
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
-	domainNotActiveErr := &shared.DomainNotActiveError{ActiveCluster: s.currentClusterName}
-	s.mockRemoteFrontendClient.On("SignalWorkflowExecution", mock.Anything, req).Return(domainNotActiveErr).Once()
-	s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalRequest)
-	})).Return(nil).Once()
-	err := s.handler.SignalWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainActive_LocalDomain() {
-	s.setupLocalDomain()
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainNotActive_LocalDomain() {
-	s.setupLocalDomain()
-	req := s.getSignalWithStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainActive_GlobalDomain_OneCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainNotActive_GlobalDomain_OneCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
-	req := s.getSignalWithStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordNotActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, false)
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getSignalWithStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordNotActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, false)
-	req := s.getSignalWithStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordActive() {
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordNotActive() {
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
-	s.mockRemoteFrontendClient.On("SignalWithStartWorkflowExecution", mock.Anything, req).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordActive() {
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
-	domainNotActiveErr := &shared.DomainNotActiveError{ActiveCluster: s.alternativeClusterName}
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	s.mockRemoteFrontendClient.On("SignalWithStartWorkflowExecution", mock.Anything, req).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordNotActive() {
-	req := s.getSignalWithStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
-	domainNotActiveErr := &shared.DomainNotActiveError{ActiveCluster: s.currentClusterName}
-	s.mockRemoteFrontendClient.On("SignalWithStartWorkflowExecution", mock.Anything, req).Return(nil, domainNotActiveErr).Once()
-	s.mockHistoryClient.On("SignalWithStartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.SignalWithStartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.SignalWithStartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainActive_LocalDomain() {
-	s.setupLocalDomain()
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainNotActive_LocalDomain() {
-	s.setupLocalDomain()
-	req := s.getStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainActive_GlobalDomain_OneCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainNotActive_GlobalDomain_OneCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
-	req := s.getStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordNotActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
-	req := s.getStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingNotEnabled_DomainRecordNotActive() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, false)
-	req := s.getStartRequest()
-
-	domainNotActiveErr := &shared.DomainNotActiveError{}
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Equal(domainNotActiveErr, err)
-	s.Nil(result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordActive() {
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordNotActive() {
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
-	s.mockRemoteFrontendClient.On("StartWorkflowExecution", mock.Anything, req).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordActive() {
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
-	domainNotActiveErr := &shared.DomainNotActiveError{ActiveCluster: s.alternativeClusterName}
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(nil, domainNotActiveErr).Once()
-	s.mockRemoteFrontendClient.On("StartWorkflowExecution", mock.Anything, req).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) TestStartWorkflow_DomainNotActive_GlobalDomain_TwoCluster_ForwardingEnabled_DomainRecordNotActive() {
-	req := s.getStartRequest()
-	resp := &shared.StartWorkflowExecutionResponse{}
-
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
-	domainNotActiveErr := &shared.DomainNotActiveError{ActiveCluster: s.currentClusterName}
-	s.mockRemoteFrontendClient.On("StartWorkflowExecution", mock.Anything, req).Return(nil, domainNotActiveErr).Once()
-	s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.MatchedBy(func(input *h.StartWorkflowExecutionRequest) bool {
-		return reflect.DeepEqual(req, input.StartRequest)
-	})).Return(resp, nil).Once()
-	result, err := s.handler.StartWorkflowExecution(context.Background(), req)
-	s.Nil(err)
-	s.Equal(resp, result)
-}
-
-func (s *dcRedirectionHandlerSuite) setupLocalDomain() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-			},
-		},
-		IsGlobalDomain: false,
-		TableVersion:   persistence.DomainTableVersionV1,
+	req := &shared.DescribeTaskListRequest{
+		Domain: common.StringPtr(s.domainName),
 	}
+	resp, err := s.handler.DescribeTaskList(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.DescribeTaskListResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.DescribeTaskListResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) setupGlobalDomainWithOneReplicationCluster() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
-			},
-		},
-		IsGlobalDomain: true,
-		TableVersion:   persistence.DomainTableVersionV1,
-	}
+func (s *dcRedirectionHandlerSuite) TestDescribeWorkflowExecution() {
+	apiName := "DescribeWorkflowExecution"
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.DescribeWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.DescribeWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.DescribeWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.DescribeWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) setupGlobalDomainWithTwoReplicationCluster(forwardingEnabled bool, isRecordActive bool) {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
-	activeCluster := s.alternativeClusterName
-	if isRecordActive {
-		activeCluster = s.currentClusterName
-	}
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: activeCluster,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
-			},
-		},
-		IsGlobalDomain: true,
-		TableVersion:   persistence.DomainTableVersionV1,
-	}
+func (s *dcRedirectionHandlerSuite) TestGetWorkflowExecutionHistory() {
+	apiName := "GetWorkflowExecutionHistory"
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
-	s.config.EnableDomainNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByDomain(forwardingEnabled)
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.GetWorkflowExecutionHistory(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.GetWorkflowExecutionHistoryResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.GetWorkflowExecutionHistoryResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) getSignalRequest() *shared.SignalWorkflowExecutionRequest {
-	return &shared.SignalWorkflowExecutionRequest{
-		Domain: common.StringPtr("some random domain name"),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("some random workflow ID"),
-			RunId:      common.StringPtr(uuid.New()),
-		},
-		SignalName: common.StringPtr("some random signal name"),
-		Input:      []byte("some random signal input"),
-		Identity:   common.StringPtr("some random signal identity"),
+func (s *dcRedirectionHandlerSuite) TestListClosedWorkflowExecutions() {
+	apiName := "ListClosedWorkflowExecutions"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.ListClosedWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
 	}
+	resp, err := s.handler.ListClosedWorkflowExecutions(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.ListClosedWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.ListClosedWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) getSignalWithStartRequest() *shared.SignalWithStartWorkflowExecutionRequest {
-	workflowType := "some random workflow type"
-	taskList := "some random task list"
-	return &shared.SignalWithStartWorkflowExecutionRequest{
-		Domain:                              common.StringPtr("some random domain name"),
-		WorkflowId:                          common.StringPtr("some random workflow ID"),
-		WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
-		TaskList:                            &shared.TaskList{Name: common.StringPtr(taskList)},
-		Input:                               []byte("some random workflow input"),
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(123),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(234),
-		Identity:                            common.StringPtr("some random signal identity"),
-		RequestId:                           common.StringPtr(uuid.New()),
-		SignalInput:                         []byte("some random workflow input"),
-		SignalName:                          common.StringPtr("some random signal name"),
+func (s *dcRedirectionHandlerSuite) TestListOpenWorkflowExecutions() {
+	apiName := "ListOpenWorkflowExecutions"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.ListOpenWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
 	}
+	resp, err := s.handler.ListOpenWorkflowExecutions(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.ListOpenWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.ListOpenWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
 }
 
-func (s *dcRedirectionHandlerSuite) getStartRequest() *shared.StartWorkflowExecutionRequest {
-	workflowType := "some random workflow type"
-	taskList := "some random task list"
-	return &shared.StartWorkflowExecutionRequest{
-		Domain:                              common.StringPtr("some random domain name"),
-		WorkflowId:                          common.StringPtr("some random workflow ID"),
-		WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
-		TaskList:                            &shared.TaskList{Name: common.StringPtr(taskList)},
-		Input:                               []byte("some random workflow input"),
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(123),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(234),
-		Identity:                            common.StringPtr("some random signal identity"),
-		RequestId:                           common.StringPtr(uuid.New()),
+func (s *dcRedirectionHandlerSuite) TestListWorkflowExecutions() {
+	apiName := "ListWorkflowExecutions"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.ListWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
 	}
+	resp, err := s.handler.ListWorkflowExecutions(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.ListWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.ListWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestScanWorkflowExecutions() {
+	apiName := "ScanWorkflowExecutions"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.ListWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.ScanWorkflowExecutions(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.ListWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.ListWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestCountWorkflowExecutions() {
+	apiName := "CountWorkflowExecutions"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.CountWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.CountWorkflowExecutions(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.CountWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.CountWorkflowExecutionsResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestPollForActivityTask() {
+	apiName := "PollForActivityTask"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.PollForActivityTaskRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.PollForActivityTask(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.PollForActivityTaskResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.PollForActivityTaskResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestPollForDecisionTask() {
+	apiName := "PollForDecisionTask"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.PollForDecisionTaskRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.PollForDecisionTask(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.PollForDecisionTaskResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.PollForDecisionTaskResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
+	apiName := "QueryWorkflow"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.QueryWorkflowRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.QueryWorkflow(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.QueryWorkflowResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.QueryWorkflowResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
+	apiName := "RecordActivityTaskHeartbeat"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
+		DomainID: s.domainID,
+	})
+	s.Nil(err)
+	req := &shared.RecordActivityTaskHeartbeatRequest{
+		TaskToken: token,
+	}
+	resp, err := s.handler.RecordActivityTaskHeartbeat(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.RecordActivityTaskHeartbeatResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.RecordActivityTaskHeartbeatResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeatByID() {
+	apiName := "RecordActivityTaskHeartbeatByID"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.RecordActivityTaskHeartbeatByIDRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.RecordActivityTaskHeartbeatByID(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.RecordActivityTaskHeartbeatResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.RecordActivityTaskHeartbeatResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRequestCancelWorkflowExecution() {
+	apiName := "RequestCancelWorkflowExecution"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.RequestCancelWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	err := s.handler.RequestCancelWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestResetStickyTaskList() {
+	apiName := "ResetStickyTaskList"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.ResetStickyTaskListRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.ResetStickyTaskList(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.ResetStickyTaskListResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.ResetStickyTaskListResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestResetWorkflowExecution() {
+	apiName := "ResetWorkflowExecution"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.ResetWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.ResetWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.ResetWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.ResetWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
+	apiName := "RespondActivityTaskCanceled"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
+		DomainID: s.domainID,
+	})
+	s.Nil(err)
+	req := &shared.RespondActivityTaskCanceledRequest{
+		TaskToken: token,
+	}
+	err = s.handler.RespondActivityTaskCanceled(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceledByID() {
+	apiName := "RespondActivityTaskCanceledByID"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.RespondActivityTaskCanceledByIDRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	err := s.handler.RespondActivityTaskCanceledByID(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
+	apiName := "RespondActivityTaskCompleted"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
+		DomainID: s.domainID,
+	})
+	s.Nil(err)
+	req := &shared.RespondActivityTaskCompletedRequest{
+		TaskToken: token,
+	}
+	err = s.handler.RespondActivityTaskCompleted(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompletedByID() {
+	apiName := "RespondActivityTaskCompletedByID"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.RespondActivityTaskCompletedByIDRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	err := s.handler.RespondActivityTaskCompletedByID(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
+	apiName := "RespondActivityTaskFailed"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
+		DomainID: s.domainID,
+	})
+	s.Nil(err)
+	req := &shared.RespondActivityTaskFailedRequest{
+		TaskToken: token,
+	}
+	err = s.handler.RespondActivityTaskFailed(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailedByID() {
+	apiName := "RespondActivityTaskFailedByID"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.RespondActivityTaskFailedByIDRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	err := s.handler.RespondActivityTaskFailedByID(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
+	apiName := "RespondDecisionTaskCompleted"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
+		DomainID: s.domainID,
+	})
+	s.Nil(err)
+	req := &shared.RespondDecisionTaskCompletedRequest{
+		TaskToken: token,
+	}
+	resp, err := s.handler.RespondDecisionTaskCompleted(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.RespondDecisionTaskCompletedResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.RespondDecisionTaskCompletedResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
+	apiName := "RespondDecisionTaskFailed"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
+		DomainID: s.domainID,
+	})
+	s.Nil(err)
+	req := &shared.RespondDecisionTaskFailedRequest{
+		TaskToken: token,
+	}
+	err = s.handler.RespondDecisionTaskFailed(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestRespondQueryTaskCompleted() {
+	apiName := "RespondQueryTaskCompleted"
+
+	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
+		s.domainID, apiName, mock.Anything).Return(nil).Once()
+
+	token, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&common.QueryTaskToken{
+		DomainID: s.domainID,
+	})
+	req := &shared.RespondQueryTaskCompletedRequest{
+		TaskToken: token,
+	}
+	err = s.handler.RespondQueryTaskCompleted(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflowExecution() {
+	apiName := "SignalWithStartWorkflowExecution"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.SignalWithStartWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.SignalWithStartWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.StartWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.StartWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestSignalWorkflowExecution() {
+	apiName := "SignalWorkflowExecution"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.SignalWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	err := s.handler.SignalWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestStartWorkflowExecution() {
+	apiName := "StartWorkflowExecution"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.StartWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.StartWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(&shared.StartWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(&shared.StartWorkflowExecutionResponse{}, nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
+func (s *dcRedirectionHandlerSuite) TestTerminateWorkflowExecution() {
+	apiName := "TerminateWorkflowExecution"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Once()
+
+	req := &shared.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	err := s.handler.TerminateWorkflowExecution(context.Background(), req)
+	s.Nil(err)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.On(apiName, mock.Anything, req).Return(nil).Once()
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
 }

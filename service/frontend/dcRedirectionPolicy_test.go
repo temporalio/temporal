@@ -21,14 +21,17 @@
 package frontend
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/uber/cadence/.gen/go/shared"
+
+	"github.com/uber/cadence/common/service/dynamicconfig"
+
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -42,14 +45,16 @@ type (
 		policy             *NoopRedirectionPolicy
 	}
 
-	forwardingDCRedirectionPolicySuite struct {
-		logger log.Logger
+	selectedAPIsForwardingRedirectionPolicySuite struct {
 		suite.Suite
-		fromDC              string
-		toDC                string
-		mockMetadataMgr     *mocks.MetadataManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		policy              *ForwardingDCRedirectionPolicy
+		domainName             string
+		domainID               string
+		currentClusterName     string
+		alternativeClusterName string
+		mockConfig             *Config
+		mockMetadataMgr        *mocks.MetadataManager
+		mockClusterMetadata    *mocks.ClusterMetadata
+		policy                 *SelectedAPIsForwardingRedirectionPolicy
 	}
 )
 
@@ -74,37 +79,48 @@ func (s *noopDCRedirectionPolicySuite) TearDownTest() {
 
 }
 
-func (s *noopDCRedirectionPolicySuite) TestGetTargetDataCenter() {
+func (s *noopDCRedirectionPolicySuite) TestWithDomainRedirect() {
 	domainName := "some random domain name"
 	domainID := "some random domain ID"
+	apiName := "any random API name"
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
 
-	targetCluster, err := s.policy.GetTargetDataCenterByID(domainID)
+	err := s.policy.WithDomainIDRedirect(domainID, apiName, callFn)
 	s.Nil(err)
-	s.Equal(s.currentClusterName, targetCluster)
 
-	targetCluster, err = s.policy.GetTargetDataCenterByName(domainName)
+	err = s.policy.WithDomainNameRedirect(domainName, apiName, callFn)
 	s.Nil(err)
-	s.Equal(s.currentClusterName, targetCluster)
+
+	s.Equal(2, callCount)
 }
 
-func TestForwardingDCRedirectionPolicySuite(t *testing.T) {
-	s := new(forwardingDCRedirectionPolicySuite)
+func TestSelectedAPIsForwardingRedirectionPolicySuite(t *testing.T) {
+	s := new(selectedAPIsForwardingRedirectionPolicySuite)
 	suite.Run(t, s)
 }
 
-func (s *forwardingDCRedirectionPolicySuite) SetupSuite() {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupSuite() {
 }
 
-func (s *forwardingDCRedirectionPolicySuite) TearDownSuite() {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownSuite() {
 
 }
 
-func (s *forwardingDCRedirectionPolicySuite) SetupTest() {
-	s.fromDC = cluster.TestCurrentClusterName
-	s.toDC = cluster.TestAlternativeClusterName
-	var err error
-	s.logger, err = loggerimpl.NewDevelopment()
-	s.Require().NoError(err)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
+	s.domainName = "some random domain name"
+	s.domainID = "some random domain ID"
+	s.currentClusterName = cluster.TestCurrentClusterName
+	s.alternativeClusterName = cluster.TestAlternativeClusterName
+
+	logger, err := loggerimpl.NewDevelopment()
+	s.Nil(err)
+
+	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false, false)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
@@ -112,22 +128,211 @@ func (s *forwardingDCRedirectionPolicySuite) SetupTest() {
 		s.mockMetadataMgr,
 		s.mockClusterMetadata,
 		metrics.NewClient(tally.NoopScope, metrics.Frontend),
-		s.logger,
+		logger,
 	)
-	s.policy = NewForwardingDCRedirectionPolicy(
-		s.fromDC, s.toDC, domainCache,
+	s.policy = NewSelectedAPIsForwardingPolicy(
+		s.currentClusterName,
+		s.mockConfig,
+		domainCache,
 	)
 }
 
-func (s *forwardingDCRedirectionPolicySuite) TearDownTest() {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownTest() {
 
 }
 
-func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_LocalDomain() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_LocalDomain() {
+	s.setupLocalDomain()
+
+	apiName := "any random API name"
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+	s.Nil(err)
+
+	err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+	s.Nil(err)
+
+	s.Equal(2, callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_GlobalDomain_OneReplicationCluster() {
+	s.setupGlobalDomainWithOneReplicationCluster()
+
+	apiName := "any random API name"
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+	s.Nil(err)
+
+	err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+	s.Nil(err)
+
+	s.Equal(2, callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_GlobalDomain_NoForwarding_DomainNotWhiltelisted() {
+	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
+
+	apiName := "any random API name"
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+	s.Nil(err)
+
+	err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+	s.Nil(err)
+
+	s.Equal(2, callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_GlobalDomain_NoForwarding_APINotWhiltelisted() {
+	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
+
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_CurrentCluster() {
+	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
+
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_AlternativeCluster() {
+	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
+
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.alternativeClusterName, targetCluster)
+		return nil
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_CurrentClusterToAlternativeCluster() {
+	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
+
+	currentClustercallCount := 0
+	alternativeClustercallCount := 0
+	callFn := func(targetCluster string) error {
+		switch targetCluster {
+		case s.currentClusterName:
+			currentClustercallCount++
+			return &shared.DomainNotActiveError{
+				CurrentCluster: s.currentClusterName,
+				ActiveCluster:  s.alternativeClusterName,
+			}
+		case s.alternativeClusterName:
+			alternativeClustercallCount++
+			return nil
+		default:
+			panic(fmt.Sprintf("unknown cluster name %v", targetCluster))
+		}
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_AlternativeClusterToCurrentCluster() {
+	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
+
+	currentClustercallCount := 0
+	alternativeClustercallCount := 0
+	callFn := func(targetCluster string) error {
+		switch targetCluster {
+		case s.currentClusterName:
+			currentClustercallCount++
+			return nil
+		case s.alternativeClusterName:
+			alternativeClustercallCount++
+			return &shared.DomainNotActiveError{
+				CurrentCluster: s.alternativeClusterName,
+				ActiveCluster:  s.currentClusterName,
+			}
+		default:
+			panic(fmt.Sprintf("unknown cluster name %v", targetCluster))
+		}
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithDomainIDRedirect(s.domainID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithDomainNameRedirect(s.domainName, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalDomain() {
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
+		Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
 		Config: &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -139,22 +344,13 @@ func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_LocalDomain
 		TableVersion:   persistence.DomainTableVersionV1,
 	}
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
-
-	targetCluster, err := s.policy.GetTargetDataCenterByID(domainID)
-	s.Nil(err)
-	s.Equal(s.fromDC, targetCluster)
-
-	targetCluster, err = s.policy.GetTargetDataCenterByName(domainName)
-	s.Nil(err)
-	s.Equal(s.fromDC, targetCluster)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(domainRecord, nil)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: s.domainName}).Return(domainRecord, nil)
 }
 
-func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_OneReplicationCluster() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneReplicationCluster() {
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
+		Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
 		Config: &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -166,25 +362,20 @@ func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomai
 		TableVersion:   persistence.DomainTableVersionV1,
 	}
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
-
-	targetCluster, err := s.policy.GetTargetDataCenterByID(domainID)
-	s.Nil(err)
-	s.Equal(s.fromDC, targetCluster)
-
-	targetCluster, err = s.policy.GetTargetDataCenterByName(domainName)
-	s.Nil(err)
-	s.Equal(s.fromDC, targetCluster)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(domainRecord, nil)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: s.domainName}).Return(domainRecord, nil)
 }
 
-func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_NoForwarding() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoReplicationCluster(forwardingEnabled bool, isRecordActive bool) {
+	activeCluster := s.alternativeClusterName
+	if isRecordActive {
+		activeCluster = s.currentClusterName
+	}
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
+		Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
 		Config: &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
+			ActiveClusterName: activeCluster,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
@@ -194,41 +385,7 @@ func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomai
 		TableVersion:   persistence.DomainTableVersionV1,
 	}
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
-
-	targetCluster, err := s.policy.GetTargetDataCenterByID(domainID)
-	s.Nil(err)
-	s.Equal(s.fromDC, targetCluster)
-
-	targetCluster, err = s.policy.GetTargetDataCenterByName(domainName)
-	s.Nil(err)
-	s.Equal(s.fromDC, targetCluster)
-}
-
-func (s *forwardingDCRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: "some other random cluster"},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
-			},
-		},
-		IsGlobalDomain: true,
-		TableVersion:   persistence.DomainTableVersionV1,
-	}
-
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(domainRecord, nil)
-
-	targetCluster, err := s.policy.GetTargetDataCenterByID(domainID)
-	s.Nil(err)
-	s.Equal(s.toDC, targetCluster)
-
-	targetCluster, err = s.policy.GetTargetDataCenterByName(domainName)
-	s.Nil(err)
-	s.Equal(s.toDC, targetCluster)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(domainRecord, nil)
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: s.domainName}).Return(domainRecord, nil)
+	s.mockConfig.EnableDomainNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByDomain(forwardingEnabled)
 }

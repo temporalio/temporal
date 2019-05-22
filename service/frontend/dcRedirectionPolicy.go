@@ -23,6 +23,7 @@ package frontend
 import (
 	"fmt"
 
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/config"
@@ -33,15 +34,21 @@ const (
 	DCRedirectionPolicyDefault = ""
 	// DCRedirectionPolicyNoop means no redirection
 	DCRedirectionPolicyNoop = "noop"
-	// DCRedirectionPolicyForwarding means forwarding from an DC to another DC
-	DCRedirectionPolicyForwarding = "forwarding"
+	// DCRedirectionPolicySelectedAPIsForwarding means forwarding the following APIs based domain
+	// 1. StartWorkflowExecution
+	// 2. SignalWithStartWorkflowExecution
+	// 3. SignalWorkflowExecution
+	// 4. RequestCancelWorkflowExecution
+	// 5. TerminateWorkflowExecution
+	// please also reference selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
+	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
 )
 
 type (
-	// DCRedirectionPolicy is DC redirection policy interface
+	// DCRedirectionPolicy is a DC redirection policy interface
 	DCRedirectionPolicy interface {
-		GetTargetDataCenterByName(domainName string) (string, error)
-		GetTargetDataCenterByID(domainName string) (string, error)
+		WithDomainIDRedirect(domainID string, apiName string, call func(string) error) error
+		WithDomainNameRedirect(domainName string, apiName string, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -49,18 +56,26 @@ type (
 		currentClusterName string
 	}
 
-	// ForwardingDCRedirectionPolicy is DC redirection policy which forwards
-	// API calls if domain is effectively global, fromDC is current cluster,
-	// fromDC is not in replication config and toDC is in replication config,
-	ForwardingDCRedirectionPolicy struct {
-		fromDC      string
-		toDC        string
-		domainCache cache.DomainCache
+	// SelectedAPIsForwardingRedirectionPolicy is a DC redirection policy
+	// which (based on domain) forwards selected APIs calls to active cluster
+	SelectedAPIsForwardingRedirectionPolicy struct {
+		currentClusterName string
+		config             *Config
+		domainCache        cache.DomainCache
 	}
 )
 
+// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
+var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
+	"StartWorkflowExecution":           {},
+	"SignalWithStartWorkflowExecution": {},
+	"SignalWorkflowExecution":          {},
+	"RequestCancelWorkflowExecution":   {},
+	"TerminateWorkflowExecution":       {},
+}
+
 // RedirectionPolicyGenerator generate corresponding redirection policy
-func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata,
+func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config,
 	domainCache cache.DomainCache, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
@@ -68,14 +83,9 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata,
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicyNoop:
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
-	case DCRedirectionPolicyForwarding:
+	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		if _, ok := clusterMetadata.GetAllClusterInfo()[policy.ToDC]; !ok {
-			panic(fmt.Sprintf("Incorrect to DC: %v", policy.ToDC))
-		}
-		return NewForwardingDCRedirectionPolicy(
-			currentClusterName, policy.ToDC, domainCache,
-		)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, domainCache)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -88,65 +98,83 @@ func NewNoopRedirectionPolicy(currentClusterName string) *NoopRedirectionPolicy 
 	}
 }
 
-// GetTargetDataCenterByName get target cluster name by domain Name
-func (policy *NoopRedirectionPolicy) GetTargetDataCenterByName(domainName string) (string, error) {
-	return policy.currentClusterName, nil
+// WithDomainIDRedirect redirect the API call based on domain ID
+func (policy *NoopRedirectionPolicy) WithDomainIDRedirect(domainID string, apiName string, call func(string) error) error {
+	return call(policy.currentClusterName)
 }
 
-// GetTargetDataCenterByID get target cluster name by domain ID
-func (policy *NoopRedirectionPolicy) GetTargetDataCenterByID(domainID string) (string, error) {
-	return policy.currentClusterName, nil
+// WithDomainNameRedirect redirect the API call based on domain name
+func (policy *NoopRedirectionPolicy) WithDomainNameRedirect(domainName string, apiName string, call func(string) error) error {
+	return call(policy.currentClusterName)
 }
 
-// NewForwardingDCRedirectionPolicy creates a data center redirection policy forwarding API calls
-func NewForwardingDCRedirectionPolicy(fromDC string, toDC string, domainCache cache.DomainCache) *ForwardingDCRedirectionPolicy {
-	return &ForwardingDCRedirectionPolicy{
-		fromDC:      fromDC,
-		toDC:        toDC,
-		domainCache: domainCache,
+// NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on domain
+func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, domainCache cache.DomainCache) *SelectedAPIsForwardingRedirectionPolicy {
+	return &SelectedAPIsForwardingRedirectionPolicy{
+		currentClusterName: currentClusterName,
+		config:             config,
+		domainCache:        domainCache,
 	}
 }
 
-// GetTargetDataCenterByName get target cluster name by domain Name
-func (policy *ForwardingDCRedirectionPolicy) GetTargetDataCenterByName(domainName string) (string, error) {
-	domainEntry, err := policy.domainCache.GetDomain(domainName)
-	if err != nil {
-		return "", err
-	}
-
-	return policy.getTargetDataCenter(domainEntry), nil
-}
-
-// GetTargetDataCenterByID get target cluster name by domain ID
-func (policy *ForwardingDCRedirectionPolicy) GetTargetDataCenterByID(domainID string) (string, error) {
+// WithDomainIDRedirect redirect the API call based on domain ID
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainIDRedirect(domainID string, apiName string, call func(string) error) error {
 	domainEntry, err := policy.domainCache.GetDomainByID(domainID)
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	return policy.getTargetDataCenter(domainEntry), nil
+	return policy.withRedirect(domainEntry, apiName, call)
 }
 
-func (policy *ForwardingDCRedirectionPolicy) getTargetDataCenter(domainEntry *cache.DomainCacheEntry) string {
+// WithDomainNameRedirect redirect the API call based on domain name
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainNameRedirect(domainName string, apiName string, call func(string) error) error {
+	domainEntry, err := policy.domainCache.GetDomain(domainName)
+	if err != nil {
+		return err
+	}
+	return policy.withRedirect(domainEntry, apiName, call)
+}
+
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(domainEntry *cache.DomainCacheEntry, apiName string, call func(string) error) error {
+	targetDC, enableDomainNotActiveForwarding := policy.getTargetClusterAndIsDomainNotActiveAutoForwarding(domainEntry, apiName)
+
+	err := call(targetDC)
+
+	targetDC, ok := policy.isDomainNotActiveError(err)
+	if !ok || !enableDomainNotActiveForwarding {
+		return err
+	}
+	return call(targetDC)
+}
+
+func (policy *SelectedAPIsForwardingRedirectionPolicy) isDomainNotActiveError(err error) (string, bool) {
+	domainNotActiveErr, ok := err.(*shared.DomainNotActiveError)
+	if !ok {
+		return "", false
+	}
+	return domainNotActiveErr.ActiveCluster, true
+}
+
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDomainNotActiveAutoForwarding(domainEntry *cache.DomainCacheEntry, apiName string) (string, bool) {
 	if !domainEntry.IsGlobalDomain() {
-		return policy.fromDC
+		return policy.currentClusterName, false
 	}
 
 	if len(domainEntry.GetReplicationConfig().Clusters) == 1 {
 		// do not do dc redirection if domain is only targeting at 1 dc (effectively local domain)
-		return policy.fromDC
+		return policy.currentClusterName, false
 	}
 
-	replicationClusterNames := map[string]struct{}{}
-	for _, clusterConfig := range domainEntry.GetReplicationConfig().Clusters {
-		replicationClusterNames[clusterConfig.ClusterName] = struct{}{}
+	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) {
+		// do not do dc redirection if domain is only targeting at 1 dc (effectively local domain)
+		return policy.currentClusterName, false
 	}
 
-	_, containsFromDC := replicationClusterNames[policy.fromDC]
-	_, containsToDC := replicationClusterNames[policy.toDC]
-
-	if !containsFromDC && containsToDC {
-		return policy.toDC
+	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
+	if !ok {
+		// do not do dc redirection if API is not whitelisted
+		return policy.currentClusterName, false
 	}
-	return policy.fromDC
+
+	return domainEntry.GetReplicationConfig().ActiveClusterName, true
 }

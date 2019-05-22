@@ -83,7 +83,7 @@ clusterMetadata:
       rpcAddress: "127.0.0.1:8933"
 
 dcRedirectionPolicy:
-  policy: "noop"
+  policy: "selected-apis-forwarding"
   toDC: ""
 
 kafka:

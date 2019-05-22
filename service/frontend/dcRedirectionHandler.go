@@ -23,6 +23,8 @@ package frontend
 import (
 	"context"
 
+	"github.com/uber/cadence/client"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
@@ -42,7 +44,11 @@ type (
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
 		service            service.Service
-		frontendHandler    *WorkflowHandler
+		frontendHandler    workflowserviceserver.Interface
+		clientBean         client.Bean
+
+		startFn func() error
+		stopFn  func()
 	}
 )
 
@@ -50,6 +56,7 @@ type (
 func NewDCRedirectionHandler(wfHandler *WorkflowHandler, policy config.DCRedirectionPolicy) *DCRedirectionHandlerImpl {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		wfHandler.GetClusterMetadata(),
+		wfHandler.config,
 		wfHandler.domainCache,
 		policy,
 	)
@@ -62,23 +69,26 @@ func NewDCRedirectionHandler(wfHandler *WorkflowHandler, policy config.DCRedirec
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		service:            wfHandler.Service,
 		frontendHandler:    wfHandler,
+		clientBean:         wfHandler.Service.GetClientBean(),
+		startFn:            func() error { return wfHandler.Start() },
+		stopFn:             func() { wfHandler.Stop() },
 	}
 }
 
 // RegisterHandler register this handler, must be called before Start()
 func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
-	handler.frontendHandler.Service.GetDispatcher().Register(workflowserviceserver.New(handler))
-	handler.frontendHandler.Service.GetDispatcher().Register(metaserver.New(handler))
+	handler.service.GetDispatcher().Register(workflowserviceserver.New(handler))
+	handler.service.GetDispatcher().Register(metaserver.New(handler))
 }
 
 // Start starts the handler
 func (handler *DCRedirectionHandlerImpl) Start() error {
-	return handler.frontendHandler.Start()
+	return handler.startFn()
 }
 
 // Stop stops the handler
 func (handler *DCRedirectionHandlerImpl) Stop() {
-	handler.frontendHandler.Stop()
+	handler.stopFn()
 }
 
 // Health is for health check
@@ -142,16 +152,22 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
 	request *shared.DescribeTaskListRequest,
 ) (*shared.DescribeTaskListResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "DescribeTaskList"
+	var resp *shared.DescribeTaskListResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.DescribeTaskList(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.DescribeTaskList(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.DescribeTaskList(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).DescribeTaskList(ctx, request)
+	return resp, err
 }
 
 // DescribeWorkflowExecution API call
@@ -160,16 +176,22 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 	request *shared.DescribeWorkflowExecutionRequest,
 ) (*shared.DescribeWorkflowExecutionResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "DescribeWorkflowExecution"
+	var resp *shared.DescribeWorkflowExecutionResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.DescribeWorkflowExecution(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.DescribeWorkflowExecution(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.DescribeWorkflowExecution(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).DescribeWorkflowExecution(ctx, request)
+	return resp, err
 }
 
 // GetWorkflowExecutionHistory API call
@@ -178,16 +200,22 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	request *shared.GetWorkflowExecutionHistoryRequest,
 ) (*shared.GetWorkflowExecutionHistoryResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "GetWorkflowExecutionHistory"
+	var resp *shared.GetWorkflowExecutionHistoryResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.GetWorkflowExecutionHistory(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.GetWorkflowExecutionHistory(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.GetWorkflowExecutionHistory(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).GetWorkflowExecutionHistory(ctx, request)
+	return resp, err
 }
 
 // ListClosedWorkflowExecutions API call
@@ -196,16 +224,22 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 	request *shared.ListClosedWorkflowExecutionsRequest,
 ) (*shared.ListClosedWorkflowExecutionsResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "ListClosedWorkflowExecutions"
+	var resp *shared.ListClosedWorkflowExecutionsResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.ListClosedWorkflowExecutions(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListClosedWorkflowExecutions(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListClosedWorkflowExecutions(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ListClosedWorkflowExecutions(ctx, request)
+	return resp, err
 }
 
 // ListOpenWorkflowExecutions API call
@@ -214,16 +248,22 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 	request *shared.ListOpenWorkflowExecutionsRequest,
 ) (*shared.ListOpenWorkflowExecutionsResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "ListOpenWorkflowExecutions"
+	var resp *shared.ListOpenWorkflowExecutionsResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.ListOpenWorkflowExecutions(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListOpenWorkflowExecutions(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListOpenWorkflowExecutions(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ListOpenWorkflowExecutions(ctx, request)
+	return resp, err
 }
 
 // ListWorkflowExecutions API call
@@ -232,16 +272,22 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 	request *shared.ListWorkflowExecutionsRequest,
 ) (*shared.ListWorkflowExecutionsResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "ListWorkflowExecutions"
+	var resp *shared.ListWorkflowExecutionsResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.ListWorkflowExecutions(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListWorkflowExecutions(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListWorkflowExecutions(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ListWorkflowExecutions(ctx, request)
+	return resp, err
 }
 
 // ScanWorkflowExecutions API call
@@ -250,16 +296,22 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 	request *shared.ListWorkflowExecutionsRequest,
 ) (*shared.ListWorkflowExecutionsResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "ScanWorkflowExecutions"
+	var resp *shared.ListWorkflowExecutionsResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.ScanWorkflowExecutions(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ScanWorkflowExecutions(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ScanWorkflowExecutions(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ScanWorkflowExecutions(ctx, request)
+	return resp, err
 }
 
 // CountWorkflowExecutions API call
@@ -268,16 +320,22 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 	request *shared.CountWorkflowExecutionsRequest,
 ) (*shared.CountWorkflowExecutionsResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "CountWorkflowExecutions"
+	var resp *shared.CountWorkflowExecutionsResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.CountWorkflowExecutions(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.CountWorkflowExecutions(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.CountWorkflowExecutions(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).CountWorkflowExecutions(ctx, request)
+	return resp, err
 }
 
 // PollForActivityTask API call
@@ -286,16 +344,22 @@ func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 	request *shared.PollForActivityTaskRequest,
 ) (*shared.PollForActivityTaskResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "PollForActivityTask"
+	var resp *shared.PollForActivityTaskResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.PollForActivityTask(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.PollForActivityTask(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.PollForActivityTask(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).PollForActivityTask(ctx, request)
+	return resp, err
 }
 
 // PollForDecisionTask API call
@@ -304,16 +368,22 @@ func (handler *DCRedirectionHandlerImpl) PollForDecisionTask(
 	request *shared.PollForDecisionTaskRequest,
 ) (*shared.PollForDecisionTaskResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "PollForDecisionTask"
+	var resp *shared.PollForDecisionTaskResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.PollForDecisionTask(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.PollForDecisionTask(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.PollForDecisionTask(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).PollForDecisionTask(ctx, request)
+	return resp, err
 }
 
 // QueryWorkflow API call
@@ -322,16 +392,22 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 	request *shared.QueryWorkflowRequest,
 ) (*shared.QueryWorkflowResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "QueryWorkflow"
+	var resp *shared.QueryWorkflowResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.QueryWorkflow(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.QueryWorkflow(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).QueryWorkflow(ctx, request)
+	return resp, err
 }
 
 // RecordActivityTaskHeartbeat API call
@@ -340,21 +416,27 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 	request *shared.RecordActivityTaskHeartbeatRequest,
 ) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 
+	var apiName = "RecordActivityTaskHeartbeat"
+	var resp *shared.RecordActivityTaskHeartbeatResponse
+	var err error
+
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
-		return nil, err
-	}
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.RecordActivityTaskHeartbeat(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.RecordActivityTaskHeartbeat(ctx, request)
+		}
+		return err
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RecordActivityTaskHeartbeat(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RecordActivityTaskHeartbeat(ctx, request)
+	return resp, err
 }
 
 // RecordActivityTaskHeartbeatByID API call
@@ -363,16 +445,22 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatByID(
 	request *shared.RecordActivityTaskHeartbeatByIDRequest,
 ) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "RecordActivityTaskHeartbeatByID"
+	var resp *shared.RecordActivityTaskHeartbeatResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RecordActivityTaskHeartbeatByID(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.RecordActivityTaskHeartbeatByID(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.RecordActivityTaskHeartbeatByID(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RecordActivityTaskHeartbeatByID(ctx, request)
+	return resp, err
 }
 
 // RequestCancelWorkflowExecution API call
@@ -381,16 +469,21 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 	request *shared.RequestCancelWorkflowExecutionRequest,
 ) error {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
+	var apiName = "RequestCancelWorkflowExecution"
+	var err error
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RequestCancelWorkflowExecution(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RequestCancelWorkflowExecution(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RequestCancelWorkflowExecution(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RequestCancelWorkflowExecution(ctx, request)
+	return err
 }
 
 // ResetStickyTaskList API call
@@ -399,16 +492,22 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
 	request *shared.ResetStickyTaskListRequest,
 ) (*shared.ResetStickyTaskListResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "ResetStickyTaskList"
+	var resp *shared.ResetStickyTaskListResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.ResetStickyTaskList(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ResetStickyTaskList(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ResetStickyTaskList(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ResetStickyTaskList(ctx, request)
+	return resp, err
 }
 
 // ResetWorkflowExecution API call
@@ -417,16 +516,22 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 	request *shared.ResetWorkflowExecutionRequest,
 ) (*shared.ResetWorkflowExecutionResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
+	var apiName = "ResetWorkflowExecution"
+	var resp *shared.ResetWorkflowExecutionResponse
+	var err error
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.ResetWorkflowExecution(ctx, request)
-	}
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ResetWorkflowExecution(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ResetWorkflowExecution(ctx, request)
+		}
+		return err
+	})
 
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).ResetWorkflowExecution(ctx, request)
+	return resp, err
 }
 
 // RespondActivityTaskCanceled API call
@@ -435,21 +540,26 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 	request *shared.RespondActivityTaskCanceledRequest,
 ) error {
 
+	var apiName = "RespondActivityTaskCanceled"
+	var err error
+
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondActivityTaskCanceled(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondActivityTaskCanceled(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondActivityTaskCanceled(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondActivityTaskCanceled(ctx, request)
+	return err
 }
 
 // RespondActivityTaskCanceledByID API call
@@ -458,16 +568,21 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledByID(
 	request *shared.RespondActivityTaskCanceledByIDRequest,
 ) error {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
+	var apiName = "RespondActivityTaskCanceledByID"
+	var err error
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondActivityTaskCanceledByID(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondActivityTaskCanceledByID(ctx, request)
+	return err
 }
 
 // RespondActivityTaskCompleted API call
@@ -476,21 +591,26 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 	request *shared.RespondActivityTaskCompletedRequest,
 ) error {
 
+	var apiName = "RespondActivityTaskCompleted"
+	var err error
+
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondActivityTaskCompleted(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondActivityTaskCompleted(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondActivityTaskCompleted(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondActivityTaskCompleted(ctx, request)
+	return err
 }
 
 // RespondActivityTaskCompletedByID API call
@@ -499,16 +619,21 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedByID(
 	request *shared.RespondActivityTaskCompletedByIDRequest,
 ) error {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
+	var apiName = "RespondActivityTaskCompletedByID"
+	var err error
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondActivityTaskCompletedByID(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondActivityTaskCompletedByID(ctx, request)
+	return err
 }
 
 // RespondActivityTaskFailed API call
@@ -517,21 +642,26 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 	request *shared.RespondActivityTaskFailedRequest,
 ) error {
 
+	var apiName = "RespondActivityTaskFailed"
+	var err error
+
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondActivityTaskFailed(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondActivityTaskFailed(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondActivityTaskFailed(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondActivityTaskFailed(ctx, request)
+	return err
 }
 
 // RespondActivityTaskFailedByID API call
@@ -540,16 +670,21 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedByID(
 	request *shared.RespondActivityTaskFailedByIDRequest,
 ) error {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
+	var apiName = "RespondActivityTaskFailedByID"
+	var err error
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondActivityTaskFailedByID(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondActivityTaskFailedByID(ctx, request)
+	return err
 }
 
 // RespondDecisionTaskCompleted API call
@@ -558,21 +693,27 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 	request *shared.RespondDecisionTaskCompletedRequest,
 ) (*shared.RespondDecisionTaskCompletedResponse, error) {
 
+	var apiName = "RespondDecisionTaskCompleted"
+	var resp *shared.RespondDecisionTaskCompletedResponse
+	var err error
+
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
-		return nil, err
-	}
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.RespondDecisionTaskCompleted(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.RespondDecisionTaskCompleted(ctx, request)
+		}
+		return err
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondDecisionTaskCompleted(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondDecisionTaskCompleted(ctx, request)
+	return resp, err
 }
 
 // RespondDecisionTaskFailed API call
@@ -581,21 +722,26 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
 	request *shared.RespondDecisionTaskFailedRequest,
 ) error {
 
+	var apiName = "RespondDecisionTaskFailed"
+	var err error
+
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondDecisionTaskFailed(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondDecisionTaskFailed(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondDecisionTaskFailed(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondDecisionTaskFailed(ctx, request)
+	return err
 }
 
 // RespondQueryTaskCompleted API call
@@ -604,21 +750,26 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 	request *shared.RespondQueryTaskCompletedRequest,
 ) error {
 
+	var apiName = "RespondQueryTaskCompleted"
+	var err error
+
 	token, err := handler.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
 		return err
 	}
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByID(token.DomainID)
-	if err != nil {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.RespondQueryTaskCompleted(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.RespondQueryTaskCompleted(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.RespondQueryTaskCompleted(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).RespondQueryTaskCompleted(ctx, request)
+	return err
 }
 
 // SignalWithStartWorkflowExecution API call
@@ -627,23 +778,21 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 	request *shared.SignalWithStartWorkflowExecutionRequest,
 ) (*shared.StartWorkflowExecutionResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
-
+	var apiName = "SignalWithStartWorkflowExecution"
 	var resp *shared.StartWorkflowExecutionResponse
+	var err error
 
-	err = handler.withDomainNotActiveRedirect(request.GetDomain(), targetDC, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
 		switch {
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.SignalWithStartWorkflowExecution(ctx, request)
 		default:
-			remoteClient := handler.service.GetClientBean().GetRemoteFrontendClient(targetDC)
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			resp, err = remoteClient.SignalWithStartWorkflowExecution(ctx, request)
 		}
 		return err
 	})
+
 	return resp, err
 }
 
@@ -653,17 +802,15 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 	request *shared.SignalWorkflowExecutionRequest,
 ) error {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return err
-	}
+	var apiName = "SignalWorkflowExecution"
+	var err error
 
-	err = handler.withDomainNotActiveRedirect(request.GetDomain(), targetDC, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
 		switch {
 		case targetDC == handler.currentClusterName:
 			err = handler.frontendHandler.SignalWorkflowExecution(ctx, request)
 		default:
-			remoteClient := handler.service.GetClientBean().GetRemoteFrontendClient(targetDC)
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			err = remoteClient.SignalWorkflowExecution(ctx, request)
 		}
 		return err
@@ -677,23 +824,21 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 	request *shared.StartWorkflowExecutionRequest,
 ) (*shared.StartWorkflowExecutionResponse, error) {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
-		return nil, err
-	}
-
+	var apiName = "StartWorkflowExecution"
 	var resp *shared.StartWorkflowExecutionResponse
+	var err error
 
-	err = handler.withDomainNotActiveRedirect(request.GetDomain(), targetDC, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
 		switch {
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.StartWorkflowExecution(ctx, request)
 		default:
-			remoteClient := handler.service.GetClientBean().GetRemoteFrontendClient(targetDC)
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			resp, err = remoteClient.StartWorkflowExecution(ctx, request)
 		}
 		return err
 	})
+
 	return resp, err
 }
 
@@ -703,63 +848,19 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	request *shared.TerminateWorkflowExecutionRequest,
 ) error {
 
-	targetDC, err := handler.redirectionPolicy.GetTargetDataCenterByName(request.GetDomain())
-	if err != nil {
+	var apiName = "TerminateWorkflowExecution"
+	var err error
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+		switch {
+		case targetDC == handler.currentClusterName:
+			err = handler.frontendHandler.TerminateWorkflowExecution(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			err = remoteClient.TerminateWorkflowExecution(ctx, request)
+		}
 		return err
-	}
+	})
 
-	if targetDC == handler.currentClusterName {
-		return handler.frontendHandler.TerminateWorkflowExecution(ctx, request)
-	}
-
-	return handler.service.GetClientBean().GetRemoteFrontendClient(targetDC).TerminateWorkflowExecution(ctx, request)
-}
-
-func (handler *DCRedirectionHandlerImpl) isDomainNotActiveError(err error) (string, bool) {
-	domainNotActiveErr, ok := err.(*shared.DomainNotActiveError)
-	if !ok {
-		return "", false
-	}
-	return domainNotActiveErr.ActiveCluster, true
-}
-
-func (handler *DCRedirectionHandlerImpl) enableDomainNotActiveAutoForwarding(domainName string) (bool, string, error) {
-	domainEntry, err := handler.domainCache.GetDomain(domainName)
-	if err != nil {
-		return false, "", err
-	}
-
-	if !domainEntry.IsGlobalDomain() {
-		return false, "", nil
-	}
-
-	if len(domainEntry.GetReplicationConfig().Clusters) == 1 {
-		// do not do dc redirection if domain is only targeting at 1 dc (effectively local domain)
-		return false, "", nil
-	}
-
-	if !handler.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) {
-		// do not do dc redirection if domain is only targeting at 1 dc (effectively local domain)
-		return false, "", nil
-	}
-
-	return true, domainEntry.GetReplicationConfig().ActiveClusterName, nil
-}
-
-func (handler *DCRedirectionHandlerImpl) withDomainNotActiveRedirect(domain string, targetDC string, call func(string) error) error {
-	enableDomainNotActiveForwarding, activeCluster, err := handler.enableDomainNotActiveAutoForwarding(domain)
-	if err != nil {
-		return err
-	}
-
-	if enableDomainNotActiveForwarding {
-		targetDC = activeCluster
-	}
-
-	err = call(targetDC)
-	targetDC, ok := handler.isDomainNotActiveError(err)
-	if !ok || !enableDomainNotActiveForwarding {
-		return err
-	}
-	return call(targetDC)
+	return err
 }
