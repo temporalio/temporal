@@ -49308,6 +49308,7 @@ type WorkflowExecutionStartedEventAttributes struct {
 	ContinuedFailureReason              *string                 `json:"continuedFailureReason,omitempty"`
 	ContinuedFailureDetails             []byte                  `json:"continuedFailureDetails,omitempty"`
 	LastCompletionResult                []byte                  `json:"lastCompletionResult,omitempty"`
+	OriginalExecutionRunId              *string                 `json:"originalExecutionRunId,omitempty"`
 	Identity                            *string                 `json:"identity,omitempty"`
 	RetryPolicy                         *RetryPolicy            `json:"retryPolicy,omitempty"`
 	Attempt                             *int32                  `json:"attempt,omitempty"`
@@ -49336,7 +49337,7 @@ type WorkflowExecutionStartedEventAttributes struct {
 //   }
 func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [23]wire.Field
+		fields [24]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -49452,6 +49453,14 @@ func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 58, Value: w}
+		i++
+	}
+	if v.OriginalExecutionRunId != nil {
+		w, err = wire.NewValueString(*(v.OriginalExecutionRunId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 59, Value: w}
 		i++
 	}
 	if v.Identity != nil {
@@ -49680,6 +49689,16 @@ func (v *WorkflowExecutionStartedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 59:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.OriginalExecutionRunId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 60:
 			if field.Value.Type() == wire.TBinary {
 				var x string
@@ -49775,7 +49794,7 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [23]string
+	var fields [24]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -49831,6 +49850,10 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 	}
 	if v.LastCompletionResult != nil {
 		fields[i] = fmt.Sprintf("LastCompletionResult: %v", v.LastCompletionResult)
+		i++
+	}
+	if v.OriginalExecutionRunId != nil {
+		fields[i] = fmt.Sprintf("OriginalExecutionRunId: %v", *(v.OriginalExecutionRunId))
 		i++
 	}
 	if v.Identity != nil {
@@ -49925,6 +49948,9 @@ func (v *WorkflowExecutionStartedEventAttributes) Equals(rhs *WorkflowExecutionS
 	if !((v.LastCompletionResult == nil && rhs.LastCompletionResult == nil) || (v.LastCompletionResult != nil && rhs.LastCompletionResult != nil && bytes.Equal(v.LastCompletionResult, rhs.LastCompletionResult))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.OriginalExecutionRunId, rhs.OriginalExecutionRunId) {
+		return false
+	}
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
 		return false
 	}
@@ -50003,6 +50029,9 @@ func (v *WorkflowExecutionStartedEventAttributes) MarshalLogObject(enc zapcore.O
 	}
 	if v.LastCompletionResult != nil {
 		enc.AddString("lastCompletionResult", base64.StdEncoding.EncodeToString(v.LastCompletionResult))
+	}
+	if v.OriginalExecutionRunId != nil {
+		enc.AddString("originalExecutionRunId", *v.OriginalExecutionRunId)
 	}
 	if v.Identity != nil {
 		enc.AddString("identity", *v.Identity)
@@ -50242,6 +50271,21 @@ func (v *WorkflowExecutionStartedEventAttributes) GetLastCompletionResult() (o [
 // IsSetLastCompletionResult returns true if LastCompletionResult is not nil.
 func (v *WorkflowExecutionStartedEventAttributes) IsSetLastCompletionResult() bool {
 	return v != nil && v.LastCompletionResult != nil
+}
+
+// GetOriginalExecutionRunId returns the value of OriginalExecutionRunId if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetOriginalExecutionRunId() (o string) {
+	if v != nil && v.OriginalExecutionRunId != nil {
+		return *v.OriginalExecutionRunId
+	}
+
+	return
+}
+
+// IsSetOriginalExecutionRunId returns true if OriginalExecutionRunId is not nil.
+func (v *WorkflowExecutionStartedEventAttributes) IsSetOriginalExecutionRunId() bool {
+	return v != nil && v.OriginalExecutionRunId != nil
 }
 
 // GetIdentity returns the value of Identity if it is set or its

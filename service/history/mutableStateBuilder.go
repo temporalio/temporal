@@ -1295,7 +1295,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(requestID string) {
 
 func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(domainID string,
 	parentExecutionInfo *h.ParentExecutionInfo, execution workflow.WorkflowExecution, previousExecutionState mutableState,
-	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, originalRunID string) *workflow.HistoryEvent {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskList := previousExecutionInfo.TaskList
 	if attributes.TaskList != nil {
@@ -1363,7 +1363,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(d
 		parentDomainID = parentExecutionInfo.DomainUUID
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, previousExecutionInfo)
+	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, previousExecutionInfo, originalRunID)
 	e.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, createRequest.GetRequestId(), event)
 
 	return event
@@ -1382,7 +1382,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(execution workflo
 		return nil
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionStartedEvent(startRequest, nil)
+	event := e.hBuilder.AddWorkflowExecutionStartedEvent(startRequest, nil, execution.GetRunId())
 
 	var parentDomainID *string
 	if startRequest.ParentExecutionInfo != nil {
@@ -2719,6 +2719,11 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 	}
 
 	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(decisionCompletedEventID, newRunID, attributes)
+	currentStartEvent, found := e.GetStartEvent()
+	if !found {
+		return nil, nil, &workflow.InternalServiceError{Message: "Failed to load start event."}
+	}
+	originalRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetOriginalExecutionRunId()
 
 	var newStateBuilder *mutableStateBuilder
 	if domainEntry.IsGlobalDomain() {
@@ -2730,7 +2735,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 		newStateBuilder = newMutableStateBuilder(e.currentCluster, e.shard, e.eventsCache, e.logger)
 	}
 	domainID := domainEntry.GetInfo().ID
-	startedEvent := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes)
+	startedEvent := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes, originalRunID)
 	if startedEvent == nil {
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
