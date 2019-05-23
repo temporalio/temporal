@@ -1350,7 +1350,7 @@ func ResetWorkflow(c *cli.Context) {
 	decisionFinishID := eventID
 	var err error
 	if resetType != "" {
-		resetBaseRunID, decisionFinishID, err = getResetEventIDByType(c, resetType, domain, wid, rid, ctx, frontendClient)
+		resetBaseRunID, decisionFinishID, err = getResetEventIDByType(ctx, c, resetType, domain, wid, rid, frontendClient)
 		if err != nil {
 			ErrorAndExit("getResetEventIDByType failed", err)
 		}
@@ -1535,7 +1535,7 @@ func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, 
 		}
 	}
 
-	resetBaseRunID, decisionFinishID, err := getResetEventIDByType(c, resetType, domain, wid, rid, ctx, frontendClient)
+	resetBaseRunID, decisionFinishID, err := getResetEventIDByType(ctx, c, resetType, domain, wid, rid, frontendClient)
 	if err != nil {
 		return printErrorAndReturn("getResetEventIDByType failed", err)
 	}
@@ -1559,7 +1559,7 @@ func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, 
 	return nil
 }
 
-func getResetEventIDByType(c *cli.Context, resetType, domain, wid, rid string, ctx context.Context, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
 	fmt.Println("switch", resetType)
 	switch resetType {
 	case "LastDecisionCompleted":
@@ -1573,13 +1573,13 @@ func getResetEventIDByType(c *cli.Context, resetType, domain, wid, rid string, c
 			return
 		}
 	case "FirstDecisionCompleted":
-		resetBaseRunID, decisionFinishID, err = getFirstDecisionCompletedID(domain, wid, rid, ctx, frontendClient)
+		resetBaseRunID, decisionFinishID, err = getFirstDecisionCompletedID(ctx, domain, wid, rid, frontendClient)
 		if err != nil {
 			return
 		}
 	case "BadBinary":
 		binCheckSum := c.String(FlagResetBadBinaryChecksum)
-		resetBaseRunID, decisionFinishID, err = getBadDecisionCompletedID(domain, wid, rid, binCheckSum, ctx, frontendClient)
+		resetBaseRunID, decisionFinishID, err = getBadDecisionCompletedID(ctx, domain, wid, rid, binCheckSum, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1623,7 +1623,7 @@ func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, fr
 	return
 }
 
-func getBadDecisionCompletedID(domain, wid, rid, binChecksum string, ctx context.Context, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksum string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(domain),
@@ -1651,7 +1651,7 @@ func getBadDecisionCompletedID(domain, wid, rid, binChecksum string, ctx context
 	return
 }
 
-func getFirstDecisionCompletedID(domain, wid, rid string, ctx context.Context, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &shared.GetWorkflowExecutionHistoryRequest{
 		Domain: common.StringPtr(domain),

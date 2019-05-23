@@ -53,6 +53,8 @@ func NewClient(s3cli s3iface.S3API) blobstore.Client {
 		s3cli: s3cli,
 	}
 }
+
+// ClientFromConfig create client from config
 func ClientFromConfig(cfg *Config) (s3iface.S3API, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err

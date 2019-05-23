@@ -241,7 +241,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore := cassp.NewWorkflowExecutionPersistenceFromSession(session, shardIDInt, loggerimpl.NewNopLogger())
+	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt, session, loggerimpl.NewNopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: wid,

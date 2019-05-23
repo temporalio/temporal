@@ -472,7 +472,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 	histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 	historyV2Mgr := persistence.NewHistoryV2ManagerImpl(histV2, loggerimpl.NewNopLogger())
 
-	exeM := cassandra.NewWorkflowExecutionPersistenceFromSession(session, shardID, loggerimpl.NewNopLogger())
+	exeM, _ := cassandra.NewWorkflowExecutionPersistence(shardID, session, loggerimpl.NewNopLogger())
 	exeMgr := persistence.NewExecutionManagerImpl(exeM, loggerimpl.NewNopLogger())
 
 	for {

@@ -3596,7 +3596,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	s.Equal(workflowExecutionReset.GetRunId(), runID)
 }
 
-// TestResetMutableStateCurrentIsNotSelf test
+// TestResetMutableStateMismatch test
 func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowID := "test-reset-mutable-state-test-mismatch"
