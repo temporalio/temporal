@@ -240,6 +240,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		BranchToken:                 executionInfo.BranchToken,
 		CronSchedule:                executionInfo.CronSchedule,
 		ReplicationState:            replicationState,
+		SearchAttributes:            executionInfo.SearchAttributes,
 
 		// retry policy
 		HasRetryPolicy:     executionInfo.HasRetryPolicy,

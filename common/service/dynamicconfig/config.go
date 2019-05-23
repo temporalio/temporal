@@ -89,6 +89,9 @@ type BoolPropertyFn func(opts ...FilterOption) bool
 // StringPropertyFn is a wrapper to get string property from dynamic config
 type StringPropertyFn func(opts ...FilterOption) string
 
+// MapPropertyFn is a wrapper to get map property from dynamic config
+type MapPropertyFn func(opts ...FilterOption) map[string]interface{}
+
 // StringPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
 type StringPropertyFnWithDomainFilter func(domain string) string
 
@@ -227,6 +230,18 @@ func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn 
 func (c *Collection) GetStringProperty(key Key, defaultValue string) StringPropertyFn {
 	return func(opts ...FilterOption) string {
 		val, err := c.client.GetStringValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		c.logValue(key, val, defaultValue)
+		return val
+	}
+}
+
+// GetMapProperty gets property and asserts that it's a map
+func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}) MapPropertyFn {
+	return func(opts ...FilterOption) map[string]interface{} {
+		val, err := c.client.GetMapValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
 			c.logNoValue(key, err)
 		}

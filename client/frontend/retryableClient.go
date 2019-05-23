@@ -218,6 +218,21 @@ func (c *retryableClient) CountWorkflowExecutions(
 	return resp, err
 }
 
+func (c *retryableClient) GetSearchAttributes(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (*shared.GetSearchAttributesResponse, error) {
+
+	var resp *shared.GetSearchAttributesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetSearchAttributes(ctx, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollForActivityTask(
 	ctx context.Context,
 	request *shared.PollForActivityTaskRequest,

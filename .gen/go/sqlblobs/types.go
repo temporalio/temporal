@@ -7301,7 +7301,46 @@ type WorkflowExecutionInfo struct {
 	ClientImpl                      *string                     `json:"clientImpl,omitempty"`
 	AutoResetPoints                 []byte                      `json:"autoResetPoints,omitempty"`
 	AutoResetPointsEncoding         *string                     `json:"autoResetPointsEncoding,omitempty"`
+	SearchAttributes                map[string][]byte           `json:"searchAttributes,omitempty"`
 }
+
+type _Map_String_Binary_MapItemList map[string][]byte
+
+func (m _Map_String_Binary_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		if v == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", k)
+		}
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := wire.NewValueBinary(v), error(nil)
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_Binary_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_Binary_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_Binary_MapItemList) ValueType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_Binary_MapItemList) Close() {}
 
 // ToWire translates a WorkflowExecutionInfo struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -7320,7 +7359,7 @@ type WorkflowExecutionInfo struct {
 //   }
 func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [55]wire.Field
+		fields [56]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7766,8 +7805,44 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 116, Value: w}
 		i++
 	}
+	if v.SearchAttributes != nil {
+		w, err = wire.NewValueMap(_Map_String_Binary_MapItemList(v.SearchAttributes)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 118, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _Map_String_Binary_Read(m wire.MapItemList) (map[string][]byte, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TBinary {
+		return nil, nil
+	}
+
+	o := make(map[string][]byte, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := x.Value.GetBinary(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
 }
 
 // FromWire deserializes a WorkflowExecutionInfo struct from its Thrift-level
@@ -8326,6 +8401,14 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 118:
+			if field.Value.Type() == wire.TMap {
+				v.SearchAttributes, err = _Map_String_Binary_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -8339,7 +8422,7 @@ func (v *WorkflowExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [55]string
+	var fields [56]string
 	i := 0
 	if v.ParentDomainID != nil {
 		fields[i] = fmt.Sprintf("ParentDomainID: %v", v.ParentDomainID)
@@ -8561,8 +8644,29 @@ func (v *WorkflowExecutionInfo) String() string {
 		fields[i] = fmt.Sprintf("AutoResetPointsEncoding: %v", *(v.AutoResetPointsEncoding))
 		i++
 	}
+	if v.SearchAttributes != nil {
+		fields[i] = fmt.Sprintf("SearchAttributes: %v", v.SearchAttributes)
+		i++
+	}
 
 	return fmt.Sprintf("WorkflowExecutionInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Map_String_Binary_Equals(lhs, rhs map[string][]byte) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !bytes.Equal(lv, rv) {
+			return false
+		}
+	}
+	return true
 }
 
 // Equals returns true if all the fields of this WorkflowExecutionInfo match the
@@ -8740,8 +8844,22 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !_String_EqualsPtr(v.AutoResetPointsEncoding, rhs.AutoResetPointsEncoding) {
 		return false
 	}
+	if !((v.SearchAttributes == nil && rhs.SearchAttributes == nil) || (v.SearchAttributes != nil && rhs.SearchAttributes != nil && _Map_String_Binary_Equals(v.SearchAttributes, rhs.SearchAttributes))) {
+		return false
+	}
 
 	return true
+}
+
+type _Map_String_Binary_Zapper map[string][]byte
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of _Map_String_Binary_Zapper.
+func (m _Map_String_Binary_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	for k, v := range m {
+		enc.AddString((string)(k), base64.StdEncoding.EncodeToString(v))
+	}
+	return err
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
@@ -8914,6 +9032,9 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.AutoResetPointsEncoding != nil {
 		enc.AddString("autoResetPointsEncoding", *v.AutoResetPointsEncoding)
+	}
+	if v.SearchAttributes != nil {
+		err = multierr.Append(err, enc.AddObject("searchAttributes", (_Map_String_Binary_Zapper)(v.SearchAttributes)))
 	}
 	return err
 }
@@ -9741,4 +9862,19 @@ func (v *WorkflowExecutionInfo) GetAutoResetPointsEncoding() (o string) {
 // IsSetAutoResetPointsEncoding returns true if AutoResetPointsEncoding is not nil.
 func (v *WorkflowExecutionInfo) IsSetAutoResetPointsEncoding() bool {
 	return v != nil && v.AutoResetPointsEncoding != nil
+}
+
+// GetSearchAttributes returns the value of SearchAttributes if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetSearchAttributes() (o map[string][]byte) {
+	if v != nil && v.SearchAttributes != nil {
+		return v.SearchAttributes
+	}
+
+	return
+}
+
+// IsSetSearchAttributes returns true if SearchAttributes is not nil.
+func (v *WorkflowExecutionInfo) IsSetSearchAttributes() bool {
+	return v != nil && v.SearchAttributes != nil
 }

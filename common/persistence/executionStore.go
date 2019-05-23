@@ -163,6 +163,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(info *InternalWorkflowEx
 		CronSchedule:                 info.CronSchedule,
 		ExpirationSeconds:            info.ExpirationSeconds,
 		AutoResetPoints:              autoResetPoints,
+		SearchAttributes:             info.SearchAttributes,
 	}
 	return newInfo, nil
 }
@@ -538,6 +539,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 		BranchToken:                  info.BranchToken,
 		CronSchedule:                 info.CronSchedule,
 		ExpirationSeconds:            info.ExpirationSeconds,
+		SearchAttributes:             info.SearchAttributes,
 	}, nil
 }
 
@@ -684,6 +686,7 @@ func (m *executionManagerImpl) SerializeCreateWorkflowExecutionRequest(request *
 		BranchToken:                 request.BranchToken,
 		CronSchedule:                request.CronSchedule,
 		ExpirationSeconds:           request.ExpirationSeconds,
+		SearchAttributes:            request.SearchAttributes,
 	}, nil
 }
 

@@ -1446,6 +1446,10 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 		}
 	}
 
+	if event.SearchAttributes != nil {
+		e.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
+	}
+
 	e.writeEventToCache(startEvent)
 }
 

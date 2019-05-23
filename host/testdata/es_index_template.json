@@ -42,6 +42,16 @@
         },
         "KafkaKey": {
           "type": "keyword"
+        },
+        "Attr": {
+          "properties": {
+            "CustomStringField":  { "type": "text" },
+            "CustomKeywordField": { "type": "keyword"},
+            "CustomIntField": { "type": "long"},
+            "CustomBoolField": { "type": "boolean"},
+            "CustomDoubleField": { "type": "double"},
+            "CustomDatetimeField": { "type": "date"}
+          }
         }
       }
     }

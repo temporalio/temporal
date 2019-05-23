@@ -1100,6 +1100,7 @@
     "github.com/uber/tchannel-go",
     "github.com/urfave/cli",
     "github.com/valyala/fastjson",
+    "github.com/xwb1989/sqlparser",
     "go.uber.org/atomic",
     "go.uber.org/cadence",
     "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient",

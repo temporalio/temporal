@@ -254,6 +254,15 @@ enum ArchivalStatus {
   ENABLED,
 }
 
+enum IndexedValueType {
+  STRING,
+  KEYWORD,
+  INT,
+  DOUBLE,
+  BOOL,
+  DATETIME,
+}
+
 struct Header {
     10: optional map<string, binary> fields
 }
@@ -298,6 +307,10 @@ struct Memo {
   10: optional map<string,binary> fields
 }
 
+struct SearchAttributes {
+  10: optional map<string,binary> indexedFields
+}
+
 struct WorkflowExecutionInfo {
   10: optional WorkflowExecution execution
   20: optional WorkflowType type
@@ -309,6 +322,7 @@ struct WorkflowExecutionInfo {
   80: optional WorkflowExecution parentExecution
   90: optional i64 (js.type = "Long") executionTime
   100: optional Memo memo
+  101: optional SearchAttributes searchAttributes
   110: optional ResetPoints autoResetPoints
 }
 
@@ -458,6 +472,7 @@ struct WorkflowExecutionStartedEventAttributes {
   100: optional string cronSchedule
   110: optional i32 firstDecisionTaskBackoffSeconds
   120: optional Memo memo
+  121: optional SearchAttributes searchAttributes
   130: optional ResetPoints prevAutoResetPoints
   140: optional Header header
 }
@@ -986,6 +1001,7 @@ struct StartWorkflowExecutionRequest {
   120: optional RetryPolicy retryPolicy
   130: optional string cronSchedule
   140: optional Memo memo
+  141: optional SearchAttributes searchAttributes
   150: optional Header header
 }
 
@@ -1184,6 +1200,7 @@ struct SignalWithStartWorkflowExecutionRequest {
   140: optional RetryPolicy retryPolicy
   150: optional string cronSchedule
   160: optional Memo memo
+  161: optional SearchAttributes searchAttributes
   170: optional Header header
 }
 
@@ -1255,6 +1272,10 @@ struct CountWorkflowExecutionsRequest {
 
 struct CountWorkflowExecutionsResponse {
   10: optional i64 count
+}
+
+struct GetSearchAttributesResponse {
+  10: optional map<string, IndexedValueType> keys
 }
 
 struct QueryWorkflowRequest {

@@ -46,26 +46,3 @@ var (
 	FieldTypeBool   = indexer.FieldTypeBool
 	FieldTypeBinary = indexer.FieldTypeBinary
 )
-
-var (
-	validFieldName = map[string]interface{}{
-		DomainID:      struct{}{},
-		WorkflowID:    struct{}{},
-		RunID:         struct{}{},
-		WorkflowType:  struct{}{},
-		StartTime:     struct{}{},
-		ExecutionTime: struct{}{},
-		CloseTime:     struct{}{},
-		CloseStatus:   struct{}{},
-		HistoryLength: struct{}{},
-		KafkaKey:      struct{}{},
-		Memo:          struct{}{},
-		Encoding:      struct{}{},
-	}
-)
-
-// IsFieldNameValid return true if given field name are allowed to index in elastic search
-func IsFieldNameValid(name string) bool {
-	_, ok := validFieldName[name]
-	return ok
-}

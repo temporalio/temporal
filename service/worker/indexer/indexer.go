@@ -39,6 +39,7 @@ type (
 		esClient            es.Client
 		logger              log.Logger
 		metricsClient       metrics.Client
+		dynamicCollection   *dynamicconfig.Collection
 		visibilityProcessor *indexProcessor
 		visibilityIndexName string
 	}
@@ -50,6 +51,7 @@ type (
 		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
 		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
 		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
+		ValidSearchAttributes    dynamicconfig.MapPropertyFn
 	}
 )
 

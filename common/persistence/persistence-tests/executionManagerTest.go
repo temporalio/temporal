@@ -21,6 +21,7 @@
 package persistencetests
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -713,6 +714,11 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 			},
 		},
 	}
+	testSearchAttrKey := "env"
+	testSearchAttrVal, _ := json.Marshal("test")
+	testSearchAttr := map[string][]byte{
+		testSearchAttrKey: testSearchAttrVal,
+	}
 
 	createReq := &p.CreateWorkflowExecutionRequest{
 		RequestID: uuid.New(),
@@ -763,6 +769,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		CronSchedule:            "* * * * *",
 		ExpirationSeconds:       rand.Int31(),
 		PreviousAutoResetPoints: &testResetPoints,
+		SearchAttributes:        testSearchAttr,
 	}
 
 	createResp, err := s.ExecutionManager.CreateWorkflowExecution(createReq)
@@ -808,6 +815,9 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.CronSchedule, info.CronSchedule)
 	s.Equal(createReq.NonRetriableErrors, info.NonRetriableErrors)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
+	val, ok := info.SearchAttributes[testSearchAttrKey]
+	s.True(ok)
+	s.Equal(testSearchAttrVal, val)
 
 	s.Equal(createReq.ReplicationState.LastWriteEventID, state.ReplicationState.LastWriteEventID)
 	s.Equal(createReq.ReplicationState.LastWriteVersion, state.ReplicationState.LastWriteVersion)
@@ -865,6 +875,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Empty(info0.ClientImpl)
 	s.Equal(int32(0), info0.SignalCount)
 	s.True(info0.AutoResetPoints.Equals(&gen.ResetPoints{}))
+	s.True(len(info0.SearchAttributes) == 0)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -890,6 +901,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.ExpirationSeconds = math.MaxInt32
 	updatedInfo.ExpirationTime = time.Now()
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
+	searchAttrKey := "env"
+	searchAttrVal := []byte("test")
+	updatedInfo.SearchAttributes = map[string][]byte{searchAttrKey: searchAttrVal}
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -933,6 +947,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.ExpirationSeconds, info1.ExpirationSeconds)
 	s.EqualTimes(updatedInfo.ExpirationTime, info1.ExpirationTime)
 	s.Equal(updatedInfo.NonRetriableErrors, info1.NonRetriableErrors)
+	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
+	s.True(ok)
+	s.Equal(searchAttrVal, searchAttrVal1)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
@@ -975,6 +992,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.ExpirationSeconds, info2.ExpirationSeconds)
 	s.EqualTimes(updatedInfo.ExpirationTime, info2.ExpirationTime)
 	s.Equal(updatedInfo.NonRetriableErrors, info2.NonRetriableErrors)
+	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
+	s.True(ok)
+	s.Equal(searchAttrVal, searchAttrVal2)
 
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
@@ -1007,15 +1027,18 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(123), info3.DecisionAttempt)
 	s.Equal(int64(321), info3.DecisionStartedTimestamp)
 	s.Equal(int64(654), info3.DecisionScheduledTimestamp)
-	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
-	s.EqualValues(updatedInfo.HistorySize, info2.HistorySize)
-	s.Equal(updatedInfo.InitialInterval, info2.InitialInterval)
-	s.Equal(updatedInfo.BackoffCoefficient, info2.BackoffCoefficient)
-	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
-	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
-	s.Equal(updatedInfo.ExpirationSeconds, info2.ExpirationSeconds)
-	s.EqualTimes(updatedInfo.ExpirationTime, info2.ExpirationTime)
-	s.Equal(updatedInfo.NonRetriableErrors, info2.NonRetriableErrors)
+	s.Equal(updatedInfo.SignalCount, info3.SignalCount)
+	s.EqualValues(updatedInfo.HistorySize, info3.HistorySize)
+	s.Equal(updatedInfo.InitialInterval, info3.InitialInterval)
+	s.Equal(updatedInfo.BackoffCoefficient, info3.BackoffCoefficient)
+	s.Equal(updatedInfo.MaximumInterval, info3.MaximumInterval)
+	s.Equal(updatedInfo.MaximumAttempts, info3.MaximumAttempts)
+	s.Equal(updatedInfo.ExpirationSeconds, info3.ExpirationSeconds)
+	s.EqualTimes(updatedInfo.ExpirationTime, info3.ExpirationTime)
+	s.Equal(updatedInfo.NonRetriableErrors, info3.NonRetriableErrors)
+	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
+	s.True(ok)
+	s.Equal(searchAttrVal, searchAttrVal3)
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
@@ -1048,15 +1071,18 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info4.DecisionTimeout)
 	s.Equal(int64(123), info4.DecisionAttempt)
 	s.Equal(int64(321), info4.DecisionStartedTimestamp)
-	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
-	s.EqualValues(updatedInfo.HistorySize, info2.HistorySize)
-	s.Equal(updatedInfo.InitialInterval, info2.InitialInterval)
-	s.Equal(updatedInfo.BackoffCoefficient, info2.BackoffCoefficient)
-	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
-	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
-	s.Equal(updatedInfo.ExpirationSeconds, info2.ExpirationSeconds)
-	s.EqualTimes(updatedInfo.ExpirationTime, info2.ExpirationTime)
-	s.Equal(updatedInfo.NonRetriableErrors, info2.NonRetriableErrors)
+	s.Equal(updatedInfo.SignalCount, info4.SignalCount)
+	s.EqualValues(updatedInfo.HistorySize, info4.HistorySize)
+	s.Equal(updatedInfo.InitialInterval, info4.InitialInterval)
+	s.Equal(updatedInfo.BackoffCoefficient, info4.BackoffCoefficient)
+	s.Equal(updatedInfo.MaximumInterval, info4.MaximumInterval)
+	s.Equal(updatedInfo.MaximumAttempts, info4.MaximumAttempts)
+	s.Equal(updatedInfo.ExpirationSeconds, info4.ExpirationSeconds)
+	s.EqualTimes(updatedInfo.ExpirationTime, info4.ExpirationTime)
+	s.Equal(updatedInfo.NonRetriableErrors, info4.NonRetriableErrors)
+	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
+	s.True(ok)
+	s.Equal(searchAttrVal, searchAttrVal4)
 
 	log.Infof("Workflow execution last updated: %v", info4.LastUpdatedTimestamp)
 }

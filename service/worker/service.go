@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
@@ -110,6 +111,7 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
 			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
 			ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
+			ValidSearchAttributes:    dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		},
 		ScannerCfg: &scanner.Config{
 			PersistenceMaxQPS: dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),

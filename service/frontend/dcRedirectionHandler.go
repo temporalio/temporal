@@ -338,6 +338,14 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 	return resp, err
 }
 
+// GetSearchAttributes API call
+func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
+	ctx context.Context,
+) (*shared.GetSearchAttributesResponse, error) {
+
+	return handler.service.GetClientBean().GetFrontendClient().GetSearchAttributes(ctx)
+}
+
 // PollForActivityTask API call
 func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 	ctx context.Context,

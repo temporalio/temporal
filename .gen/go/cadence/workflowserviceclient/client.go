@@ -66,6 +66,11 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
+	GetSearchAttributes(
+		ctx context.Context,
+		opts ...yarpc.CallOption,
+	) (*shared.GetSearchAttributesResponse, error)
+
 	GetWorkflowExecutionHistory(
 		ctx context.Context,
 		GetRequest *shared.GetWorkflowExecutionHistoryRequest,
@@ -377,6 +382,28 @@ func (c client) DescribeWorkflowExecution(
 	}
 
 	success, err = cadence.WorkflowService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetSearchAttributes(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (success *shared.GetSearchAttributesResponse, err error) {
+
+	args := cadence.WorkflowService_GetSearchAttributes_Helper.Args()
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_GetSearchAttributes_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_GetSearchAttributes_Helper.UnwrapResponse(&result)
 	return
 }
 

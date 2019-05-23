@@ -46,6 +46,7 @@ import (
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cron"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
@@ -62,22 +63,23 @@ var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
 type (
 	// WorkflowHandler - Thrift handler interface for workflow service
 	WorkflowHandler struct {
-		domainCache       cache.DomainCache
-		metadataMgr       persistence.MetadataManager
-		historyMgr        persistence.HistoryManager
-		historyV2Mgr      persistence.HistoryV2Manager
-		visibilityMgr     persistence.VisibilityManager
-		history           history.Client
-		matching          matching.Client
-		matchingRawClient matching.Client
-		tokenSerializer   common.TaskTokenSerializer
-		metricsClient     metrics.Client
-		startWG           sync.WaitGroup
-		rateLimiter       tokenbucket.TokenBucket
-		config            *Config
-		blobstoreClient   blobstore.Client
-		versionChecker    *versionChecker
-		domainHandler     *domainHandlerImpl
+		domainCache              cache.DomainCache
+		metadataMgr              persistence.MetadataManager
+		historyMgr               persistence.HistoryManager
+		historyV2Mgr             persistence.HistoryV2Manager
+		visibilityMgr            persistence.VisibilityManager
+		history                  history.Client
+		matching                 matching.Client
+		matchingRawClient        matching.Client
+		tokenSerializer          common.TaskTokenSerializer
+		metricsClient            metrics.Client
+		startWG                  sync.WaitGroup
+		rateLimiter              tokenbucket.TokenBucket
+		config                   *Config
+		blobstoreClient          blobstore.Client
+		versionChecker           *versionChecker
+		domainHandler            *domainHandlerImpl
+		visibilityQueryValidator *common.VisibilityQueryValidator
 		service.Service
 	}
 
@@ -170,6 +172,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 			blobstoreClient,
 			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 		),
+		visibilityQueryValidator: common.NewQueryValidator(config.ValidSearchAttributes),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -1486,11 +1489,12 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
-	if startRequest.GetDomain() == "" {
+	domainName := startRequest.GetDomain()
+	if domainName == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	if len(startRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
+	if len(domainName) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errDomainTooLong, scope)
 	}
 
@@ -1542,12 +1546,16 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(startRequest.GetDomain()))
+	if err := wh.validateSearchAttributes(startRequest.SearchAttributes, domainName); err != nil {
+		return nil, wh.error(&gen.BadRequestError{Message: err.Error()}, scope)
+	}
+
+	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(domainName))
 	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
 	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() {
 		wh.Service.GetThrottledLogger().Warn("Decision timeout is larger than workflow timeout",
 			tag.WorkflowDecisionTimeoutSeconds(startRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(startRequest.GetDomain()),
+			tag.WorkflowDomainName(domainName),
 			tag.WorkflowID(startRequest.GetWorkflowId()),
 			tag.WorkflowType(startRequest.GetWorkflowType().GetName()))
 		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(startRequest.GetExecutionStartToCloseTimeoutSeconds())
@@ -1555,7 +1563,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	if startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
 		wh.Service.GetThrottledLogger().Warn("Decision timeout is too large",
 			tag.WorkflowDecisionTimeoutSeconds(startRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(startRequest.GetDomain()),
+			tag.WorkflowDomainName(domainName),
 			tag.WorkflowID(startRequest.GetWorkflowId()),
 			tag.WorkflowType(startRequest.GetWorkflowType().GetName()))
 		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
@@ -1566,7 +1574,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 			Message: fmt.Sprintf("TaskStartToCloseTimeoutSeconds is larger than ExecutionStartToCloseTimeout or MaxDecisionStartToCloseTimeout (%ds).", maxDecisionTimeout)}, scope)
 	}
 
-	domainName := startRequest.GetDomain()
 	wh.Service.GetLogger().Debug("Start workflow execution request domain", tag.WorkflowDomainName(domainName))
 	domainID, err := wh.domainCache.GetDomainID(domainName)
 	if err != nil {
@@ -1576,8 +1583,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	// add domain tag to scope, so further metrics will have the domain tag
 	scope = scope.Tagged(metrics.DomainTag(domainName))
 
-	sizeLimitError := wh.config.BlobSizeLimitError(startRequest.GetDomain())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(startRequest.GetDomain())
+	sizeLimitError := wh.config.BlobSizeLimitError(domainName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainName)
 	actualSize := len(startRequest.Input) + common.GetSizeOfMapStringToByteArray(startRequest.Memo.GetFields())
 	if err := common.CheckEventBlobSizeLimit(
 		actualSize,
@@ -1593,7 +1600,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	}
 
 	wh.Service.GetLogger().Debug("Start workflow execution request domainID", tag.WorkflowDomainID(domainID))
-
 	resp, err = wh.history.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(domainID, startRequest))
 
 	if err != nil {
@@ -1909,11 +1915,12 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
-	if signalWithStartRequest.GetDomain() == "" {
+	domainName := signalWithStartRequest.GetDomain()
+	if domainName == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	if len(signalWithStartRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
+	if len(domainName) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errDomainTooLong, scope)
 	}
 
@@ -1967,12 +1974,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(signalWithStartRequest.GetDomain()))
+	if err := wh.validateSearchAttributes(signalWithStartRequest.SearchAttributes, domainName); err != nil {
+		return nil, wh.error(&gen.BadRequestError{Message: err.Error()}, scope)
+	}
+
+	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(domainName))
 	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
 	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() {
 		wh.Service.GetThrottledLogger().Warn("Decision timeout is larger than workflow timeout",
 			tag.WorkflowDecisionTimeoutSeconds(signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(signalWithStartRequest.GetDomain()),
+			tag.WorkflowDomainName(domainName),
 			tag.WorkflowID(signalWithStartRequest.GetWorkflowId()),
 			tag.WorkflowType(signalWithStartRequest.GetWorkflowType().GetName()))
 		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds())
@@ -1980,7 +1991,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
 		wh.Service.GetThrottledLogger().Warn("Decision timeout is too large",
 			tag.WorkflowDecisionTimeoutSeconds(signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(signalWithStartRequest.GetDomain()),
+			tag.WorkflowDomainName(domainName),
 			tag.WorkflowID(signalWithStartRequest.GetWorkflowId()),
 			tag.WorkflowType(signalWithStartRequest.GetWorkflowType().GetName()))
 		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
@@ -1991,16 +2002,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 			Message: fmt.Sprintf("TaskStartToCloseTimeoutSeconds is larger than ExecutionStartToCloseTimeout or MaxDecisionStartToCloseTimeout (%ds).", maxDecisionTimeout)}, scope)
 	}
 
-	domainID, err := wh.domainCache.GetDomainID(signalWithStartRequest.GetDomain())
+	domainID, err := wh.domainCache.GetDomainID(domainName)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
 	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(signalWithStartRequest.GetDomain()))
+	scope = scope.Tagged(metrics.DomainTag(domainName))
 
-	sizeLimitError := wh.config.BlobSizeLimitError(signalWithStartRequest.GetDomain())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(signalWithStartRequest.GetDomain())
+	sizeLimitError := wh.config.BlobSizeLimitError(domainName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainName)
 	if err := common.CheckEventBlobSizeLimit(
 		len(signalWithStartRequest.SignalInput),
 		sizeLimitWarn,
@@ -2436,6 +2447,10 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listReque
 		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
 	}
 
+	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(listRequest); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	domain := listRequest.GetDomain()
 	domainID, err := wh.domainCache.GetDomainID(domain)
 	if err != nil {
@@ -2490,6 +2505,10 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listReque
 		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
 	}
 
+	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(listRequest); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	domain := listRequest.GetDomain()
 	domainID, err := wh.domainCache.GetDomainID(domain)
 	if err != nil {
@@ -2540,6 +2559,10 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countReq
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
+	if err := wh.visibilityQueryValidator.ValidateCountRequestForQuery(countRequest); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	domain := countRequest.GetDomain()
 	domainID, err := wh.domainCache.GetDomainID(domain)
 	if err != nil {
@@ -2561,6 +2584,24 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countReq
 
 	resp = &gen.CountWorkflowExecutionsResponse{
 		Count: common.Int64Ptr(persistenceResp.Count),
+	}
+	return resp, nil
+}
+
+// GetSearchAttributes return valid indexed keys
+func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context) (resp *gen.GetSearchAttributesResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendGetSearchAttributesScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	keys := wh.config.ValidSearchAttributes()
+	resp = &gen.GetSearchAttributesResponse{
+		Keys: wh.convertIndexedKeyToThrift(keys),
 	}
 	return resp, nil
 }
@@ -3226,4 +3267,69 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		NextPageToken: nextToken,
 		Archived:      common.BoolPtr(true),
 	}, nil
+}
+
+func (wh *WorkflowHandler) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]gen.IndexedValueType {
+	converted := make(map[string]gen.IndexedValueType)
+	for k, v := range keys {
+		switch v {
+		case gen.IndexedValueTypeString:
+			converted[k] = gen.IndexedValueTypeString
+		case gen.IndexedValueTypeKeyword:
+			converted[k] = gen.IndexedValueTypeKeyword
+		case gen.IndexedValueTypeInt:
+			converted[k] = gen.IndexedValueTypeInt
+		case gen.IndexedValueTypeDouble:
+			converted[k] = gen.IndexedValueTypeDouble
+		case gen.IndexedValueTypeBool:
+			converted[k] = gen.IndexedValueTypeBool
+		case gen.IndexedValueTypeDatetime:
+			converted[k] = gen.IndexedValueTypeDatetime
+		default:
+			wh.GetLogger().Error("unknown index value type", tag.Value(v))
+		}
+	}
+	return converted
+}
+
+func (wh *WorkflowHandler) validateSearchAttributes(input *gen.SearchAttributes, domain string) error {
+	if input == nil {
+		return nil
+	}
+
+	fields := input.GetIndexedFields()
+	lengthOfFields := len(fields)
+	if lengthOfFields > wh.config.SearchAttributesNumberOfKeysLimit(domain) {
+		wh.GetLogger().WithTags(tag.Number(int64(lengthOfFields)), tag.WorkflowDomainName(domain)).
+			Error("number of keys in search attributes exceed limit")
+		return fmt.Errorf("number of keys %d exceed limit", lengthOfFields)
+	}
+
+	totalSize := 0
+	for key, val := range fields {
+		if !wh.visibilityQueryValidator.IsValidSearchAttributes(key) {
+			wh.GetLogger().WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
+				Error("invalid search attribute")
+			return fmt.Errorf("%s is not valid search attribute", key)
+		}
+		if definition.IsSystemIndexedKey(key) {
+			wh.GetLogger().WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
+				Error("illegal update of system reserved attribute")
+			return fmt.Errorf("%s is read-only Cadence reservered attribute", key)
+		}
+		if len(val) > wh.config.SearchAttributesSizeOfValueLimit(domain) {
+			wh.GetLogger().WithTags(tag.ESKey(key), tag.Number(int64(len(val))), tag.WorkflowDomainName(domain)).
+				Error("value size of search attribute exceed limit")
+			return fmt.Errorf("size limit exceed for key %s", key)
+		}
+		totalSize += len(key) + len(val)
+	}
+
+	if totalSize > wh.config.SearchAttributesTotalSizeLimit(domain) {
+		wh.GetLogger().WithTags(tag.Number(int64(totalSize)), tag.WorkflowDomainName(domain)).
+			Error("total size of search attributes exceed limit")
+		return fmt.Errorf("total size %d exceed limit", totalSize)
+	}
+
+	return nil
 }

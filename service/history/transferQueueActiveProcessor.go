@@ -414,6 +414,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	}
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getVisibilityMemo(startEvent)
+	searchAttr := executionInfo.SearchAttributes
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
@@ -421,6 +422,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	err = t.recordWorkflowClosed(
 		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp.UnixNano(),
 		workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(), visibilityMemo,
+		searchAttr,
 	)
 	if err != nil {
 		return err
@@ -873,11 +875,13 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	startEvent, _ := msBuilder.GetStartEvent()
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getVisibilityMemo(startEvent)
+	searchAttr := executionInfo.SearchAttributes
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(), workflowTimeout, task.GetTaskID(), visibilityMemo)
+	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(),
+		workflowTimeout, task.GetTaskID(), visibilityMemo, searchAttr)
 }
 
 func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistence.TransferTaskInfo) (retError error) {

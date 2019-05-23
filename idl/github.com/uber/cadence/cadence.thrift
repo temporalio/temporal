@@ -491,6 +491,16 @@ service WorkflowService {
     )
 
   /**
+  * GetSearchAttributes is a visibility API to get all legal keys that could be used in list APIs
+  **/
+  shared.GetSearchAttributesResponse GetSearchAttributes()
+    throws (
+      1: shared.InternalServiceError internalServiceError,
+      2: shared.ServiceBusyError serviceBusyError,
+      3: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+    )
+
+  /**
   * RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a DecisionTask for query)
   * as a result of 'PollForDecisionTask' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
   * API and return the query result to client as a response to 'QueryWorkflow' API call.

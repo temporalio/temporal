@@ -525,6 +525,8 @@ const (
 	FrontendListDomainsScope
 	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
 	FrontendResetWorkflowExecutionScope
+	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
+	FrontendGetSearchAttributesScope
 
 	NumFrontendScopes
 )
@@ -985,6 +987,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
 		FrontendDescribeTaskListScope:                 {operation: "DescribeTaskList"},
 		FrontendResetStickyTaskListScope:              {operation: "ResetStickyTaskList"},
+		FrontendGetSearchAttributesScope:              {operation: "GetSearchAttributes"},
 	},
 	// History Scope Names
 	History: {

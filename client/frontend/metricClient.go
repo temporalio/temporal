@@ -240,6 +240,23 @@ func (c *metricClient) CountWorkflowExecutions(
 	return resp, err
 }
 
+func (c *metricClient) GetSearchAttributes(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (*shared.GetSearchAttributesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendGetSearchAttributesScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendGetSearchAttributesScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetSearchAttributes(ctx, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendGetSearchAttributesScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) PollForActivityTask(
 	ctx context.Context,
 	request *shared.PollForActivityTaskRequest,

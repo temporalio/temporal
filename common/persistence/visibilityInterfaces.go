@@ -43,6 +43,7 @@ type (
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *s.Memo
+		SearchAttributes   map[string][]byte
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
@@ -60,6 +61,7 @@ type (
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *s.Memo
+		SearchAttributes   map[string][]byte
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain

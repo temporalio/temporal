@@ -261,6 +261,7 @@ type (
 		ClientFeatureVersion         string
 		ClientImpl                   string
 		AutoResetPoints              *workflow.ResetPoints
+		SearchAttributes             map[string][]byte
 		// for retry
 		Attempt            int32
 		HasRetryPolicy     bool
@@ -709,6 +710,7 @@ type (
 		BranchToken       []byte
 		CronSchedule      string
 		ExpirationSeconds int32
+		SearchAttributes  map[string][]byte
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest

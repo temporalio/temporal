@@ -23,6 +23,7 @@ package frontend
 import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
@@ -71,6 +72,12 @@ type Config struct {
 
 	// Domain specific config
 	EnableDomainNotActiveAutoForwarding dynamicconfig.BoolPropertyFnWithDomainFilter
+
+	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
+	ValidSearchAttributes             dynamicconfig.MapPropertyFn
+	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithDomainFilter
+	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithDomainFilter
+	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithDomainFilter
 }
 
 // NewConfig returns new service config with default values
@@ -96,10 +103,14 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableVisibil
 		AdminOperationToken:                 dc.GetStringProperty(dynamicconfig.AdminOperationToken, "CadenceTeamONLY"),
 		DisableListVisibilityByFilter:       dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 		BlobSizeLimitError:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:                   dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1204),
+		BlobSizeLimitWarn:                   dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 		ThrottledLogRPS:                     dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
 		EnableDomainNotActiveAutoForwarding: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableDomainNotActiveAutoForwarding, false),
 		EnableClientVersionCheck:            dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, enableClientVersionCheck),
+		ValidSearchAttributes:               dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit:   dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesNumberOfKeysLimit, 20),
+		SearchAttributesSizeOfValueLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
+		SearchAttributesTotalSizeLimit:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 	}
 }
 

@@ -21,12 +21,14 @@
 package indexer
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/olivere/elastic"
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/codec"
+	"github.com/uber/cadence/common/definition"
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -234,10 +236,21 @@ func (p *indexProcessor) generateESDoc(msg *indexer.Message, keyToKafkaMsg strin
 	return doc
 }
 
+func (p *indexProcessor) decodeSearchAttrBinary(bytes []byte, key string) interface{} {
+	var val interface{}
+	err := json.Unmarshal(bytes, &val)
+	if err != nil {
+		p.logger.Error("Error when decode search attributes values.", tag.Error(err), tag.ESField(key))
+		p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
+	}
+	return val
+}
+
 func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[string]interface{} {
 	doc := make(map[string]interface{})
+	attr := make(map[string]interface{})
 	for k, v := range fields {
-		if !es.IsFieldNameValid(k) {
+		if !p.isValidFieldToES(k) {
 			p.logger.Error("Unregistered field.", tag.ESField(k))
 			p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
 			continue
@@ -251,18 +264,33 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[s
 		case indexer.FieldTypeBool:
 			doc[k] = v.GetBoolData()
 		case indexer.FieldTypeBinary:
-			doc[k] = v.GetBinaryData()
+			if k == definition.Memo {
+				doc[k] = v.GetBinaryData()
+			} else { // custom search attributes
+				attr[k] = p.decodeSearchAttrBinary(v.GetBinaryData(), k)
+			}
 		default:
 			// must be bug in code and bad deployment, check data sent from producer
 			p.logger.Fatal("Unknown field type")
 		}
 	}
+	doc[definition.Attr] = attr
 	return doc
 }
 
+func (p *indexProcessor) isValidFieldToES(field string) bool {
+	if _, ok := p.config.ValidSearchAttributes()[field]; ok {
+		return true
+	}
+	if field == definition.Memo || field == definition.KafkaKey || field == definition.Encoding {
+		return true
+	}
+	return false
+}
+
 func fulfillDoc(doc map[string]interface{}, msg *indexer.Message, keyToKafkaMsg string) {
-	doc[es.DomainID] = msg.GetDomainID()
-	doc[es.WorkflowID] = msg.GetWorkflowID()
-	doc[es.RunID] = msg.GetRunID()
-	doc[es.KafkaKey] = keyToKafkaMsg
+	doc[definition.DomainID] = msg.GetDomainID()
+	doc[definition.WorkflowID] = msg.GetWorkflowID()
+	doc[definition.RunID] = msg.GetRunID()
+	doc[definition.KafkaKey] = keyToKafkaMsg
 }
