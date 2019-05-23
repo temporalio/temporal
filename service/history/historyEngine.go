@@ -169,8 +169,8 @@ func NewEngineWithShardContext(
 		visibilityMgr:        visibilityMgr,
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		historyCache:         historyCache,
-		logger:               logger.WithTags(tag.ComponentMatchingEngine),
-		throttledLogger:      shard.GetThrottledLogger().WithTags(tag.ComponentMatchingEngine),
+		logger:               logger.WithTags(tag.ComponentHistoryEngine),
+		throttledLogger:      shard.GetThrottledLogger().WithTags(tag.ComponentHistoryEngine),
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
@@ -1109,8 +1109,9 @@ Update_History_Loop:
 			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 			e.throttledLogger.Warn("the number of auto-reset points is exceeding the limit, will do rotating.",
 				tag.WorkflowDomainName(domainEntry.GetInfo().Name),
+				tag.WorkflowDomainID(domainEntry.GetInfo().ID),
 				tag.WorkflowID(workflowExecution.GetWorkflowId()),
-				tag.WorkflowDomainName(workflowExecution.GetRunId()),
+				tag.WorkflowRunID(workflowExecution.GetRunId()),
 				tag.Number(int64(maxResetPoints)))
 		}
 		completedEvent := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)

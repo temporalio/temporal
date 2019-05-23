@@ -97,6 +97,7 @@ func (m *domainToBucketMap) getRateLimiter(domain string, numOfPriority, qps int
 
 func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	domain := request.Domain
+	domainID := request.DomainUUID
 
 	rateLimiter := p.rateLimitersForOpen.getRateLimiter(domain, numOfPriorityForOpen, p.config.VisibilityOpenMaxQPS(domain))
 	if ok, _ := rateLimiter.GetToken(0, 1); ok {
@@ -104,7 +105,8 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 	}
 
 	p.logger.Info("Request for open workflow is sampled",
-		tag.WorkflowDomainID(domain),
+		tag.WorkflowDomainID(domainID),
+		tag.WorkflowDomainName(domain),
 		tag.WorkflowType(request.WorkflowTypeName),
 		tag.WorkflowID(request.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(request.Execution.GetRunId()),
@@ -115,6 +117,7 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 
 func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	domain := request.Domain
+	domainID := request.DomainUUID
 	priority := getRequestPriority(request)
 
 	rateLimiter := p.rateLimitersForClosed.getRateLimiter(domain, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(domain))
@@ -123,7 +126,8 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 	}
 
 	p.logger.Info("Request for closed workflow is sampled",
-		tag.WorkflowDomainID(domain),
+		tag.WorkflowDomainID(domainID),
+		tag.WorkflowDomainName(domain),
 		tag.WorkflowType(request.WorkflowTypeName),
 		tag.WorkflowID(request.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(request.Execution.GetRunId()),
