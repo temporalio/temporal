@@ -83,12 +83,16 @@ type (
 		replicationState *persistence.ReplicationState
 		continueAsNew    *persistence.CreateWorkflowExecutionRequest
 		hBuilder         *historyBuilder
-		currentCluster   string
-		historySize      int
-		eventsCache      eventsCache
-		shard            ShardContext
-		config           *Config
-		logger           log.Logger
+
+		// in memory only attribute which indicates whether there are
+		// buffered events in persistence
+		hasBufferedEventsInPersistence bool
+
+		currentCluster string
+		eventsCache    eventsCache
+		shard          ShardContext
+		config         *Config
+		logger         log.Logger
 	}
 )
 
@@ -122,6 +126,8 @@ func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCac
 		updateSignalRequestedIDs:  make(map[string]struct{}),
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedID:   "",
+
+		hasBufferedEventsInPersistence: false,
 
 		currentCluster: currentCluster,
 		eventsCache:    eventsCache,
@@ -185,6 +191,8 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	for _, ai := range state.ActivityInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
 	}
+
+	e.hasBufferedEventsInPersistence = len(e.bufferedEvents) > 0
 }
 
 func (e *mutableStateBuilder) GetEventStoreVersion() int32 {
@@ -302,21 +310,21 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	// is added to reorder buffered events to guarantee all activity completion events will always be processed at the end.
 	var reorderedEvents []*workflow.HistoryEvent
 	reorderFunc := func(bufferedEvents []*workflow.HistoryEvent) {
-		for _, e := range bufferedEvents {
-			switch e.GetEventType() {
+		for _, event := range bufferedEvents {
+			switch event.GetEventType() {
 			case workflow.EventTypeActivityTaskCompleted,
 				workflow.EventTypeActivityTaskFailed,
 				workflow.EventTypeActivityTaskCanceled,
 				workflow.EventTypeActivityTaskTimedOut:
-				reorderedEvents = append(reorderedEvents, e)
+				reorderedEvents = append(reorderedEvents, event)
 			case workflow.EventTypeChildWorkflowExecutionCompleted,
 				workflow.EventTypeChildWorkflowExecutionFailed,
 				workflow.EventTypeChildWorkflowExecutionCanceled,
 				workflow.EventTypeChildWorkflowExecutionTimedOut,
 				workflow.EventTypeChildWorkflowExecutionTerminated:
-				reorderedEvents = append(reorderedEvents, e)
+				reorderedEvents = append(reorderedEvents, event)
 			default:
-				newCommittedEvents = append(newCommittedEvents, e)
+				newCommittedEvents = append(newCommittedEvents, event)
 			}
 		}
 	}
@@ -324,12 +332,18 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	// no decision in-flight, flush all buffered events to committed bucket
 	if !e.HasInFlightDecisionTask() {
 		// flush persisted buffered events
-		reorderFunc(e.bufferedEvents)
+		if len(e.bufferedEvents) > 0 {
+			reorderFunc(e.bufferedEvents)
+			e.bufferedEvents = nil
+		}
+		if e.hasBufferedEventsInPersistence {
+			e.clearBufferedEvents = true
+		}
 
 		// flush pending buffered events
-		if e.updateBufferedEvents != nil {
-			reorderFunc(e.updateBufferedEvents)
-		}
+		reorderFunc(e.updateBufferedEvents)
+		// clear pending buffered events
+		e.updateBufferedEvents = nil
 
 		// Put back all the reordered buffer events at the end
 		if len(reorderedEvents) > 0 {
@@ -339,12 +353,6 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 		// flush new buffered events that were not saved to persistence yet
 		newCommittedEvents = append(newCommittedEvents, newBufferedEvents...)
 		newBufferedEvents = nil
-
-		// remove the persisted buffered events from persistence if there is any
-		e.clearBufferedEvents = e.clearBufferedEvents || len(e.bufferedEvents) > 0
-		e.bufferedEvents = nil
-		// clear pending buffered events
-		e.updateBufferedEvents = nil
 	}
 
 	newCommittedEvents = e.trimEventsAfterWorkflowClose(newCommittedEvents)
@@ -466,6 +474,8 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	e.updateBufferedReplicationTasks = nil
 	e.deleteBufferedReplicationEvent = nil
 
+	e.hasBufferedEventsInPersistence = len(e.bufferedEvents) > 0
+
 	return updates, nil
 }
 
@@ -503,6 +513,7 @@ func (e *mutableStateBuilder) DeleteBufferedReplicationTask(firstEventID int64) 
 
 func (e *mutableStateBuilder) checkAndClearTimerFiredEvent(timerID string) *workflow.HistoryEvent {
 	var timerEvent *workflow.HistoryEvent
+
 	e.bufferedEvents, timerEvent = checkAndClearTimerFiredEvent(e.bufferedEvents, timerID)
 	if timerEvent != nil {
 		return timerEvent
@@ -2569,10 +2580,18 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 	identity string,
 ) *workflow.HistoryEvent {
 
+	if !e.IsWorkflowExecutionRunning() {
+		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+			tag.WorkflowEventID(e.GetNextEventID()),
+			tag.ErrorTypeInvalidHistoryAction,
+			tag.WorkflowActionTimerCanceled)
+		return nil
+	}
+
 	var timerStartedID int64
 	timerID := attributes.GetTimerId()
 	isTimerRunning, ti := e.GetUserTimer(timerID)
-	if !isTimerRunning || !e.IsWorkflowExecutionRunning() {
+	if !isTimerRunning {
 		// if timer is not running then check if it has fired in the mutable state.
 		// If so clear the timer from the mutable state. We need to check both the
 		// bufferedEvents and the history builder
@@ -2593,7 +2612,9 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 
 	// Timer is running.
 	event := e.hBuilder.AddTimerCanceledEvent(timerStartedID, decisionCompletedEventID, timerID, identity)
-	e.ReplicateTimerCanceledEvent(event)
+	if isTimerRunning {
+		e.ReplicateTimerCanceledEvent(event)
+	}
 
 	return event
 }

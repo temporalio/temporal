@@ -3350,6 +3350,144 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	s.startWithMemoHelper(fn, id, taskList, memo)
 }
 
+func (s *integrationSuite) TestCancelTimer() {
+	id := "integration-cancel-timer-test"
+	wt := "integration-cancel-timer-test-type"
+	tl := "integration-cancel-timer-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	creatResp, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	workflowExecution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      common.StringPtr(creatResp.GetRunId()),
+	}
+
+	timerID := 1
+	timerScheduled := false
+	signalDelivered := false
+	timerCancelled := false
+	workflowComplete := false
+	timer := int64(4)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !timerScheduled {
+			timerScheduled = true
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartTimer),
+				StartTimerDecisionAttributes: &workflow.StartTimerDecisionAttributes{
+					TimerId:                   common.StringPtr(fmt.Sprintf("%v", timerID)),
+					StartToFireTimeoutSeconds: common.Int64Ptr(timer),
+				},
+			}}, nil
+		}
+
+		resp, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain:          common.StringPtr(s.domainName),
+			Execution:       workflowExecution,
+			MaximumPageSize: common.Int32Ptr(200),
+		})
+		s.Nil(err)
+		for _, event := range resp.History.Events {
+			switch event.GetEventType() {
+			case workflow.EventTypeWorkflowExecutionSignaled:
+				signalDelivered = true
+			case workflow.EventTypeTimerCanceled:
+				timerCancelled = true
+			}
+		}
+
+		if !signalDelivered {
+			s.Fail("should receive a signal")
+		}
+
+		if !timerCancelled {
+			time.Sleep(time.Duration(2*timer) * time.Second)
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCancelTimer),
+				CancelTimerDecisionAttributes: &workflow.CancelTimerDecisionAttributes{
+					TimerId: common.StringPtr(fmt.Sprintf("%v", timerID)),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	// schedule the timer
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.Logger.Info("PollAndProcessDecisionTask: completed")
+	s.Nil(err)
+
+	s.Nil(s.sendSignal(s.domainName, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+
+	// receive the signal & cancel the timer
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.Logger.Info("PollAndProcessDecisionTask: completed")
+	s.Nil(err)
+
+	s.Nil(s.sendSignal(s.domainName, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	// complete the workflow
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.Logger.Info("PollAndProcessDecisionTask: completed")
+	s.Nil(err)
+
+	s.True(workflowComplete)
+
+	resp, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain:          common.StringPtr(s.domainName),
+		Execution:       workflowExecution,
+		MaximumPageSize: common.Int32Ptr(200),
+	})
+	s.Nil(err)
+	for _, event := range resp.History.Events {
+		switch event.GetEventType() {
+		case workflow.EventTypeWorkflowExecutionSignaled:
+			signalDelivered = true
+		case workflow.EventTypeTimerCanceled:
+			timerCancelled = true
+		case workflow.EventTypeTimerFired:
+			s.Fail("timer got fired")
+		}
+	}
+}
+
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
 func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, taskList *workflow.TaskList, memo *workflow.Memo) {
 	identity := "worker1"
