@@ -75,15 +75,15 @@ const (
 // method will always return either: nil, errContextTimeout or an error from uploadHistoryActivityNonRetryableErrors.
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	metricsClient := container.MetricsClient
-	sw := metricsClient.StartTimer(metrics.ArchiverUploadHistoryActivityScope, metrics.CadenceLatency)
+	scope := container.MetricsClient.Scope(metrics.ArchiverUploadHistoryActivityScope, metrics.DomainTag(request.DomainName))
+	sw := scope.StartTimer(metrics.CadenceLatency)
 	defer func() {
 		sw.Stop()
 		if err != nil {
 			if err == errContextTimeout {
-				metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter)
+				scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
 			} else {
-				metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount)
+				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
 		}
 	}()
@@ -98,12 +98,12 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	}
 	if clusterMetadata.ArchivalConfig().GetArchivalStatus() != cluster.ArchivalEnabled {
 		logger.Error(uploadSkipMsg, tag.UploadFailReason("cluster is not enabled for archival"))
-		metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverSkipUploadCount)
+		scope.IncCounter(metrics.ArchiverSkipUploadCount)
 		return nil
 	}
 	if domainCacheEntry.GetConfig().ArchivalStatus != shared.ArchivalStatusEnabled {
 		logger.Error(uploadSkipMsg, tag.UploadFailReason("domain is not enabled for archival"))
-		metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverSkipUploadCount)
+		scope.IncCounter(metrics.ArchiverSkipUploadCount)
 		return nil
 	}
 	bucket := domainCacheEntry.GetConfig().ArchivalBucket
@@ -141,7 +141,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if !runConstTest {
 				continue
 			}
-			metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverRunningDeterministicConstructionCheckCount)
+			scope.IncCounter(metrics.ArchiverRunningDeterministicConstructionCheckCount)
 		}
 		historyBlob, err := getBlob(ctx, historyBlobReader, pageToken)
 		if err != nil {
@@ -162,10 +162,10 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			existingBlob, err := downloadBlob(ctx, blobstoreClient, bucket, key)
 			if err != nil {
 				logger.Error("failed to download blob for deterministic construction verification", tag.Error(err))
-				metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount)
+				scope.IncCounter(metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount)
 			} else if !blob.Equal(existingBlob) {
 				logger.Error("deterministic construction check failed")
-				metricsClient.IncCounter(metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverDeterministicConstructionCheckFailedCount)
+				scope.IncCounter(metrics.ArchiverDeterministicConstructionCheckFailedCount)
 			}
 			continue
 		}
@@ -183,15 +183,15 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 // method will always return either: nil, contextTimeoutErr or an error from deleteHistoryActivityNonRetryableErrors.
 func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	metricsClient := container.MetricsClient
-	sw := metricsClient.StartTimer(metrics.ArchiverDeleteHistoryActivityScope, metrics.CadenceLatency)
+	scope := container.MetricsClient.Scope(metrics.ArchiverDeleteHistoryActivityScope, metrics.DomainTag(request.DomainName))
+	sw := scope.StartTimer(metrics.CadenceLatency)
 	defer func() {
 		sw.Stop()
 		if err != nil {
 			if err == errContextTimeout {
-				metricsClient.IncCounter(metrics.ArchiverDeleteHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter)
+				scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
 			} else {
-				metricsClient.IncCounter(metrics.ArchiverDeleteHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount)
+				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
 		}
 	}()

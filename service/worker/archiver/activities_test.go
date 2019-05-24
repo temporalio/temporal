@@ -63,6 +63,7 @@ type activitiesSuite struct {
 
 	logger        log.Logger
 	metricsClient *mmocks.Client
+	metricsScope  *mmocks.Scope
 }
 
 func TestActivitiesSuite(t *testing.T) {
@@ -73,17 +74,20 @@ func (s *activitiesSuite) SetupTest() {
 	zapLogger := zap.NewNop()
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.metricsClient = &mmocks.Client{}
-	s.metricsClient.On("StartTimer", mock.Anything, metrics.CadenceLatency).Return(tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{})).Once()
+	s.metricsScope = &mmocks.Scope{}
+	s.metricsScope.On("StartTimer", metrics.CadenceLatency).Return(tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{})).Once()
 }
 
 func (s *activitiesSuite) TearDownTest() {
 	s.metricsClient.AssertExpectations(s.T())
+	s.metricsScope.AssertExpectations(s.T())
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_DomainCacheNonRetryableError() {
 	domainCache := &cache.DomainCacheMock{}
 	domainCache.On("GetDomainByID", mock.Anything).Return(nil, errPersistenceNonRetryable).Once()
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	container := &BootstrapContainer{
 		Logger:        s.logger,
 		MetricsClient: s.metricsClient,
@@ -95,6 +99,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_DomainCacheNonRetryable
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -108,7 +113,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_DomainCacheNonRetryable
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_TimeoutGettingDomainCacheEntry() {
 	domainCache := &cache.DomainCacheMock{}
 	domainCache.On("GetDomainByID", mock.Anything).Return(nil, errPersistenceRetryable).Once()
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.CadenceErrContextTimeoutCounter).Once()
 	container := &BootstrapContainer{
 		Logger:        s.logger,
 		MetricsClient: s.metricsClient,
@@ -120,6 +126,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_TimeoutGettingDomainCac
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -131,7 +138,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_TimeoutGettingDomainCac
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Skip_ClusterArchivalNotEnabled() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverSkipUploadCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverSkipUploadCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, false)
 	container := &BootstrapContainer{
 		Logger:          s.logger,
@@ -145,6 +153,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Skip_ClusterArchivalNotEnabl
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -156,7 +165,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Skip_ClusterArchivalNotEnabl
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Skip_DomainArchivalNotEnabled() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverSkipUploadCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverSkipUploadCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(false, "", true)
 	container := &BootstrapContainer{
 		Logger:          s.logger,
@@ -170,6 +180,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Skip_DomainArchivalNotEnable
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -181,7 +192,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Skip_DomainArchivalNotEnable
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_DomainConfigMissingBucket() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, "", true)
 	container := &BootstrapContainer{
 		Logger:          s.logger,
@@ -195,6 +207,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_DomainConfigMissingBuck
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -206,7 +219,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_DomainConfigMissingBuck
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ConstructBlobKeyError() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	container := &BootstrapContainer{
 		Logger:          s.logger,
@@ -220,6 +234,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ConstructBlobKeyError()
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           "", // this causes an error when creating the blob key
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -231,7 +246,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ConstructBlobKeyError()
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsNonRetryableError() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("some error"))
@@ -249,6 +265,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsNonRetryableErro
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -260,7 +277,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsNonRetryableErro
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsTimeout() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.CadenceErrContextTimeoutCounter).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("some error"))
@@ -278,6 +296,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsTimeout() {
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -289,6 +308,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsTimeout() {
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobAlreadyExists() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(map[string]string{"is_last": "true"}, nil)
@@ -306,6 +326,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobAlreadyExists() 
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -317,6 +338,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobAlreadyExists() 
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_MultipleBlobsAlreadyExist() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	firstKey, err := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, common.FirstBlobPageToken)
@@ -339,6 +361,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_MultipleBlobsAlready
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -350,7 +373,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_MultipleBlobsAlready
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ReadBlobNonRetryableError() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, blobstore.ErrBlobNotExists).Once()
@@ -370,6 +394,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ReadBlobNonRetryableErr
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -381,7 +406,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ReadBlobNonRetryableErr
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ReadBlobTimeout() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.CadenceErrContextTimeoutCounter).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, blobstore.ErrBlobNotExists).Once()
@@ -401,6 +427,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ReadBlobTimeout() {
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -412,8 +439,9 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_ReadBlobTimeout() {
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CouldNotRunCheck() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount).Once()
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverRunningDeterministicConstructionCheckCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverRunningDeterministicConstructionCheckCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(map[string]string{"is_last": "true"}, nil)
@@ -438,6 +466,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CouldNotRunCheck() {
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -449,8 +478,9 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CouldNotRunCheck() {
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CheckFailed() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverDeterministicConstructionCheckFailedCount).Once()
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverRunningDeterministicConstructionCheckCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverDeterministicConstructionCheckFailedCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverRunningDeterministicConstructionCheckCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(map[string]string{"is_last": "true"}, nil)
@@ -474,6 +504,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CheckFailed() {
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -485,7 +516,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CheckFailed() {
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobNonRetryableError() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, blobstore.ErrBlobNotExists).Once()
@@ -510,6 +542,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobNonRetryableE
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -521,7 +554,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobNonRetryableE
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobTimeout() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverUploadHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.CadenceErrContextTimeoutCounter).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, blobstore.ErrBlobNotExists).Once()
@@ -546,6 +580,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobTimeout() {
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -557,6 +592,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_UploadBlobTimeout() {
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobDoesNotAlreadyExist() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, blobstore.ErrBlobNotExists).Once()
@@ -582,6 +618,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobDoesNotAlreadyEx
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -593,6 +630,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobDoesNotAlreadyEx
 }
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_ConcurrentUploads() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	firstKey, err := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, common.FirstBlobPageToken)
 	s.NoError(err)
 	secondKey, err := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, common.FirstBlobPageToken+1)
@@ -624,6 +662,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_ConcurrentUploads() 
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -635,7 +674,8 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_ConcurrentUploads() 
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverDeleteHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
@@ -649,6 +689,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -661,7 +702,8 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV2() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverDeleteHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.CadenceErrContextTimeoutCounter).Once()
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(errPersistenceRetryable)
 	container := &BootstrapContainer{
@@ -675,6 +717,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -687,7 +730,8 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryableError() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverDeleteHistoryActivityScope, metrics.ArchiverNonRetryableErrorCount).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	mockHistoryManager := &mocks.HistoryManager{}
 	mockHistoryManager.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
@@ -701,6 +745,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryabl
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -712,7 +757,8 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryabl
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV1() {
-	s.metricsClient.On("IncCounter", metrics.ArchiverDeleteHistoryActivityScope, metrics.CadenceErrContextTimeoutCounter).Once()
+	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.CadenceErrContextTimeoutCounter).Once()
 	mockHistoryManager := &mocks.HistoryManager{}
 	mockHistoryManager.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(errPersistenceRetryable)
 	container := &BootstrapContainer{
@@ -726,6 +772,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -737,6 +784,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Success() {
+	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	mockHistoryManager := &mocks.HistoryManager{}
 	mockHistoryManager.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil)
 	container := &BootstrapContainer{
@@ -750,6 +798,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Success() {
 	})
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,

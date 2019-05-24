@@ -631,9 +631,15 @@ func (t *timerQueueProcessorBase) deleteWorkflow(task *persistence.TimerTaskInfo
 }
 
 func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInfo, msBuilder mutableState, context workflowExecutionContext) error {
+	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
+	if err != nil {
+		return err
+	}
+
 	req := &archiver.ArchiveRequest{
 		ShardID:              t.shard.GetShardID(),
 		DomainID:             task.DomainID,
+		DomainName:           domainCacheEntry.GetInfo().Name,
 		WorkflowID:           task.WorkflowID,
 		RunID:                task.RunID,
 		EventStoreVersion:    msBuilder.GetEventStoreVersion(),

@@ -42,6 +42,7 @@ type (
 	ArchiveRequest struct {
 		ShardID              int
 		DomainID             string
+		DomainName           string
 		WorkflowID           string
 		RunID                string
 		EventStoreVersion    int32

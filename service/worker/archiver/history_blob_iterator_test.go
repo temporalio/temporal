@@ -23,6 +23,8 @@ package archiver
 import (
 	"errors"
 	"fmt"
+	"testing"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -31,11 +33,11 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"testing"
 )
 
 const (
 	testDomainID                      = "test-domain-id"
+	testDomainName                    = "test-domain-name"
 	testWorkflowID                    = "test-workflow-id"
 	testRunID                         = "test-run-id"
 	testNextEventID                   = 1800
@@ -538,6 +540,7 @@ func (s *HistoryBlobIteratorSuite) constructTestHistoryBlobIterator(
 
 	request := ArchiveRequest{
 		DomainID:             testDomainID,
+		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		EventStoreVersion:    int32(eventStoreVersion),
