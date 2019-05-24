@@ -103,6 +103,7 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.Equal(*workflowExecution.WorkflowId, resp.Tasks[0].WorkflowID)
 		s.Equal(*workflowExecution.RunId, resp.Tasks[0].RunID)
 		s.Equal(sid, resp.Tasks[0].ScheduleID)
+		s.True(resp.Tasks[0].CreatedTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
 			// cassandra uses TTL and expiry isn't stored as part of task state
 			s.True(time.Now().Before(resp.Tasks[0].Expiry))

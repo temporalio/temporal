@@ -195,6 +195,7 @@ struct TaskInfo {
   12: optional binary runID
   13: optional i64 (js.type = "Long") scheduleID
   14: optional i64 (js.type = "Long") expiryTimeNanos
+  15: optional i64 (js.type = "Long") createdTimeNanos
 }
 
 struct TaskListInfo {

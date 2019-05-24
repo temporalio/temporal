@@ -223,6 +223,7 @@ CREATE TYPE task (
   workflow_id      text,
   run_id           uuid,
   schedule_id      bigint,
+  created_time     timestamp
 );
 
 CREATE TYPE task_list (

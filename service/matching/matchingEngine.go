@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"time"
 
 	"github.com/pborman/uuid"
 	h "github.com/uber/cadence/.gen/go/history"
@@ -232,6 +233,7 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 		WorkflowID:             addRequest.Execution.GetWorkflowId(),
 		ScheduleID:             addRequest.GetScheduleId(),
 		ScheduleToStartTimeout: addRequest.GetScheduleToStartTimeoutSeconds(),
+		CreatedTime:            time.Now(),
 	}
 	return tlMgr.AddTask(addRequest.Execution, taskInfo)
 }
@@ -255,6 +257,7 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 		WorkflowID:             addRequest.Execution.GetWorkflowId(),
 		ScheduleID:             addRequest.GetScheduleId(),
 		ScheduleToStartTimeout: addRequest.GetScheduleToStartTimeoutSeconds(),
+		CreatedTime:            time.Now(),
 	}
 	return tlMgr.AddTask(addRequest.Execution, taskInfo)
 }
@@ -618,6 +621,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
 		token, _ = e.tokenSerializer.Serialize(taskoken)
+		if context.syncResponseCh == nil {
+			scope := domainTaggedMetricScope(e.domainCache, task.DomainID, e.metricsClient, metrics.MatchingPollForDecisionTaskScope)
+			scope.RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
+			scope.Tagged(metrics.DomainAllTag()).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
+		}
 	}
 
 	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, workflowExecutionPtr(context.workflowExecution), token)
@@ -625,7 +633,6 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 		response.Query = context.queryTaskInfo.queryRequest.QueryRequest.Query
 	}
 	response.BacklogCountHint = common.Int64Ptr(context.backlogCountHint)
-
 	return response
 }
 
@@ -641,6 +648,11 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	attributes := scheduledEvent.ActivityTaskScheduledEventAttributes
 	if attributes.ActivityId == nil {
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
+	}
+	if context.syncResponseCh == nil {
+		scope := domainTaggedMetricScope(e.domainCache, task.DomainID, e.metricsClient, metrics.MatchingPollForActivityTaskScope)
+		scope.RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
+		scope.Tagged(metrics.DomainAllTag()).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
 	}
 
 	response := &workflow.PollForActivityTaskResponse{}

@@ -5382,10 +5382,11 @@ func (v *SignalInfo) IsSetControl() bool {
 }
 
 type TaskInfo struct {
-	WorkflowID      *string `json:"workflowID,omitempty"`
-	RunID           []byte  `json:"runID,omitempty"`
-	ScheduleID      *int64  `json:"scheduleID,omitempty"`
-	ExpiryTimeNanos *int64  `json:"expiryTimeNanos,omitempty"`
+	WorkflowID       *string `json:"workflowID,omitempty"`
+	RunID            []byte  `json:"runID,omitempty"`
+	ScheduleID       *int64  `json:"scheduleID,omitempty"`
+	ExpiryTimeNanos  *int64  `json:"expiryTimeNanos,omitempty"`
+	CreatedTimeNanos *int64  `json:"createdTimeNanos,omitempty"`
 }
 
 // ToWire translates a TaskInfo struct into a Thrift-level intermediate
@@ -5405,7 +5406,7 @@ type TaskInfo struct {
 //   }
 func (v *TaskInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -5441,6 +5442,14 @@ func (v *TaskInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 14, Value: w}
+		i++
+	}
+	if v.CreatedTimeNanos != nil {
+		w, err = wire.NewValueI64(*(v.CreatedTimeNanos)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 15, Value: w}
 		i++
 	}
 
@@ -5507,6 +5516,16 @@ func (v *TaskInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 15:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.CreatedTimeNanos = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -5520,7 +5539,7 @@ func (v *TaskInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.WorkflowID != nil {
 		fields[i] = fmt.Sprintf("WorkflowID: %v", *(v.WorkflowID))
@@ -5536,6 +5555,10 @@ func (v *TaskInfo) String() string {
 	}
 	if v.ExpiryTimeNanos != nil {
 		fields[i] = fmt.Sprintf("ExpiryTimeNanos: %v", *(v.ExpiryTimeNanos))
+		i++
+	}
+	if v.CreatedTimeNanos != nil {
+		fields[i] = fmt.Sprintf("CreatedTimeNanos: %v", *(v.CreatedTimeNanos))
 		i++
 	}
 
@@ -5564,6 +5587,9 @@ func (v *TaskInfo) Equals(rhs *TaskInfo) bool {
 	if !_I64_EqualsPtr(v.ExpiryTimeNanos, rhs.ExpiryTimeNanos) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.CreatedTimeNanos, rhs.CreatedTimeNanos) {
+		return false
+	}
 
 	return true
 }
@@ -5585,6 +5611,9 @@ func (v *TaskInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	}
 	if v.ExpiryTimeNanos != nil {
 		enc.AddInt64("expiryTimeNanos", *v.ExpiryTimeNanos)
+	}
+	if v.CreatedTimeNanos != nil {
+		enc.AddInt64("createdTimeNanos", *v.CreatedTimeNanos)
 	}
 	return err
 }
@@ -5647,6 +5676,21 @@ func (v *TaskInfo) GetExpiryTimeNanos() (o int64) {
 // IsSetExpiryTimeNanos returns true if ExpiryTimeNanos is not nil.
 func (v *TaskInfo) IsSetExpiryTimeNanos() bool {
 	return v != nil && v.ExpiryTimeNanos != nil
+}
+
+// GetCreatedTimeNanos returns the value of CreatedTimeNanos if it is set or its
+// zero value if it is unset.
+func (v *TaskInfo) GetCreatedTimeNanos() (o int64) {
+	if v != nil && v.CreatedTimeNanos != nil {
+		return *v.CreatedTimeNanos
+	}
+
+	return
+}
+
+// IsSetCreatedTimeNanos returns true if CreatedTimeNanos is not nil.
+func (v *TaskInfo) IsSetCreatedTimeNanos() bool {
+	return v != nil && v.CreatedTimeNanos != nil
 }
 
 type TaskListInfo struct {

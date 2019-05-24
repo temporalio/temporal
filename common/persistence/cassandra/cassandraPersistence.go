@@ -333,7 +333,8 @@ const (
 		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
-		`schedule_id: ?` +
+		`schedule_id: ?,` +
+		`created_time: ? ` +
 		`}`
 
 	templateCreateShardQuery = `INSERT INTO executions (` +
@@ -2782,6 +2783,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	taskListType := request.TaskListInfo.TaskType
 	taskListKind := request.TaskListInfo.Kind
 	ackLevel := request.TaskListInfo.AckLevel
+	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
 	for _, task := range request.Tasks {
 		scheduleID := task.Data.ScheduleID
@@ -2795,7 +2797,8 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				domainID,
 				task.Execution.GetWorkflowId(),
 				task.Execution.GetRunId(),
-				scheduleID)
+				scheduleID,
+				cqlNowTimestamp)
 		} else {
 			batch.Query(templateCreateTaskWithTTLQuery,
 				domainID,
@@ -2807,6 +2810,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				task.Execution.GetWorkflowId(),
 				task.Execution.GetRunId(),
 				scheduleID,
+				cqlNowTimestamp,
 				task.Data.ScheduleToStartTimeout)
 		}
 	}
@@ -4313,6 +4317,8 @@ func createTaskInfo(result map[string]interface{}) *p.TaskInfo {
 			info.RunID = v.(gocql.UUID).String()
 		case "schedule_id":
 			info.ScheduleID = v.(int64)
+		case "created_time":
+			info.CreatedTime = v.(time.Time)
 		}
 	}
 

@@ -361,6 +361,7 @@ type (
 		ScheduleID             int64
 		ScheduleToStartTimeout int32
 		Expiry                 time.Time
+		CreatedTime            time.Time
 	}
 
 	// Task is the generic interface for workflow tasks

@@ -331,10 +331,11 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			expiryTime = time.Now().Add(time.Second * time.Duration(v.Data.ScheduleToStartTimeout))
 		}
 		blob, err := taskInfoToBlob(&sqlblobs.TaskInfo{
-			WorkflowID:      &v.Data.WorkflowID,
-			RunID:           sqldb.MustParseUUID(v.Data.RunID),
-			ScheduleID:      &v.Data.ScheduleID,
-			ExpiryTimeNanos: common.Int64Ptr(expiryTime.UnixNano()),
+			WorkflowID:       &v.Data.WorkflowID,
+			RunID:            sqldb.MustParseUUID(v.Data.RunID),
+			ScheduleID:       &v.Data.ScheduleID,
+			ExpiryTimeNanos:  common.Int64Ptr(expiryTime.UnixNano()),
+			CreatedTimeNanos: common.Int64Ptr(time.Now().UnixNano()),
 		})
 		if err != nil {
 			return nil, err
@@ -390,12 +391,13 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 			return nil, err
 		}
 		tasks[i] = &persistence.TaskInfo{
-			DomainID:   request.DomainID,
-			WorkflowID: info.GetWorkflowID(),
-			RunID:      sqldb.UUID(info.RunID).String(),
-			TaskID:     v.TaskID,
-			ScheduleID: info.GetScheduleID(),
-			Expiry:     time.Unix(0, info.GetExpiryTimeNanos()),
+			DomainID:    request.DomainID,
+			WorkflowID:  info.GetWorkflowID(),
+			RunID:       sqldb.UUID(info.RunID).String(),
+			TaskID:      v.TaskID,
+			ScheduleID:  info.GetScheduleID(),
+			Expiry:      time.Unix(0, info.GetExpiryTimeNanos()),
+			CreatedTime: time.Unix(0, info.GetCreatedTimeNanos()),
 		}
 	}
 
