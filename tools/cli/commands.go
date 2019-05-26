@@ -1337,7 +1337,7 @@ func ResetWorkflow(c *cli.Context) {
 	if !ok && eventID <= 0 {
 		ErrorAndExit("Must specify valid eventID or valid resetType", nil)
 	}
-	if ok {
+	if ok && len(extraForResetType) > 0 {
 		getRequiredOption(c, extraForResetType)
 	}
 
