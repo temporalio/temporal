@@ -52,7 +52,7 @@ type (
 )
 
 func (s *integrationSuite) SetupSuite() {
-	s.setupSuite("testdata/integrationtestcluster.yaml")
+	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
 func (s *integrationSuite) TearDownSuite() {

@@ -21,7 +21,7 @@
 // +build !race
 // need to run xdc tests with race detector off because of ringpop bug causing data race issue
 
-package hostxdc
+package xdc
 
 import (
 	"bytes"
@@ -65,8 +65,7 @@ type (
 )
 
 const (
-	defaultTestClustersConfig = "testdata/integrationtestclusters.yaml"
-	cacheRefreshInterval      = cache.DomainCacheRefreshInterval + time.Second
+	cacheRefreshInterval = cache.DomainCacheRefreshInterval + time.Second
 )
 
 var (
@@ -97,7 +96,7 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.logger = loggerimpl.NewLogger(zapLogger)
 
-	fileName := defaultTestClustersConfig
+	fileName := "../testdata/xdc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {
 		fileName = host.TestFlags.TestClusterConfigFile
 	}
@@ -1482,7 +1481,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
-	domainName := "test-activity-hearbeat-workflow-failover-" + common.GenerateRandomString(5)
+	domainName := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
@@ -1505,9 +1504,9 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-activity-hearbeat-workflow-failover-test"
-	wt := "integration-activity-hearbeat-workflow-failover-test-type"
-	tl := "integration-activity-hearbeat-workflow-failover-test-tasklist"
+	id := "integration-activity-heartbeat-workflow-failover-test"
+	wt := "integration-activity-heartbeat-workflow-failover-test-type"
+	tl := "integration-activity-heartbeat-workflow-failover-test-tasklist"
 	identity := "worker1"
 	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
 	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
@@ -1642,6 +1641,9 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
+	// Wait for domain cache to pick the change
+	time.Sleep(cacheRefreshInterval)
+
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
@@ -1652,8 +1654,6 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(workflow.PendingActivityStateScheduled, pendingActivities[0].GetState())
 	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
 
-	// Wait for domain cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 	for i := 0; i < 10; i++ {
 		poller2.PollAndProcessActivityTask(false)
 		if activity2Called {

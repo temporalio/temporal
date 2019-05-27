@@ -1,0 +1,131 @@
+- persistence:
+    dbname: integration_active_es
+  clustermetadata:
+    enableGlobalDomain: true
+    failoverVersionIncrement: 10
+    masterClusterName: "active-es"
+    currentClusterName: "active-es"
+    clusterInformation:
+      active-es:
+        enabled: true
+        initialFailoverVersion: 0
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:9104"
+      standby-es:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:10104"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+    enableindexer: true
+  enableeventsv2: false
+  clusterno: 2
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  messagingclientconfig:
+    usemock: false
+    kafkaconfig:
+      clusters:
+        test:
+          brokers:
+            - "${KAFKA_SEEDS}:9092"
+      topics:
+        active-es:
+          cluster: test
+        active-es-dlq:
+          cluster: test
+        standby-es:
+          cluster: test
+        standby-es-dlq:
+          cluster: test
+        test-visibility-topic-0:
+          cluster: test
+        test-visibility-topic-0-dlq:
+          cluster: test
+      cadence-cluster-topics:
+        active-es:
+          topic: active-es
+          dlq-topic: active-es-dlq
+        standby-es:
+          topic: standby-es
+          dlq-topic: standby-es-dlq
+      applications:
+        visibility:
+          topic: test-visibility-topic-0
+          dlq-topic: test-visibility-topic-0-dlq
+  esconfig:
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: test-visibility-0-
+
+- persistence:
+    dbname: integration_standby_es
+  clustermetadata:
+    enableGlobalDomain: true
+    failoverVersionIncrement: 10
+    masterClusterName: "active-es"
+    currentClusterName: "standby-es"
+    clusterInformation:
+      active-es:
+        enabled: true
+        initialFailoverVersion: 0
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:9104"
+      standby-es:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "cadence-frontend"
+        rpcAddress: "127.0.0.1:10104"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+    enableindexer: true
+  enableeventsv2: false
+  clusterno: 3
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  messagingclientconfig:
+    usemock: false
+    kafkaconfig:
+      clusters:
+        test:
+          brokers:
+            - "${KAFKA_SEEDS}:9092"
+      topics:
+        active-es:
+          cluster: test
+        active-es-dlq:
+          cluster: test
+        standby-es:
+          cluster: test
+        standby-es-dlq:
+          cluster: test
+        test-visibility-topic-1:
+          cluster: test
+        test-visibility-topic-1-dlq:
+          cluster: test
+      cadence-cluster-topics:
+        active-es:
+          topic: active-es
+          dlq-topic: active-es-dlq
+        standby-es:
+          topic: standby-es
+          dlq-topic: standby-es-dlq
+      applications:
+        visibility:
+          topic: test-visibility-topic-1
+          dlq-topic: test-visibility-topic-1-dlq
+  esconfig:
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: test-visibility-1-

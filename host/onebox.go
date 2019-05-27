@@ -233,24 +233,49 @@ func (c *cadenceImpl) Stop() {
 }
 
 func (c *cadenceImpl) FrontendAddress() string {
-	if c.clusterNo != 0 {
-		return cluster.TestAlternativeClusterFrontendAddress
+	switch c.clusterNo {
+	case 0:
+		return "127.0.0.1:7104"
+	case 1:
+		return "127.0.0.1:8104"
+	case 2:
+		return "127.0.0.1:9104"
+	case 3:
+		return "127.0.0.1:10104"
+	default:
+		return "127.0.0.1:7104"
 	}
-	return cluster.TestCurrentClusterFrontendAddress
 }
 
 func (c *cadenceImpl) FrontendPProfPort() int {
-	if c.clusterNo != 0 {
+	switch c.clusterNo {
+	case 0:
+		return 7105
+	case 1:
 		return 8105
+	case 2:
+		return 9105
+	case 3:
+		return 10105
+	default:
+		return 7105
 	}
-	return 7105
 }
 
 func (c *cadenceImpl) HistoryServiceAddress() []string {
 	hosts := []string{}
-	startPort := 7200
-	if c.clusterNo != 0 {
-		startPort = 8200
+	startPort := 7201
+	switch c.clusterNo {
+	case 0:
+		startPort = 7201
+	case 1:
+		startPort = 8201
+	case 2:
+		startPort = 9201
+	case 3:
+		startPort = 10201
+	default:
+		startPort = 7201
 	}
 	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
 		port := startPort + i
@@ -263,9 +288,18 @@ func (c *cadenceImpl) HistoryServiceAddress() []string {
 
 func (c *cadenceImpl) HistoryPProfPort() []int {
 	ports := []int{}
-	startPort := 7300
-	if c.clusterNo != 0 {
-		startPort = 8300
+	startPort := 7301
+	switch c.clusterNo {
+	case 0:
+		startPort = 7301
+	case 1:
+		startPort = 8301
+	case 2:
+		startPort = 9301
+	case 3:
+		startPort = 10301
+	default:
+		startPort = 7301
 	}
 	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
 		port := startPort + i
@@ -277,31 +311,63 @@ func (c *cadenceImpl) HistoryPProfPort() []int {
 }
 
 func (c *cadenceImpl) MatchingServiceAddress() string {
-	if c.clusterNo != 0 {
+	switch c.clusterNo {
+	case 0:
+		return "127.0.0.1:7106"
+	case 1:
 		return "127.0.0.1:8106"
+	case 2:
+		return "127.0.0.1:9106"
+	case 3:
+		return "127.0.0.1:10106"
+	default:
+		return "127.0.0.1:7106"
 	}
-	return "127.0.0.1:7106"
 }
 
 func (c *cadenceImpl) MatchingPProfPort() int {
-	if c.clusterNo != 0 {
+	switch c.clusterNo {
+	case 0:
+		return 7107
+	case 1:
 		return 8107
+	case 2:
+		return 9107
+	case 3:
+		return 10107
+	default:
+		return 7107
 	}
-	return 7107
 }
 
 func (c *cadenceImpl) WorkerServiceAddress() string {
-	if c.clusterNo != 0 {
+	switch c.clusterNo {
+	case 0:
+		return "127.0.0.1:7108"
+	case 1:
 		return "127.0.0.1:8108"
+	case 2:
+		return "127.0.0.1:9108"
+	case 3:
+		return "127.0.0.1:10108"
+	default:
+		return "127.0.0.1:7108"
 	}
-	return "127.0.0.1:7108"
 }
 
 func (c *cadenceImpl) WorkerPProfPort() int {
-	if c.clusterNo != 0 {
+	switch c.clusterNo {
+	case 0:
+		return 7109
+	case 1:
 		return 8109
+	case 2:
+		return 9109
+	case 3:
+		return 10109
+	default:
+		return 7109
 	}
-	return 7109
 }
 
 func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {

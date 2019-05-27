@@ -27,7 +27,7 @@ BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
 INTEG_TEST_ROOT=./host
 INTEG_TEST_DIR=host
-INTEG_TEST_XDC_ROOT=./hostxdc
+INTEG_TEST_XDC_ROOT=./host/xdc
 INTEG_TEST_XDC_DIR=hostxdc
 
 GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
@@ -67,7 +67,7 @@ ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
 TOOLS_SRC := $(shell find ./tools -name "*.go")
 TOOLS_SRC += $(TOOLS_CMD_ROOT)
 
-# all directories with *_test.go files in them (exclude hostxdc)
+# all directories with *_test.go files in them (exclude host/xdc)
 TEST_DIRS := $(filter-out $(INTEG_TEST_XDC_ROOT)%, $(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 
 # all tests other than integration test fall into the pkg_test category
@@ -133,7 +133,7 @@ test_eventsV2_xdc: dep-ensured bins
 	@rm -f test_eventsV2_xdc.log
 	@echo Running integration test for cross dc:
 	@for dir in $(INTEG_TEST_XDC_ROOT); do \
-		go test -timeout 20m -coverprofile=$@ "$$dir" -v -eventsV2xdc=true | tee -a test_eventsV2_xdc.log; \
+		go test -timeout 20m -coverprofile=$@ "$$dir" -v $(TEST_TAG) -eventsV2xdc=true | tee -a test_eventsV2_xdc.log; \
 	done;
 
 # need to run xdc tests with race detector off because of ringpop bug causing data race issue
@@ -141,7 +141,7 @@ test_xdc: dep-ensured bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(INTEG_TEST_XDC_ROOT); do \
-		go test -timeout 20m -coverprofile=$@ "$$dir" | tee -a test.log; \
+		go test -timeout 20m -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 
 cover_profile: clean bins_nothrift
@@ -170,7 +170,7 @@ cover_xdc_profile: clean bins_nothrift
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_DIR)
-	@time go test $(INTEG_TEST_XDC_ROOT) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
+	@time go test $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
 
 cover: cover_profile

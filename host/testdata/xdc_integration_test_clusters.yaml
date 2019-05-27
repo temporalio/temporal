@@ -1,4 +1,4 @@
-- persisence:
+- persistence:
     dbname: integration_active
   clustermetadata:
     enableGlobalDomain: true
