@@ -32,6 +32,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +74,8 @@ const (
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
+
+	searchAttrInputSeparator = "|"
 )
 
 var envKeysForUserName = []string{
@@ -612,6 +615,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	memoFields := processMemo(c)
 	if len(memoFields) != 0 {
 		startRequest.Memo = &s.Memo{Fields: memoFields}
+	}
+
+	searchAttrFields := processSearchAttr(c)
+	if len(searchAttrFields) != 0 {
+		startRequest.SearchAttributes = &s.SearchAttributes{IndexedFields: searchAttrFields}
 	}
 
 	startFn := func() {
@@ -1498,6 +1506,43 @@ func ResetInBatch(c *cli.Context) {
 	wg.Wait()
 }
 
+// sort helper for search attributes
+type byKey [][]string
+
+func (s byKey) Len() int {
+	return len(s)
+}
+func (s byKey) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byKey) Less(i, j int) bool {
+	return s[i][0] < s[j][0]
+}
+
+// GetSearchAttributes get valid search attributes
+func GetSearchAttributes(c *cli.Context) {
+	wfClient := getWorkflowClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := wfClient.GetSearchAttributes(ctx)
+	if err != nil {
+		ErrorAndExit("Failed to get search attributes.", err)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	header := []string{"Key", "Value type"}
+	table.SetHeader(header)
+	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
+	rows := [][]string{}
+	for k, v := range resp.Keys {
+		rows = append(rows, []string{k, v.String()})
+	}
+	sort.Sort(byKey(rows))
+	table.AppendBulk(rows)
+	table.Render()
+}
+
 func printErrorAndReturn(msg string, err error) error {
 	fmt.Println(msg)
 	return err
@@ -1964,6 +2009,77 @@ func validateJSONs(str string) error {
 			return err // Invalid input
 		}
 	}
+}
+
+// use parseBool to ensure all BOOL search attributes only be "true" or "false"
+func parseBool(str string) (bool, error) {
+	switch str {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("not parseable bool value: %s", str)
+}
+
+func trimSpace(strs []string) []string {
+	result := make([]string, len(strs))
+	for i, v := range strs {
+		result[i] = strings.TrimSpace(v)
+	}
+	return result
+}
+
+func convertStringToRealType(v string) interface{} {
+	var genVal interface{}
+	var err error
+
+	if genVal, err = strconv.ParseInt(v, 10, 64); err == nil {
+
+	} else if genVal, err = parseBool(v); err == nil {
+
+	} else if genVal, err = strconv.ParseFloat(v, 64); err == nil {
+
+	} else if genVal, err = time.Parse(defaultDateTimeFormat, v); err == nil {
+
+	} else {
+		genVal = v
+	}
+
+	return genVal
+}
+
+func processSearchAttr(c *cli.Context) map[string][]byte {
+	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
+	var searchAttrKeys []string
+	if strings.TrimSpace(rawSearchAttrKey) != "" {
+		searchAttrKeys = trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	}
+
+	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
+	var searchAttrVals []interface{}
+	if strings.TrimSpace(rawSearchAttrVal) != "" {
+		searchAttrValsStr := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
+
+		for _, v := range searchAttrValsStr {
+			searchAttrVals = append(searchAttrVals, convertStringToRealType(v))
+		}
+	}
+
+	if len(searchAttrKeys) != len(searchAttrVals) {
+		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
+	}
+
+	fields := map[string][]byte{}
+	for i, key := range searchAttrKeys {
+		val, err := json.Marshal(searchAttrVals[i])
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
+		}
+		fields[key] = val
+	}
+
+	return fields
 }
 
 func processMemo(c *cli.Context) map[string][]byte {

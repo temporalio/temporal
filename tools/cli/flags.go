@@ -156,6 +156,8 @@ const (
 	FlagMemoKey                     = "memo_key"
 	FlagMemo                        = "memo"
 	FlagMemoFile                    = "memo_file"
+	FlagSearchAttributesKey         = "search_attr_key"
+	FlagSearchAttributesVal         = "search_attr_value"
 	FlagAddBadBinary                = "add_bad_binary"
 	FlagRemoveBadBinary             = "remove_bad_binary"
 	FlagResetType                   = "reset_type"
@@ -277,6 +279,16 @@ func getFlagsForStart() []cli.Flag {
 			Name: FlagMemoFile,
 			Usage: "Optional info that can be listed in list workflow, from JSON format file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"The order must be same as memo_key",
+		},
+		cli.StringFlag{
+			Name: FlagSearchAttributesKey,
+			Usage: "Optional search attributes keys that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
+				"Use `workflow get-search-attr` cmd to list legal keys.",
+		},
+		cli.StringFlag{
+			Name: FlagSearchAttributesVal,
+			Usage: "Optional search attributes value that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
+				"Use `workflow get-search-attr` cmd to list legal keys and value types",
 		},
 	}
 }

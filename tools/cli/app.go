@@ -51,7 +51,7 @@ func NewCliApp() *cli.App {
 		cli.IntFlag{
 			Name:   FlagContextTimeoutWithAlias,
 			Value:  defaultContextTimeoutInSeconds,
-			Usage:  "Optional timeout for context of RPC call in seconds",
+			Usage:  "optional timeout for context of RPC call in seconds",
 			EnvVar: "CADENCE_CONTEXT_TIMEOUT",
 		},
 	}
