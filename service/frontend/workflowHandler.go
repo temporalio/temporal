@@ -1585,7 +1585,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 
 	sizeLimitError := wh.config.BlobSizeLimitError(domainName)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainName)
-	actualSize := len(startRequest.Input) + common.GetSizeOfMapStringToByteArray(startRequest.Memo.GetFields())
+	actualSize := len(startRequest.Input)
+	if startRequest.Memo != nil {
+		actualSize += common.GetSizeOfMapStringToByteArray(startRequest.Memo.GetFields())
+	}
 	if err := common.CheckEventBlobSizeLimit(
 		actualSize,
 		sizeLimitWarn,
