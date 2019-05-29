@@ -1440,8 +1440,8 @@ struct HistoryBranch{
 
 // VersionHistoryItem contains signal eventID and the corresponding version
 struct VersionHistoryItem{
-  10: optional i64 eventID
-  20: optional i64 version
+  10: optional i64 (js.type = "Long") eventID
+  20: optional i64 (js.type = "Long") version
 }
 
 // VersionHistory contains the version history of a branch

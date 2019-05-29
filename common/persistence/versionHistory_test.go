@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+
 	"testing"
 )
 
@@ -270,7 +271,8 @@ func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistoryItem_Error_
 		{EventID: 9, Version: 10},
 	}
 	local := NewVersionHistory(localItems)
-	_, err := local.FindLowestCommonVersionHistoryItem(VersionHistory{})
+	remote := NewVersionHistory([]VersionHistoryItem{{-1, -1}})
+	_, err := local.FindLowestCommonVersionHistoryItem(remote)
 	s.Error(err)
 }
 

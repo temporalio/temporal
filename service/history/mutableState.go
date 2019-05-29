@@ -118,6 +118,7 @@ type (
 		GetStartEvent() (*workflow.HistoryEvent, bool)
 		GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest
 		GetCurrentBranch() []byte
+		GetAllVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetEventStoreVersion() int32
@@ -205,5 +206,6 @@ type (
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(string, int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
+		DeleteVersionHistory(index int)
 	}
 )
