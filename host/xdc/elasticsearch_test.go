@@ -29,6 +29,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -43,10 +48,6 @@ import (
 	"github.com/uber/cadence/host"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"os"
-	"testing"
-	"time"
 )
 
 const (
@@ -143,6 +144,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Name:              common.StringPtr(domainName),
 		Clusters:          clusterReplicationConfigES,
 		ActiveClusterName: common.StringPtr(clusterNameES[0]),
+		IsGlobalDomain:    common.BoolPtr(true),
 	}
 	err := client1.RegisterDomain(createContext(), regReq)
 	s.NoError(err)

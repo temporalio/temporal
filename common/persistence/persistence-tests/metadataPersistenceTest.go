@@ -78,6 +78,7 @@ func (m *MetadataPersistenceSuite) TestCreateDomain() {
 	emitMetric := true
 	archivalBucketName := "bucket-test-name"
 	archivalStatus := gen.ArchivalStatusEnabled
+	badBinaries := gen.BadBinaries{map[string]*gen.BadBinaryInfo{}}
 	isGlobalDomain := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
@@ -97,6 +98,7 @@ func (m *MetadataPersistenceSuite) TestCreateDomain() {
 			EmitMetric:     emitMetric,
 			ArchivalBucket: archivalBucketName,
 			ArchivalStatus: archivalStatus,
+			BadBinaries:    badBinaries,
 		},
 		&p.DomainReplicationConfig{},
 		isGlobalDomain,
@@ -123,7 +125,7 @@ func (m *MetadataPersistenceSuite) TestCreateDomain() {
 	m.Equal(emitMetric, resp1.Config.EmitMetric)
 	m.Equal(archivalBucketName, resp1.Config.ArchivalBucket)
 	m.Equal(archivalStatus, resp1.Config.ArchivalStatus)
-	m.Equal(gen.BadBinaries{}, resp1.Config.BadBinaries)
+	m.Equal(badBinaries, resp1.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.ReplicationConfig.Clusters))
 	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
@@ -403,6 +405,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentUpdateDomain() {
 	emitMetric := true
 	archivalBucketName := "bucket-test-name"
 	archivalStatus := gen.ArchivalStatusEnabled
+	badBinaries := gen.BadBinaries{map[string]*gen.BadBinaryInfo{}}
 
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -437,6 +440,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentUpdateDomain() {
 			EmitMetric:     emitMetric,
 			ArchivalBucket: archivalBucketName,
 			ArchivalStatus: archivalStatus,
+			BadBinaries:    badBinaries,
 		},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: clusterActive,
@@ -455,7 +459,7 @@ func (m *MetadataPersistenceSuite) TestConcurrentUpdateDomain() {
 	m.NotNil(resp2)
 	m.Equal(id, resp2.Info.ID)
 	m.Equal(name, resp2.Info.Name)
-	m.Equal(gen.BadBinaries{}, resp2.Config.BadBinaries)
+	m.Equal(badBinaries, resp2.Config.BadBinaries)
 
 	testBinaries := gen.BadBinaries{
 		Binaries: map[string]*gen.BadBinaryInfo{

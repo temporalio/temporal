@@ -939,6 +939,7 @@ struct RegisterDomainRequest {
   90: optional string securityToken
   100: optional ArchivalStatus archivalStatus
   110: optional string archivalBucketName
+  120: optional bool isGlobalDomain
 }
 
 struct ListDomainsRequest {

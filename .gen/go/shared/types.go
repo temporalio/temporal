@@ -29113,6 +29113,7 @@ type RegisterDomainRequest struct {
 	SecurityToken                          *string                            `json:"securityToken,omitempty"`
 	ArchivalStatus                         *ArchivalStatus                    `json:"archivalStatus,omitempty"`
 	ArchivalBucketName                     *string                            `json:"archivalBucketName,omitempty"`
+	IsGlobalDomain                         *bool                              `json:"isGlobalDomain,omitempty"`
 }
 
 // ToWire translates a RegisterDomainRequest struct into a Thrift-level intermediate
@@ -29132,7 +29133,7 @@ type RegisterDomainRequest struct {
 //   }
 func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -29224,6 +29225,14 @@ func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.IsGlobalDomain != nil {
+		w, err = wire.NewValueBool(*(v.IsGlobalDomain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
 
@@ -29358,6 +29367,16 @@ func (v *RegisterDomainRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.IsGlobalDomain = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -29371,7 +29390,7 @@ func (v *RegisterDomainRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [12]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -29415,6 +29434,10 @@ func (v *RegisterDomainRequest) String() string {
 	}
 	if v.ArchivalBucketName != nil {
 		fields[i] = fmt.Sprintf("ArchivalBucketName: %v", *(v.ArchivalBucketName))
+		i++
+	}
+	if v.IsGlobalDomain != nil {
+		fields[i] = fmt.Sprintf("IsGlobalDomain: %v", *(v.IsGlobalDomain))
 		i++
 	}
 
@@ -29464,6 +29487,9 @@ func (v *RegisterDomainRequest) Equals(rhs *RegisterDomainRequest) bool {
 	if !_String_EqualsPtr(v.ArchivalBucketName, rhs.ArchivalBucketName) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.IsGlobalDomain, rhs.IsGlobalDomain) {
+		return false
+	}
 
 	return true
 }
@@ -29506,6 +29532,9 @@ func (v *RegisterDomainRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.ArchivalBucketName != nil {
 		enc.AddString("archivalBucketName", *v.ArchivalBucketName)
+	}
+	if v.IsGlobalDomain != nil {
+		enc.AddBool("isGlobalDomain", *v.IsGlobalDomain)
 	}
 	return err
 }
@@ -29673,6 +29702,21 @@ func (v *RegisterDomainRequest) GetArchivalBucketName() (o string) {
 // IsSetArchivalBucketName returns true if ArchivalBucketName is not nil.
 func (v *RegisterDomainRequest) IsSetArchivalBucketName() bool {
 	return v != nil && v.ArchivalBucketName != nil
+}
+
+// GetIsGlobalDomain returns the value of IsGlobalDomain if it is set or its
+// zero value if it is unset.
+func (v *RegisterDomainRequest) GetIsGlobalDomain() (o bool) {
+	if v != nil && v.IsGlobalDomain != nil {
+		return *v.IsGlobalDomain
+	}
+
+	return
+}
+
+// IsSetIsGlobalDomain returns true if IsGlobalDomain is not nil.
+func (v *RegisterDomainRequest) IsSetIsGlobalDomain() bool {
+	return v != nil && v.IsGlobalDomain != nil
 }
 
 type ReplicationInfo struct {

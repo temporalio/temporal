@@ -92,11 +92,7 @@ func (m *metadataManagerProxy) Close() {
 }
 
 func (m *metadataManagerProxy) CreateDomain(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
-	if request.IsGlobalDomain {
-		return m.metadataMgrV2.CreateDomain(request)
-	}
-
-	return m.metadataMgr.CreateDomain(request)
+	return m.metadataMgrV2.CreateDomain(request)
 }
 
 func (m *metadataManagerProxy) UpdateDomain(request *p.InternalUpdateDomainRequest) error {
