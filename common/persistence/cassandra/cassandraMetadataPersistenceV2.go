@@ -133,7 +133,7 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 // orphaned entry from domains table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
 	query := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name)
-	applied, err := query.ScanCAS()
+	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err),

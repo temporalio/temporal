@@ -131,6 +131,8 @@ const (
 	FlagActiveClusterNameWithAlias  = FlagActiveClusterName + ", ac"
 	FlagClusters                    = "clusters"
 	FlagClustersWithAlias           = FlagClusters + ", cl"
+	FlagIsGlobalDomain              = "global_domain"
+	FlagIsGlobalDomainWithAlias     = FlagIsGlobalDomain + ", gd"
 	FlagDomainData                  = "domain_data"
 	FlagDomainDataWithAlias         = FlagDomainData + ", dmd"
 	FlagEventID                     = "event_id"

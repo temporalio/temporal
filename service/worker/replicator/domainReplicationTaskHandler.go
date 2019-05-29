@@ -21,8 +21,6 @@
 package replicator
 
 import (
-	"errors"
-
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
@@ -31,23 +29,25 @@ import (
 
 var (
 	// ErrEmptyDomainReplicationTask is the error to indicate empty replication task
-	ErrEmptyDomainReplicationTask = errors.New("empty domain replication task")
+	ErrEmptyDomainReplicationTask = &shared.BadRequestError{Message: "empty domain replication task"}
 	// ErrInvalidDomainOperation is the error to indicate empty domain operation attribute
-	ErrInvalidDomainOperation = errors.New("invalid domain operation attribute")
+	ErrInvalidDomainOperation = &shared.BadRequestError{Message: "invalid domain operation attribute"}
 	// ErrInvalidDomainID is the error to indicate empty rID attribute
-	ErrInvalidDomainID = errors.New("invalid domain ID attribute")
+	ErrInvalidDomainID = &shared.BadRequestError{Message: "invalid domain ID attribute"}
 	// ErrInvalidDomainInfo is the error to indicate empty info attribute
-	ErrInvalidDomainInfo = errors.New("invalid domain info attribute")
+	ErrInvalidDomainInfo = &shared.BadRequestError{Message: "invalid domain info attribute"}
 	// ErrInvalidDomainConfig is the error to indicate empty config attribute
-	ErrInvalidDomainConfig = errors.New("invalid domain config attribute")
+	ErrInvalidDomainConfig = &shared.BadRequestError{Message: "invalid domain config attribute"}
 	// ErrInvalidDomainReplicationConfig is the error to indicate empty replication config attribute
-	ErrInvalidDomainReplicationConfig = errors.New("invalid domain replication config attribute")
+	ErrInvalidDomainReplicationConfig = &shared.BadRequestError{Message: "invalid domain replication config attribute"}
 	// ErrInvalidDomainConfigVersion is the error to indicate empty config version attribute
-	ErrInvalidDomainConfigVersion = errors.New("invalid domain config version attribute")
+	ErrInvalidDomainConfigVersion = &shared.BadRequestError{Message: "invalid domain config version attribute"}
 	// ErrInvalidDomainFailoverVersion is the error to indicate empty failover version attribute
-	ErrInvalidDomainFailoverVersion = errors.New("invalid domain failover version attribute")
+	ErrInvalidDomainFailoverVersion = &shared.BadRequestError{Message: "invalid domain failover version attribute"}
 	// ErrInvalidDomainStatus is the error to indicate invalid domain status
-	ErrInvalidDomainStatus = errors.New("invalid domain status attribute")
+	ErrInvalidDomainStatus = &shared.BadRequestError{Message: "invalid domain status attribute"}
+	// ErrNameUUIDCollision is the error to indicate domain name / UUID collision
+	ErrNameUUIDCollision = &shared.BadRequestError{Message: "domain replication encounter name / UUID collision"}
 )
 
 // NOTE: the counterpart of domain replication transmission logic is in service/fropntend package
@@ -121,6 +121,51 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 	}
 
 	_, err = domainReplicator.metadataManagerV2.CreateDomain(request)
+	if err != nil {
+		// SQL and Cassandra handle domain UUID collision differently
+		// here, whenever seeing a error replicating a domain
+		// do a check if there is a name / UUID collision
+
+		recordExists := true
+		resp, getErr := domainReplicator.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+			Name: task.Info.GetName(),
+		})
+		switch getErr.(type) {
+		case nil:
+			if resp.Info.ID != task.GetID() {
+				return ErrNameUUIDCollision
+			}
+		case *shared.EntityNotExistsError:
+			// no check is necessary
+			recordExists = false
+		default:
+			// return the original err
+			return err
+		}
+
+		resp, getErr = domainReplicator.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+			ID: task.GetID(),
+		})
+		switch getErr.(type) {
+		case nil:
+			if resp.Info.Name != task.Info.GetName() {
+				return ErrNameUUIDCollision
+			}
+		case *shared.EntityNotExistsError:
+			// no check is necessary
+			recordExists = false
+		default:
+			// return the original err
+			return err
+		}
+
+		if recordExists {
+			// name -> id & id -> name check pass, this is duplication request
+			return nil
+		}
+		return err
+	}
+
 	return err
 }
 
@@ -132,7 +177,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 		return err
 	}
 
-	// first we need to get the current notification verion since we need to it for conditional update
+	// first we need to get the current notification version since we need to it for conditional update
 	metadata, err := domainReplicator.metadataManagerV2.GetMetadata()
 	if err != nil {
 		return err
@@ -147,7 +192,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); ok {
 			// this can happen if the create domain replication task is to processed.
-			// e.g. new cluster being lanuched
+			// e.g. new cluster which does not have anything
 			return domainReplicator.handleDomainCreationReplicationTask(task)
 		}
 		return err

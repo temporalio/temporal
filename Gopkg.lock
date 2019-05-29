@@ -42,7 +42,7 @@
   version = "0.9.3"
 
 [[projects]]
-  digest = "1:bf4e3519e0dcf7c47d21da85026a3b5800c3ecc99d0889e49fb9533781d8a3bd"
+  digest = "1:a9922281482e7c94d448ad9c63626e27b60edd4927ee578e8aac6ce0f410cff7"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -83,8 +83,8 @@
     "service/sts",
   ]
   pruneopts = ""
-  revision = "8943f83bb1e98c94710f767576fe17cc29adb4dd"
-  version = "v1.19.38"
+  revision = "1badbda38516ecb9e6157b85064bf7058ca9f0dc"
+  version = "v1.19.40"
 
 [[projects]]
   branch = "master"
@@ -573,14 +573,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1e723239f889d05f0611d20dc21621d3f743bb4c1deff675aa1e45ac2fa96097"
+  digest = "1:69b8051863c7fba35d264b256a4ea2e9ce4b5fef46fcdb65c75768074994fd79"
   name = "github.com/prometheus/procfs"
   packages = [
     ".",
     "internal/fs",
   ]
   pruneopts = ""
-  revision = "3cb620ac02d09c0648c0ea033ea9706e5d11e416"
+  revision = "65bdadfa96aecebf4dcf888da995a29eab4fc964"
 
 [[projects]]
   branch = "master"
@@ -770,7 +770,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:469da1fa375e08b50568f7532edadd049a91d81e9e074aaabd46963149343f6b"
+  digest = "1:910e3636d87582759d3beef6438337137c128ba544e178ab36493f3274582830"
   name = "go.uber.org/cadence"
   packages = [
     ".",
@@ -792,7 +792,7 @@
     "workflow",
   ]
   pruneopts = ""
-  revision = "b086c4bd10e370394efa9cd4d8dcb2b99f76ef25"
+  revision = "8e96b4f6316956910895bc11a12161b440c0d5d3"
 
 [[projects]]
   digest = "1:22c7effcb4da0eacb2bb1940ee173fac010e9ef3c691f5de4b524d538bd980f5"
@@ -946,14 +946,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:67eb682bc10f1293b906694c64363dca71bf4ee2f8965518727c47d080422af5"
+  digest = "1:e292cb7347cb6bdfcb0fd7846f7bc61408d6a2d82354e4946fc527aff9b66921"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = ""
-  revision = "adf421d2caf4ffcf74142ff5fb9ee323b21a819e"
+  revision = "6a60838ec2595395fabc7b2e6c2ae9fb5a87722d"
 
 [[projects]]
   branch = "master"
@@ -965,7 +965,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f2a1112016ad33189b58d3804fe02b622648a2242bac6b8eb27f527b33034f6b"
+  digest = "1:653e09c0b436e583239fa6dc95a8fa6d08b030a59c80941319753d120a0d259b"
   name = "golang.org/x/tools"
   packages = [
     "cmd/stringer",
@@ -983,7 +983,7 @@
     "internal/semver",
   ]
   pruneopts = ""
-  revision = "d238219cc233110bab5949ee47e1505814ab1197"
+  revision = "fb6c8ffd22070e69b7642308d055748cda081989"
 
 [[projects]]
   digest = "1:01b9b21ce3c29e95c6226188ab77233e59f4e397262a078cd6f248405b86dda7"

@@ -124,21 +124,27 @@ func (s *cliAppSuite) TestAppCommands() {
 	}
 }
 
-func (s *cliAppSuite) TestDomainRegister() {
+func (s *cliAppSuite) TestDomainRegister_LocalDomain() {
 	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "register"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "false"})
+	s.Equal(0, errorCode)
+}
+
+func (s *cliAppSuite) TestDomainRegister_GlobalDomain() {
+	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
+	s.Equal(0, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainRegister_DomainExist() {
 	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(&shared.DomainAlreadyExistsError{})
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainRegister_Failed() {
 	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(&shared.BadRequestError{"fake error"})
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
 	s.Equal(1, errorCode)
 }
 
