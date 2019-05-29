@@ -1282,7 +1282,18 @@ func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
 }
 
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
-	return e.executionInfo.State != persistence.WorkflowStateCompleted
+	switch e.executionInfo.State {
+	case persistence.WorkflowStateCreated:
+		return true
+	case persistence.WorkflowStateRunning:
+		return true
+	case persistence.WorkflowStateCompleted:
+		return false
+	case persistence.WorkflowStateZombie:
+		return false
+	default:
+		panic(fmt.Sprintf("unknown execution state: %v", e.executionInfo.State))
+	}
 }
 
 func (e *mutableStateBuilder) IsCancelRequested() (bool, string) {

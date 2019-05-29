@@ -3394,10 +3394,18 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(prevStartRequestID,
 
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
-	if prevState != persistence.WorkflowStateCompleted {
+	switch prevState {
+	case persistence.WorkflowStateCreated,
+		persistence.WorkflowStateRunning:
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+	case persistence.WorkflowStateCompleted:
+		// previous workflow completed, proceed
+	default:
+		// persistence.WorkflowStateZombie or unknown type
+		return &workflow.InternalServiceError{Message: fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState)}
 	}
+
 	switch wfIDReusePolicy {
 	case workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := FailedWorkflowCloseState[prevCloseState]; !ok {

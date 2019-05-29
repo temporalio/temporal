@@ -26,8 +26,34 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
+var (
+	validWorkflowStates = map[int]struct{}{
+		WorkflowStateCreated:   {},
+		WorkflowStateRunning:   {},
+		WorkflowStateCompleted: {},
+		WorkflowStateZombie:    {},
+	}
+
+	validWorkflowCloseStatuses = map[int]struct{}{
+		WorkflowCloseStatusNone:           {},
+		WorkflowCloseStatusCompleted:      {},
+		WorkflowCloseStatusFailed:         {},
+		WorkflowCloseStatusCanceled:       {},
+		WorkflowCloseStatusTerminated:     {},
+		WorkflowCloseStatusContinuedAsNew: {},
+		WorkflowCloseStatusTimedOut:       {},
+	}
+)
+
 // ValidateCreateWorkflowStateCloseStatus validate workflow state and close status
 func ValidateCreateWorkflowStateCloseStatus(state int, closeStatus int) error {
+	if err := validateWorkflowState(state); err != nil {
+		return err
+	}
+	if err := validateWorkflowCloseStatus(closeStatus); err != nil {
+		return err
+	}
+
 	// validate workflow state & close status
 	if state == WorkflowStateCompleted || closeStatus != WorkflowCloseStatusNone {
 		return &workflow.InternalServiceError{
@@ -40,6 +66,13 @@ func ValidateCreateWorkflowStateCloseStatus(state int, closeStatus int) error {
 
 // ValidateUpdateWorkflowStateCloseStatus validate workflow state and close status
 func ValidateUpdateWorkflowStateCloseStatus(state int, closeStatus int) error {
+	if err := validateWorkflowState(state); err != nil {
+		return err
+	}
+	if err := validateWorkflowCloseStatus(closeStatus); err != nil {
+		return err
+	}
+
 	// validate workflow state & close status
 	if closeStatus == WorkflowCloseStatusNone {
 		if state == WorkflowStateCompleted {
@@ -62,5 +95,27 @@ func ValidateUpdateWorkflowStateCloseStatus(state int, closeStatus int) error {
 			}
 		}
 	}
+	return nil
+}
+
+// validateWorkflowState validate workflow state
+func validateWorkflowState(state int) error {
+	if _, ok := validWorkflowStates[state]; !ok {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Invalid workflow state: %v", state),
+		}
+	}
+
+	return nil
+}
+
+// validateWorkflowCloseStatus validate workflow close status
+func validateWorkflowCloseStatus(closeStatus int) error {
+	if _, ok := validWorkflowCloseStatuses[closeStatus]; !ok {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Invalid workflow close status: %v", closeStatus),
+		}
+	}
+
 	return nil
 }

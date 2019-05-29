@@ -59,6 +59,9 @@ const (
 	// Update current record only if workflow is open
 	// Only applicable for UpdateWorkflowExecution
 	CreateWorkflowModeContinueAsNew
+	// Do not update current record since workflow to
+	// applicable for CreateWorkflowExecution, UpdateWorkflowExecution
+	CreateWorkflowModeZombie
 )
 
 // Workflow execution states
@@ -66,6 +69,7 @@ const (
 	WorkflowStateCreated = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
+	WorkflowStateZombie
 )
 
 // Workflow execution close status

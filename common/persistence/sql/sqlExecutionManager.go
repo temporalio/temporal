@@ -71,6 +71,7 @@ func (m *sqlExecutionManager) CreateWorkflowExecution(request *p.InternalCreateW
 }
 
 func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.InternalCreateWorkflowExecutionRequest) (*p.CreateWorkflowExecutionResponse, error) {
+
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateCloseStatus(
 		request.State,
@@ -95,7 +96,14 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.
 
 	lastWriteVersion := common.EmptyVersion
 
-	if row != nil {
+	// current workflow record check
+	if row == nil {
+		// current row does not exists, check if creating zombie workflow
+		if request.CreateWorkflowMode == p.CreateWorkflowModeZombie {
+			return nil, fmt.Errorf("Cannot create zombie workflow when current record is missing")
+		}
+	} else {
+		// current run ID, last write version, current workflow state check
 		switch request.CreateWorkflowMode {
 		case p.CreateWorkflowModeBrandNew:
 			if request.ReplicationState != nil {
@@ -132,6 +140,12 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx sqldb.Tx, request *p.
 						"RunID: %v, PreviousRunID: %v",
 						workflowID, runIDStr, request.PreviousRunID),
 				}
+			}
+		case p.CreateWorkflowModeZombie:
+			// zombie workflow creation with existence of current record, this is a noop
+			if err := assertRunIDMismatch(sqldb.MustParseUUID(request.Execution.GetRunId()),
+				row.RunID); err != nil {
+				return nil, err
 			}
 		default:
 			return nil, fmt.Errorf("Unknown workflow creation mode: %v", request.CreateWorkflowMode)
@@ -615,26 +629,37 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 		}
 	} else {
 		executionInfo := request.ExecutionInfo
-		startVersion := common.EmptyVersion
-		lastWriteVersion := common.EmptyVersion
-		if request.ReplicationState != nil {
-			startVersion = request.ReplicationState.StartVersion
-			lastWriteVersion = request.ReplicationState.LastWriteVersion
-		}
-		// this is only to update the current record
-		if err := assertAndUpdateCurrentExecution(tx,
-			shardID,
-			domainID,
-			workflowID,
-			runID,
-			runID,
-			executionInfo.CreateRequestID,
-			executionInfo.State,
-			executionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion); err != nil {
+		switch executionInfo.State {
+		case p.WorkflowStateZombie:
+			if err := assertNotCurrentExecution(tx, shardID, domainID, workflowID, runID); err != nil {
+				return err
+			}
+		case p.WorkflowStateCreated, p.WorkflowStateRunning, p.WorkflowStateCompleted:
+			startVersion := common.EmptyVersion
+			lastWriteVersion := common.EmptyVersion
+			if request.ReplicationState != nil {
+				startVersion = request.ReplicationState.StartVersion
+				lastWriteVersion = request.ReplicationState.LastWriteVersion
+			}
+			// this is only to update the current record
+			if err := assertAndUpdateCurrentExecution(tx,
+				shardID,
+				domainID,
+				workflowID,
+				runID,
+				runID,
+				executionInfo.CreateRequestID,
+				executionInfo.State,
+				executionInfo.CloseStatus,
+				startVersion,
+				lastWriteVersion); err != nil {
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update current execution. Error: %v", err),
+				}
+			}
+		default:
 			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update current execution. Error: %v", err),
+				Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Unknown workflow state %v", executionInfo.State),
 			}
 		}
 	}
@@ -1537,8 +1562,8 @@ func createExecutionFromRequest(
 }
 
 func createOrUpdateCurrentExecution(
-	tx sqldb.Tx, request *p.InternalCreateWorkflowExecutionRequest, shardID int, domainID sqldb.UUID, runID sqldb.UUID,
-	state int, closeStatus int) error {
+	tx sqldb.Tx, request *p.InternalCreateWorkflowExecutionRequest, shardID int, domainID sqldb.UUID,
+	runID sqldb.UUID, state int, closeStatus int) error {
 	row := sqldb.CurrentExecutionsRow{
 		ShardID:          int64(shardID),
 		DomainID:         domainID,
@@ -1561,7 +1586,7 @@ func createOrUpdateCurrentExecution(
 		if err := updateCurrentExecution(tx,
 			shardID,
 			domainID,
-			*request.Execution.WorkflowId,
+			request.Execution.GetWorkflowId(),
 			runID,
 			request.RequestID,
 			state,
@@ -1576,7 +1601,7 @@ func createOrUpdateCurrentExecution(
 		if err := updateCurrentExecution(tx,
 			shardID,
 			domainID,
-			*request.Execution.WorkflowId,
+			request.Execution.GetWorkflowId(),
 			runID,
 			request.RequestID,
 			state,
@@ -1592,6 +1617,14 @@ func createOrUpdateCurrentExecution(
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Failed to insert into current_executions table. Error: %v", err),
 			}
+		}
+	case p.CreateWorkflowModeZombie:
+		if request.State != p.WorkflowStateZombie || request.CloseStatus != p.WorkflowCloseStatusNone {
+			return &workflow.InternalServiceError{Message: fmt.Sprintf(
+				"Cannot create zombie workflow with state: %v, close status: %v",
+				request.State,
+				request.CloseStatus,
+			)}
 		}
 	default:
 		return fmt.Errorf("Unknown workflow creation mode: %v", request.CreateWorkflowMode)
@@ -1892,21 +1925,45 @@ func createTimerTasks(
 	return nil
 }
 
+func assertNotCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+	currentRunID, err := tx.LockCurrentExecutions(&sqldb.CurrentExecutionsFilter{
+		ShardID: int64(shardID), DomainID: domainID, WorkflowID: workflowID})
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Assertion on current record failed. Failed to check current run ID. Error: %v", err),
+		}
+	}
+	if err := assertRunIDMismatch(runID, currentRunID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func assertAndUpdateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, newRunID sqldb.UUID, previousRunID sqldb.UUID,
 	createRequestID string, state int, closeStatus int, startVersion int64, lastWriteVersion int64) error {
 	runID, err := tx.LockCurrentExecutions(&sqldb.CurrentExecutionsFilter{
 		ShardID: int64(shardID), DomainID: domainID, WorkflowID: workflowID})
 	if err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ContinueAsNew failed. Failed to check current run ID. Error: %v", err),
+			Message: fmt.Sprintf("Update current record failed. Failed to check current run ID. Error: %v", err),
 		}
 	}
 	if !bytes.Equal(runID, previousRunID) {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("ContinueAsNew failed. Current run ID was %v, expected %v", runID, previousRunID),
+			Msg: fmt.Sprintf("Update current record failed failed. Current run ID was %v, expected %v", runID, previousRunID),
 		}
 	}
 	return updateCurrentExecution(tx, shardID, domainID, workflowID, newRunID, createRequestID, state, closeStatus, startVersion, lastWriteVersion)
+}
+
+func assertRunIDMismatch(runID sqldb.UUID, currentRunID sqldb.UUID) error {
+	// zombie workflow creation with existence of current record, this is a noop
+	if bytes.Equal(runID, currentRunID) {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Assertion on current run ID failed. Current run ID is not expected: %v", currentRunID),
+		}
+	}
+	return nil
 }
 
 func updateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID,

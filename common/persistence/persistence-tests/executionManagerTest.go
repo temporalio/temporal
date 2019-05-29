@@ -154,6 +154,89 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	req.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.IsType(&shared.InternalServiceError{}, err)
+
+	// for zombie workflow creation, we must use existing workflow ID which got created
+	// since we do not allow creation of zombie workflow without current record
+	workflowExecutionStatusZombie := gen.WorkflowExecution{
+		WorkflowId: workflowExecutionStatusRunning.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	req.CreateWorkflowMode = p.CreateWorkflowModeZombie
+	req.Execution = workflowExecutionStatusZombie
+	req.State = p.WorkflowStateZombie
+	for _, invalidCloseStatus := range invalidCloseStatuses {
+		req.CloseStatus = invalidCloseStatus
+		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
+		s.IsType(&shared.InternalServiceError{}, err)
+	}
+	req.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionStatusZombie)
+	s.Nil(err)
+	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
+	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+}
+
+// TestCreateWorkflowExecutionWithZombieState test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
+	domainID := uuid.New()
+	workflowExecutionRunning := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("create-workflow-test-with-zombie-state"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+
+	req := &p.CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            workflowExecutionRunning,
+		TaskList:             tasklist,
+		WorkflowTypeName:     workflowType,
+		WorkflowTimeout:      workflowTimeout,
+		DecisionTimeoutValue: decisionTimeout,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardInfo.RangeID,
+		CreateWorkflowMode:   p.CreateWorkflowModeZombie,
+		State:                p.WorkflowStateZombie,
+		CloseStatus:          p.WorkflowCloseStatusNone,
+	}
+	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
+	s.NotNil(err) // do not allow creating a zombie workflow if no current running workflow
+
+	req.CreateWorkflowMode = p.CreateWorkflowModeBrandNew
+	req.State = p.WorkflowStateRunning
+	req.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	currentRunID, err := s.GetCurrentWorkflowRunID(domainID, workflowExecutionRunning.GetWorkflowId())
+	s.Nil(err)
+	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
+
+	workflowExecutionZombie := gen.WorkflowExecution{
+		WorkflowId: workflowExecutionRunning.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	req.Execution = workflowExecutionZombie
+	req.CreateWorkflowMode = p.CreateWorkflowModeZombie
+	req.State = p.WorkflowStateZombie
+	req.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	// current run ID is still the prev running run ID
+	currentRunID, err = s.GetCurrentWorkflowRunID(domainID, workflowExecutionRunning.GetWorkflowId())
+	s.Nil(err)
+	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
+	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionZombie)
+	s.Nil(err)
+	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
+	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
 }
 
 // TestUpdateWorkflowExecutionStateCloseStatus test
@@ -250,6 +333,147 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 		s.Equal(p.WorkflowStateCompleted, info.ExecutionInfo.State)
 		s.Equal(closeStatus, info.ExecutionInfo.CloseStatus)
 	}
+
+	// create a new workflow with same domain ID & workflow ID
+	// to enable update workflow with zombie status
+	workflowExecutionRunning := gen.WorkflowExecution{
+		WorkflowId: workflowExecution.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	req.Execution = workflowExecutionRunning
+	req.CreateWorkflowMode = p.CreateWorkflowModeWorkflowIDReuse
+	req.PreviousRunID = workflowExecution.GetRunId()
+	req.PreviousLastWriteVersion = common.EmptyVersion
+	req.State = p.WorkflowStateRunning
+	req.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+
+	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedInfo.State = p.WorkflowStateZombie
+	updatedInfo.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ExecutionInfo: updatedInfo,
+		Condition:     nextEventID,
+		RangeID:       s.ShardInfo.RangeID,
+	})
+	s.NoError(err)
+	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
+	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+
+	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedInfo.State = p.WorkflowStateZombie
+	for _, closeStatus := range closeStatuses {
+		updatedInfo.CloseStatus = closeStatus
+		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+			ExecutionInfo: updatedInfo,
+			Condition:     nextEventID,
+			RangeID:       s.ShardInfo.RangeID,
+		})
+		s.IsType(&shared.InternalServiceError{}, err)
+	}
+}
+
+// TestUpdateWorkflowExecutionWithZombieState test
+func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
+	domainID := uuid.New()
+	workflowID := "create-workflow-test-with-zombie-state"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+
+	// create and update a workflow to make it completed
+	req := &p.CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            workflowExecution,
+		TaskList:             tasklist,
+		WorkflowTypeName:     workflowType,
+		WorkflowTimeout:      workflowTimeout,
+		DecisionTimeoutValue: decisionTimeout,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardInfo.RangeID,
+		CreateWorkflowMode:   p.CreateWorkflowModeBrandNew,
+		State:                p.WorkflowStateRunning,
+		CloseStatus:          p.WorkflowCloseStatusNone,
+	}
+	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	currentRunID, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Nil(err)
+	s.Equal(workflowExecution.GetRunId(), currentRunID)
+
+	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+
+	// try to turn current workflow into zombie state, this should end with an error
+	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedInfo.State = p.WorkflowStateZombie
+	updatedInfo.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ExecutionInfo: updatedInfo,
+		Condition:     nextEventID,
+		RangeID:       s.ShardInfo.RangeID,
+	})
+	s.NotNil(err)
+
+	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedInfo.State = p.WorkflowStateCompleted
+	updatedInfo.CloseStatus = p.WorkflowCloseStatusCompleted
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ExecutionInfo: updatedInfo,
+		Condition:     nextEventID,
+		RangeID:       s.ShardInfo.RangeID,
+	})
+	s.NoError(err)
+
+	// create a new workflow with same domain ID & workflow ID
+	workflowExecutionRunning := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	req.Execution = workflowExecutionRunning
+	req.CreateWorkflowMode = p.CreateWorkflowModeWorkflowIDReuse
+	req.PreviousRunID = workflowExecution.GetRunId()
+	req.PreviousLastWriteVersion = common.EmptyVersion
+	req.State = p.WorkflowStateRunning
+	req.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	currentRunID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Nil(err)
+	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
+
+	// get the workflow to be turned into a zombie
+	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedInfo.State = p.WorkflowStateZombie
+	updatedInfo.CloseStatus = p.WorkflowCloseStatusNone
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ExecutionInfo: updatedInfo,
+		Condition:     nextEventID,
+		RangeID:       s.ShardInfo.RangeID,
+	})
+	s.NoError(err)
+	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
+	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	// check current run ID is un touched
+	currentRunID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Nil(err)
+	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
 }
 
 // TestCreateWorkflowExecutionBrandNew test
