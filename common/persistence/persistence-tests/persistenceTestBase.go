@@ -528,11 +528,12 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 }
 
 // UpdateWorkflowExecution is a utility method to update workflow execution
-func (s *TestBase) UpdateWorkflowExecution(updatedInfo *p.WorkflowExecutionInfo, decisionScheduleIDs []int64,
+func (s *TestBase) UpdateWorkflowExecution(updatedInfo *p.WorkflowExecutionInfo,
+	versionHistories *p.VersionHistories, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, condition int64, timerTasks []p.Task,
 	upsertActivityInfos []*p.ActivityInfo, deleteActivityInfos []int64,
 	upsertTimerInfos []*p.TimerInfo, deleteTimerInfos []string) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, decisionScheduleIDs, activityScheduleIDs,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, decisionScheduleIDs, activityScheduleIDs,
 		s.ShardInfo.RangeID, condition, timerTasks, upsertActivityInfos, deleteActivityInfos,
 		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil,
 		nil, nil, nil, "")
@@ -558,95 +559,95 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *p.WorkflowExecu
 }
 
 // UpsertChildExecutionsState is a utility method to update mutable state of workflow execution
-func (s *TestBase) UpsertChildExecutionsState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) UpsertChildExecutionsState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	upsertChildInfos []*p.ChildExecutionInfo) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, upsertChildInfos, nil, nil, nil,
 		nil, nil, nil, "")
 }
 
 // UpsertRequestCancelState is a utility method to update mutable state of workflow execution
-func (s *TestBase) UpsertRequestCancelState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) UpsertRequestCancelState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	upsertCancelInfos []*p.RequestCancelInfo) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, upsertCancelInfos, nil,
 		nil, nil, nil, "")
 }
 
 // UpsertSignalInfoState is a utility method to update mutable state of workflow execution
-func (s *TestBase) UpsertSignalInfoState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) UpsertSignalInfoState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	upsertSignalInfos []*p.SignalInfo) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		upsertSignalInfos, nil, nil, "")
 }
 
 // UpsertSignalsRequestedState is a utility method to update mutable state of workflow execution
-func (s *TestBase) UpsertSignalsRequestedState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) UpsertSignalsRequestedState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	upsertSignalsRequested []string) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, upsertSignalsRequested, "")
 }
 
 // DeleteChildExecutionsState is a utility method to delete child execution from mutable state
-func (s *TestBase) DeleteChildExecutionsState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) DeleteChildExecutionsState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	deleteChildInfo int64) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, &deleteChildInfo, nil, nil,
 		nil, nil, nil, "")
 }
 
 // DeleteCancelState is a utility method to delete request cancel state from mutable state
-func (s *TestBase) DeleteCancelState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) DeleteCancelState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	deleteCancelInfo int64) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, &deleteCancelInfo,
 		nil, nil, nil, "")
 }
 
 // DeleteSignalState is a utility method to delete request cancel state from mutable state
-func (s *TestBase) DeleteSignalState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) DeleteSignalState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	deleteSignalInfo int64) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, &deleteSignalInfo, nil, "")
 }
 
 // DeleteSignalsRequestedState is a utility method to delete mutable state of workflow execution
-func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, condition int64,
 	deleteSignalsRequestedID string) error {
-	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, deleteSignalsRequestedID)
 }
 
 // UpdateWorklowStateAndReplication is a utility method to update workflow execution
-func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *p.WorkflowExecutionInfo,
+func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories,
 	updatedReplicationState *p.ReplicationState, newBufferedReplicationTask *p.BufferedReplicationTask,
 	deleteBufferedReplicationTask *int64, condition int64, txTasks []p.Task) error {
-	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedReplicationState, nil, nil,
+	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedReplicationState, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "",
 		newBufferedReplicationTask, deleteBufferedReplicationTask)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
-func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExecutionInfo, decisionScheduleIDs []int64,
+func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []p.Task,
 	upsertActivityInfos []*p.ActivityInfo, deleteActivityInfos []int64, upsertTimerInfos []*p.TimerInfo,
 	deleteTimerInfos []string, upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64,
 	upsertCancelInfos []*p.RequestCancelInfo, deleteCancelInfo *int64,
 	upsertSignalInfos []*p.SignalInfo, deleteSignalInfo *int64,
 	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
-	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, nil, decisionScheduleIDs, activityScheduleIDs, rangeID,
+	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, nil, versionHistories, decisionScheduleIDs, activityScheduleIDs, rangeID,
 		condition, timerTasks, []p.Task{}, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
 		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
 		upsertSignalRequestedIDs, deleteSignalRequestedID, nil, nil)
@@ -654,7 +655,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExe
 
 // UpdateWorkflowExecutionWithReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.WorkflowExecutionInfo,
-	updatedReplicationState *p.ReplicationState, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
+	updatedReplicationState *p.ReplicationState, versionHistories *p.VersionHistories, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []p.Task, txTasks []p.Task, upsertActivityInfos []*p.ActivityInfo,
 	deleteActivityInfos []int64, upsertTimerInfos []*p.TimerInfo, deleteTimerInfos []string,
 	upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*p.RequestCancelInfo,
@@ -688,12 +689,12 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			TaskList:   updatedInfo.TaskList,
 			ScheduleID: int64(activityScheduleID)})
 	}
-
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:                 updatedInfo,
 		ReplicationState:              updatedReplicationState,
 		TransferTasks:                 transferTasks,
 		ReplicationTasks:              replicationTasks,
+		VersionHistories:              versionHistories,
 		TimerTasks:                    timerTasks,
 		Condition:                     condition,
 		RangeID:                       rangeID,

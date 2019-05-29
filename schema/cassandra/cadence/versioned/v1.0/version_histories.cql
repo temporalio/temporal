@@ -1,0 +1,1 @@
+ALTER TABLE executions ADD version_histories blob;

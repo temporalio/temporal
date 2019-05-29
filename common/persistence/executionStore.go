@@ -21,6 +21,7 @@
 package persistence
 
 import (
+	"fmt"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -72,7 +73,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(request *GetWorkflowExecutio
 		},
 	}
 
-	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivitInfos)
+	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivityInfos)
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +93,13 @@ func (m *executionManagerImpl) GetWorkflowExecution(request *GetWorkflowExecutio
 	if err != nil {
 		return nil, err
 	}
-
+	versionHistories, err := m.DeserializeVersionHistories(response.State.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	newResponse.State.VersionHistories = versionHistories
 	newResponse.MutableStateStats = m.statsComputer.computeMutableStateStats(response)
+
 	return newResponse, nil
 }
 
@@ -298,7 +304,18 @@ func (m *executionManagerImpl) DeserializeActivityInfos(infos map[int64]*Interna
 	return newInfos, nil
 }
 
+func (m *executionManagerImpl) DeserializeVersionHistories(blob *DataBlob) (*VersionHistories, error) {
+	tVersionHistoroes, err := m.serializer.DeserializeVersionHistories(blob)
+	if err != nil {
+		return nil, err
+	}
+	return NewVersionHistoriesFromThrift(tVersionHistoroes), nil
+}
+
 func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
+	if err := m.ValidateUpdateWorkflowExecutionRequest(request); err != nil {
+		return nil, err
+	}
 	executionInfo, err := m.SerializeExecutionInfo(request.ExecutionInfo, request.Encoding)
 	if err != nil {
 		return nil, err
@@ -322,8 +339,11 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	if err != nil {
 		return nil, err
 	}
-
 	continueAsNew, err := m.SerializeCreateWorkflowExecutionRequest(request.ContinueAsNew)
+	if err != nil {
+		return nil, err
+	}
+	versionHistories, err := m.SerializeVersionHistories(request.VersionHistories, request.Encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -336,6 +356,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		NewBufferedReplicationTask: newBufferedReplicationTask,
 
 		ReplicationState:              request.ReplicationState,
+		VersionHistories:              versionHistories,
 		TransferTasks:                 request.TransferTasks,
 		TimerTasks:                    request.TimerTasks,
 		ReplicationTasks:              request.ReplicationTasks,
@@ -358,6 +379,22 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	msuss := m.statsComputer.computeMutableStateUpdateStats(newRequest)
 	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
 	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1
+}
+
+func (m *executionManagerImpl) ValidateUpdateWorkflowExecutionRequest(request *UpdateWorkflowExecutionRequest) error {
+	if request.VersionHistories != nil && request.ReplicationState != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Update workflow with invalid request:" +
+				"replication state and version histories cannot both be set."),
+		}
+	}
+	if request.VersionHistories != nil && (request.ExecutionInfo.BranchToken != nil || request.ExecutionInfo.NextEventID != common.EmptyEventID) {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Update workflow with invalid request:" +
+				"version histories and branch token/next event id cannot both be set."),
+		}
+	}
+	return nil
 }
 
 func (m *executionManagerImpl) SerializeNewBufferedReplicationTask(task *BufferedReplicationTask, encoding common.EncodingType) (*InternalBufferedReplicationTask, error) {
@@ -543,7 +580,18 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 	}, nil
 }
 
+func (m *executionManagerImpl) SerializeVersionHistories(versionHistories *VersionHistories, encoding common.EncodingType) (*DataBlob, error) {
+	var tVersionHistories *workflow.VersionHistories
+	if versionHistories != nil {
+		tVersionHistories = versionHistories.ToThrift()
+	}
+	return m.serializer.SerializeVersionHistories(tVersionHistories, encoding)
+}
+
 func (m *executionManagerImpl) ResetMutableState(request *ResetMutableStateRequest) error {
+	if err := m.ValidateResetMutableStateRequest(request); err != nil {
+		return err
+	}
 	executionInfo, err := m.SerializeExecutionInfo(request.ExecutionInfo, request.Encoding)
 	if err != nil {
 		return err
@@ -556,11 +604,16 @@ func (m *executionManagerImpl) ResetMutableState(request *ResetMutableStateReque
 	if err != nil {
 		return err
 	}
+	versionHistories, err := m.SerializeVersionHistories(request.VersionHistories, request.Encoding)
+	if err != nil {
+		return err
+	}
 
 	newRequest := &InternalResetMutableStateRequest{
 		PrevRunID:                 request.PrevRunID,
 		ExecutionInfo:             executionInfo,
 		ReplicationState:          request.ReplicationState,
+		VersionHistories:          versionHistories,
 		Condition:                 request.Condition,
 		RangeID:                   request.RangeID,
 		InsertActivityInfos:       insertActivityInfos,
@@ -573,8 +626,26 @@ func (m *executionManagerImpl) ResetMutableState(request *ResetMutableStateReque
 	return m.persistence.ResetMutableState(newRequest)
 }
 
-func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error {
+func (m *executionManagerImpl) ValidateResetMutableStateRequest(request *ResetMutableStateRequest) error {
+	if request.VersionHistories != nil && request.ReplicationState != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Reset mutable state with invalid request:" +
+				"replication state and version histories cannot both be set."),
+		}
+	}
+	if request.VersionHistories != nil && (request.ExecutionInfo.BranchToken != nil || request.ExecutionInfo.NextEventID != common.EmptyEventID) {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Reset workflow with invalid request:" +
+				"version histories and branch token/next event id cannot both be set."),
+		}
+	}
+	return nil
+}
 
+func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error {
+	if err := m.ValidateResetWorkflowExecutionRequest(request); err != nil {
+		return err
+	}
 	currExecution, err := m.SerializeExecutionInfo(request.CurrExecutionInfo, request.Encoding)
 	if err != nil {
 		return err
@@ -589,6 +660,14 @@ func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExec
 		return err
 	}
 	insertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(request.InsertChildExecutionInfos, request.Encoding)
+	if err != nil {
+		return err
+	}
+	currVersionHistories, err := m.SerializeVersionHistories(request.CurrVersionHistories, request.Encoding)
+	if err != nil {
+		return err
+	}
+	insertVersionHistories, err := m.SerializeVersionHistories(request.InsertVersionHistories, request.Encoding)
 	if err != nil {
 		return err
 	}
@@ -609,6 +688,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExec
 		CurrReplicationTasks: request.CurrReplicationTasks,
 		CurrTimerTasks:       request.CurrTimerTasks,
 		CurrTransferTasks:    request.CurrTransferTasks,
+		CurrVersionHistories: currVersionHistories,
 
 		InsertExecutionInfo:       executionInfo,
 		InsertReplicationState:    request.InsertReplicationState,
@@ -621,11 +701,43 @@ func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExec
 		InsertRequestCancelInfos:  request.InsertRequestCancelInfos,
 		InsertSignalInfos:         request.InsertSignalInfos,
 		InsertSignalRequestedIDs:  request.InsertSignalRequestedIDs,
+		InsertVersionHistories:    insertVersionHistories,
 	}
 	return m.persistence.ResetWorkflowExecution(newRequest)
 }
 
+func (m *executionManagerImpl) ValidateResetWorkflowExecutionRequest(request *ResetWorkflowExecutionRequest) error {
+	if request.CurrVersionHistories != nil && request.CurrReplicationState != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Reset workflow execution with invalid request:" +
+				"current replication state and current version histories cannot both be set."),
+		}
+	}
+	if request.InsertVersionHistories != nil && request.InsertReplicationState != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Reset workflow execution with invalid request:" +
+				"insert replication state and insert version histories cannot both be set."),
+		}
+	}
+	if request.InsertVersionHistories != nil && (request.InsertExecutionInfo.NextEventID != common.EmptyEventID || request.InsertExecutionInfo.BranchToken != nil) {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Reset workflow execution with invalid request:" +
+				"insert version histories and insert eventID/branch token cannot both be set."),
+		}
+	}
+	if request.CurrVersionHistories != nil && (request.CurrExecutionInfo.NextEventID != common.EmptyEventID || request.CurrExecutionInfo.BranchToken != nil) {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Reset workflow execution with invalid request:" +
+				"current version histories and current eventID/branch token cannot both be set."),
+		}
+	}
+	return nil
+}
+
 func (m *executionManagerImpl) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
+	if err := m.ValidateCreateWorkflowExecutionRequest(request); err != nil {
+		return nil, err
+	}
 	intReq, err := m.SerializeCreateWorkflowExecutionRequest(request)
 	if err != nil {
 		return nil, err
@@ -633,11 +745,31 @@ func (m *executionManagerImpl) CreateWorkflowExecution(request *CreateWorkflowEx
 	return m.persistence.CreateWorkflowExecution(intReq)
 }
 
+func (m *executionManagerImpl) ValidateCreateWorkflowExecutionRequest(request *CreateWorkflowExecutionRequest) error {
+	if request.ReplicationState != nil && request.VersionHistories != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Create workflow with invalid request:" +
+				"replication state and version histories cannot both be set."),
+		}
+	}
+	if request.VersionHistories != nil && (request.BranchToken != nil || request.NextEventID != common.EmptyEventID) {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Create workflow with invalid request:" +
+				"version histories and branch token/next event id cannot both be set."),
+		}
+	}
+	return nil
+}
+
 func (m *executionManagerImpl) SerializeCreateWorkflowExecutionRequest(request *CreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionRequest, error) {
 	if request == nil {
 		return nil, nil
 	}
 	autoResetPointsBlob, err := m.serializer.SerializeResetPoints(request.PreviousAutoResetPoints, common.EncodingTypeThriftRW)
+	if err != nil {
+		return nil, err
+	}
+	versionHistories, err := m.SerializeVersionHistories(request.VersionHistories, common.EncodingTypeThriftRW)
 	if err != nil {
 		return nil, err
 	}
@@ -686,6 +818,7 @@ func (m *executionManagerImpl) SerializeCreateWorkflowExecutionRequest(request *
 		BranchToken:                 request.BranchToken,
 		CronSchedule:                request.CronSchedule,
 		ExpirationSeconds:           request.ExpirationSeconds,
+		VersionHistories:            versionHistories,
 		SearchAttributes:            request.SearchAttributes,
 	}, nil
 }

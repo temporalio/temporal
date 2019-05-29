@@ -492,7 +492,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	closeInfo.NextEventID = int64(5)
 	closeInfo.LastProcessedEvent = int64(2)
 
-	err2 := s.UpdateWorkflowExecution(closeInfo, nil, nil, nextEventID,
+	err2 := s.UpdateWorkflowExecution(closeInfo, nil, nil, nil, nextEventID,
 		nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
@@ -905,7 +905,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal := []byte("test")
 	updatedInfo.SearchAttributes = map[string][]byte{searchAttrKey: searchAttrVal}
 
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
 	state1, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -954,7 +954,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
 	failedUpdateInfo := copyWorkflowExecutionInfo(updatedInfo)
-	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
+	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, nil, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.Error(err4, "expected non nil error.")
 	s.IsType(&p.ConditionFailedError{}, err4)
 	log.Errorf("Conditional update failed with error: %v", err4)
@@ -998,7 +998,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
-	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, nil, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err5, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
@@ -1043,7 +1043,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
 	//update with incorrect rangeID and condition(next_event_id)
-	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, nil, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
 	log.Errorf("Conditional update failed with error: %v", err7)
@@ -1319,7 +1319,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, int64(3), nil, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, nil, []int64{int64(4)}, int64(3), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
 	tasks2, err1 := s.GetTransferTasks(1, false)
@@ -1618,7 +1618,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			ScheduledID: 99,
 		},
 	}
-	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
+	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, nil, int64(3), replicationTasks)
 	s.NoError(err)
 
 	respTasks, err := s.GetReplicationTasks(1, true)
@@ -1705,7 +1705,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 		&p.SignalExecutionTask{now, currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},
 		&p.StartChildExecutionTask{now, currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
 	}
-	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, nil, int64(3), tasks)
 	s.NoError(err2)
 
 	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
@@ -1802,7 +1802,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 		&p.SignalExecutionTask{now, currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},
 		&p.StartChildExecutionTask{now, currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
 	}
-	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, nil, int64(3), tasks)
 	s.NoError(err2)
 
 	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
@@ -1862,7 +1862,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 		&p.ActivityTimeoutTask{now.Add(3 * time.Second), 4, int(gen.TimeoutTypeStartToClose), 7, 0, 14},
 		&p.UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
 	}
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
 	s.NoError(err2)
 
 	timerTasks, err1 := s.GetTimerIndexTasks(1, true) // use page size one to force pagination
@@ -1915,7 +1915,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 		&p.ActivityTimeoutTask{time.Now(), 4, int(gen.TimeoutTypeStartToClose), 7, 0, 14},
 		&p.UserTimerTask{time.Now(), 5, 7, 15},
 	}
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
 	s.NoError(err2)
 
 	timerTasks, err1 := s.GetTimerIndexTasks(1, true) // use page size one to force pagination
@@ -1933,7 +1933,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	s.Equal(int64(14), timerTasks[3].Version)
 	s.Equal(int64(15), timerTasks[4].Version)
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, nil, nil)
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, nil, int64(5), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
 	err2 = s.CompleteTimerTask(timerTasks[0].VisibilityTimestamp, timerTasks[0].TaskID)
@@ -2009,7 +2009,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		ExpirationTime:           currentTime,
 		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
 	}}
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2051,7 +2051,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.EqualTimes(activityInfos[0].ExpirationTime, ai.ExpirationTime)
 	s.Equal(activityInfos[0].NonRetriableErrors, ai.NonRetriableErrors)
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, []int64{1}, nil, nil)
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, nil, int64(5), nil, nil, []int64{1}, nil, nil)
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2089,7 +2089,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 		TaskID:     2,
 		StartedID:  5,
 	}}
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2102,7 +2102,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2150,7 +2150,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 		StartedEvent:    &gen.HistoryEvent{EventId: int64Ptr(2)},
 		CreateRequestID: createRequestID,
 	}}
-	err2 := s.UpsertChildExecutionsState(updatedInfo, int64(3), childExecutionInfos)
+	err2 := s.UpsertChildExecutionsState(updatedInfo, nil, int64(3), childExecutionInfos)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2167,7 +2167,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	s.Equal(int64(2), *ci.StartedEvent.EventId)
 	s.Equal(createRequestID, ci.CreateRequestID)
 
-	err2 = s.DeleteChildExecutionsState(updatedInfo, int64(5), int64(1))
+	err2 = s.DeleteChildExecutionsState(updatedInfo, nil, int64(5), int64(1))
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2202,7 +2202,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 		InitiatedID:     1,
 		CancelRequestID: cancelRequestID,
 	}}
-	err2 := s.UpsertRequestCancelState(updatedInfo, int64(3), requestCancelInfos)
+	err2 := s.UpsertRequestCancelState(updatedInfo, nil, int64(3), requestCancelInfos)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2216,7 +2216,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 	s.Equal(int64(1), ri.InitiatedID)
 	s.Equal(cancelRequestID, ri.CancelRequestID)
 
-	err2 = s.DeleteCancelState(updatedInfo, int64(5), int64(1))
+	err2 = s.DeleteCancelState(updatedInfo, nil, int64(5), int64(1))
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2259,7 +2259,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 			Input:           input,
 			Control:         control,
 		}}
-	err2 := s.UpsertSignalInfoState(updatedInfo, int64(3), signalInfos)
+	err2 := s.UpsertSignalInfoState(updatedInfo, nil, int64(3), signalInfos)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2276,7 +2276,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 	s.Equal(input, ri.Input)
 	s.Equal(control, ri.Control)
 
-	err2 = s.DeleteSignalState(updatedInfo, int64(5), int64(1))
+	err2 = s.DeleteSignalState(updatedInfo, nil, int64(5), int64(1))
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2308,7 +2308,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	signalRequestedID := uuid.New()
 	signalsRequested := []string{signalRequestedID}
-	err2 := s.UpsertSignalsRequestedState(updatedInfo, int64(3), signalsRequested)
+	err2 := s.UpsertSignalsRequestedState(updatedInfo, nil, int64(3), signalsRequested)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2319,7 +2319,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	s.True(ok)
 	s.NotNil(ri)
 
-	err2 = s.DeleteSignalsRequestedState(updatedInfo, int64(5), signalRequestedID)
+	err2 = s.DeleteSignalsRequestedState(updatedInfo, nil, int64(5), signalRequestedID)
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2374,7 +2374,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 		Version:      int64(11),
 		History:      events,
 	}
-	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, bufferedTask, nil, int64(3), nil)
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, bufferedTask, nil, int64(3), nil)
 	s.NoError(err2)
 
 	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2458,7 +2458,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 		History:       completionEvents,
 		NewRunHistory: newRunEvents,
 	}
-	err3 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, bufferedTask, nil, int64(3), nil)
+	err3 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, bufferedTask, nil, int64(3), nil)
 	s.NoError(err3)
 
 	state2, err4 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2504,7 +2504,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 	s.Equal(int64(1), bufferedNewRunEvents[1].DecisionTaskScheduledEventAttributes.GetAttempt())
 
 	deleteBufferedReplicationTask := int64(5)
-	err5 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, &deleteBufferedReplicationTask, int64(3), nil)
+	err5 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, &deleteBufferedReplicationTask, int64(3), nil)
 	s.NoError(err5)
 
 	state3, err6 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2513,7 +2513,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 	s.Equal(1, len(state3.BufferedReplicationTasks))
 
 	deleteBufferedReplicationTask2 := int64(10)
-	err7 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, &deleteBufferedReplicationTask2, int64(3), nil)
+	err7 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, &deleteBufferedReplicationTask2, int64(3), nil)
 	s.NoError(err7)
 
 	state4, err8 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2543,7 +2543,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateInfo() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2658,7 +2658,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 			},
 		},
 	}}
-	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
+	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, nil, int64(3), replicationTasks)
 	s.NoError(err)
 
 	tasks1, err := s.GetReplicationTasks(1, false)
@@ -2831,7 +2831,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 			},
 		},
 	}}
-	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedReplicationState, nil, nil, int64(3), replicationTasks1)
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, updatedReplicationState, nil, nil, int64(3), replicationTasks1)
 	s.NoError(err2)
 
 	taskR1, err := s.GetReplicationTasks(1, false)
@@ -2974,9 +2974,9 @@ func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 	s.NotNil(partialInfo, "Valid Workflow info expected.")
 
 	bufferUpdateInfo := copyWorkflowExecutionInfo(partialInfo)
-	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
-	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
 	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1, false)
 	s.NoError(err2)
@@ -3192,9 +3192,9 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(partialInfo, "Valid Workflow info expected.")
 
 	bufferUpdateInfo := copyWorkflowExecutionInfo(partialInfo)
-	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
-	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
 	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1, false)
 	s.NoError(err2)

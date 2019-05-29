@@ -30,7 +30,7 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 
 	activityInfoCount := 0
 	activityInfoSize := 0
-	for _, ai := range req.State.ActivitInfos {
+	for _, ai := range req.State.ActivityInfos {
 		activityInfoCount++
 		activityInfoSize += computeActivityInfoSize(ai)
 	}

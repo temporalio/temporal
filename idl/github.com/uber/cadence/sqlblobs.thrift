@@ -121,7 +121,9 @@ struct WorkflowExecutionInfo {
   114: optional string clientImpl
   115: optional binary autoResetPoints
   116: optional string autoResetPointsEncoding
-  118: optional map<string, binary> searchAttributes
+  118: optional binary versionHistories
+  120: optional string versionHistoriesEncoding
+  122: optional map<string, binary> searchAttributes
 }
 
 struct ActivityInfo {

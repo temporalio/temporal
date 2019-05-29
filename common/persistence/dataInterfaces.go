@@ -540,6 +540,24 @@ type (
 		LastEventID int64
 	}
 
+	// VersionHistoryItem contains the event id and the associated version
+	VersionHistoryItem struct {
+		EventID int64
+		Version int64
+	}
+
+	// VersionHistory provides operations on version history
+	VersionHistory struct {
+		BranchToken []byte
+		History     []VersionHistoryItem
+	}
+
+	// VersionHistories contains a set of VersionHistory
+	VersionHistories struct {
+		CurrentBranch int32
+		Histories     []VersionHistory
+	}
+
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
 		ActivityInfos            map[int64]*ActivityInfo
@@ -552,6 +570,7 @@ type (
 		ReplicationState         *ReplicationState
 		BufferedEvents           []*workflow.HistoryEvent
 		BufferedReplicationTasks map[int64]*BufferedReplicationTask
+		VersionHistories         *VersionHistories
 	}
 
 	// ActivityInfo details.
@@ -705,6 +724,7 @@ type (
 		MaximumAttempts             int32
 		NonRetriableErrors          []string
 		PreviousAutoResetPoints     *workflow.ResetPoints
+		VersionHistories            *VersionHistories
 		// 2 means using eventsV2, empty/0/1 means using events(V1)
 		EventStoreVersion int32
 		// for eventsV2: branchToken from historyPersistence
@@ -749,6 +769,7 @@ type (
 	UpdateWorkflowExecutionRequest struct {
 		ExecutionInfo    *WorkflowExecutionInfo
 		ReplicationState *ReplicationState
+		VersionHistories *VersionHistories
 		TransferTasks    []Task
 		TimerTasks       []Task
 		ReplicationTasks []Task
@@ -781,6 +802,7 @@ type (
 		PrevRunID        string
 		ExecutionInfo    *WorkflowExecutionInfo
 		ReplicationState *ReplicationState
+		VersionHistories *VersionHistories
 		Condition        int64
 		RangeID          int64
 
@@ -812,6 +834,7 @@ type (
 		UpdateCurr           bool
 		CurrExecutionInfo    *WorkflowExecutionInfo
 		CurrReplicationState *ReplicationState
+		CurrVersionHistories *VersionHistories
 		CurrReplicationTasks []Task
 		CurrTransferTasks    []Task
 		CurrTimerTasks       []Task
@@ -819,6 +842,7 @@ type (
 		// For new mutable state
 		InsertExecutionInfo       *WorkflowExecutionInfo
 		InsertReplicationState    *ReplicationState
+		InsertVersionHistories    *VersionHistories
 		InsertTransferTasks       []Task
 		InsertTimerTasks          []Task
 		InsertReplicationTasks    []Task

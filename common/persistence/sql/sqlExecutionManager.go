@@ -292,10 +292,14 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		state.ExecutionInfo.AutoResetPoints = p.NewDataBlob(info.AutoResetPoints,
 			common.EncodingType(info.GetAutoResetPointsEncoding()))
 	}
+	if info.GetVersionHistories() != nil {
+		state.VersionHistories = p.NewDataBlob(info.GetVersionHistories(),
+			common.EncodingType(info.GetVersionHistoriesEncoding()))
+	}
 
 	{
 		var err error
-		state.ActivitInfos, err = getActivityInfoMap(m.db,
+		state.ActivityInfos, err = getActivityInfoMap(m.db,
 			m.shardID,
 			domainID,
 			wfID,
@@ -477,7 +481,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 		}
 	}
 
-	if err := updateExecution(tx, executionInfo, request.ReplicationState, shardID); err != nil {
+	if err := updateExecution(tx, executionInfo, request.ReplicationState, request.VersionHistories, shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 		}
@@ -745,7 +749,7 @@ func (m *sqlExecutionManager) ResetWorkflowExecution(request *p.InternalResetWor
 				}
 			}
 
-			if err := updateExecution(tx, currExecutionInfo, currReplicationState, shardID); err != nil {
+			if err := updateExecution(tx, currExecutionInfo, currReplicationState, request.CurrVersionHistories, shardID); err != nil {
 				return &workflow.InternalServiceError{
 					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 				}
@@ -778,7 +782,7 @@ func (m *sqlExecutionManager) ResetWorkflowExecution(request *p.InternalResetWor
 				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create replication tasks. Error: %v", err),
 			}
 		}
-		if err := createExecution(tx, insertExecutionInfo, insertReplicationState, shardID); err != nil {
+		if err := createExecution(tx, insertExecutionInfo, insertReplicationState, request.InsertVersionHistories, shardID); err != nil {
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create executions row. Erorr: %v", err),
 			}
@@ -934,7 +938,7 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx sqldb.Tx, request *p.Intern
 		}
 	}
 
-	if err := updateExecution(tx, info, request.ReplicationState, m.shardID); err != nil {
+	if err := updateExecution(tx, info, request.ReplicationState, request.VersionHistories, m.shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 		}
@@ -1438,6 +1442,12 @@ func createExecutionFromRequest(
 	emptyStr := ""
 	zeroPtr := common.Int64Ptr(0)
 	lastWriteVersion := common.EmptyVersion
+	var versionHistoriesData []byte
+	var versionHistoriesEncoding *string
+	if request.VersionHistories != nil {
+		versionHistoriesData = request.VersionHistories.Data
+		versionHistoriesEncoding = common.StringPtr(string(request.VersionHistories.GetEncoding()))
+	}
 	info := &sqlblobs.WorkflowExecutionInfo{
 		TaskList:                        &request.TaskList,
 		WorkflowTypeName:                &request.WorkflowTypeName,
@@ -1478,6 +1488,8 @@ func createExecutionFromRequest(
 		ExecutionContext:                request.ExecutionContext,
 		AutoResetPoints:                 request.PreviousAutoResetPoints.Data,
 		AutoResetPointsEncoding:         common.StringPtr(string(request.PreviousAutoResetPoints.GetEncoding())),
+		VersionHistories:                versionHistoriesData,
+		VersionHistoriesEncoding:        versionHistoriesEncoding,
 		SearchAttributes:                request.SearchAttributes,
 	}
 	if request.ReplicationState != nil {
@@ -1931,6 +1943,7 @@ func updateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workf
 
 func buildExecutionRow(executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
+	versionHistories *p.DataBlob,
 	shardID int) (row *sqldb.ExecutionsRow, err error) {
 	lastWriteVersion := common.EmptyVersion
 	info := &sqlblobs.WorkflowExecutionInfo{
@@ -1995,6 +2008,10 @@ func buildExecutionRow(executionInfo *p.InternalWorkflowExecutionInfo,
 			info.LastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
 		}
 	}
+	if versionHistories != nil {
+		info.VersionHistories = versionHistories.Data
+		info.VersionHistoriesEncoding = common.StringPtr(string(versionHistories.GetEncoding()))
+	}
 
 	if executionInfo.ParentDomainID != "" {
 		info.ParentDomainID = sqldb.MustParseUUID(executionInfo.ParentDomainID)
@@ -2029,8 +2046,9 @@ func buildExecutionRow(executionInfo *p.InternalWorkflowExecutionInfo,
 func updateExecution(tx sqldb.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
+	versionHistories *p.DataBlob,
 	shardID int) error {
-	row, err := buildExecutionRow(executionInfo, replicationState, shardID)
+	row, err := buildExecutionRow(executionInfo, replicationState, versionHistories, shardID)
 	if err != nil {
 		return err
 	}
@@ -2058,8 +2076,9 @@ func updateExecution(tx sqldb.Tx,
 func createExecution(tx sqldb.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
+	versionHistories *p.DataBlob,
 	shardID int) error {
-	row, err := buildExecutionRow(executionInfo, replicationState, shardID)
+	row, err := buildExecutionRow(executionInfo, replicationState, versionHistories, shardID)
 	if err != nil {
 		return err
 	}

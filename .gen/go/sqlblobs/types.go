@@ -7345,6 +7345,8 @@ type WorkflowExecutionInfo struct {
 	ClientImpl                      *string                     `json:"clientImpl,omitempty"`
 	AutoResetPoints                 []byte                      `json:"autoResetPoints,omitempty"`
 	AutoResetPointsEncoding         *string                     `json:"autoResetPointsEncoding,omitempty"`
+	VersionHistories                []byte                      `json:"versionHistories,omitempty"`
+	VersionHistoriesEncoding        *string                     `json:"versionHistoriesEncoding,omitempty"`
 	SearchAttributes                map[string][]byte           `json:"searchAttributes,omitempty"`
 }
 
@@ -7403,7 +7405,7 @@ func (_Map_String_Binary_MapItemList) Close() {}
 //   }
 func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [56]wire.Field
+		fields [58]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7849,12 +7851,28 @@ func (v *WorkflowExecutionInfo) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 116, Value: w}
 		i++
 	}
+	if v.VersionHistories != nil {
+		w, err = wire.NewValueBinary(v.VersionHistories), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 118, Value: w}
+		i++
+	}
+	if v.VersionHistoriesEncoding != nil {
+		w, err = wire.NewValueString(*(v.VersionHistoriesEncoding)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
 	if v.SearchAttributes != nil {
 		w, err = wire.NewValueMap(_Map_String_Binary_MapItemList(v.SearchAttributes)), error(nil)
 		if err != nil {
 			return w, err
 		}
-		fields[i] = wire.Field{ID: 118, Value: w}
+		fields[i] = wire.Field{ID: 122, Value: w}
 		i++
 	}
 
@@ -8446,6 +8464,24 @@ func (v *WorkflowExecutionInfo) FromWire(w wire.Value) error {
 
 			}
 		case 118:
+			if field.Value.Type() == wire.TBinary {
+				v.VersionHistories, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 120:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.VersionHistoriesEncoding = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 122:
 			if field.Value.Type() == wire.TMap {
 				v.SearchAttributes, err = _Map_String_Binary_Read(field.Value.GetMap())
 				if err != nil {
@@ -8466,7 +8502,7 @@ func (v *WorkflowExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [56]string
+	var fields [58]string
 	i := 0
 	if v.ParentDomainID != nil {
 		fields[i] = fmt.Sprintf("ParentDomainID: %v", v.ParentDomainID)
@@ -8688,6 +8724,14 @@ func (v *WorkflowExecutionInfo) String() string {
 		fields[i] = fmt.Sprintf("AutoResetPointsEncoding: %v", *(v.AutoResetPointsEncoding))
 		i++
 	}
+	if v.VersionHistories != nil {
+		fields[i] = fmt.Sprintf("VersionHistories: %v", v.VersionHistories)
+		i++
+	}
+	if v.VersionHistoriesEncoding != nil {
+		fields[i] = fmt.Sprintf("VersionHistoriesEncoding: %v", *(v.VersionHistoriesEncoding))
+		i++
+	}
 	if v.SearchAttributes != nil {
 		fields[i] = fmt.Sprintf("SearchAttributes: %v", v.SearchAttributes)
 		i++
@@ -8888,6 +8932,12 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	if !_String_EqualsPtr(v.AutoResetPointsEncoding, rhs.AutoResetPointsEncoding) {
 		return false
 	}
+	if !((v.VersionHistories == nil && rhs.VersionHistories == nil) || (v.VersionHistories != nil && rhs.VersionHistories != nil && bytes.Equal(v.VersionHistories, rhs.VersionHistories))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.VersionHistoriesEncoding, rhs.VersionHistoriesEncoding) {
+		return false
+	}
 	if !((v.SearchAttributes == nil && rhs.SearchAttributes == nil) || (v.SearchAttributes != nil && rhs.SearchAttributes != nil && _Map_String_Binary_Equals(v.SearchAttributes, rhs.SearchAttributes))) {
 		return false
 	}
@@ -9076,6 +9126,12 @@ func (v *WorkflowExecutionInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.AutoResetPointsEncoding != nil {
 		enc.AddString("autoResetPointsEncoding", *v.AutoResetPointsEncoding)
+	}
+	if v.VersionHistories != nil {
+		enc.AddString("versionHistories", base64.StdEncoding.EncodeToString(v.VersionHistories))
+	}
+	if v.VersionHistoriesEncoding != nil {
+		enc.AddString("versionHistoriesEncoding", *v.VersionHistoriesEncoding)
 	}
 	if v.SearchAttributes != nil {
 		err = multierr.Append(err, enc.AddObject("searchAttributes", (_Map_String_Binary_Zapper)(v.SearchAttributes)))
@@ -9906,6 +9962,36 @@ func (v *WorkflowExecutionInfo) GetAutoResetPointsEncoding() (o string) {
 // IsSetAutoResetPointsEncoding returns true if AutoResetPointsEncoding is not nil.
 func (v *WorkflowExecutionInfo) IsSetAutoResetPointsEncoding() bool {
 	return v != nil && v.AutoResetPointsEncoding != nil
+}
+
+// GetVersionHistories returns the value of VersionHistories if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetVersionHistories() (o []byte) {
+	if v != nil && v.VersionHistories != nil {
+		return v.VersionHistories
+	}
+
+	return
+}
+
+// IsSetVersionHistories returns true if VersionHistories is not nil.
+func (v *WorkflowExecutionInfo) IsSetVersionHistories() bool {
+	return v != nil && v.VersionHistories != nil
+}
+
+// GetVersionHistoriesEncoding returns the value of VersionHistoriesEncoding if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionInfo) GetVersionHistoriesEncoding() (o string) {
+	if v != nil && v.VersionHistoriesEncoding != nil {
+		return *v.VersionHistoriesEncoding
+	}
+
+	return
+}
+
+// IsSetVersionHistoriesEncoding returns true if VersionHistoriesEncoding is not nil.
+func (v *WorkflowExecutionInfo) IsSetVersionHistoriesEncoding() bool {
+	return v != nil && v.VersionHistoriesEncoding != nil
 }
 
 // GetSearchAttributes returns the value of SearchAttributes if it is set or its

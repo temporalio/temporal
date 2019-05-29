@@ -46630,6 +46630,704 @@ func (v *UpdateDomainResponse) IsSetIsGlobalDomain() bool {
 	return v != nil && v.IsGlobalDomain != nil
 }
 
+type VersionHistories struct {
+	CurrentBranch *int32            `json:"currentBranch,omitempty"`
+	Histories     []*VersionHistory `json:"histories,omitempty"`
+}
+
+type _List_VersionHistory_ValueList []*VersionHistory
+
+func (v _List_VersionHistory_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_VersionHistory_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_VersionHistory_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_VersionHistory_ValueList) Close() {}
+
+// ToWire translates a VersionHistories struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *VersionHistories) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.CurrentBranch != nil {
+		w, err = wire.NewValueI32(*(v.CurrentBranch)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Histories != nil {
+		w, err = wire.NewValueList(_List_VersionHistory_ValueList(v.Histories)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _VersionHistory_Read(w wire.Value) (*VersionHistory, error) {
+	var v VersionHistory
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_VersionHistory_Read(l wire.ValueList) ([]*VersionHistory, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*VersionHistory, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _VersionHistory_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a VersionHistories struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a VersionHistories struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v VersionHistories
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *VersionHistories) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.CurrentBranch = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TList {
+				v.Histories, err = _List_VersionHistory_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a VersionHistories
+// struct.
+func (v *VersionHistories) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.CurrentBranch != nil {
+		fields[i] = fmt.Sprintf("CurrentBranch: %v", *(v.CurrentBranch))
+		i++
+	}
+	if v.Histories != nil {
+		fields[i] = fmt.Sprintf("Histories: %v", v.Histories)
+		i++
+	}
+
+	return fmt.Sprintf("VersionHistories{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_VersionHistory_Equals(lhs, rhs []*VersionHistory) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this VersionHistories match the
+// provided VersionHistories.
+//
+// This function performs a deep comparison.
+func (v *VersionHistories) Equals(rhs *VersionHistories) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_I32_EqualsPtr(v.CurrentBranch, rhs.CurrentBranch) {
+		return false
+	}
+	if !((v.Histories == nil && rhs.Histories == nil) || (v.Histories != nil && rhs.Histories != nil && _List_VersionHistory_Equals(v.Histories, rhs.Histories))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_VersionHistory_Zapper []*VersionHistory
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_VersionHistory_Zapper.
+func (l _List_VersionHistory_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of VersionHistories.
+func (v *VersionHistories) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.CurrentBranch != nil {
+		enc.AddInt32("currentBranch", *v.CurrentBranch)
+	}
+	if v.Histories != nil {
+		err = multierr.Append(err, enc.AddArray("histories", (_List_VersionHistory_Zapper)(v.Histories)))
+	}
+	return err
+}
+
+// GetCurrentBranch returns the value of CurrentBranch if it is set or its
+// zero value if it is unset.
+func (v *VersionHistories) GetCurrentBranch() (o int32) {
+	if v != nil && v.CurrentBranch != nil {
+		return *v.CurrentBranch
+	}
+
+	return
+}
+
+// IsSetCurrentBranch returns true if CurrentBranch is not nil.
+func (v *VersionHistories) IsSetCurrentBranch() bool {
+	return v != nil && v.CurrentBranch != nil
+}
+
+// GetHistories returns the value of Histories if it is set or its
+// zero value if it is unset.
+func (v *VersionHistories) GetHistories() (o []*VersionHistory) {
+	if v != nil && v.Histories != nil {
+		return v.Histories
+	}
+
+	return
+}
+
+// IsSetHistories returns true if Histories is not nil.
+func (v *VersionHistories) IsSetHistories() bool {
+	return v != nil && v.Histories != nil
+}
+
+type VersionHistory struct {
+	BranchToken []byte                `json:"branchToken,omitempty"`
+	History     []*VersionHistoryItem `json:"history,omitempty"`
+}
+
+type _List_VersionHistoryItem_ValueList []*VersionHistoryItem
+
+func (v _List_VersionHistoryItem_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_VersionHistoryItem_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_VersionHistoryItem_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_VersionHistoryItem_ValueList) Close() {}
+
+// ToWire translates a VersionHistory struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *VersionHistory) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.BranchToken != nil {
+		w, err = wire.NewValueBinary(v.BranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.History != nil {
+		w, err = wire.NewValueList(_List_VersionHistoryItem_ValueList(v.History)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _VersionHistoryItem_Read(w wire.Value) (*VersionHistoryItem, error) {
+	var v VersionHistoryItem
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_VersionHistoryItem_Read(l wire.ValueList) ([]*VersionHistoryItem, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*VersionHistoryItem, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _VersionHistoryItem_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a VersionHistory struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a VersionHistory struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v VersionHistory
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *VersionHistory) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				v.BranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TList {
+				v.History, err = _List_VersionHistoryItem_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a VersionHistory
+// struct.
+func (v *VersionHistory) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.BranchToken != nil {
+		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
+		i++
+	}
+	if v.History != nil {
+		fields[i] = fmt.Sprintf("History: %v", v.History)
+		i++
+	}
+
+	return fmt.Sprintf("VersionHistory{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_VersionHistoryItem_Equals(lhs, rhs []*VersionHistoryItem) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this VersionHistory match the
+// provided VersionHistory.
+//
+// This function performs a deep comparison.
+func (v *VersionHistory) Equals(rhs *VersionHistory) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
+		return false
+	}
+	if !((v.History == nil && rhs.History == nil) || (v.History != nil && rhs.History != nil && _List_VersionHistoryItem_Equals(v.History, rhs.History))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_VersionHistoryItem_Zapper []*VersionHistoryItem
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_VersionHistoryItem_Zapper.
+func (l _List_VersionHistoryItem_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of VersionHistory.
+func (v *VersionHistory) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.BranchToken != nil {
+		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
+	}
+	if v.History != nil {
+		err = multierr.Append(err, enc.AddArray("history", (_List_VersionHistoryItem_Zapper)(v.History)))
+	}
+	return err
+}
+
+// GetBranchToken returns the value of BranchToken if it is set or its
+// zero value if it is unset.
+func (v *VersionHistory) GetBranchToken() (o []byte) {
+	if v != nil && v.BranchToken != nil {
+		return v.BranchToken
+	}
+
+	return
+}
+
+// IsSetBranchToken returns true if BranchToken is not nil.
+func (v *VersionHistory) IsSetBranchToken() bool {
+	return v != nil && v.BranchToken != nil
+}
+
+// GetHistory returns the value of History if it is set or its
+// zero value if it is unset.
+func (v *VersionHistory) GetHistory() (o []*VersionHistoryItem) {
+	if v != nil && v.History != nil {
+		return v.History
+	}
+
+	return
+}
+
+// IsSetHistory returns true if History is not nil.
+func (v *VersionHistory) IsSetHistory() bool {
+	return v != nil && v.History != nil
+}
+
+type VersionHistoryItem struct {
+	EventID *int64 `json:"eventID,omitempty"`
+	Version *int64 `json:"version,omitempty"`
+}
+
+// ToWire translates a VersionHistoryItem struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *VersionHistoryItem) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.EventID != nil {
+		w, err = wire.NewValueI64(*(v.EventID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Version != nil {
+		w, err = wire.NewValueI64(*(v.Version)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a VersionHistoryItem struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a VersionHistoryItem struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v VersionHistoryItem
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *VersionHistoryItem) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.EventID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Version = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a VersionHistoryItem
+// struct.
+func (v *VersionHistoryItem) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.EventID != nil {
+		fields[i] = fmt.Sprintf("EventID: %v", *(v.EventID))
+		i++
+	}
+	if v.Version != nil {
+		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
+		i++
+	}
+
+	return fmt.Sprintf("VersionHistoryItem{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this VersionHistoryItem match the
+// provided VersionHistoryItem.
+//
+// This function performs a deep comparison.
+func (v *VersionHistoryItem) Equals(rhs *VersionHistoryItem) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_I64_EqualsPtr(v.EventID, rhs.EventID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Version, rhs.Version) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of VersionHistoryItem.
+func (v *VersionHistoryItem) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.EventID != nil {
+		enc.AddInt64("eventID", *v.EventID)
+	}
+	if v.Version != nil {
+		enc.AddInt64("version", *v.Version)
+	}
+	return err
+}
+
+// GetEventID returns the value of EventID if it is set or its
+// zero value if it is unset.
+func (v *VersionHistoryItem) GetEventID() (o int64) {
+	if v != nil && v.EventID != nil {
+		return *v.EventID
+	}
+
+	return
+}
+
+// IsSetEventID returns true if EventID is not nil.
+func (v *VersionHistoryItem) IsSetEventID() bool {
+	return v != nil && v.EventID != nil
+}
+
+// GetVersion returns the value of Version if it is set or its
+// zero value if it is unset.
+func (v *VersionHistoryItem) GetVersion() (o int64) {
+	if v != nil && v.Version != nil {
+		return *v.Version
+	}
+
+	return
+}
+
+// IsSetVersion returns true if Version is not nil.
+func (v *VersionHistoryItem) IsSetVersion() bool {
+	return v != nil && v.Version != nil
+}
+
 type WorkflowExecution struct {
 	WorkflowId *string `json:"workflowId,omitempty"`
 	RunId      *string `json:"runId,omitempty"`
