@@ -1250,6 +1250,9 @@ func (h *Handler) convertError(err error) error {
 	case *persistence.CurrentWorkflowConditionFailedError:
 		err := err.(*persistence.CurrentWorkflowConditionFailedError)
 		return &gen.InternalServiceError{Message: err.Msg}
+	case *persistence.TransactionSizeLimitError:
+		err := err.(*persistence.TransactionSizeLimitError)
+		return &gen.BadRequestError{Message: err.Msg}
 	}
 
 	return err

@@ -27,15 +27,17 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
 
 	// historyManagerImpl implements HistoryManager based on HistoryStore and PayloadSerializer
 	historyManagerImpl struct {
-		serializer  PayloadSerializer
-		persistence HistoryStore
-		logger      log.Logger
+		serializer           PayloadSerializer
+		persistence          HistoryStore
+		logger               log.Logger
+		transactionSizeLimit dynamicconfig.IntPropertyFn
 	}
 
 	// historyToken is used to serialize/deserialize pagination token for GetWorkflowExecutionHistory
@@ -49,11 +51,12 @@ type (
 var _ HistoryManager = (*historyManagerImpl)(nil)
 
 //NewHistoryManagerImpl returns new HistoryManager
-func NewHistoryManagerImpl(persistence HistoryStore, logger log.Logger) HistoryManager {
+func NewHistoryManagerImpl(persistence HistoryStore, logger log.Logger, transactionSizeLimit dynamicconfig.IntPropertyFn) HistoryManager {
 	return &historyManagerImpl{
-		serializer:  NewPayloadSerializer(),
-		persistence: persistence,
-		logger:      logger,
+		serializer:           NewPayloadSerializer(),
+		persistence:          persistence,
+		logger:               logger,
+		transactionSizeLimit: transactionSizeLimit,
 	}
 }
 
@@ -70,6 +73,13 @@ func (m *historyManagerImpl) AppendHistoryEvents(request *AppendHistoryEventsReq
 		return nil, err
 	}
 
+	size := len(eventsData.Data)
+	sizeLimit := m.transactionSizeLimit()
+	if size > sizeLimit {
+		return nil, &TransactionSizeLimitError{
+			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
+		}
+	}
 	resp := &AppendHistoryEventsResponse{Size: len(eventsData.Data)}
 	return resp, m.persistence.AppendHistoryEvents(
 		&InternalAppendHistoryEventsRequest{

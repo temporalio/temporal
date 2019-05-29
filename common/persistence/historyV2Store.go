@@ -23,13 +23,13 @@ package persistence
 import (
 	"fmt"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/codec"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -41,19 +41,21 @@ type (
 		logger                log.Logger
 		thriftEncoder         codec.BinaryEncoder
 		pagingTokenSerializer *jsonHistoryTokenSerializer
+		transactionSizeLimit  dynamicconfig.IntPropertyFn
 	}
 )
 
 var _ HistoryV2Manager = (*historyV2ManagerImpl)(nil)
 
 //NewHistoryV2ManagerImpl returns new HistoryManager
-func NewHistoryV2ManagerImpl(persistence HistoryV2Store, logger log.Logger) HistoryV2Manager {
+func NewHistoryV2ManagerImpl(persistence HistoryV2Store, logger log.Logger, transactionSizeLimit dynamicconfig.IntPropertyFn) HistoryV2Manager {
 	return &historyV2ManagerImpl{
 		historySerializer:     NewPayloadSerializer(),
 		persistence:           persistence,
 		logger:                logger,
 		thriftEncoder:         codec.NewThriftRWEncoder(),
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
+		transactionSizeLimit:  transactionSizeLimit,
 	}
 }
 
@@ -201,7 +203,12 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesReq
 	// nodeID will be the first eventID
 	blob, err := m.historySerializer.SerializeBatchEvents(request.Events, request.Encoding)
 	size := len(blob.Data)
-
+	sizeLimit := m.transactionSizeLimit()
+	if size > sizeLimit {
+		return nil, &TransactionSizeLimitError{
+			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
+		}
+	}
 	shardID, err := getShardID(request.ShardID)
 	if err != nil {
 		m.logger.Error("shardID is not set in append history nodes operation", tag.Error(err))

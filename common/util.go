@@ -79,6 +79,8 @@ const (
 	FailureReasonDecisionBlobSizeExceedsLimit = "DECISION_BLOB_SIZE_EXCEEDS_LIMIT"
 	// TerminateReasonSizeExceedsLimit is reason to terminate workflow when history size or count exceed limit
 	TerminateReasonSizeExceedsLimit = "HISTORY_EXCEEDS_LIMIT"
+	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
+	FailureReasonTransactionSizeExceedsLimit = "TRANSACTION_SIZE_EXCEEDS_LIMIT"
 )
 
 var (

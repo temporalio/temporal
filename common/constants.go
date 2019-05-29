@@ -107,3 +107,8 @@ const (
 	// below which a warning will be logged
 	CriticalLongPollTimeout = time.Second * 20
 )
+
+const (
+	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
+	DefaultTransactionSizeLimit = 14 * 1024 * 1024
+)

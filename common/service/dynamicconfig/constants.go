@@ -59,6 +59,7 @@ var keys = map[Key]string{
 	ArchivalStatus:                      "system.archivalStatus",
 	EnableReadFromArchival:              "system.enableReadFromArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
+	TransactionSizeLimit:                "system.transactionSizeLimit",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -237,6 +238,8 @@ const (
 	// EnableDomainNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 	// for signal / start / signal with start API if domain is not active
 	EnableDomainNotActiveAutoForwarding
+	// TransactionSizeLimit is the largest allowed transaction size to persistence
+	TransactionSizeLimit
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError

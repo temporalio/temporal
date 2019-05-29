@@ -1119,19 +1119,20 @@ Update_History_Loop:
 			return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
 		}
 
-		failDecision := false
-		var failCause workflow.DecisionTaskFailedCause
-		var failMessage string
-		var err error
+		var (
+			failDecision                    bool
+			failCause                       workflow.DecisionTaskFailedCause
+			failMessage                     string
+			isComplete                      bool
+			activityNotStartedCancelled     bool
+			transferTasks                   []persistence.Task
+			timerTasks                      []persistence.Task
+			continueAsNewBuilder            mutableState
+			continueAsNewTimerTasks         []persistence.Task
+			hasDecisionScheduleActivityTask bool
+		)
 		completedID := *completedEvent.EventId
 		hasUnhandledEvents := msBuilder.HasBufferedEvents()
-		isComplete := false
-		activityNotStartedCancelled := false
-		transferTasks := []persistence.Task{}
-		timerTasks := []persistence.Task{}
-		var continueAsNewBuilder mutableState
-		var continueAsNewTimerTasks []persistence.Task
-		hasDecisionScheduleActivityTask := false
 
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskList == nil {
 			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyDisabledCounter)
@@ -1173,11 +1174,8 @@ Update_History_Loop:
 						targetDomainID = domainEntry.GetInfo().ID
 					}
 
-					if err = validateActivityScheduleAttributes(attributes, executionInfo.WorkflowTimeout, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadScheduleActivityAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateActivityScheduleAttributes(attributes, executionInfo.WorkflowTimeout, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "ScheduleActivityTaskDecisionAttributes.Input exceeds size limit.")
@@ -1185,6 +1183,7 @@ Update_History_Loop:
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1213,17 +1212,15 @@ Update_History_Loop:
 						continue Process_Decision_Loop
 					}
 					attributes := d.CompleteWorkflowExecutionDecisionAttributes
-					if err = validateCompleteWorkflowExecutionAttributes(attributes); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadCompleteWorkflowExecutionAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateCompleteWorkflowExecutionAttributes(attributes); err != nil {
+						return nil, err
 					}
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Result, "CompleteWorkflowExecutionDecisionAttributes.Result exceeds size limit.")
 					if err != nil {
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1280,11 +1277,8 @@ Update_History_Loop:
 					}
 
 					failedAttributes := d.FailWorkflowExecutionDecisionAttributes
-					if err = validateFailWorkflowExecutionAttributes(failedAttributes); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadFailWorkflowExecutionAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateFailWorkflowExecutionAttributes(failedAttributes); err != nil {
+						return nil, err
 					}
 
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(failedAttributes.Details, "FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.")
@@ -1292,6 +1286,7 @@ Update_History_Loop:
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1357,11 +1352,8 @@ Update_History_Loop:
 						continue Process_Decision_Loop
 					}
 					attributes := d.CancelWorkflowExecutionDecisionAttributes
-					if err = validateCancelWorkflowExecutionAttributes(attributes); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadCancelWorkflowExecutionAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateCancelWorkflowExecutionAttributes(attributes); err != nil {
+						return nil, err
 					}
 					msBuilder.AddWorkflowExecutionCanceledEvent(completedID, attributes)
 					isComplete = true
@@ -1370,11 +1362,8 @@ Update_History_Loop:
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.DecisionTypeStartTimerCounter)
 					attributes := d.StartTimerDecisionAttributes
-					if err = validateTimerScheduleAttributes(attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadStartTimerAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateTimerScheduleAttributes(attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					_, ti := msBuilder.AddTimerStartedEvent(completedID, attributes)
 					if ti == nil {
@@ -1388,11 +1377,8 @@ Update_History_Loop:
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.DecisionTypeCancelActivityCounter)
 					attributes := d.RequestCancelActivityTaskDecisionAttributes
-					if err = validateActivityCancelAttributes(attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadRequestCancelActivityAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateActivityCancelAttributes(attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					activityID := *attributes.ActivityId
 					actCancelReqEvent, ai, isRunning := msBuilder.AddActivityTaskCancelRequestedEvent(completedID, activityID,
@@ -1415,11 +1401,8 @@ Update_History_Loop:
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.DecisionTypeCancelTimerCounter)
 					attributes := d.CancelTimerDecisionAttributes
-					if err = validateTimerCancelAttributes(attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadCancelTimerAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateTimerCancelAttributes(attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					if msBuilder.AddTimerCanceledEvent(completedID, attributes, common.StringDefault(request.Identity)) == nil {
 						msBuilder.AddCancelTimerFailedEvent(completedID, attributes, common.StringDefault(request.Identity))
@@ -1438,17 +1421,15 @@ Update_History_Loop:
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.DecisionTypeRecordMarkerCounter)
 					attributes := d.RecordMarkerDecisionAttributes
-					if err = validateRecordMarkerAttributes(attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadRecordMarkerAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateRecordMarkerAttributes(attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Details, "RecordMarkerDecisionAttributes.Details exceeds size limit.")
 					if err != nil {
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1458,11 +1439,8 @@ Update_History_Loop:
 					e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 						metrics.DecisionTypeCancelExternalWorkflowCounter)
 					attributes := d.RequestCancelExternalWorkflowExecutionDecisionAttributes
-					if err = validateCancelExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadRequestCancelExternalWorkflowExecutionAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateCancelExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 
 					foreignDomainID := ""
@@ -1497,17 +1475,15 @@ Update_History_Loop:
 						metrics.DecisionTypeSignalExternalWorkflowCounter)
 
 					attributes := d.SignalExternalWorkflowExecutionDecisionAttributes
-					if err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "SignalExternalWorkflowExecutionDecisionAttributes.Input exceeds size limit.")
 					if err != nil {
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1555,17 +1531,15 @@ Update_History_Loop:
 						continue Process_Decision_Loop
 					}
 					attributes := d.ContinueAsNewWorkflowExecutionDecisionAttributes
-					if err = validateContinueAsNewWorkflowExecutionAttributes(executionInfo, attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadContinueAsNewAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateContinueAsNewWorkflowExecutionAttributes(executionInfo, attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "ContinueAsNewWorkflowExecutionDecisionAttributes.Input exceeds size limit.")
 					if err != nil {
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1593,17 +1567,15 @@ Update_History_Loop:
 						metrics.DecisionTypeChildWorkflowCounter)
 					targetDomainID := domainID
 					attributes := d.StartChildWorkflowExecutionDecisionAttributes
-					if err = validateStartChildExecutionAttributes(executionInfo, attributes, maxIDLengthLimit); err != nil {
-						failDecision = true
-						failCause = workflow.DecisionTaskFailedCauseBadStartChildExecutionAttributes
-						failMessage = err.Error()
-						break Process_Decision_Loop
+					if err := validateStartChildExecutionAttributes(executionInfo, attributes, maxIDLengthLimit); err != nil {
+						return nil, err
 					}
 					failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "StartChildWorkflowExecutionDecisionAttributes.Input exceeds size limit.")
 					if err != nil {
 						return nil, err
 					}
 					if failWorkflow {
+						isComplete = true
 						break Process_Decision_Loop
 					}
 
@@ -1629,10 +1601,6 @@ Update_History_Loop:
 					return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", *d.DecisionType)}
 				}
 			}
-		}
-
-		if err != nil {
-			return nil, err
 		}
 
 		if failDecision {
@@ -1728,11 +1696,40 @@ Update_History_Loop:
 
 		if updateErr != nil {
 			if updateErr == ErrConflict {
-				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
-					metrics.ConcurrencyUpdateFailureCounter)
+				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
 				continue Update_History_Loop
 			}
 
+			// if updateErr resulted in TransactionSizeLimitError then fail workflow
+			switch updateErr.(type) {
+			case *persistence.TransactionSizeLimitError:
+				// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
+				// clears mutable state if error is returned
+				msBuilder, err = context.loadWorkflowExecution()
+				if err != nil {
+					return nil, err
+				}
+
+				msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
+					Reason:   common.StringPtr(common.FailureReasonTransactionSizeExceedsLimit),
+					Identity: common.StringPtr("cadence-history-server"),
+					Details:  []byte(updateErr.Error()),
+				})
+				tranT, timerT, err := e.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
+				if err != nil {
+					return nil, err
+				}
+				transferTasks = []persistence.Task{tranT}
+				timerTasks = []persistence.Task{timerT}
+				transactionID, err3 = e.shard.GetNextTransferTaskID()
+				if err3 != nil {
+					return nil, err3
+				}
+				if err := context.updateWorkflowExecutionWithContext(request.ExecutionContext, transferTasks, timerTasks, transactionID); err != nil {
+					return nil, err
+				}
+				e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
+			}
 			return nil, updateErr
 		}
 

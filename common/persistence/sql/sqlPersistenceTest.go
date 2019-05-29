@@ -27,7 +27,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/environment"
 )
 
@@ -99,6 +101,7 @@ func (s *TestCluster) Config() config.Persistence {
 		DataStores: map[string]config.DataStore{
 			"test": {SQL: &cfg},
 		},
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
 }
 

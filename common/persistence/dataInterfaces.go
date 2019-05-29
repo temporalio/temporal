@@ -183,6 +183,11 @@ type (
 		Msg string
 	}
 
+	// TransactionSizeLimitError is returned when the transaction size is too large
+	TransactionSizeLimitError struct {
+		Msg string
+	}
+
 	// ShardInfo describes a shard
 	ShardInfo struct {
 		ShardID                   int
@@ -1521,6 +1526,10 @@ func (e *WorkflowExecutionAlreadyStartedError) Error() string {
 }
 
 func (e *TimeoutError) Error() string {
+	return e.Msg
+}
+
+func (e *TransactionSizeLimitError) Error() string {
 	return e.Msg
 }
 

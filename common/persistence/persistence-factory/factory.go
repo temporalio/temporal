@@ -182,7 +182,7 @@ func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewHistoryManagerImpl(store, f.logger)
+	result := p.NewHistoryManagerImpl(store, f.logger, f.config.TransactionSizeLimit)
 	if ds.ratelimit != nil {
 		result = p.NewHistoryPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -199,7 +199,7 @@ func (f *factoryImpl) NewHistoryV2Manager() (p.HistoryV2Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewHistoryV2ManagerImpl(store, f.logger)
+	result := p.NewHistoryV2ManagerImpl(store, f.logger, f.config.TransactionSizeLimit)
 	if ds.ratelimit != nil {
 		result = p.NewHistoryV2PersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
