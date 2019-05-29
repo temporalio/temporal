@@ -71,9 +71,11 @@ func (b *historyBuilder) HasTransientEvents() bool {
 	return b.transientHistory != nil && len(b.transientHistory) > 0
 }
 
+// originalRunID is the runID when the WorkflowExecutionStarted event is written
+// firstRunID is the very first runID along the chain of ContinueAsNew and Reset
 func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *h.StartWorkflowExecutionRequest,
-	previousExecution *persistence.WorkflowExecutionInfo, originalRunID string) *workflow.HistoryEvent {
-	event := b.newWorkflowExecutionStartedEvent(request, previousExecution, originalRunID)
+	previousExecution *persistence.WorkflowExecutionInfo, firstRunID, originalRunID string) *workflow.HistoryEvent {
+	event := b.newWorkflowExecutionStartedEvent(request, previousExecution, firstRunID, originalRunID)
 
 	return b.addEventToHistory(event)
 }
@@ -453,7 +455,7 @@ func (b *historyBuilder) addTransientEvent(event *workflow.HistoryEvent) *workfl
 }
 
 func (b *historyBuilder) newWorkflowExecutionStartedEvent(
-	startRequest *h.StartWorkflowExecutionRequest, previousExecution *persistence.WorkflowExecutionInfo, originalRunID string) *workflow.HistoryEvent {
+	startRequest *h.StartWorkflowExecutionRequest, previousExecution *persistence.WorkflowExecutionInfo, firstRunID, originalRunID string) *workflow.HistoryEvent {
 	var prevRunID *string
 	var resetPoints *workflow.ResetPoints
 	if previousExecution != nil {
@@ -482,6 +484,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.ContinuedFailureDetails = startRequest.ContinuedFailureDetails
 	attributes.Initiator = startRequest.ContinueAsNewInitiator
 	attributes.FirstDecisionTaskBackoffSeconds = startRequest.FirstDecisionTaskBackoffSeconds
+	attributes.FirstExecutionRunId = common.StringPtr(firstRunID)
 	attributes.OriginalExecutionRunId = common.StringPtr(originalRunID)
 	attributes.Memo = request.Memo
 	attributes.SearchAttributes = request.SearchAttributes
