@@ -30,7 +30,8 @@ const (
 	instance = "instance"
 	domain   = "domain"
 
-	domainAllValue = "all"
+	domainAllValue     = "all"
+	domainUnknownValue = "_unknown_"
 )
 
 // Tag is an interface to define metrics tags
@@ -73,6 +74,23 @@ func (d domainAllTag) Key() string {
 // Value returns the value of the domain all tag
 func (d domainAllTag) Value() string {
 	return domainAllValue
+}
+
+type domainUnknownTag struct{}
+
+// DomainAllTag returns a new domain:unknown tag-value
+func DomainUnknownTag() Tag {
+	return domainUnknownTag{}
+}
+
+// Key returns the key of the domain unknown tag
+func (d domainUnknownTag) Key() string {
+	return domain
+}
+
+// Value returns the value of the domain unknown tag
+func (d domainUnknownTag) Value() string {
+	return domainUnknownValue
 }
 
 type instanceTag struct {
