@@ -50,7 +50,7 @@ Try out [Cadence command-line tool](tools/cli/README.md) to perform various task
 ### Use Cadence Web
 
 Try out [Cadence Web UI](https://github.com/uber/cadence-web) to view your workflows on Cadence.  
-(This is already available at localhost:8080 if you run Cadence with docker compose)
+(This is already available at localhost:8088 if you run Cadence with docker compose)
 
 ## Contributing
 We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).
