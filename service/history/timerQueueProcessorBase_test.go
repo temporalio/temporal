@@ -196,19 +196,6 @@ func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
 		WorkflowId: &task.WorkflowID,
 		RunId:      &task.RunID,
 	}
-	versionHistories := &persistence.VersionHistories{
-		Histories: []persistence.VersionHistory{
-			{
-				BranchToken: []byte{123},
-				History: []persistence.VersionHistoryItem{
-					{
-						EventID: 1,
-						Version: 0,
-					},
-				},
-			},
-		},
-	}
 	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 	ms := &mockMutableState{}
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -217,14 +204,12 @@ func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
 	s.mockExecutionManager.On("DeleteExecutionFromVisibility", mock.Anything).Return(nil).Once()
 	ms.On("GetEventStoreVersion").Return(persistence.EventStoreVersionV2).Once()
 	ms.On("GetCurrentBranch").Return([]byte{}).Once()
-	ms.On("GetAllBranches").Return(versionHistories).Once()
-	ms.On("DeleteVersionHistory").Once()
 
 	err := s.timerQueueProcessor.deleteWorkflow(task, ms, ctx)
 	s.NoError(err)
 }
 
-func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_EntityNotExists() {
+func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_EntiryNotExists() {
 	err := &workflow.EntityNotExistsError{}
 	s.Nil(s.timerQueueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
 }

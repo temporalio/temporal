@@ -2227,7 +2227,7 @@ func (_m *mockMutableState) UpdateUserTimer(_a0 string, _a1 *persistence.TimerIn
 	_m.Called(_a0, _a1)
 }
 
-// GetAllBranches provide mocks
+// GetAllVersionHistories provide mocks
 func (_m *mockMutableState) GetAllVersionHistories() *persistence.VersionHistories {
 	ret := _m.Called()
 
@@ -2239,9 +2239,4 @@ func (_m *mockMutableState) GetAllVersionHistories() *persistence.VersionHistori
 	}
 
 	return r0
-}
-
-// DeleteVersionHistory provides a mock function with given fields: _a0
-func (_m *mockMutableState) DeleteVersionHistory(_a0 int) {
-	_m.Called(_a0)
 }

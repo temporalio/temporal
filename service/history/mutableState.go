@@ -206,6 +206,5 @@ type (
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(string, int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
-		DeleteVersionHistory(index int)
 	}
 )

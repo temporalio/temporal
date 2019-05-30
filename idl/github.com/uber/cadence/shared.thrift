@@ -1435,7 +1435,7 @@ struct HistoryBranchRange{
 struct HistoryBranch{
   10: optional string treeID
   20: optional string branchID
-  30: optional list<HistoryBranchRange>  ancestors
+  30: optional list<HistoryBranchRange> ancestors
 }
 
 // VersionHistoryItem contains signal eventID and the corresponding version

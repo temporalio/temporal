@@ -842,7 +842,6 @@ type (
 		CurrReplicationTasks []Task
 		CurrTransferTasks    []Task
 		CurrTimerTasks       []Task
-		VersionHistories     *workflow.VersionHistories
 
 		// For new mutable state
 		InsertExecutionInfo       *WorkflowExecutionInfo

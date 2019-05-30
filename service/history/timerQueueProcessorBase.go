@@ -617,7 +617,7 @@ func (t *timerQueueProcessorBase) deleteWorkflow(task *persistence.TimerTaskInfo
 		return err
 	}
 
-	if err := t.deleteWorkflowHistory(task, msBuilder, true); err != nil {
+	if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
 		return err
 	}
 
@@ -666,9 +666,6 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 	if err := t.deleteWorkflowExecution(task); err != nil {
 		return err
 	}
-	if err := t.deleteWorkflowHistory(task, msBuilder, false); err != nil {
-		return err
-	}
 	if err := t.deleteWorkflowVisibility(task); err != nil {
 		return err
 	}
@@ -700,7 +697,7 @@ func (t *timerQueueProcessorBase) deleteCurrentWorkflowExecution(task *persisten
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerTaskInfo, msBuilder mutableState, shouldDeleteCurrent bool) error {
+func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerTaskInfo, msBuilder mutableState) error {
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op := func() error {
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
@@ -711,30 +708,8 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 				tag.TaskID(task.GetTaskID()),
 				tag.FailoverVersion(task.GetVersion()),
 				tag.TaskType(task.GetTaskType()))
-			versionHistories := msBuilder.GetAllVersionHistories()
-
-			if versionHistories != nil {
-			CleanupLoop:
-				for idx, versionHistory := range versionHistories.Histories {
-					if !shouldDeleteCurrent && int32(idx) == versionHistories.CurrentBranch {
-						continue CleanupLoop
-					}
-					if err := persistence.DeleteWorkflowExecutionHistoryV2(
-						t.historyService.historyV2Mgr,
-						versionHistory.BranchToken,
-						common.IntPtr(t.shard.GetShardID()),
-						logger); err != nil {
-						return err
-					}
-					msBuilder.DeleteVersionHistory(idx)
-					//TODO: update mutable state with deleted version histories
-				}
-			}
+			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, msBuilder.GetCurrentBranch(), common.IntPtr(t.shard.GetShardID()), logger)
 		}
-		if !shouldDeleteCurrent {
-			return nil
-		}
-
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{
 				DomainID:  domainID,

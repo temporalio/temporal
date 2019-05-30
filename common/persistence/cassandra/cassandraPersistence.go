@@ -1378,6 +1378,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Int
 	default:
 		panic(fmt.Sprintf("Unknown CreateWorkflowMode: %v", request.CreateWorkflowMode))
 	}
+
 	// TODO use updateMutableState() with useCondition=false to make code much cleaner
 	if request.ReplicationState != nil {
 		lastReplicationInfo := make(map[string]map[string]interface{})
