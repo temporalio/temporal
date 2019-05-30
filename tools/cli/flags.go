@@ -165,6 +165,8 @@ const (
 	FlagResetType                   = "reset_type"
 	FlagResetPointsOnly             = "reset_points_only"
 	FlagResetBadBinaryChecksum      = "reset_bad_binary_checksum"
+	FlagListQuery                   = "query"
+	FlagListQueryWithAlias          = FlagListQuery + ", q"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -371,6 +373,11 @@ func getFlagsForListAll() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,
 			Usage: "Closed workflow status [completed, failed, canceled, terminated, continuedasnew, timedout]",
+		},
+		cli.StringFlag{
+			Name: FlagListQueryWithAlias,
+			Usage: "Optional SQL like query for use of search attributes. NOTE: using query will ignore all other filter flags including: " +
+				"[open, earliest_time, latest_time, workflow_id, workflow_type]",
 		},
 	}
 }

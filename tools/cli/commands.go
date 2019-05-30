@@ -1153,7 +1153,10 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	prepareTable := func(next []byte) ([]byte, int) {
 		var result []*s.WorkflowExecutionInfo
 		var nextPageToken []byte
-		if queryOpen {
+		if c.IsSet(FlagListQuery) {
+			listQuery := c.String(FlagListQuery)
+			result, nextPageToken = listWorkflowExecutions(wfClient, pageSize, next, listQuery, c)
+		} else if queryOpen {
 			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, c)
 		} else {
 			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, next, c)
@@ -1183,6 +1186,24 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		return nextPageToken, len(result)
 	}
 	return prepareTable
+}
+
+func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) (
+	[]*s.WorkflowExecutionInfo, []byte) {
+
+	request := &s.ListWorkflowExecutionsRequest{
+		PageSize:      common.Int32Ptr(int32(pageSize)),
+		NextPageToken: nextPageToken,
+		Query:         common.StringPtr(query),
+	}
+
+	ctx, cancel := newContextForLongPoll(c)
+	defer cancel()
+	response, err := client.ListWorkflow(ctx, request)
+	if err != nil {
+		ErrorAndExit("Failed to list workflow.", err)
+	}
+	return response.Executions, response.NextPageToken
 }
 
 func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
