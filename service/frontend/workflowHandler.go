@@ -96,7 +96,8 @@ type (
 	}
 
 	getHistoryContinuationTokenArchival struct {
-		BlobstorePageToken int
+		BlobstorePageToken   int
+		CloseFailoverVersion int64
 	}
 )
 
@@ -3216,7 +3217,6 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	domainID string,
 	scope metrics.Scope,
 ) (*gen.GetWorkflowExecutionHistoryResponse, error) {
-
 	entry, err := wh.domainCache.GetDomainByID(domainID)
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -3232,11 +3232,24 @@ func (wh *WorkflowHandler) getArchivedHistory(
 			return nil, wh.error(errInvalidNextArchivalPageToken, scope)
 		}
 	} else {
+		indexKey, err := archiver.NewHistoryIndexBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId())
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		indexTags, err := wh.blobstoreClient.GetTags(ctx, archivalBucket, indexKey)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		highestVersion, err := archiver.GetHighestVersion(indexTags)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
 		token = &getHistoryContinuationTokenArchival{
-			BlobstorePageToken: common.FirstBlobPageToken,
+			BlobstorePageToken:   common.FirstBlobPageToken,
+			CloseFailoverVersion: *highestVersion,
 		}
 	}
-	key, err := archiver.NewHistoryBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), token.BlobstorePageToken)
+	key, err := archiver.NewHistoryBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), token.CloseFailoverVersion, token.BlobstorePageToken)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3255,9 +3268,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 			return nil, wh.error(err, scope)
 		}
 	}
-	token = &getHistoryContinuationTokenArchival{
-		BlobstorePageToken: *historyBlob.Header.NextPageToken,
-	}
+	token.BlobstorePageToken = *historyBlob.Header.NextPageToken
 	if *historyBlob.Header.IsLast {
 		token = nil
 	}

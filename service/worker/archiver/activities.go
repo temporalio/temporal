@@ -22,9 +22,7 @@ package archiver
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"math/rand"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
@@ -59,7 +57,7 @@ const (
 )
 
 var (
-	uploadHistoryActivityNonRetryableErrors = []string{errGetDomainByID, errGetTags, errUploadBlob, errReadBlob, errEmptyBucket, errConstructBlob}
+	uploadHistoryActivityNonRetryableErrors = []string{errGetDomainByID, errGetTags, errUploadBlob, errReadBlob, errEmptyBucket, errConstructBlob, errDownloadBlob}
 	deleteHistoryActivityNonRetryableErrors = []string{errDeleteHistoryV1, errDeleteHistoryV2}
 	errContextTimeout                       = errors.New("activity aborted because context timed out")
 )
@@ -121,7 +119,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	blobstoreClient := container.Blobstore
 	handledLastBlob := false
 	for pageToken := common.FirstBlobPageToken; !handledLastBlob; pageToken++ {
-		key, err := NewHistoryBlobKey(request.DomainID, request.WorkflowID, request.RunID, pageToken)
+		key, err := NewHistoryBlobKey(request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, pageToken)
 		if err != nil {
 			logger.Error(uploadErrorMsg, tag.UploadFailReason("could not construct blob key"), tag.ArchivalBucket(bucket))
 			return cadence.NewCustomError(errConstructBlob)
@@ -137,7 +135,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			handledLastBlob = IsLast(tags)
 			// this is a sampling based sanity check used to ensure deterministic blob construction
 			// is operating as expected, the correctness of archival depends on this deterministic construction
-			runConstTest = runConstructionCheck(container.Config.DeterministicConstructionCheckProbability())
+			runConstTest = shouldRun(container.Config.DeterministicConstructionCheckProbability())
 			if !runConstTest {
 				continue
 			}
@@ -174,6 +172,24 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			return err
 		}
 		handledLastBlob = *historyBlob.Header.IsLast
+	}
+	indexBlobKey, err := NewHistoryIndexBlobKey(request.DomainID, request.WorkflowID, request.RunID)
+	if err != nil {
+		logger.Error(uploadErrorMsg, tag.UploadFailReason("could not construct index blob key"), tag.ArchivalBucket(bucket))
+		return cadence.NewCustomError(errConstructBlob)
+	}
+	existingVersions, err := getTags(ctx, blobstoreClient, bucket, indexBlobKey)
+	if err != nil && err != blobstore.ErrBlobNotExists {
+		logger.Error(uploadErrorMsg, tag.UploadFailReason("could not get index blob tags"), tag.ArchivalBucket(bucket), tag.ArchivalBlobKey(indexBlobKey.String()))
+		return err
+	}
+	indexBlobWithVersion := addVersion(request.CloseFailoverVersion, existingVersions)
+	if indexBlobWithVersion == nil {
+		return nil
+	}
+	if err := uploadBlob(ctx, blobstoreClient, bucket, indexBlobKey, indexBlobWithVersion); err != nil {
+		logger.Error(uploadErrorMsg, tag.UploadFailReason("could not upload index blob"), tag.ArchivalBucket(bucket), tag.ArchivalBlobKey(indexBlobKey.String()))
+		return err
 	}
 	return nil
 }
@@ -303,26 +319,6 @@ func getDomainByID(ctx context.Context, domainCache cache.DomainCache, id string
 	return entry, nil
 }
 
-func constructBlob(historyBlob *HistoryBlob, enableCompression bool) (*blob.Blob, string, error) {
-	body, err := json.Marshal(historyBlob)
-	if err != nil {
-		return nil, "failed to serialize blob", err
-	}
-	tags, err := ConvertHeaderToTags(historyBlob.Header)
-	if err != nil {
-		return nil, "failed to convert header to tags", err
-	}
-	wrapFunctions := []blob.WrapFn{blob.JSONEncoded()}
-	if enableCompression {
-		wrapFunctions = append(wrapFunctions, blob.GzipCompressed())
-	}
-	blob, err := blob.Wrap(blob.NewBlob(body, tags), wrapFunctions...)
-	if err != nil {
-		return nil, "failed to wrap blob", err
-	}
-	return blob, "", nil
-}
-
 func deleteHistoryV1(ctx context.Context, container *BootstrapContainer, request ArchiveRequest) error {
 	deleteHistoryReq := &persistence.DeleteWorkflowExecutionHistoryRequest{
 		DomainID: request.DomainID,
@@ -368,23 +364,4 @@ func deleteHistoryV2(ctx context.Context, container *BootstrapContainer, request
 		err = backoff.Retry(op, common.CreatePersistanceRetryPolicy(), common.IsPersistenceTransientError)
 	}
 	return nil
-}
-
-func contextExpired(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
-}
-
-func runConstructionCheck(probability float64) bool {
-	if probability <= 0 {
-		return false
-	}
-	if probability >= 1.0 {
-		return true
-	}
-	return rand.Intn(int(1.0/probability)) == 0
 }

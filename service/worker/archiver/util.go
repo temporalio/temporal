@@ -22,104 +22,19 @@ package archiver
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strconv"
-	"strings"
+	"math/rand"
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 )
 
-type (
-	// HistoryBlobHeader is the header attached to all history blobs
-	HistoryBlobHeader struct {
-		DomainName           *string `json:"domain_name,omitempty"`
-		DomainID             *string `json:"domain_id,omitempty"`
-		WorkflowID           *string `json:"workflow_id,omitempty"`
-		RunID                *string `json:"run_id,omitempty"`
-		CurrentPageToken     *int    `json:"current_page_token,omitempty"`
-		NextPageToken        *int    `json:"next_page_token,omitempty"`
-		IsLast               *bool   `json:"is_last,omitempty"`
-		FirstFailoverVersion *int64  `json:"first_failover_version,omitempty"`
-		LastFailoverVersion  *int64  `json:"last_failover_version,omitempty"`
-		FirstEventID         *int64  `json:"first_event_id,omitempty"`
-		LastEventID          *int64  `json:"last_event_id,omitempty"`
-		UploadDateTime       *string `json:"upload_date_time,omitempty"`
-		UploadCluster        *string `json:"upload_cluster,omitempty"`
-		EventCount           *int64  `json:"event_count,omitempty"`
-		CloseFailoverVersion *int64  `json:"close_failover_version,omitempty"`
-	}
-
-	// HistoryBlob is the serializable data that forms the body of a blob
-	HistoryBlob struct {
-		Header *HistoryBlobHeader `json:"header"`
-		Body   *shared.History    `json:"body"`
-	}
-)
-
-var (
-	errInvalidKeyInput = errors.New("invalid input to construct history blob key")
-)
-
-// NewHistoryBlobKey returns a key for history blob
-func NewHistoryBlobKey(domainID, workflowID, runID string, pageToken int) (blob.Key, error) {
-	if len(domainID) == 0 || len(workflowID) == 0 || len(runID) == 0 {
-		return nil, errInvalidKeyInput
-	}
-	if pageToken < common.FirstBlobPageToken {
-		return nil, errInvalidKeyInput
-	}
-	domainIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(domainID)))
-	workflowIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(workflowID)))
-	runIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(runID)))
-	combinedHash := strings.Join([]string{domainIDHash, workflowIDHash, runIDHash}, "")
-	return blob.NewKey("history", combinedHash, StringPageToken(pageToken))
-}
-
-// StringPageToken converts input blob page token to string form
-func StringPageToken(pageToken int) string {
-	return strconv.Itoa(pageToken)
-}
-
-// ConvertHeaderToTags converts header into metadata tags for blob
-func ConvertHeaderToTags(header *HistoryBlobHeader) (map[string]string, error) {
-	var tempMap map[string]interface{}
-	bytes, err := json.Marshal(header)
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(bytes, &tempMap); err != nil {
-		return nil, err
-	}
-	result := make(map[string]string, len(tempMap))
-	for k, v := range tempMap {
-		result[k] = fmt.Sprintf("%v", v)
-	}
-	return result, nil
-}
-
-// IsLast returns true if tags indicate blob is the last blob in archived history, false otherwise
-func IsLast(tags map[string]string) bool {
-	last, ok := tags["is_last"]
-	return ok && last == "true"
-}
-
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
 func MaxArchivalIterationTimeout() time.Duration {
 	return workflowStartToCloseTimeout / 2
-}
-
-func modifyBlobForConstCheck(historyBlob *HistoryBlob, existingTags map[string]string) {
-	historyBlob.Header.UploadCluster = common.StringPtr(existingTags["upload_cluster"])
-	historyBlob.Header.UploadDateTime = common.StringPtr(existingTags["upload_date_time"])
 }
 
 func hashArchiveRequest(archiveRequest ArchiveRequest) uint64 {
@@ -150,6 +65,7 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 	return logger.WithTags(
 		tag.ShardID(request.ShardID),
 		tag.ArchivalRequestDomainID(request.DomainID),
+		tag.ArchivalRequestDomainName(request.DomainName),
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
 		tag.ArchivalRequestRunID(request.RunID),
 		tag.ArchivalRequestEventStoreVersion(request.EventStoreVersion),
@@ -157,4 +73,23 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 		tag.ArchivalRequestNextEventID(request.NextEventID),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
 	)
+}
+
+func contextExpired(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldRun(probability float64) bool {
+	if probability <= 0 {
+		return false
+	}
+	if probability >= 1.0 {
+		return true
+	}
+	return rand.Intn(int(1.0/probability)) == 0
 }
