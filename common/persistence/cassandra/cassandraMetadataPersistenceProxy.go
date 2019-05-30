@@ -23,6 +23,8 @@ package cassandra
 import (
 	"errors"
 
+	"github.com/uber/cadence/common"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -35,7 +37,7 @@ type (
 	// WARN this struct should only be used by the domain cache ONLY
 	metadataManagerProxy struct {
 		metadataMgr   p.MetadataStore
-		metadataMgrV2 p.MetadataStore
+		metadataMgrV2 *cassandraMetadataPersistenceV2
 		logger        log.Logger
 	}
 )
@@ -51,7 +53,7 @@ func newMetadataManagerProxy(cfg config.Cassandra,
 	if err != nil {
 		return nil, err
 	}
-	return &metadataManagerProxy{metadataMgr: metadataMgr, metadataMgrV2: metadataMgrV2, logger: logger}, nil
+	return &metadataManagerProxy{metadataMgr: metadataMgr, metadataMgrV2: metadataMgrV2.(*cassandraMetadataPersistenceV2), logger: logger}, nil
 }
 
 func (m *metadataManagerProxy) GetName() string {
@@ -74,6 +76,27 @@ func (m *metadataManagerProxy) GetDomain(request *p.GetDomainRequest) (*p.Intern
 	resp, err = m.metadataMgr.GetDomain(request)
 	if err == nil {
 		resp.TableVersion = p.DomainTableVersionV1
+		if !resp.IsGlobalDomain {
+			_, err = m.metadataMgrV2.CreateDomainInV2Table(&p.InternalCreateDomainRequest{
+				Info:              resp.Info,
+				Config:            resp.Config,
+				ReplicationConfig: resp.ReplicationConfig,
+				IsGlobalDomain:    false,
+				ConfigVersion:     0,
+				FailoverVersion:   common.EmptyVersion,
+			})
+			if err != nil {
+				m.logger.WithTags(
+					tag.WorkflowDomainID(resp.Info.ID),
+					tag.WorkflowDomainName(resp.Info.Name),
+				).Error("Unable to migrate domain")
+			}
+		} else {
+			m.logger.WithTags(
+				tag.WorkflowDomainID(resp.Info.ID),
+				tag.WorkflowDomainName(resp.Info.Name),
+			).Error("Unable to migrate domain, encounter global domain in V1")
+		}
 	}
 	return resp, err
 }
