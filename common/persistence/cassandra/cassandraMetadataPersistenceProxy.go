@@ -23,9 +23,8 @@ package cassandra
 import (
 	"errors"
 
-	"github.com/uber/cadence/common"
-
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
@@ -77,6 +76,9 @@ func (m *metadataManagerProxy) GetDomain(request *p.GetDomainRequest) (*p.Intern
 	if err == nil {
 		resp.TableVersion = p.DomainTableVersionV1
 		if !resp.IsGlobalDomain {
+			if resp.Config.BadBinaries == nil {
+				resp.Config.BadBinaries = &p.DataBlob{}
+			}
 			_, err = m.metadataMgrV2.CreateDomainInV2Table(&p.InternalCreateDomainRequest{
 				Info:              resp.Info,
 				Config:            resp.Config,
