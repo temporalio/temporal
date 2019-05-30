@@ -27,17 +27,18 @@ import (
 )
 
 type metricsScope struct {
-	scope tally.Scope
-	defs  map[int]metricDefinition
+	scope          tally.Scope
+	defs           map[int]metricDefinition
+	isDomainTagged bool
 }
 
-func newMetricsScope(scope tally.Scope, defs map[int]metricDefinition) Scope {
-	return &metricsScope{scope, defs}
+func newMetricsScope(scope tally.Scope, defs map[int]metricDefinition, isDomain bool) Scope {
+	return &metricsScope{scope, defs, isDomain}
 }
 
 // NoopScope returns a noop scope of metrics
 func NoopScope(serviceIdx ServiceIdx) Scope {
-	return &metricsScope{tally.NoopScope, getMetricDefs(serviceIdx)}
+	return &metricsScope{tally.NoopScope, getMetricDefs(serviceIdx), false}
 }
 
 func (m *metricsScope) IncCounter(id int) {
@@ -55,20 +56,36 @@ func (m *metricsScope) UpdateGauge(id int, value float64) {
 	m.scope.Gauge(name).Update(value)
 }
 
-func (m *metricsScope) StartTimer(id int) tally.Stopwatch {
+func (m *metricsScope) StartTimer(id int) Stopwatch {
 	name := string(m.defs[id].metricName)
-	return m.scope.Timer(name).Start()
+	timer := m.scope.Timer(name)
+	if m.isDomainTagged {
+		timerAll := m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(name)
+		return NewStopwatch(timer, timerAll)
+	}
+	return NewStopwatch(timer)
 }
 
 func (m *metricsScope) RecordTimer(id int, d time.Duration) {
 	name := string(m.defs[id].metricName)
 	m.scope.Timer(name).Record(d)
+	if m.isDomainTagged {
+		m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(name).Record(d)
+	}
 }
 
 func (m *metricsScope) Tagged(tags ...Tag) Scope {
+	domainTagged := false
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
+		if isDomainTagged(tag) {
+			domainTagged = true
+		}
 		tagMap[tag.Key()] = tag.Value()
 	}
-	return newMetricsScope(m.scope.Tagged(tagMap), m.defs)
+	return newMetricsScope(m.scope.Tagged(tagMap), m.defs, domainTagged)
+}
+
+func isDomainTagged(tag Tag) bool {
+	return tag.Key() == domain && tag.Value() != domainAllValue
 }

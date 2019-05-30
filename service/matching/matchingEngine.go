@@ -623,10 +623,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 		token, _ = e.tokenSerializer.Serialize(taskoken)
 		if context.syncResponseCh == nil {
 			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
-			if len(context.domainName) != 0 {
-				scope.Tagged(metrics.DomainTag(context.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
-			}
-			scope.Tagged(metrics.DomainAllTag()).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
+			scope.Tagged(metrics.DomainTag(context.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
 		}
 	}
 
@@ -653,10 +650,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	}
 	if context.syncResponseCh == nil {
 		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
-		if len(context.domainName) != 0 {
-			scope.Tagged(metrics.DomainTag(context.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
-		}
-		scope.Tagged(metrics.DomainAllTag()).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
+		scope.Tagged(metrics.DomainTag(context.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.CreatedTime))
 	}
 
 	response := &workflow.PollForActivityTaskResponse{}

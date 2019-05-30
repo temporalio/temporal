@@ -25,11 +25,9 @@ import (
 	"errors"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
@@ -76,7 +74,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.metricsClient = &mmocks.Client{}
 	s.metricsScope = &mmocks.Scope{}
-	s.metricsScope.On("StartTimer", metrics.CadenceLatency).Return(tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{})).Once()
+	s.metricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Once()
 }
 
 func (s *activitiesSuite) TearDownTest() {

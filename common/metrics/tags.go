@@ -44,8 +44,13 @@ type domainTag struct {
 	value string
 }
 
-// DomainTag returns a new domain tag
+// DomainTag returns a new domain tag. For timers, this also ensures that we
+// dual emit the metric with the all tag. If a blank domain is provided then
+// this converts that to an unknown domain.
 func DomainTag(value string) Tag {
+	if len(value) == 0 {
+		value = domainUnknownValue
+	}
 	return domainTag{value}
 }
 
@@ -59,26 +64,9 @@ func (d domainTag) Value() string {
 	return d.value
 }
 
-type domainAllTag struct{}
-
-// DomainAllTag returns a new domain all tag-value
-func DomainAllTag() Tag {
-	return domainAllTag{}
-}
-
-// Key returns the key of the domain all tag
-func (d domainAllTag) Key() string {
-	return domain
-}
-
-// Value returns the value of the domain all tag
-func (d domainAllTag) Value() string {
-	return domainAllValue
-}
-
 type domainUnknownTag struct{}
 
-// DomainAllTag returns a new domain:unknown tag-value
+// DomainUnknownTag returns a new domain:unknown tag-value
 func DomainUnknownTag() Tag {
 	return domainUnknownTag{}
 }
