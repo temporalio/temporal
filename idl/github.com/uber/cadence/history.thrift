@@ -83,6 +83,7 @@ struct GetMutableStateResponse {
   120: optional i32 eventStoreVersion
   130: optional binary branchToken
   140: optional map<string, shared.ReplicationInfo> replicationInfo
+  150: optional shared.VersionHistories versionHistories
 }
 
 struct ResetStickyTaskListRequest {

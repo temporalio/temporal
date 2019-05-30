@@ -506,6 +506,7 @@ func (e *historyEngineImpl) GetMutableState(ctx ctx.Context,
 		RunId:      request.Execution.RunId,
 	}
 
+	//TODO: GetMutableState can be a long poll and with 3DC, we need to handle when the current branch changes.
 	response, err := e.getMutableState(ctx, domainID, execution)
 	if err != nil {
 		return nil, err
@@ -581,6 +582,7 @@ func (e *historyEngineImpl) getMutableState(ctx ctx.Context,
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
+	versionHistories := msBuilder.GetAllVersionHistories()
 	retResp = &h.GetMutableStateResponse{
 		Execution:                            &execution,
 		WorkflowType:                         &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
@@ -596,6 +598,7 @@ func (e *historyEngineImpl) getMutableState(ctx ctx.Context,
 		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
 		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
 		BranchToken:                          msBuilder.GetCurrentBranch(),
+		VersionHistories:                     versionHistories.ToThrift(),
 	}
 
 	replicationState := msBuilder.GetReplicationState()

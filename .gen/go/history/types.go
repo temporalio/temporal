@@ -983,6 +983,7 @@ type GetMutableStateResponse struct {
 	EventStoreVersion                    *int32                             `json:"eventStoreVersion,omitempty"`
 	BranchToken                          []byte                             `json:"branchToken,omitempty"`
 	ReplicationInfo                      map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
+	VersionHistories                     *shared.VersionHistories           `json:"versionHistories,omitempty"`
 }
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*shared.ReplicationInfo
@@ -1040,7 +1041,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [15]wire.Field
+		fields [16]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1166,6 +1167,14 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 140, Value: w}
 		i++
 	}
+	if v.VersionHistories != nil {
+		w, err = v.VersionHistories.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 150, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -1214,6 +1223,12 @@ func _Map_String_ReplicationInfo_Read(m wire.MapItemList) (map[string]*shared.Re
 	})
 	m.Close()
 	return o, err
+}
+
+func _VersionHistories_Read(w wire.Value) (*shared.VersionHistories, error) {
+	var v shared.VersionHistories
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a GetMutableStateResponse struct from its Thrift-level
@@ -1376,6 +1391,14 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 150:
+			if field.Value.Type() == wire.TStruct {
+				v.VersionHistories, err = _VersionHistories_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1389,7 +1412,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [15]string
+	var fields [16]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -1449,6 +1472,10 @@ func (v *GetMutableStateResponse) String() string {
 	}
 	if v.ReplicationInfo != nil {
 		fields[i] = fmt.Sprintf("ReplicationInfo: %v", v.ReplicationInfo)
+		i++
+	}
+	if v.VersionHistories != nil {
+		fields[i] = fmt.Sprintf("VersionHistories: %v", v.VersionHistories)
 		i++
 	}
 
@@ -1547,6 +1574,9 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
 		return false
 	}
+	if !((v.VersionHistories == nil && rhs.VersionHistories == nil) || (v.VersionHistories != nil && rhs.VersionHistories != nil && v.VersionHistories.Equals(rhs.VersionHistories))) {
+		return false
+	}
 
 	return true
 }
@@ -1612,6 +1642,9 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	}
 	if v.ReplicationInfo != nil {
 		err = multierr.Append(err, enc.AddObject("replicationInfo", (_Map_String_ReplicationInfo_Zapper)(v.ReplicationInfo)))
+	}
+	if v.VersionHistories != nil {
+		err = multierr.Append(err, enc.AddObject("versionHistories", v.VersionHistories))
 	}
 	return err
 }
@@ -1839,6 +1872,21 @@ func (v *GetMutableStateResponse) GetReplicationInfo() (o map[string]*shared.Rep
 // IsSetReplicationInfo returns true if ReplicationInfo is not nil.
 func (v *GetMutableStateResponse) IsSetReplicationInfo() bool {
 	return v != nil && v.ReplicationInfo != nil
+}
+
+// GetVersionHistories returns the value of VersionHistories if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetVersionHistories() (o *shared.VersionHistories) {
+	if v != nil && v.VersionHistories != nil {
+		return v.VersionHistories
+	}
+
+	return
+}
+
+// IsSetVersionHistories returns true if VersionHistories is not nil.
+func (v *GetMutableStateResponse) IsSetVersionHistories() bool {
+	return v != nil && v.VersionHistories != nil
 }
 
 type ParentExecutionInfo struct {
