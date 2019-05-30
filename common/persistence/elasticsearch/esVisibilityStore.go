@@ -562,13 +562,13 @@ func addDomainToQuery(dsl *fastjson.Value, domainID string) {
 	addMustQuery(dsl, domainQueryString)
 }
 
+// addMustQuery is wrapping bool query with new bool query with must,
+// reason not making a flat bool query is to ensure "should (or)" query works correctly in query context.
 func addMustQuery(dsl *fastjson.Value, queryString string) {
+	valOfTopQuery := dsl.Get("query")
 	valOfBool := dsl.Get("query", "bool")
-	if valOfMust := valOfBool.Get(dslFieldMust); valOfMust == nil {
-		valOfBool.Set(dslFieldMust, fastjson.MustParse(fmt.Sprintf("[%s]", queryString)))
-	} else {
-		valOfMust.SetArrayItem(len(valOfMust.GetArray()), fastjson.MustParse(queryString))
-	}
+	newValOfBool := fmt.Sprintf(`{"must":[%s,{"bool":%s}]}`, queryString, valOfBool.String())
+	valOfTopQuery.Set("bool", fastjson.MustParse(newValOfBool))
 }
 
 func shouldSearchAfter(token *esVisibilityPageToken) bool {
