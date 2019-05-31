@@ -413,7 +413,7 @@ Update_History_Loop:
 			case workflow.TimeoutTypeScheduleToClose:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
-					if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
+					if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
 						return errFailedToAddTimeoutEvent
 					}
 					updateHistory = true
@@ -423,7 +423,7 @@ Update_History_Loop:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
 					if ai.StartedID != common.EmptyEventID {
-						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
+						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
 							return errFailedToAddTimeoutEvent
 						}
 						updateHistory = true
@@ -443,7 +443,7 @@ Update_History_Loop:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 					if ai.StartedID == common.EmptyEventID {
-						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
+						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
 							return errFailedToAddTimeoutEvent
 						}
 						updateHistory = true
