@@ -66,6 +66,7 @@ type (
 		testDomain          string
 		testDomainID        string
 		logger              log.Logger
+		config              *Config
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
 		mockMetricClient    metrics.Client
@@ -128,8 +129,8 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandlerHelper() *WorkflowHandler {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
+	s.config = s.newConfig()
+	wh := s.getWorkflowHandler(s.config)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.domainCache = s.mockDomainCache
 	wh.visibilityMgr = s.mockVisibilityMgr
@@ -1219,7 +1220,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 
 	listRequest := &shared.ListWorkflowExecutionsRequest{
 		Domain:   common.StringPtr(s.testDomain),
-		PageSize: common.Int32Ptr(10),
+		PageSize: common.Int32Ptr(int32(s.config.ESIndexMaxResultWindow())),
 	}
 	ctx := context.Background()
 
@@ -1233,6 +1234,10 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	listRequest.Query = common.StringPtr(query)
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NotNil(err)
+
+	listRequest.PageSize = common.Int32Ptr(int32(s.config.ESIndexMaxResultWindow() + 1))
+	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
+	s.NotNil(err)
 }
 
 func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
@@ -1243,7 +1248,7 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 
 	listRequest := &shared.ListWorkflowExecutionsRequest{
 		Domain:   common.StringPtr(s.testDomain),
-		PageSize: common.Int32Ptr(10),
+		PageSize: common.Int32Ptr(int32(s.config.ESIndexMaxResultWindow())),
 	}
 	ctx := context.Background()
 
@@ -1256,6 +1261,10 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 	query = "InvalidKey = 'a'"
 	listRequest.Query = common.StringPtr(query)
 	_, err = wh.ScanWorkflowExecutions(ctx, listRequest)
+	s.NotNil(err)
+
+	listRequest.PageSize = common.Int32Ptr(int32(s.config.ESIndexMaxResultWindow() + 1))
+	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NotNil(err)
 }
 

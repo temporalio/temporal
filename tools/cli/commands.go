@@ -856,7 +856,6 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 // ListWorkflow list workflow executions based on filters
 func ListWorkflow(c *cli.Context) {
 	more := c.Bool(FlagMore)
-	pageSize := c.Int(FlagPageSize)
 	queryOpen := c.Bool(FlagOpen)
 
 	printJSON := c.Bool(FlagPrintJSON)
@@ -881,14 +880,13 @@ func ListWorkflow(c *cli.Context) {
 		prepareTable(nil)
 		table.Render()
 	} else { // require input Enter to view next page
-		var resultSize int
 		var nextPageToken []byte
 		for {
-			nextPageToken, resultSize = prepareTable(nextPageToken)
+			nextPageToken, _ = prepareTable(nextPageToken)
 			table.Render()
 			table.ClearRows()
 
-			if resultSize < pageSize {
+			if len(nextPageToken) == 0 {
 				break
 			}
 
@@ -919,8 +917,7 @@ func ListAllWorkflow(c *cli.Context) {
 		for {
 			results, nextPageToken = getListResultInRaw(c, queryOpen, nextPageToken)
 			printListResults(results, printJSON)
-			//printListResultsInJson(results)
-			if len(results) < defaultPageSizeForList {
+			if len(nextPageToken) == 0 {
 				break
 			}
 		}
@@ -930,11 +927,10 @@ func ListAllWorkflow(c *cli.Context) {
 
 	table := createTableForListWorkflow(c, true, queryOpen)
 	prepareTable := listWorkflow(c, table, queryOpen)
-	var resultSize int
 	var nextPageToken []byte
 	for {
-		nextPageToken, resultSize = prepareTable(nextPageToken)
-		if resultSize < defaultPageSizeForList {
+		nextPageToken, _ = prepareTable(nextPageToken)
+		if len(nextPageToken) == 0 {
 			break
 		}
 	}
