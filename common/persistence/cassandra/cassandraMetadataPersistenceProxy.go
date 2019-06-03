@@ -35,6 +35,7 @@ type (
 	// TODO, we should migrate the non global domain to new table, see #773
 	// WARN this struct should only be used by the domain cache ONLY
 	metadataManagerProxy struct {
+		serializer    p.PayloadSerializer
 		metadataMgr   p.MetadataStore
 		metadataMgrV2 *cassandraMetadataPersistenceV2
 		logger        log.Logger
@@ -52,11 +53,59 @@ func newMetadataManagerProxy(cfg config.Cassandra,
 	if err != nil {
 		return nil, err
 	}
-	return &metadataManagerProxy{metadataMgr: metadataMgr, metadataMgrV2: metadataMgrV2.(*cassandraMetadataPersistenceV2), logger: logger}, nil
+	return &metadataManagerProxy{
+		serializer:    p.NewPayloadSerializer(),
+		metadataMgr:   metadataMgr,
+		metadataMgrV2: metadataMgrV2.(*cassandraMetadataPersistenceV2),
+		logger:        logger,
+	}, nil
 }
 
 func (m *metadataManagerProxy) GetName() string {
 	return cassandraPersistenceName
+}
+
+func (m *metadataManagerProxy) migrationDomain(resp *p.InternalGetDomainResponse) {
+	if !resp.IsGlobalDomain {
+		badBinaries, err := m.serializer.DeserializeBadBinaries(resp.Config.BadBinaries)
+		if err != nil {
+			m.logger.WithTags(
+				tag.WorkflowDomainID(resp.Info.ID),
+				tag.WorkflowDomainName(resp.Info.Name),
+			).Error("Unable to migrate domain")
+			return
+		}
+		resp.Config.BadBinaries, err = m.serializer.SerializeBadBinaries(badBinaries, common.EncodingTypeThriftRW)
+		if err != nil {
+			m.logger.WithTags(
+				tag.WorkflowDomainID(resp.Info.ID),
+				tag.WorkflowDomainName(resp.Info.Name),
+			).Error("Unable to migrate domain")
+			return
+		}
+
+		_, err = m.metadataMgrV2.CreateDomainInV2Table(&p.InternalCreateDomainRequest{
+			Info:              resp.Info,
+			Config:            resp.Config,
+			ReplicationConfig: resp.ReplicationConfig,
+			IsGlobalDomain:    false,
+			ConfigVersion:     0,
+			FailoverVersion:   common.EmptyVersion,
+		})
+
+		if err != nil {
+			m.logger.WithTags(
+				tag.WorkflowDomainID(resp.Info.ID),
+				tag.WorkflowDomainName(resp.Info.Name),
+			).Error("Unable to migrate domain")
+			return
+		}
+	} else {
+		m.logger.WithTags(
+			tag.WorkflowDomainID(resp.Info.ID),
+			tag.WorkflowDomainName(resp.Info.Name),
+		).Error("Unable to migrate domain, encounter global domain in V1")
+	}
 }
 
 func (m *metadataManagerProxy) GetDomain(request *p.GetDomainRequest) (*p.InternalGetDomainResponse, error) {
@@ -75,30 +124,7 @@ func (m *metadataManagerProxy) GetDomain(request *p.GetDomainRequest) (*p.Intern
 	resp, err = m.metadataMgr.GetDomain(request)
 	if err == nil {
 		resp.TableVersion = p.DomainTableVersionV1
-		if !resp.IsGlobalDomain {
-			if resp.Config.BadBinaries == nil {
-				resp.Config.BadBinaries = &p.DataBlob{}
-			}
-			_, err = m.metadataMgrV2.CreateDomainInV2Table(&p.InternalCreateDomainRequest{
-				Info:              resp.Info,
-				Config:            resp.Config,
-				ReplicationConfig: resp.ReplicationConfig,
-				IsGlobalDomain:    false,
-				ConfigVersion:     0,
-				FailoverVersion:   common.EmptyVersion,
-			})
-			if err != nil {
-				m.logger.WithTags(
-					tag.WorkflowDomainID(resp.Info.ID),
-					tag.WorkflowDomainName(resp.Info.Name),
-				).Error("Unable to migrate domain")
-			}
-		} else {
-			m.logger.WithTags(
-				tag.WorkflowDomainID(resp.Info.ID),
-				tag.WorkflowDomainName(resp.Info.Name),
-			).Error("Unable to migrate domain, encounter global domain in V1")
-		}
+		m.migrationDomain(resp)
 	}
 	return resp, err
 }
