@@ -477,11 +477,7 @@ func getESQueryDSLHelper(request *p.ListWorkflowExecutionsRequestV2, token *esVi
 
 	isSorted := dsl.Exists(dslFieldSort)
 	if !isSorted { // set default sorting
-		if isOpen {
-			dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForOpen))
-		} else {
-			dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForClose))
-		}
+		dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForOpen))
 	} else {
 		// add WorkflowID as tie-breaker
 		dsl.Get(dslFieldSort).Set("1", fastjson.MustParse(jsonSortWithTieBreaker))
@@ -497,10 +493,13 @@ func getESQueryDSLHelper(request *p.ListWorkflowExecutionsRequestV2, token *esVi
 
 func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
 	var sql string
-	if strings.TrimSpace(request.Query) == "" {
-		sql = fmt.Sprintf("select * from dumy limit %d", request.PageSize)
+	query := strings.TrimSpace(request.Query)
+	if query == "" {
+		sql = fmt.Sprintf("select * from dummy limit %d", request.PageSize)
+	} else if common.IsJustOrderByClause(query) {
+		sql = fmt.Sprintf("select * from dummy %s limit %d", request.Query, request.PageSize)
 	} else {
-		sql = fmt.Sprintf("select * from dumy where %s limit %d", request.Query, request.PageSize)
+		sql = fmt.Sprintf("select * from dummy where %s limit %d", request.Query, request.PageSize)
 	}
 	return sql
 }
@@ -508,9 +507,9 @@ func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
 func getSQLFromCountRequest(request *p.CountWorkflowExecutionsRequest) string {
 	var sql string
 	if strings.TrimSpace(request.Query) == "" {
-		sql = "select * from dumy"
+		sql = "select * from dummy"
 	} else {
-		sql = fmt.Sprintf("select * from dumy where %s", request.Query)
+		sql = fmt.Sprintf("select * from dummy where %s", request.Query)
 	}
 	return sql
 }
