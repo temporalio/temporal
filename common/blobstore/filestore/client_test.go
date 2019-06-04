@@ -244,7 +244,7 @@ func (s *ClientSuite) TestDelete_Success() {
 	key, err := blob.NewKeyFromString("blob.blob")
 	s.NoError(err)
 	deleted, err := client.Delete(context.Background(), defaultBucketName, key)
-	s.NoError(err)
+	s.Equal(blobstore.ErrBlobNotExists, err)
 	s.False(deleted)
 
 	b := blob.NewBlob([]byte("body"), map[string]string{})

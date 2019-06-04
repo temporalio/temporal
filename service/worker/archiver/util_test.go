@@ -21,9 +21,11 @@
 package archiver
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
+	"go.uber.org/cadence"
 )
 
 type UtilSuite struct {
@@ -84,5 +86,25 @@ func (s *UtilSuite) TestHashesEqual() {
 
 	for _, tc := range testCases {
 		s.Equal(tc.equal, hashesEqual(tc.a, tc.b))
+	}
+}
+
+func (s *UtilSuite) TestValidateRequest() {
+	testCases := []struct {
+		request     *ArchiveRequest
+		expectedErr error
+	}{
+		{
+			request:     &ArchiveRequest{},
+			expectedErr: cadence.NewCustomError(errEmptyBucket),
+		},
+		{
+			request:     &ArchiveRequest{BucketName: "some random bucket name"},
+			expectedErr: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Equal(tc.expectedErr, validateArchivalRequest(tc.request))
 	}
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"go.uber.org/cadence"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -72,6 +73,7 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestNextEventID(request.NextEventID),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
+		tag.ArchivalBucket(request.BucketName),
 	)
 }
 
@@ -92,4 +94,13 @@ func shouldRun(probability float64) bool {
 		return true
 	}
 	return rand.Intn(int(1.0/probability)) == 0
+}
+
+func validateArchivalRequest(request *ArchiveRequest) error {
+	if len(request.BucketName) == 0 {
+		// this should not be able to occur, if domain enables archival bucket should always be set
+		return cadence.NewCustomError(errEmptyBucket)
+	}
+
+	return nil
 }

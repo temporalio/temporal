@@ -103,6 +103,39 @@ func (s *HistoryIndexBlobSuite) TestAddVersion() {
 	}
 }
 
+func (s *HistoryIndexBlobSuite) TestDeleteVersion() {
+	testCases := []struct {
+		existingVersions     map[string]string
+		closeFailoverVersion int64
+		expectedBlob         *blob.Blob
+	}{
+		{
+			existingVersions:     nil,
+			closeFailoverVersion: 10,
+			expectedBlob:         nil,
+		},
+		{
+			existingVersions:     map[string]string{"10": ""},
+			closeFailoverVersion: 10,
+			expectedBlob:         blob.NewBlob(nil, map[string]string{}),
+		},
+		{
+			existingVersions:     map[string]string{"1": ""},
+			closeFailoverVersion: 10,
+			expectedBlob:         nil,
+		},
+		{
+			existingVersions:     map[string]string{"1": "", "10": ""},
+			closeFailoverVersion: 10,
+			expectedBlob:         blob.NewBlob(nil, map[string]string{"1": ""}),
+		},
+	}
+	for _, tc := range testCases {
+		indexBlob := deleteVersion(tc.closeFailoverVersion, tc.existingVersions)
+		s.True(indexBlob.Equal(tc.expectedBlob))
+	}
+}
+
 func (s *HistoryIndexBlobSuite) TestGetHighestVersion() {
 	testCases := []struct {
 		tags            map[string]string
