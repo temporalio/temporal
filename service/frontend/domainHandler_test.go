@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -359,6 +360,62 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			IsGlobalDomain:  common.BoolPtr(isGlobalDomain2),
 		},
 	}, domains)
+}
+
+func (s *domainHandlerCommonSuite) TestValidateRetentionPeriod() {
+	testCases := []struct {
+		retentionPeriod int32
+		expectedErr     error
+	}{
+		{
+			retentionPeriod: 10,
+			expectedErr:     nil,
+		},
+		{
+			retentionPeriod: 0,
+			expectedErr:     errInvalidRetentionPeriod,
+		},
+		{
+			retentionPeriod: -3,
+			expectedErr:     errInvalidRetentionPeriod,
+		},
+	}
+	for _, tc := range testCases {
+		actualErr := s.handler.validateRetentionPeriod(tc.retentionPeriod)
+		s.Equal(tc.expectedErr, actualErr)
+	}
+}
+
+func (s *domainHandlerCommonSuite) TestRegisterDomain_InvalidRetentionPeriod() {
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr("random domain name"),
+		Description:                            common.StringPtr("random domain name"),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(0)),
+		IsGlobalDomain:                         common.BoolPtr(false),
+	}
+	err := s.handler.registerDomain(context.Background(), registerRequest)
+	s.Equal(errInvalidRetentionPeriod, err)
+}
+
+func (s *domainHandlerCommonSuite) TestUpdateDomain_InvalidRetentionPeriod() {
+	domain := "random domain name"
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(false),
+	}
+	err := s.handler.registerDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		Configuration: &workflow.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(-1)),
+		},
+	}
+	_, err = s.handler.updateDomain(context.Background(), updateRequest)
+	s.Equal(errInvalidRetentionPeriod, err)
 }
 
 func (s *domainHandlerCommonSuite) getRandomDomainName() string {

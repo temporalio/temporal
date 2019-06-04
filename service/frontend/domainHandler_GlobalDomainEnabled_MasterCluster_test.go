@@ -105,9 +105,11 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		})
 	}
 
+	retention := int32(1)
 	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name:           common.StringPtr(domainName),
-		IsGlobalDomain: common.BoolPtr(isGlobalDomain),
+		Name:                                   common.StringPtr(domainName),
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 	})
 	s.Nil(err)
 
@@ -127,7 +129,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		UUID:        common.StringPtr(""),
 	}, resp.DomainInfo)
 	s.Equal(&shared.DomainConfiguration{
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(0),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
 		ArchivalBucketName:                     common.StringPtr(""),
 		ArchivalRetentionPeriodInDays:          nil,
@@ -284,8 +286,9 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 	domainName := s.getRandomDomainName()
 	isGlobalDomain := false
 	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name:           common.StringPtr(domainName),
-		IsGlobalDomain: common.BoolPtr(isGlobalDomain),
+		Name:                                   common.StringPtr(domainName),
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
 	})
 	s.Nil(err)
 
@@ -373,9 +376,11 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
+	retention := int32(1)
 	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name:           common.StringPtr(domainName),
-		IsGlobalDomain: common.BoolPtr(isGlobalDomain),
+		Name:                                   common.StringPtr(domainName),
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 	})
 	s.Nil(err)
 
@@ -395,7 +400,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		UUID:        common.StringPtr(""),
 	}, resp.DomainInfo)
 	s.Equal(&shared.DomainConfiguration{
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(0),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
 		ArchivalBucketName:                     common.StringPtr(""),
 		ArchivalRetentionPeriodInDays:          nil,
@@ -576,10 +581,11 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
 	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name:              common.StringPtr(domainName),
-		IsGlobalDomain:    common.BoolPtr(isGlobalDomain),
-		Clusters:          clusters,
-		ActiveClusterName: common.StringPtr(activeClusterName),
+		Name:                                   common.StringPtr(domainName),
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
+		Clusters:                               clusters,
+		ActiveClusterName:                      common.StringPtr(activeClusterName),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
 	})
 	s.Nil(err)
 

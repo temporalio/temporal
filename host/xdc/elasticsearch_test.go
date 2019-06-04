@@ -141,10 +141,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	domainName := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
-		Name:              common.StringPtr(domainName),
-		Clusters:          clusterReplicationConfigES,
-		ActiveClusterName: common.StringPtr(clusterNameES[0]),
-		IsGlobalDomain:    common.BoolPtr(true),
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfigES,
+		ActiveClusterName:                      common.StringPtr(clusterNameES[0]),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
 	}
 	err := client1.RegisterDomain(createContext(), regReq)
 	s.NoError(err)
