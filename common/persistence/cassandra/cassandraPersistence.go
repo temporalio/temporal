@@ -2787,7 +2787,8 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 
 	for _, task := range request.Tasks {
 		scheduleID := task.Data.ScheduleID
-		if task.Data.ScheduleToStartTimeout == 0 {
+		ttl := int64(task.Data.ScheduleToStartTimeout)
+		if ttl <= 0 {
 			batch.Query(templateCreateTaskQuery,
 				domainID,
 				taskList,
@@ -2800,6 +2801,9 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				scheduleID,
 				cqlNowTimestamp)
 		} else {
+			if ttl > maxCassandraTTL {
+				ttl = maxCassandraTTL
+			}
 			batch.Query(templateCreateTaskWithTTLQuery,
 				domainID,
 				taskList,
@@ -2811,7 +2815,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				task.Execution.GetRunId(),
 				scheduleID,
 				cqlNowTimestamp,
-				task.Data.ScheduleToStartTimeout)
+				ttl)
 		}
 	}
 
