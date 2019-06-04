@@ -114,13 +114,36 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)
 	uploadSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
-	if err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, nil); err != nil {
-		logger.Error("failed to upload history, moving on to deleting history without archiving", tag.Error(err))
+	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, nil)
+	if err != nil {
+		logger.Error("failed to upload history, will delete all uploaded blobs and moving on to deleting history without archiving", tag.Error(err))
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
 	}
 	uploadSW.Stop()
+
+	if err != nil {
+		ao := workflow.ActivityOptions{
+			ScheduleToStartTimeout: 10 * time.Minute,
+			StartToCloseTimeout:    5 * time.Minute,
+			RetryPolicy: &cadence.RetryPolicy{
+				InitialInterval:          time.Second,
+				BackoffCoefficient:       2.0,
+				ExpirationInterval:       10 * time.Minute,
+				NonRetriableErrorReasons: deleteBlobActivityNonRetryableErrors,
+			},
+		}
+		actCtx := workflow.WithActivityOptions(ctx, ao)
+		deleteBlobSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteBlobWithRetriesLatency)
+		if err := workflow.ExecuteActivity(actCtx, deleteBlobActivityFnName, request).Get(actCtx, nil); err != nil {
+			logger.Error("failed to delete uploaded blobs", tag.Error(err))
+			metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteBlobFailedAllRetriesCount)
+		} else {
+			metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteBlobSuccessCount)
+		}
+		deleteBlobSW.Stop()
+	}
 
 	lao := workflow.LocalActivityOptions{
 		ScheduleToCloseTimeout: 1 * time.Minute,
@@ -133,7 +156,7 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	}
 	deleteSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
-	err := workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
+	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
 	if err == nil {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount)
 		sw.Stop()

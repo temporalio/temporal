@@ -24,10 +24,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
-	"github.com/uber/cadence/common/blobstore/blob"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
+
+	"github.com/uber/cadence/common/blobstore/blob"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -92,10 +93,7 @@ func readFile(filepath string) ([]byte, error) {
 
 func deleteFile(filepath string) (bool, error) {
 	if err := os.Remove(filepath); err != nil {
-		if !os.IsNotExist(err) {
-			return false, err
-		}
-		return false, nil
+		return false, err
 	}
 	return true, nil
 }
