@@ -22,6 +22,7 @@ package common
 
 import (
 	"errors"
+	"strings"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/definition"
@@ -66,22 +67,39 @@ func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *w
 }
 
 // validateListOrCountRequestForQuery valid sql for visibility API
+// it also adds attr prefix for customized fields
 func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClause string) (string, error) {
 	if len(whereClause) != 0 {
-		sqlQuery := "SELECT * FROM dummy WHERE " + whereClause
+		var sqlQuery string
+		whereClause := strings.TrimSpace(whereClause)
+		if IsJustOrderByClause(whereClause) { // just order by
+			sqlQuery = "SELECT * FROM dummy " + whereClause
+		} else {
+			sqlQuery = "SELECT * FROM dummy WHERE " + whereClause
+		}
+
 		stmt, err := sqlparser.Parse(sqlQuery)
 		if err != nil {
 			return "", &workflow.BadRequestError{Message: "Invalid query."}
 		}
 
 		sel := stmt.(*sqlparser.Select)
-		err = qv.validateWhereExpr(sel.Where.Expr)
+		buf := sqlparser.NewTrackedBuffer(nil)
+		// validate where expr
+		if sel.Where != nil {
+			err = qv.validateWhereExpr(sel.Where.Expr)
+			if err != nil {
+				return "", &workflow.BadRequestError{Message: err.Error()}
+			}
+			sel.Where.Expr.Format(buf)
+		}
+		// validate order by
+		err = qv.validateOrderByExpr(sel.OrderBy)
 		if err != nil {
 			return "", &workflow.BadRequestError{Message: err.Error()}
 		}
+		sel.OrderBy.Format(buf)
 
-		buf := sqlparser.NewTrackedBuffer(nil)
-		sel.Where.Expr.Format(buf)
 		return buf.String(), nil
 	}
 	return whereClause, nil
@@ -168,6 +186,28 @@ func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr) error
 		return nil
 	}
 	return errors.New("invalid search attribute")
+}
+
+func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderBy) error {
+	for _, orderByExpr := range orderBy {
+		colName, ok := orderByExpr.Expr.(*sqlparser.ColName)
+		if !ok {
+			return errors.New("invalid order by expression")
+		}
+		colNameStr := colName.Name.String()
+		if qv.IsValidSearchAttributes(colNameStr) {
+			if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
+				orderByExpr.Expr = &sqlparser.ColName{
+					Metadata:  colName.Metadata,
+					Name:      sqlparser.NewColIdent(definition.Attr + "." + colNameStr),
+					Qualifier: colName.Qualifier,
+				}
+			}
+		} else {
+			return errors.New("invalid order by attribute")
+		}
+	}
+	return nil
 }
 
 // IsValidSearchAttributes return true if key is registered

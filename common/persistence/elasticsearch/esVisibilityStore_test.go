@@ -662,7 +662,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	dsl, isOpen, err := getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
 
 	request.Query = "invaild query"
 	dsl, isOpen, err = getESQueryDSL(request, token)
@@ -674,13 +674,13 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	dsl, isOpen, err = getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' or WorkflowID = 'another-wid'`
 	dsl, isOpen, err = getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
 	dsl, isOpen, err = getESQueryDSL(request, token)
@@ -704,19 +704,25 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	dsl, isOpen, err = getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000`
 	dsl, isOpen, err = getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000 or ExecutionTime > 2000`
 	dsl, isOpen, err = getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+
+	request.Query = `order by ExecutionTime desc`
+	dsl, isOpen, err = getESQueryDSL(request, token)
+	s.Nil(err)
+	s.False(isOpen)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"ExecutionTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < "unable to parse"`
 	_, _, err = getESQueryDSL(request, token)
@@ -730,7 +736,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	dsl, isOpen, err = getESQueryDSL(request, token)
 	s.Nil(err)
 	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}],"search_after":[1,"a"]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}],"search_after":[1,"a"]}`, dsl)
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {

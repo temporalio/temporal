@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -438,4 +439,11 @@ func GetSizeOfMapStringToByteArray(input map[string][]byte) int {
 		res += len(k) + len(v)
 	}
 	return res + golandMapReserverNumberOfBytes
+}
+
+// IsJustOrderByClause return true is query start with order by
+func IsJustOrderByClause(clause string) bool {
+	whereClause := strings.TrimSpace(clause)
+	whereClause = strings.ToLower(whereClause)
+	return strings.HasPrefix(whereClause, "order by")
 }
