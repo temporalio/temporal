@@ -158,6 +158,10 @@ func (d *domainHandlerImpl) registerDomain(ctx context.Context,
 		}
 	}
 
+	if err := d.validateRetentionPeriod(registerRequest.GetWorkflowExecutionRetentionPeriodInDays()); err != nil {
+		return err
+	}
+
 	failoverVersion := common.EmptyVersion
 	if registerRequest.GetIsGlobalDomain() {
 		failoverVersion = d.clusterMetadata.GetNextFailoverVersion(activeClusterName, 0)
@@ -435,6 +439,9 @@ func (d *domainHandlerImpl) updateDomain(ctx context.Context,
 		if updatedConfig.WorkflowExecutionRetentionPeriodInDays != nil {
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
+			if err := d.validateRetentionPeriod(config.Retention); err != nil {
+				return nil, err
+			}
 		}
 		if archivalConfigChanged {
 			configurationChanged = true
@@ -679,6 +686,13 @@ func (d *domainHandlerImpl) validateClusterName(clusterName string) error {
 	if info, ok := d.clusterMetadata.GetAllClusterInfo()[clusterName]; !ok || !info.Enabled {
 		errMsg := "Invalid cluster name: %s"
 		return &shared.BadRequestError{Message: fmt.Sprintf(errMsg, clusterName)}
+	}
+	return nil
+}
+
+func (d *domainHandlerImpl) validateRetentionPeriod(retentionDays int32) error {
+	if retentionDays <= 0 {
+		return errInvalidRetentionPeriod
 	}
 	return nil
 }

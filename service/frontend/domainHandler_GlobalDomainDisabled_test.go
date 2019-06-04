@@ -132,8 +132,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_AllDefaul
 		})
 	}
 
+	retention := int32(1)
 	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name: common.StringPtr(domainName),
+		Name:                                   common.StringPtr(domainName),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 	})
 	s.Nil(err)
 
@@ -153,7 +155,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_AllDefaul
 		UUID:        common.StringPtr(""),
 	}, resp.DomainInfo)
 	s.Equal(&shared.DomainConfiguration{
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(0),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
 		ArchivalBucketName:                     common.StringPtr(""),
 		ArchivalRetentionPeriodInDays:          nil,
@@ -307,7 +309,8 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_NoAttrSet()
 func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet() {
 	domainName := s.getRandomDomainName()
 	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name: common.StringPtr(domainName),
+		Name:                                   common.StringPtr(domainName),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
 	})
 	s.Nil(err)
 
