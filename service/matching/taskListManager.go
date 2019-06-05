@@ -21,6 +21,7 @@
 package matching
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -531,20 +532,20 @@ func (c *taskListManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock,
 }
 
 func (c *taskListManagerImpl) String() string {
-	var r string
+	buf := new(bytes.Buffer)
 	if c.taskListID.taskType == persistence.TaskListTypeActivity {
-		r += "Activity"
+		buf.WriteString("Activity")
 	} else {
-		r += "Decision"
+		buf.WriteString("Decision")
 	}
 	rangeID := c.db.RangeID()
-	r += " task list " + c.taskListID.taskListName + "\n"
-	r += fmt.Sprintf("RangeID=%v\n", rangeID)
-	r += fmt.Sprintf("TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
-	r += fmt.Sprintf("AckLevel=%v\n", c.taskAckManager.ackLevel)
-	r += fmt.Sprintf("MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
+	fmt.Fprintf(buf, " task list %v\n", c.taskListID.taskListName)
+	fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
+	fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
+	fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
+	fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
 
-	return r
+	return buf.String()
 }
 
 // getAllPollerInfo return poller which poll from this tasklist in last few minutes

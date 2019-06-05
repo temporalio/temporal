@@ -51,7 +51,6 @@ import (
 // Handler - Thrift handler inteface for history service
 type (
 	Handler struct {
-		numberOfShards        int
 		shardManager          persistence.ShardManager
 		metadataMgr           persistence.MetadataManager
 		visibilityMgr         persistence.VisibilityManager

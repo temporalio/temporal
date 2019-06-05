@@ -21,6 +21,7 @@
 package matching
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -157,12 +158,11 @@ func (e *matchingEngineImpl) getTaskLists(maxCount int) (lists []taskListManager
 
 func (e *matchingEngineImpl) String() string {
 	// Executes taskList.String() on each task list outside of lock
-	var r string
+	buf := new(bytes.Buffer)
 	for _, l := range e.getTaskLists(1000) {
-		r += "\n"
-		r += l.String()
+		fmt.Fprintf(buf, "\n%s", l.String())
 	}
-	return r
+	return buf.String()
 }
 
 // Returns taskListManager for a task list. If not already cached gets new range from DB and

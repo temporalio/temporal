@@ -1079,7 +1079,6 @@ func (s *shardContextImpl) GetCurrentTime(cluster string) time.Time {
 	return s.GetTimeSource().Now()
 }
 
-// TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContext,
 	error) {
 
