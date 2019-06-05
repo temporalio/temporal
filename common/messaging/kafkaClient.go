@@ -21,6 +21,10 @@
 package messaging
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"io/ioutil"
 	"strings"
 
 	"github.com/Shopify/sarama"
@@ -36,6 +40,7 @@ type (
 	// This is a default implementation of Client interface which makes use of uber-go/kafka-client as consumer
 	kafkaClient struct {
 		config        *KafkaConfig
+		tlsConfig     *tls.Config
 		client        uberKafkaClient.Client
 		metricsClient metrics.Client
 		logger        log.Logger
@@ -68,8 +73,14 @@ func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.
 
 	client := uberKafkaClient.New(uberKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
 
+	tlsConfig, err := createTLSConfig(kc.TLS)
+	if err != nil {
+		panic(fmt.Sprintf("Error creating Kafka TLS config %v", err))
+	}
+
 	return &kafkaClient{
 		config:        kc,
+		tlsConfig:     tlsConfig,
 		client:        client,
 		metricsClient: metricsClient,
 		logger:        logger,
@@ -118,6 +129,7 @@ func (c *kafkaClient) newConsumerHelper(topic, dlq *uberKafka.Topic, consumerNam
 	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
 	consumerConfig.Concurrency = concurrency
 	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
+	consumerConfig.TLSConfig = c.tlsConfig
 
 	uConsumer, err := c.client.NewConsumer(consumerConfig)
 	if err != nil {
@@ -142,7 +154,12 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	kafkaClusterName := c.config.getKafkaClusterForTopic(topic)
 	brokers := c.config.getBrokersForKafkaCluster(kafkaClusterName)
 
-	producer, err := sarama.NewSyncProducer(brokers, nil)
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Net.TLS.Enable = c.tlsConfig != nil
+	config.Net.TLS.Config = c.tlsConfig
+
+	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
 		return nil, err
 	}
@@ -152,4 +169,26 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 		return NewMetricProducer(NewKafkaProducer(topic, producer, c.logger), c.metricsClient), nil
 	}
 	return NewKafkaProducer(topic, producer, c.logger), nil
+}
+
+func createTLSConfig(tlsConfig TLS) (*tls.Config, error) {
+	if !tlsConfig.Enabled {
+		return nil, nil
+	}
+
+	cert, err := tls.LoadX509KeyPair(tlsConfig.CertFile, tlsConfig.KeyFile)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	pemData, err := ioutil.ReadFile(tlsConfig.BundleFile)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool.AppendCertsFromPEM(pemData)
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}, nil
 }

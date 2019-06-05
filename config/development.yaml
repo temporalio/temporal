@@ -118,6 +118,8 @@ archival:
 #    s3ForcePathStyle: true
 
 kafka:
+  tls:
+    enabled: false
   clusters:
     test:
       brokers:
