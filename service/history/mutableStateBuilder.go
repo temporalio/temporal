@@ -29,8 +29,8 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -930,7 +930,7 @@ func (e *mutableStateBuilder) GetRequestCancelInfo(initiatedEventID int64) (*per
 func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Duration {
 	info := e.executionInfo
 	if !info.HasRetryPolicy {
-		return common.NoRetryBackoff
+		return backoff.NoBackoff
 	}
 
 	return getBackoffInterval(info.Attempt, info.MaximumAttempts, info.InitialInterval, info.MaximumInterval, info.BackoffCoefficient, time.Now(), info.ExpirationTime, errReason, info.NonRetriableErrors)
@@ -939,9 +939,9 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Dur
 func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
 	info := e.executionInfo
 	if len(info.CronSchedule) == 0 {
-		return cron.NoBackoff
+		return backoff.NoBackoff
 	}
-	return cron.GetBackoffForNextSchedule(info.CronSchedule, time.Now())
+	return backoff.GetBackoffForNextSchedule(info.CronSchedule, time.Now())
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.

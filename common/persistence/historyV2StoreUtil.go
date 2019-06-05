@@ -22,9 +22,10 @@ package persistence
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
 )

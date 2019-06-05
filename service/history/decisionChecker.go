@@ -24,7 +24,7 @@ import (
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cron"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -427,7 +427,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	if err := cron.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
+	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
 		return err
 	}
 

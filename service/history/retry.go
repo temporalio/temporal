@@ -27,6 +27,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -40,7 +41,7 @@ func prepareActivityNextRetryWithNowTime(version int64, a *persistence.ActivityI
 	}
 
 	backoffInterval := getBackoffInterval(a.Attempt, a.MaximumAttempts, a.InitialInterval, a.MaximumInterval, a.BackoffCoefficient, now, a.ExpirationTime, errReason, a.NonRetriableErrors)
-	if backoffInterval == common.NoRetryBackoff {
+	if backoffInterval == backoff.NoBackoff {
 		return nil
 	}
 	nextScheduleTime := now.Add(backoffInterval)
@@ -64,13 +65,13 @@ func prepareActivityNextRetryWithNowTime(version int64, a *persistence.ActivityI
 
 func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int32, backoffCoefficient float64, now, expirationTime time.Time, errReason string, nonRetriableErrors []string) time.Duration {
 	if maxAttempts == 0 && expirationTime.IsZero() {
-		return common.NoRetryBackoff
+		return backoff.NoBackoff
 	}
 
 	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
 		// currAttempt starts from 0.
 		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return common.NoRetryBackoff
+		return backoff.NoBackoff
 	}
 
 	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
@@ -79,7 +80,7 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 		if maxInterval > 0 {
 			nextInterval = int64(maxInterval)
 		} else {
-			return common.NoRetryBackoff
+			return backoff.NoBackoff
 		}
 	}
 
@@ -91,7 +92,7 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 	backoffInterval := time.Duration(nextInterval) * time.Second
 	nextScheduleTime := now.Add(backoffInterval)
 	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
-		return common.NoRetryBackoff
+		return backoff.NoBackoff
 	}
 
 	// make sure we don't retry size exceeded error reasons. Note that FailureReasonFailureDetailsExceedsLimit is retryable.
@@ -99,13 +100,13 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 		errReason == common.FailureReasonCompleteResultExceedsLimit ||
 		errReason == common.FailureReasonHeartbeatExceedsLimit ||
 		errReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
-		return common.NoRetryBackoff
+		return backoff.NoBackoff
 	}
 
 	// check if error is non-retriable
 	for _, er := range nonRetriableErrors {
 		if er == errReason {
-			return common.NoRetryBackoff
+			return backoff.NoBackoff
 		}
 	}
 

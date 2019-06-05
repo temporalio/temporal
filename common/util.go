@@ -33,7 +33,6 @@ import (
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -380,7 +379,7 @@ func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.S
 		deadline := time.Now().Add(time.Second * time.Duration(expirationInSeconds))
 		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), time.Now()))
+	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), time.Now()))
 	return histRequest
 }
 

@@ -22,8 +22,6 @@ package common
 
 import (
 	"time"
-
-	"github.com/uber/cadence/common/cron"
 )
 
 const (
@@ -66,9 +64,6 @@ const (
 	EncodingTypeUnknown               = "unknow"
 	EncodingTypeEmpty                 = ""
 )
-
-// NoRetryBackoff is used to represent backoff when no retry is needed
-const NoRetryBackoff = cron.NoBackoff
 
 type (
 	// EncodingType is an enum that represents various data encoding types

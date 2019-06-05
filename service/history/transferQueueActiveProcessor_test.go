@@ -33,9 +33,9 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
@@ -1650,6 +1650,6 @@ func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(
 			Execution:   &execution,
 			InitiatedId: common.Int64Ptr(task.ScheduleID),
 		},
-		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
+		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
 	}
 }

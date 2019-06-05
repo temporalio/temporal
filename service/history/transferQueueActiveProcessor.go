@@ -32,7 +32,6 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -796,7 +795,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 				},
 				InitiatedId: common.Int64Ptr(initiatedEventID),
 			},
-			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
+			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
 		}
 
 		var startResponse *workflow.StartWorkflowExecutionResponse

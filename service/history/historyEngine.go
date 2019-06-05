@@ -34,10 +34,10 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/definition"
 	ce "github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
@@ -727,13 +727,13 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx ctx.Context,
 	// TODO: we need to consider adding execution time to mutable state
 	// For now execution time will be calculated based on start time and cron schedule/retry policy
 	// each time DescribeWorkflowExecution is called.
-	backoff := time.Duration(0)
+	backoffDuration := time.Duration(0)
 	if executionInfo.HasRetryPolicy && (executionInfo.Attempt > 0) {
-		backoff = time.Duration(float64(executionInfo.InitialInterval)*math.Pow(executionInfo.BackoffCoefficient, float64(executionInfo.Attempt-1))) * time.Second
+		backoffDuration = time.Duration(float64(executionInfo.InitialInterval)*math.Pow(executionInfo.BackoffCoefficient, float64(executionInfo.Attempt-1))) * time.Second
 	} else if len(executionInfo.CronSchedule) != 0 {
-		backoff = cron.GetBackoffForNextSchedule(executionInfo.CronSchedule, executionInfo.StartTimestamp)
+		backoffDuration = backoff.GetBackoffForNextSchedule(executionInfo.CronSchedule, executionInfo.StartTimestamp)
 	}
-	result.WorkflowExecutionInfo.ExecutionTime = common.Int64Ptr(result.WorkflowExecutionInfo.GetStartTime() + backoff.Nanoseconds())
+	result.WorkflowExecutionInfo.ExecutionTime = common.Int64Ptr(result.WorkflowExecutionInfo.GetStartTime() + backoffDuration.Nanoseconds())
 
 	if executionInfo.ParentRunID != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &workflow.WorkflowExecution{

@@ -26,8 +26,8 @@ import (
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -326,49 +326,28 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 
 	// check if this is a cron workflow
 	cronBackoff := handler.mutableState.GetCronBackoffDuration()
-	if cronBackoff == cron.NoBackoff {
+	if cronBackoff == backoff.NoBackoff {
 		// not cron, so complete this workflow execution
 		if event := handler.mutableState.AddCompletedWorkflowEvent(handler.decisionTaskCompletedID, attr); event == nil {
 			return &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
 		}
-	} else {
-		// this is a cron workflow
-		executionInfo := handler.mutableState.GetExecutionInfo()
-		startEvent, found := handler.mutableState.GetStartEvent()
-		if !found {
-			return &workflow.InternalServiceError{Message: "Failed to load start event."}
-		}
-
-		startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
-		continueAsNewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
-			WorkflowType:                        startAttributes.WorkflowType,
-			TaskList:                            startAttributes.TaskList,
-			RetryPolicy:                         startAttributes.RetryPolicy,
-			Input:                               startAttributes.Input,
-			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
-			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
-			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(cronBackoff.Seconds())),
-			Initiator:                           workflow.ContinueAsNewInitiatorCronSchedule.Ptr(),
-			LastCompletionResult:                attr.Result,
-			CronSchedule:                        common.StringPtr(executionInfo.CronSchedule),
-		}
-
-		_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
-			handler.decisionTaskCompletedID,
-			handler.decisionTaskCompletedID,
-			handler.domainEntry,
-			startAttributes.GetParentWorkflowDomain(),
-			continueAsNewAttributes,
-			handler.eventStoreVersion,
-		)
-		if err != nil {
-			return err
-		}
-
-		handler.continueAsNewBuilder = newStateBuilder
+		return nil
 	}
 
-	return nil
+	// this is a cron workflow
+	startEvent, found := handler.mutableState.GetStartEvent()
+	if !found {
+		return &workflow.InternalServiceError{Message: "Failed to load start event."}
+	}
+	startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
+	return handler.retryCronContinueAsNew(
+		startAttributes,
+		int32(cronBackoff.Seconds()),
+		workflow.ContinueAsNewInitiatorCronSchedule.Ptr(),
+		nil,
+		nil,
+		attr.Result,
+	)
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
@@ -416,57 +395,39 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		return nil
 	}
 
+	// below will check whether to do continue as new based on backoff & backoff or cron
 	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetReason())
 	continueAsNewInitiator := workflow.ContinueAsNewInitiatorRetryPolicy
-	if backoffInterval == common.NoRetryBackoff {
+	// first check the backoff backoff
+	if backoffInterval == backoff.NoBackoff {
+		// if no backoff backoff, set the backoffInterval using cron schedule
 		backoffInterval = handler.mutableState.GetCronBackoffDuration()
 		continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 	}
-	// TODO this line `backoffInterval == cron.NoBackoff` and the
-	//  one above `backoffInterval == common.NoRetryBackoff` are essentially the same?
-	if backoffInterval == cron.NoBackoff {
-		// no retry or cron
+
+	// second check the backoff / cron schedule
+	if backoffInterval == backoff.NoBackoff {
+		// no backoff or cron
 		if event := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, attr); event == nil {
 			return &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
 		}
-	} else {
-		startEvent, found := handler.mutableState.GetStartEvent()
-		if !found {
-			return &workflow.InternalServiceError{Message: "Failed to load start event."}
-		}
-
-		startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
-		continueAsNewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
-			WorkflowType:                        startAttributes.WorkflowType,
-			TaskList:                            startAttributes.TaskList,
-			RetryPolicy:                         startAttributes.RetryPolicy,
-			Input:                               startAttributes.Input,
-			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
-			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
-			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
-			Initiator:                           continueAsNewInitiator.Ptr(),
-			FailureReason:                       attr.Reason,
-			FailureDetails:                      attr.Details,
-			LastCompletionResult:                startAttributes.LastCompletionResult,
-			CronSchedule:                        common.StringPtr(handler.mutableState.GetExecutionInfo().CronSchedule),
-		}
-
-		_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
-			handler.decisionTaskCompletedID,
-			handler.decisionTaskCompletedID,
-			handler.domainEntry,
-			startAttributes.GetParentWorkflowDomain(),
-			continueAsNewAttributes,
-			handler.eventStoreVersion,
-		)
-		if err != nil {
-			return err
-		}
-
-		handler.continueAsNewBuilder = newStateBuilder
+		return nil
 	}
 
-	return nil
+	// this is a cron / backoff workflow
+	startEvent, found := handler.mutableState.GetStartEvent()
+	if !found {
+		return &workflow.InternalServiceError{Message: "Failed to load start event."}
+	}
+	startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
+	return handler.retryCronContinueAsNew(
+		startAttributes,
+		int32(backoffInterval.Seconds()),
+		continueAsNewInitiator.Ptr(),
+		attr.Reason,
+		attr.Details,
+		startAttributes.LastCompletionResult,
+	)
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
@@ -786,5 +747,45 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 		TargetChildWorkflowOnly: attr.GetChildWorkflowOnly(),
 		InitiatedID:             wfSignalReqEvent.GetEventId(),
 	})
+	return nil
+}
+
+func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
+	attr *workflow.WorkflowExecutionStartedEventAttributes,
+	backoffInterval int32,
+	continueAsNewIter *workflow.ContinueAsNewInitiator,
+	failureReason *string,
+	failureDetails []byte,
+	lastCompletionResult []byte,
+) error {
+
+	continueAsNewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+		WorkflowType:                        attr.WorkflowType,
+		TaskList:                            attr.TaskList,
+		RetryPolicy:                         attr.RetryPolicy,
+		Input:                               attr.Input,
+		ExecutionStartToCloseTimeoutSeconds: attr.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      attr.TaskStartToCloseTimeoutSeconds,
+		CronSchedule:                        attr.CronSchedule,
+		BackoffStartIntervalInSeconds:       common.Int32Ptr(backoffInterval),
+		Initiator:                           continueAsNewIter,
+		FailureReason:                       failureReason,
+		FailureDetails:                      failureDetails,
+		LastCompletionResult:                lastCompletionResult,
+	}
+
+	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
+		handler.decisionTaskCompletedID,
+		handler.decisionTaskCompletedID,
+		handler.domainEntry,
+		attr.GetParentWorkflowDomain(),
+		continueAsNewAttributes,
+		handler.eventStoreVersion,
+	)
+	if err != nil {
+		return err
+	}
+
+	handler.continueAsNewBuilder = newStateBuilder
 	return nil
 }
