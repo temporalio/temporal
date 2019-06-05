@@ -677,8 +677,6 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) Tag 
 	return newInt64("archival-request-close-failover-version", requestCloseFailoverVersion)
 }
 
-// archival tags (blob tags)
-
 // ArchivalBucket returns tag for Bucket
 func ArchivalBucket(bucket string) Tag {
 	return newStringTag("archival-bucket", bucket)
@@ -689,29 +687,22 @@ func ArchivalBlobKey(blobKey string) Tag {
 	return newStringTag("archival-blob-key", blobKey)
 }
 
-// archival tags (file blobstore tags)
-
-// ArchivalFileBlobstoreBlobPath returns tag for FileBlobstoreBlobPath
-func ArchivalFileBlobstoreBlobPath(fileBlobstoreBlobPath string) Tag {
-	return newStringTag("archival-file-blobstore-blob-path", fileBlobstoreBlobPath)
-}
-
-// ArchivalFileBlobstoreMetadataPath returns tag for FileBlobstoreMetadataPath
-func ArchivalFileBlobstoreMetadataPath(fileBlobstoreMetadataPath string) Tag {
-	return newStringTag("archival-file-blobstore-metadata-path", fileBlobstoreMetadataPath)
-}
-
 // ArchivalClusterArchivalStatus returns tag for ClusterArchivalStatus
 func ArchivalClusterArchivalStatus(clusterArchivalStatus interface{}) Tag {
 	return newObjectTag("archival-cluster-archival-status", clusterArchivalStatus)
 }
 
-// ArchivalUploadSkipReason returns tag for UploadSkipReason
-func ArchivalUploadSkipReason(uploadSkipReason string) Tag {
-	return newStringTag("archival-upload-skip-reason", uploadSkipReason)
+// ArchivalUploadFailReason returns tag for ArchivalUploadFailReason
+func ArchivalUploadFailReason(uploadFailReason string) Tag {
+	return newStringTag("archival-upload-fail-reason", uploadFailReason)
 }
 
-// UploadFailReason returns tag for UploadFailReason
-func UploadFailReason(uploadFailReason string) Tag {
-	return newStringTag("archival-upload-fail-reason", uploadFailReason)
+// ArchivalDeleteHistoryFailReason returns tag for ArchivalDeleteHistoryFailReason
+func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) Tag {
+	return newStringTag("archival-delete-history-fail-reason", deleteHistoryFailReason)
+}
+
+// ArchivalDeleteBlobsFailReason returns tag for ArchivalDeleteBlobsFailReason
+func ArchivalDeleteBlobsFailReason(deleteBlobsFailReason string) Tag {
+	return newStringTag("archival-delete-blobs-fail-reason", deleteBlobsFailReason)
 }
