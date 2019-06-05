@@ -57,10 +57,12 @@ const (
 
 	errDeleteHistoryV1 = "failed to delete history from events_v1"
 	errDeleteHistoryV2 = "failed to delete history from events_v2"
+
+	errHistoryMutated = "history was mutated during uploading"
 )
 
 var (
-	uploadHistoryActivityNonRetryableErrors = []string{errGetDomainByID, errConstructKey, errGetTags, errUploadBlob, errReadBlob, errEmptyBucket, errConstructBlob, errDownloadBlob}
+	uploadHistoryActivityNonRetryableErrors = []string{errGetDomainByID, errConstructKey, errGetTags, errUploadBlob, errReadBlob, errEmptyBucket, errConstructBlob, errDownloadBlob, errHistoryMutated}
 	deleteBlobActivityNonRetryableErrors    = []string{errConstructKey, errGetTags, errUploadBlob, errEmptyBucket, errDeleteBlob}
 	deleteHistoryActivityNonRetryableErrors = []string{errDeleteHistoryV1, errDeleteHistoryV2}
 	errContextTimeout                       = errors.New("activity aborted because context timed out")
@@ -153,6 +155,13 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			logger.Error(uploadErrorMsg, tag.UploadFailReason("could not get history blob from reader"))
 			return err
 		}
+
+		if historyMutated(historyBlob, &request) {
+			scope.IncCounter(metrics.ArchiverHistoryMutatedCount)
+			logger.Error(uploadErrorMsg, tag.UploadFailReason("history was mutated during archiving"))
+			return cadence.NewCustomError(errHistoryMutated)
+		}
+
 		if runConstTest {
 			// some tags are specific to the cluster and time a blob was uploaded from/when
 			// this only updates those specific tags, all other parts of the blob are left unchanged
