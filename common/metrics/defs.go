@@ -1333,6 +1333,7 @@ const (
 	IndexProcessorCorruptedData
 	ArchiverNonRetryableErrorCount
 	ArchiverSkipUploadCount
+	ArchiverHistoryMutatedCount
 	ArchiverRunningDeterministicConstructionCheckCount
 	ArchiverDeterministicConstructionCheckFailedCount
 	ArchiverCouldNotRunDeterministicConstructionCheckCount
@@ -1573,6 +1574,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		IndexProcessorCorruptedData:                            {metricName: "index_processor_corrupted_data"},
 		ArchiverNonRetryableErrorCount:                         {metricName: "archiver_non_retryable_error"},
 		ArchiverSkipUploadCount:                                {metricName: "archiver_skip_upload"},
+		ArchiverHistoryMutatedCount:                            {metricName: "archiver_history_mutated"},
 		ArchiverRunningDeterministicConstructionCheckCount:     {metricName: "archiver_running_deterministic_construction_check"},
 		ArchiverDeterministicConstructionCheckFailedCount:      {metricName: "archiver_deterministic_construction_check_failed"},
 		ArchiverCouldNotRunDeterministicConstructionCheckCount: {metricName: "archiver_could_not_run_deterministic_construction_check"},

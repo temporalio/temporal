@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common"
 	"go.uber.org/cadence"
 )
 
@@ -86,6 +87,69 @@ func (s *UtilSuite) TestHashesEqual() {
 
 	for _, tc := range testCases {
 		s.Equal(tc.equal, hashesEqual(tc.a, tc.b))
+	}
+}
+
+func (s *UtilSuite) TestHistoryMutated() {
+	testCases := []struct {
+		historyBlob *HistoryBlob
+		request     *ArchiveRequest
+		isMutated   bool
+	}{
+		{
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(15),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 3,
+			},
+			isMutated: true,
+		},
+		{
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(10),
+					LastEventID:         common.Int64Ptr(50),
+					IsLast:              common.BoolPtr(true),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 10,
+				NextEventID:          34,
+			},
+			isMutated: true,
+		},
+		{
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(9),
+					IsLast:              common.BoolPtr(true),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 10,
+			},
+			isMutated: true,
+		},
+		{
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(10),
+					LastEventID:         common.Int64Ptr(33),
+					IsLast:              common.BoolPtr(true),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 10,
+				NextEventID:          34,
+			},
+			isMutated: false,
+		},
+	}
+	for _, tc := range testCases {
+		s.Equal(tc.isMutated, historyMutated(tc.historyBlob, tc.request))
 	}
 }
 
