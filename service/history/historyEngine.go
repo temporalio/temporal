@@ -1743,6 +1743,7 @@ func (e *historyEngineImpl) DeleteExecutionFromVisibility(task *persistence.Time
 }
 
 type updateWorkflowAction struct {
+	noop           bool
 	deleteWorkflow bool
 	createDecision bool
 	timerTasks     []persistence.Task
@@ -1777,6 +1778,9 @@ Update_History_Loop:
 
 			// Returned error back to the caller
 			return err
+		}
+		if postActions.noop {
+			return nil
 		}
 
 		transferTasks, timerTasks := postActions.transferTasks, postActions.timerTasks
@@ -2051,50 +2055,6 @@ func getStartRequest(domainID string,
 
 	startRequest := common.CreateHistoryStartWorkflowRequest(domainID, req)
 	return startRequest
-}
-
-func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, eventStoreVersion int32, branchToken []byte, logger log.Logger, domainID, workflowID, runID string, shardID *int) (*workflow.HistoryEvent, error) {
-	var events []*workflow.HistoryEvent
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		response, err := historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
-			BranchToken:   branchToken,
-			MinEventID:    common.FirstEventID,
-			MaxEventID:    common.FirstEventID + 1,
-			PageSize:      defaultHistoryPageSize,
-			NextPageToken: nil,
-			ShardID:       shardID,
-		})
-		if err != nil {
-			logger.Error("Conflict resolution current workflow finished.", tag.Error(err))
-			return nil, err
-		}
-		events = response.HistoryEvents
-	} else {
-		response, err := historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID: domainID,
-			Execution: workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			FirstEventID:  common.FirstEventID,
-			NextEventID:   common.FirstEventID + 1,
-			PageSize:      defaultHistoryPageSize,
-			NextPageToken: nil,
-		})
-		if err != nil {
-			logger.Error("Conflict resolution current workflow finished.", tag.Error(err))
-			return nil, err
-		}
-		events = response.History.Events
-	}
-
-	if len(events) == 0 {
-		logger.WithTags(tag.WorkflowID(workflowID), tag.WorkflowRunID(runID))
-		logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
-		return nil, errNoHistoryFound
-	}
-
-	return events[0], nil
 }
 
 func setTaskInfo(version int64, timestamp time.Time, transferTasks []persistence.Task, timerTasks []persistence.Task) {

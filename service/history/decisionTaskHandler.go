@@ -35,8 +35,6 @@ import (
 )
 
 type (
-	workflowStartEventProvider func() (*workflow.HistoryEvent, error)
-
 	timerBuilderProvider func() *timerBuilder
 
 	decisionTaskHandlerImpl struct {
@@ -64,11 +62,10 @@ type (
 		attrValidator    *decisionAttrValidator
 		sizeLimitChecker *decisionBlobSizeChecker
 
-		logger                     log.Logger
-		timerBuilderProvider       timerBuilderProvider
-		workflowStartEventProvider workflowStartEventProvider
-		domainCache                cache.DomainCache
-		metricsClient              metrics.Client
+		logger               log.Logger
+		timerBuilderProvider timerBuilderProvider
+		domainCache          cache.DomainCache
+		metricsClient        metrics.Client
 	}
 )
 
@@ -82,7 +79,6 @@ func newDecisionTaskHandler(
 	sizeLimitChecker *decisionBlobSizeChecker,
 	logger log.Logger,
 	timerBuilderProvider timerBuilderProvider,
-	workflowStartEventProvider workflowStartEventProvider,
 	domainCache cache.DomainCache,
 	metricsClient metrics.Client,
 ) *decisionTaskHandlerImpl {
@@ -109,12 +105,11 @@ func newDecisionTaskHandler(
 		attrValidator:    attrValidator,
 		sizeLimitChecker: sizeLimitChecker,
 
-		logger:                     logger,
-		timerBuilder:               timerBuilderProvider(),
-		timerBuilderProvider:       timerBuilderProvider,
-		workflowStartEventProvider: workflowStartEventProvider,
-		domainCache:                domainCache,
-		metricsClient:              metricsClient,
+		logger:               logger,
+		timerBuilder:         timerBuilderProvider(),
+		timerBuilderProvider: timerBuilderProvider,
+		domainCache:          domainCache,
+		metricsClient:        metricsClient,
 	}
 }
 
@@ -343,9 +338,9 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	} else {
 		// this is a cron workflow
 		executionInfo := handler.mutableState.GetExecutionInfo()
-		startEvent, err := handler.workflowStartEventProvider()
-		if err != nil {
-			return err
+		startEvent, found := handler.mutableState.GetStartEvent()
+		if !found {
+			return &workflow.InternalServiceError{Message: "Failed to load start event."}
 		}
 
 		startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
@@ -439,9 +434,9 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 			return &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
 		}
 	} else {
-		startEvent, err := handler.workflowStartEventProvider()
-		if err != nil {
-			return err
+		startEvent, found := handler.mutableState.GetStartEvent()
+		if !found {
+			return &workflow.InternalServiceError{Message: "Failed to load start event."}
 		}
 
 		startAttributes := startEvent.WorkflowExecutionStartedEventAttributes

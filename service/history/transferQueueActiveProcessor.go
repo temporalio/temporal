@@ -872,7 +872,10 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	workflowTimeout := executionInfo.WorkflowTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp.UnixNano()
-	startEvent, _ := msBuilder.GetStartEvent()
+	startEvent, found := msBuilder.GetStartEvent()
+	if !found {
+		return &workflow.InternalServiceError{Message: "Failed to load start event."}
+	}
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getVisibilityMemo(startEvent)
 	searchAttr := executionInfo.SearchAttributes

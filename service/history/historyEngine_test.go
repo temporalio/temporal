@@ -4788,24 +4788,6 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	s.Nil(err)
 }
 
-func (s *engineSuite) TestGetWorkflowStartedEvent() {
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   []byte{},
-		MinEventID:    common.FirstEventID,
-		MaxEventID:    common.FirstEventID + 1,
-		PageSize:      defaultHistoryPageSize,
-		NextPageToken: nil,
-		ShardID:       common.IntPtr(0),
-	}
-	events := []*workflow.HistoryEvent{
-		{EventId: common.Int64Ptr(int64(0))},
-	}
-	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: events}, nil)
-	event, err := getWorkflowStartedEvent(s.mockHistoryMgr, s.mockHistoryV2Mgr, p.EventStoreVersionV2, []byte{}, s.logger, "", "", "", common.IntPtr(0))
-	s.NoError(err)
-	s.NotNil(event)
-}
-
 func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
 	context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {
