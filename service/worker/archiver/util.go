@@ -116,6 +116,14 @@ func validateArchivalRequest(request *ArchiveRequest) error {
 		// this should not be able to occur, if domain enables archival bucket should always be set
 		return cadence.NewCustomError(errEmptyBucket)
 	}
-
 	return nil
+}
+
+func errorDetails(err error) string {
+	var details string
+	if _, ok := err.(*cadence.CustomError); !ok {
+		return details
+	}
+	err.(*cadence.CustomError).Details(&details)
+	return details
 }
