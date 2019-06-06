@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
+	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/blob"
@@ -77,6 +78,11 @@ func NewHistoryBlobKey(domainID, workflowID, runID string, closeFailoverVersion 
 	runIDHash := fmt.Sprintf("%v", farm.Fingerprint64([]byte(runID)))
 	combinedHash := strings.Join([]string{domainIDHash, workflowIDHash, runIDHash}, "")
 	return blob.NewKey("history", combinedHash, strconv.FormatInt(closeFailoverVersion, 10), strconv.Itoa(pageToken))
+}
+
+// NewNonDeterministicBlobKey returns a randomly generated key for non-deterministic history blob
+func NewNonDeterministicBlobKey() (blob.Key, error) {
+	return blob.NewKey("history", uuid.New())
 }
 
 // ConvertHeaderToTags converts header into metadata tags for blob
