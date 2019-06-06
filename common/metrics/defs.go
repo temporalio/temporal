@@ -1334,6 +1334,8 @@ const (
 	ArchiverNonRetryableErrorCount
 	ArchiverSkipUploadCount
 	ArchiverHistoryMutatedCount
+	ArchiverBlobSize
+	ArchiverTotalUploadSize
 	ArchiverRunningDeterministicConstructionCheckCount
 	ArchiverDeterministicConstructionCheckFailedCount
 	ArchiverCouldNotRunDeterministicConstructionCheckCount
@@ -1575,6 +1577,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchiverNonRetryableErrorCount:                         {metricName: "archiver_non_retryable_error"},
 		ArchiverSkipUploadCount:                                {metricName: "archiver_skip_upload"},
 		ArchiverHistoryMutatedCount:                            {metricName: "archiver_history_mutated"},
+		ArchiverBlobSize:                                       {metricName: "archiver_blob_size", metricType: Timer},
+		ArchiverTotalUploadSize:                                {metricName: "archiver_total_upload_size", metricType: Timer},
 		ArchiverRunningDeterministicConstructionCheckCount:     {metricName: "archiver_running_deterministic_construction_check"},
 		ArchiverDeterministicConstructionCheckFailedCount:      {metricName: "archiver_deterministic_construction_check_failed"},
 		ArchiverCouldNotRunDeterministicConstructionCheckCount: {metricName: "archiver_could_not_run_deterministic_construction_check"},

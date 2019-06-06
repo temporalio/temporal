@@ -124,6 +124,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	blobstoreClient := container.Blobstore
 
 	handledLastBlob := false
+	var totalUploadSize int64
 	for pageToken := common.FirstBlobPageToken; !handledLastBlob; pageToken++ {
 		key, err := NewHistoryBlobKey(request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, pageToken)
 		if err != nil {
@@ -173,6 +174,9 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			logger.Error(uploadErrorMsg, tag.ArchivalUploadFailReason(reason), tag.ArchivalBlobKey(key.String()))
 			return cadence.NewCustomError(errConstructBlob, err.Error())
 		}
+		currBlobSize := int64(len(blob.Body))
+		scope.RecordTimer(metrics.ArchiverBlobSize, time.Duration(currBlobSize))
+		totalUploadSize = totalUploadSize + currBlobSize
 		if runConstTest {
 			existingBlob, err := downloadBlob(ctx, blobstoreClient, request.BucketName, key)
 			if err != nil {
@@ -193,6 +197,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 		handledLastBlob = *historyBlob.Header.IsLast
 	}
+	scope.RecordTimer(metrics.ArchiverTotalUploadSize, time.Duration(totalUploadSize))
 	indexBlobKey, err := NewHistoryIndexBlobKey(request.DomainID, request.WorkflowID, request.RunID)
 	if err != nil {
 		logger.Error(uploadErrorMsg, tag.ArchivalUploadFailReason("could not construct index blob key"))
