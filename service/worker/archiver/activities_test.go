@@ -507,6 +507,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CheckFailed() {
 	historyIndexBlobKey, _ := NewHistoryIndexBlobKey(testDomainID, testWorkflowID, testRunID)
 	mockBlobstore.On("GetTags", mock.Anything, mock.Anything, historyIndexBlobKey).Return(map[string]string{strconv.FormatInt(testCloseFailoverVersion, 10): ""}, nil).Once()
 	mockBlobstore.On("Download", mock.Anything, mock.Anything, mock.Anything).Return(&blob.Blob{Body: []byte{1, 2, 3, 4}}, nil)
+	mockBlobstore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	mockHistoryBlobReader := &HistoryBlobReaderMock{}
 	mockHistoryBlobReader.On("GetBlob", mock.Anything).Return(&HistoryBlob{
 		Header: &HistoryBlobHeader{},

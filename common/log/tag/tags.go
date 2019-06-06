@@ -711,3 +711,8 @@ func ArchivalDeleteBlobsFailReason(deleteBlobsFailReason string) Tag {
 func ArchivalDeterministicConstructionCheckFailReason(deterministicConstructionCheckFailReason string) Tag {
 	return newStringTag("archival-deterministic-construction-check-fail-reason", deterministicConstructionCheckFailReason)
 }
+
+// ArchivalNonDeterministicBlobKey returns tag for randomly generated NonDeterministicBlobKey
+func ArchivalNonDeterministicBlobKey(nondeterministicBlobKey string) Tag {
+	return newStringTag("archival-non-deterministic-blob-key", nondeterministicBlobKey)
+}
