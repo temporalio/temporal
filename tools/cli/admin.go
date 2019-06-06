@@ -309,6 +309,11 @@ func newAdminKafkaCommands() []cli.Command {
 				cli.StringFlag{
 					Name: FlagHostFile,
 					Usage: "Kafka host config file in format of: " + `
+tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+    bundleFile: ""
 clusters:
 	localKafka:
 		brokers:
@@ -356,6 +361,11 @@ clusters:
 				cli.StringFlag{
 					Name: FlagHostFile,
 					Usage: "Kafka host config file in format of: " + `
+tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+    bundleFile: ""
 clusters:
 	localKafka:
 		brokers:
@@ -444,6 +454,11 @@ clusters:
 				cli.StringFlag{
 					Name: FlagHostFile,
 					Usage: "Kafka host config file in format of: " + `
+tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+    bundleFile: ""
 clusters:
 	localKafka:
 		brokers:

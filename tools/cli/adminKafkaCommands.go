@@ -23,6 +23,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -458,6 +459,7 @@ func decodeVisibility(message []byte, val *indexer.Message) error {
 // ClustersConfig describes the kafka clusters
 type ClustersConfig struct {
 	Clusters map[string]messaging.ClusterConfig
+	TLS      messaging.TLS
 }
 
 func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
@@ -645,7 +647,7 @@ func newKafkaProducer(c *cli.Context) messaging.Producer {
 	destTopic := getRequiredOption(c, FlagTopic)
 
 	// initialize kafka producer
-	destBrokers, err := loadBrokers(hostFile, destCluster)
+	destBrokers, tlsConfig, err := loadBrokerConfig(hostFile, destCluster)
 	if err != nil {
 		ErrorAndExit("", err)
 	}
@@ -653,6 +655,10 @@ func newKafkaProducer(c *cli.Context) messaging.Producer {
 	config := sarama.NewConfig()
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Return.Successes = true
+	if tlsConfig != nil {
+		config.Net.TLS.Config = tlsConfig
+		config.Net.TLS.Enable = true
+	}
 	sproducer, err := sarama.NewSyncProducer(destBrokers, config)
 	if err != nil {
 		ErrorAndExit("", err)
@@ -669,9 +675,9 @@ func AdminPurgeTopic(c *cli.Context) {
 	topic := getRequiredOption(c, FlagTopic)
 	cluster := getRequiredOption(c, FlagCluster)
 	group := getRequiredOption(c, FlagGroup)
-	brokers, err := loadBrokers(hostFile, cluster)
+	brokers, tlsConfig, err := loadBrokerConfig(hostFile, cluster)
 
-	consumer := createConsumerAndWaitForReady(brokers, group, topic)
+	consumer := createConsumerAndWaitForReady(brokers, tlsConfig, group, topic)
 
 	highWaterMarks, ok := consumer.HighWaterMarks()[topic]
 	if !ok {
@@ -687,7 +693,7 @@ func AdminPurgeTopic(c *cli.Context) {
 		ErrorAndExit("fail to commit offset", err)
 	}
 
-	consumer = createConsumerAndWaitForReady(brokers, group, topic)
+	consumer = createConsumerAndWaitForReady(brokers, tlsConfig, group, topic)
 	msg, ok := <-consumer.Messages()
 	fmt.Printf("current offset sample: %v: %v \n", msg.Partition, msg.Offset)
 }
@@ -727,12 +733,12 @@ func AdminMergeDLQ(c *cli.Context) {
 		startOffset := c.Int64(FlagStartOffset)
 		group := getRequiredOption(c, FlagGroup)
 
-		fromBrokers, err := loadBrokers(hostFile, fromCluster)
+		fromBrokers, tlsConfig, err := loadBrokerConfig(hostFile, fromCluster)
 		if err != nil {
 			ErrorAndExit("", err)
 		}
 
-		consumer := createConsumerAndWaitForReady(fromBrokers, group, fromTopic)
+		consumer := createConsumerAndWaitForReady(fromBrokers, tlsConfig, group, fromTopic)
 
 		highWaterMarks, ok := consumer.HighWaterMarks()[fromTopic]
 		if !ok {
@@ -748,7 +754,7 @@ func AdminMergeDLQ(c *cli.Context) {
 			ErrorAndExit("fail to commit offset", err)
 		}
 		// create consumer again to make sure MarkPartitionOffset works
-		consumer = createConsumerAndWaitForReady(fromBrokers, group, fromTopic)
+		consumer = createConsumerAndWaitForReady(fromBrokers, tlsConfig, group, fromTopic)
 
 		for {
 			select {
@@ -783,10 +789,15 @@ func AdminMergeDLQ(c *cli.Context) {
 	}
 }
 
-func createConsumerAndWaitForReady(brokers []string, group, fromTopic string) *cluster.Consumer {
+func createConsumerAndWaitForReady(brokers []string, tlsConfig *tls.Config, group, fromTopic string) *cluster.Consumer {
 	config := cluster.NewConfig()
 	config.Consumer.Return.Errors = true
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	if tlsConfig != nil {
+		config.Net.TLS.Enable = true
+		config.Net.TLS.Config = tlsConfig
+	}
+
 	config.Group.Return.Notifications = true
 
 	client, err := cluster.NewClient(brokers, config)
@@ -841,14 +852,14 @@ func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err e
 	return tasks, nil
 }
 
-func loadBrokers(hostFile string, cluster string) (brokers []string, err error) {
+func loadBrokerConfig(hostFile string, cluster string) ([]string, *tls.Config, error) {
 	contents, err := ioutil.ReadFile(hostFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load kafka cluster info from %v., error: %v", hostFile, err)
+		return nil, nil, fmt.Errorf("failed to load kafka cluster info from %v., error: %v", hostFile, err)
 	}
 	clustersConfig := ClustersConfig{}
 	if err := yaml.Unmarshal(contents, &clustersConfig); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(clustersConfig.Clusters) != 0 {
 		config, ok := clustersConfig.Clusters[cluster]
@@ -860,8 +871,12 @@ func loadBrokers(hostFile string, cluster string) (brokers []string, err error) 
 					brs[i] = b
 				}
 			}
-			return brs, nil
+			tlsConfig, err := messaging.CreateTLSConfig(clustersConfig.TLS)
+			if err != nil {
+				return nil, nil, fmt.Errorf(fmt.Sprintf("Error creating Kafka TLS config %v", err))
+			}
+			return brs, tlsConfig, nil
 		}
 	}
-	return nil, fmt.Errorf("failed to load broker for cluster %v", cluster)
+	return nil, nil, fmt.Errorf("failed to load broker for cluster %v", cluster)
 }

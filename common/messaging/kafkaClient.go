@@ -73,7 +73,7 @@ func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.
 
 	client := uberKafkaClient.New(uberKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
 
-	tlsConfig, err := createTLSConfig(kc.TLS)
+	tlsConfig, err := CreateTLSConfig(kc.TLS)
 	if err != nil {
 		panic(fmt.Sprintf("Error creating Kafka TLS config %v", err))
 	}
@@ -171,7 +171,7 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	return NewKafkaProducer(topic, producer, c.logger), nil
 }
 
-func createTLSConfig(tlsConfig TLS) (*tls.Config, error) {
+func CreateTLSConfig(tlsConfig TLS) (*tls.Config, error) {
 	if !tlsConfig.Enabled {
 		return nil, nil
 	}
