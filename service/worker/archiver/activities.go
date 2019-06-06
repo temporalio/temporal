@@ -178,8 +178,10 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if err != nil {
 				logger.Error("failed to download blob for deterministic construction verification", tag.ArchivalUploadFailReason(errorDetails(err)), tag.Error(err))
 				scope.IncCounter(metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount)
-			} else if !blob.Equal(existingBlob) {
-				logger.Error("deterministic construction check failed")
+			} else if equal, reason := blob.EqualWithDetails(existingBlob); !equal {
+				logger.Error("deterministic construction check failed",
+					tag.ArchivalBlobKey(key.String()),
+					tag.ArchivalDeterministicConstructionCheckFailReason(reason))
 				scope.IncCounter(metrics.ArchiverDeterministicConstructionCheckFailedCount)
 			}
 			continue

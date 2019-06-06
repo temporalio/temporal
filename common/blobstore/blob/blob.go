@@ -20,6 +20,8 @@
 
 package blob
 
+import "fmt"
+
 // Blob is the entity that gets handled by blobstore
 type Blob struct {
 	Body []byte
@@ -53,27 +55,40 @@ func (b *Blob) DeepCopy() *Blob {
 	}
 }
 
-// Equal returns true if input blob is equal, false otherwise
+// Equal returns true if input blob is equal, false otherwise.
 func (b *Blob) Equal(other *Blob) bool {
+	equal, _ := b.EqualWithDetails(other)
+	return equal
+}
+
+// Equal returns true if input blob is equal, false otherwise.
+// Additionally returns reason for the inequality.
+func (b *Blob) EqualWithDetails(other *Blob) (bool, string) {
 	if b == nil && other == nil {
-		return true
+		return true, ""
 	}
-	if b == nil || other == nil {
-		return false
+	if b == nil {
+		return false, "reference blob is nil while argument blob is not"
 	}
-	if len(b.Body) != len(other.Body) || len(b.Tags) != len(other.Tags) {
-		return false
+	if other == nil {
+		return false, "reference blob is not nil while argument blob is"
+	}
+	if len(b.Tags) != len(other.Tags) {
+		return false, fmt.Sprintf("blob tag sizes do not match {reference:%v, argument:%v}", b.Tags, other.Tags)
+	}
+	if len(b.Body) != len(other.Body) {
+		return false, fmt.Sprintf("blob body sizes do not match {reference:%v, argument:%v}", len(b.Body), len(other.Body))
 	}
 	for k, v := range b.Tags {
 		otherVal, ok := other.Tags[k]
 		if !ok || otherVal != v {
-			return false
+			return false, fmt.Sprintf("blob tags do not match {reference:%v, argument:%v}", b.Tags, other.Tags)
 		}
 	}
 	for i := 0; i < len(b.Body); i++ {
 		if b.Body[i] != other.Body[i] {
-			return false
+			return false, "blob bodies do not match"
 		}
 	}
-	return true
+	return true, ""
 }

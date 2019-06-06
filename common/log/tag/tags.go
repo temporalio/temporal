@@ -706,3 +706,8 @@ func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) Tag {
 func ArchivalDeleteBlobsFailReason(deleteBlobsFailReason string) Tag {
 	return newStringTag("archival-delete-blobs-fail-reason", deleteBlobsFailReason)
 }
+
+// ArchivalDeterministicConstructionCheckFailReason returns tag for ArchivalDeterministicConstructionCheckFailReason
+func ArchivalDeterministicConstructionCheckFailReason(deterministicConstructionCheckFailReason string) Tag {
+	return newStringTag("archival-deterministic-construction-check-fail-reason", deterministicConstructionCheckFailReason)
+}
