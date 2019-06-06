@@ -75,6 +75,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.metricsClient = &mmocks.Client{}
 	s.metricsScope = &mmocks.Scope{}
 	s.metricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Once()
+	s.metricsScope.On("RecordTimer", mock.Anything, mock.Anything).Maybe()
 }
 
 func (s *activitiesSuite) TearDownTest() {
