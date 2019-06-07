@@ -39,7 +39,7 @@ type loggerImpl struct {
 const (
 	skipForDefaultLogger = 3
 	// we put a default message when it is empty so that the log can be searchable/filterable
-	defaultMsgForEmpty = "message is empty"
+	defaultMsgForEmpty = "none"
 )
 
 // NewNopLogger returns a no-op logger
