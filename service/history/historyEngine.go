@@ -864,7 +864,11 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx ctx.Context,
 				return nil, &h.EventAlreadyStartedError{Message: "Activity task already started."}
 			}
 
-			msBuilder.AddActivityTaskStartedEvent(ai, scheduleID, requestID, request.PollRequest.GetIdentity())
+			if _, err := msBuilder.AddActivityTaskStartedEvent(
+				ai, scheduleID, requestID, request.PollRequest.GetIdentity(),
+			); err != nil {
+				return nil, err
+			}
 
 			response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
 			response.Attempt = common.Int64Ptr(int64(ai.Attempt))
@@ -1614,25 +1618,26 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(ctx ctx.Context, compl
 				return nil, &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
 			}
 
+			var err error
 			switch *completionEvent.EventType {
 			case workflow.EventTypeWorkflowExecutionCompleted:
 				attributes := completionEvent.WorkflowExecutionCompletedEventAttributes
-				msBuilder.AddChildWorkflowExecutionCompletedEvent(initiatedID, completedExecution, attributes)
+				_, err = msBuilder.AddChildWorkflowExecutionCompletedEvent(initiatedID, completedExecution, attributes)
 			case workflow.EventTypeWorkflowExecutionFailed:
 				attributes := completionEvent.WorkflowExecutionFailedEventAttributes
-				msBuilder.AddChildWorkflowExecutionFailedEvent(initiatedID, completedExecution, attributes)
+				_, err = msBuilder.AddChildWorkflowExecutionFailedEvent(initiatedID, completedExecution, attributes)
 			case workflow.EventTypeWorkflowExecutionCanceled:
 				attributes := completionEvent.WorkflowExecutionCanceledEventAttributes
-				msBuilder.AddChildWorkflowExecutionCanceledEvent(initiatedID, completedExecution, attributes)
+				_, err = msBuilder.AddChildWorkflowExecutionCanceledEvent(initiatedID, completedExecution, attributes)
 			case workflow.EventTypeWorkflowExecutionTerminated:
 				attributes := completionEvent.WorkflowExecutionTerminatedEventAttributes
-				msBuilder.AddChildWorkflowExecutionTerminatedEvent(initiatedID, completedExecution, attributes)
+				_, err = msBuilder.AddChildWorkflowExecutionTerminatedEvent(initiatedID, completedExecution, attributes)
 			case workflow.EventTypeWorkflowExecutionTimedOut:
 				attributes := completionEvent.WorkflowExecutionTimedOutEventAttributes
-				msBuilder.AddChildWorkflowExecutionTimedOutEvent(initiatedID, completedExecution, attributes)
+				_, err = msBuilder.AddChildWorkflowExecutionTimedOutEvent(initiatedID, completedExecution, attributes)
 			}
 
-			return nil, nil
+			return nil, err
 		})
 }
 
@@ -1937,7 +1942,11 @@ func (e *historyEngineImpl) failDecision(context workflowExecutionContext, sched
 		return nil, err
 	}
 
-	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, nil, request.GetIdentity(), "", "", "", 0)
+	if _, err = msBuilder.AddDecisionTaskFailedEvent(
+		scheduleID, startedID, cause, nil, request.GetIdentity(), "", "", "", 0,
+	); err != nil {
+		return nil, err
+	}
 
 	// Return new builder back to the caller for further updates
 	return msBuilder, nil

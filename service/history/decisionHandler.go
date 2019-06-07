@@ -247,10 +247,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 				return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 			}
 
-			msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, request.GetCause(), request.Details,
+			_, err := msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, request.GetCause(), request.Details,
 				request.GetIdentity(), "", "", "", 0)
-
-			return nil, nil
+			return nil, err
 		})
 }
 
@@ -408,8 +407,9 @@ Update_History_Loop:
 			// set the vars used by following logic
 			// further refactor should also clean up the vars used below
 			failDecision = decisionTaskHandler.failDecision
-			if decisionTaskHandler.failDecisionCause != nil {
+			if failDecision {
 				failCause = *decisionTaskHandler.failDecisionCause
+				failMessage = *decisionTaskHandler.failMessage
 			}
 
 			// failMessage is not used by decisionTaskHandler
@@ -475,10 +475,13 @@ Update_History_Loop:
 			} else {
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
-				msBuilder.AddDecisionTaskStartedEvent(di.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
+				_, _, err := msBuilder.AddDecisionTaskStartedEvent(di.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
 					TaskList: &workflow.TaskList{Name: common.StringPtr(di.TaskList)},
 					Identity: request.Identity,
 				})
+				if err != nil {
+					return nil, err
+				}
 				timeOutTask := tBuilder.AddStartToCloseDecisionTimoutTask(di.ScheduleID, di.Attempt, di.DecisionTimeout)
 				timerTasks = append(timerTasks, timeOutTask)
 			}
@@ -530,11 +533,14 @@ Update_History_Loop:
 					return nil, err
 				}
 
-				msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
+				_, err := msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
 					Reason:   common.StringPtr(common.FailureReasonTransactionSizeExceedsLimit),
 					Identity: common.StringPtr("cadence-history-server"),
 					Details:  []byte(updateErr.Error()),
 				})
+				if err != nil {
+					return nil, err
+				}
 				tranT, timerT, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
 				if err != nil {
 					return nil, err
