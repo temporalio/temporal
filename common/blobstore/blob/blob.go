@@ -61,7 +61,7 @@ func (b *Blob) Equal(other *Blob) bool {
 	return equal
 }
 
-// Equal returns true if input blob is equal, false otherwise.
+// EqualWithDetails returns true if input blob is equal, false otherwise.
 // Additionally returns reason for the inequality.
 func (b *Blob) EqualWithDetails(other *Blob) (bool, string) {
 	if b == nil && other == nil {
@@ -73,17 +73,19 @@ func (b *Blob) EqualWithDetails(other *Blob) (bool, string) {
 	if other == nil {
 		return false, "reference blob is not nil while argument blob is"
 	}
+
 	if len(b.Tags) != len(other.Tags) {
 		return false, fmt.Sprintf("blob tag sizes do not match {reference:%v, argument:%v}", b.Tags, other.Tags)
-	}
-	if len(b.Body) != len(other.Body) {
-		return false, fmt.Sprintf("blob body sizes do not match {reference:%v, argument:%v}", len(b.Body), len(other.Body))
 	}
 	for k, v := range b.Tags {
 		otherVal, ok := other.Tags[k]
 		if !ok || otherVal != v {
 			return false, fmt.Sprintf("blob tags do not match {reference:%v, argument:%v}", b.Tags, other.Tags)
 		}
+	}
+
+	if len(b.Body) != len(other.Body) {
+		return false, fmt.Sprintf("blob body sizes do not match {reference:%v, argument:%v}", len(b.Body), len(other.Body))
 	}
 	for i := 0; i < len(b.Body); i++ {
 		if b.Body[i] != other.Body[i] {
