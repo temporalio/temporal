@@ -179,7 +179,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() {
 
 	pendingTasks := len(taskIDs)
 	if pendingTasks > warnPendingTasks {
-		a.logger.Warn("Too many pendind tasks.")
+		a.logger.Warn("Too many pending tasks.")
 	}
 	switch a.options.MetricScope {
 	case metrics.ReplicatorQueueProcessorScope:

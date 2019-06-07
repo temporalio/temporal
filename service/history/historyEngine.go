@@ -1658,13 +1658,13 @@ func (e *historyEngineImpl) ResetWorkflowExecution(ctx ctx.Context,
 	request := resetRequest.ResetRequest
 	if request == nil || request.WorkflowExecution == nil || len(request.WorkflowExecution.GetRunId()) == 0 || len(request.WorkflowExecution.GetWorkflowId()) == 0 {
 		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("Require workflowId and runId."),
+			Message: "Require workflowId and runId.",
 		}
 		return
 	}
 	if request.GetDecisionFinishEventId() <= common.FirstEventID {
 		retError = &workflow.BadRequestError{
-			Message: fmt.Sprintf("Decision finish ID must be > 1."),
+			Message: "Decision finish ID must be > 1.",
 		}
 		return
 	}

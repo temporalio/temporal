@@ -3007,8 +3007,11 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	return response, nil
 }
 
-func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []p.Task, domainID, workflowID,
-	runID string) {
+func (d *cassandraPersistence) createTransferTasks(
+	batch *gocql.Batch,
+	transferTasks []p.Task,
+	domainID, workflowID, runID string,
+) {
 	targetDomainID := domainID
 	for _, task := range transferTasks {
 		var taskList string

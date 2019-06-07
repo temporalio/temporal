@@ -281,9 +281,15 @@ func (c *workflowExecutionContextImpl) resetMutableState(prevRunID string, reset
 // 1. append history to new run
 // 2. append history to current run if current run is not closed
 // 3. update mutableState(terminate current run if not closed) and create new run
-func (c *workflowExecutionContextImpl) resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task,
-	newMutableState mutableState, newTransferTasks, newTimerTasks, currReplicationTasks, insertReplicationTasks []persistence.Task, baseRunID string,
-	baseRunNextEventID, prevRunVersion int64) (retError error) {
+func (c *workflowExecutionContextImpl) resetWorkflowExecution(
+	currMutableState mutableState,
+	updateCurr bool,
+	closeTask, cleanupTask persistence.Task,
+	newMutableState mutableState,
+	newTransferTasks, newTimerTasks, currReplicationTasks, insertReplicationTasks []persistence.Task,
+	baseRunID string,
+	baseRunNextEventID, prevRunVersion int64,
+) (retError error) {
 
 	now := time.Now()
 	currTransferTasks := []persistence.Task{}
