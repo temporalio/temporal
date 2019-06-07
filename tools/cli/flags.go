@@ -105,6 +105,8 @@ const (
 	FlagPrintDateTimeWithAlias      = FlagPrintDateTime + ", pdt"
 	FlagPrintMemo                   = "print_memo"
 	FlagPrintMemoWithAlias          = FlagPrintMemo + ", pme"
+	FlagPrintSearchAttr             = "print_search_attr"
+	FlagPrintSearchAttrWithAlias    = FlagPrintSearchAttr + ", psa"
 	FlagPrintJSON                   = "print_json"
 	FlagPrintJSONWithAlias          = FlagPrintJSON + ", pjson"
 	FlagDescription                 = "description"
@@ -361,6 +363,10 @@ func getFlagsForListAll() []cli.Flag {
 		cli.BoolFlag{
 			Name:  FlagPrintMemoWithAlias,
 			Usage: "Print memo",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintSearchAttrWithAlias,
+			Usage: "Print search attributes",
 		},
 		cli.BoolFlag{
 			Name:  FlagPrintFullyDetailWithAlias,

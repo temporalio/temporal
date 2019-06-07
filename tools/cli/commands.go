@@ -1110,6 +1110,10 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 		header = append(header, "Memo")
 		headerColor = append(headerColor, tableHeaderBlue)
 	}
+	if printSearchAttr := c.Bool(FlagPrintSearchAttr); printSearchAttr {
+		header = append(header, "Search Attributes")
+		headerColor = append(headerColor, tableHeaderBlue)
+	}
 	table.SetHeader(header)
 	if !listAll { // color is only friendly to ANSI terminal
 		table.SetHeaderColor(headerColor...)
@@ -1128,6 +1132,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	printRawTime := c.Bool(FlagPrintRawTime)
 	printDateTime := c.Bool(FlagPrintDateTime)
 	printMemo := c.Bool(FlagPrintMemo)
+	printSearchAttr := c.Bool(FlagPrintSearchAttr)
 	pageSize := c.Int(FlagPageSize)
 	if pageSize <= 0 {
 		pageSize = defaultPageSizeForList
@@ -1176,6 +1181,9 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 			}
 			if printMemo {
 				row = append(row, getPrintableMemo(e.Memo))
+			}
+			if printSearchAttr {
+				row = append(row, getPrintableSearchAttr(e.SearchAttributes))
 			}
 			table.Append(row)
 		}
@@ -2143,6 +2151,16 @@ func getPrintableMemo(memo *s.Memo) string {
 	buf := new(bytes.Buffer)
 	for k, v := range memo.Fields {
 		fmt.Fprintf(buf, "%s=%s\n", k, string(v))
+	}
+	return buf.String()
+}
+
+func getPrintableSearchAttr(searchAttr *s.SearchAttributes) string {
+	buf := new(bytes.Buffer)
+	for k, v := range searchAttr.IndexedFields {
+		var decodedVal interface{}
+		json.Unmarshal(v, &decodedVal)
+		fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
 	}
 	return buf.String()
 }
