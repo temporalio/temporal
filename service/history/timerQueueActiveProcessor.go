@@ -283,7 +283,7 @@ Update_History_Loop:
 
 			if isExpired := tBuilder.IsTimerExpired(td, task.VisibilityTimestamp); isExpired {
 				// Add TimerFired event to history.
-				if msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID) == nil {
+				if _, err := msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID); err != nil {
 					return errFailedToAddTimerFiredEvent
 				}
 
@@ -413,7 +413,7 @@ Update_History_Loop:
 			case workflow.TimeoutTypeScheduleToClose:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
-					if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
+					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return errFailedToAddTimeoutEvent
 					}
 					updateHistory = true
@@ -423,7 +423,7 @@ Update_History_Loop:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
 					if ai.StartedID != common.EmptyEventID {
-						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
+						if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 							return errFailedToAddTimeoutEvent
 						}
 						updateHistory = true
@@ -433,7 +433,7 @@ Update_History_Loop:
 			case workflow.TimeoutTypeHeartbeat:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
-					if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
+					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return errFailedToAddTimeoutEvent
 					}
 					updateHistory = true
@@ -443,7 +443,7 @@ Update_History_Loop:
 				{
 					t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 					if ai.StartedID == common.EmptyEventID {
-						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
+						if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 							return errFailedToAddTimeoutEvent
 						}
 						updateHistory = true
@@ -521,8 +521,8 @@ Update_History_Loop:
 			t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 			// check if scheduled decision still pending and not started yet
 			if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID {
-				timeoutEvent := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
-				if timeoutEvent == nil {
+				_, err := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
+				if err != nil {
 					// Unable to add DecisionTaskTimeout event to history
 					return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskScheduleToStartTimeout event to history."}
 				}
@@ -714,10 +714,8 @@ Update_History_Loop:
 			continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 		}
 		if backoffInterval == backoff.NoBackoff {
-			if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {
-				// If we failed to add the event that means the workflow is already completed.
-				// we drop this timeout event.
-				return nil
+			if _, err := msBuilder.AddTimeoutWorkflowEvent(); err != nil {
+				return err
 			}
 
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload

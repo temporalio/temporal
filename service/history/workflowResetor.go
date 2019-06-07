@@ -209,7 +209,7 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 		if ai.StartedID != common.EmptyEventID {
 			// this means the activity has started but not completed, we need to fail the activity
 			request := getRespondActivityTaskFailedRequestFromActivity(ai, "workflowReset")
-			if msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, request) == nil {
+			if _, err := msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, request); err != nil {
 				// Unable to add ActivityTaskFailed event to history
 				return &workflow.InternalServiceError{Message: "Unable to add ActivityTaskFailed event to mutableState."}
 			}
@@ -276,9 +276,9 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// Note that we need to ensure DecisionTaskFailed event is appended right after DecisionTaskStarted event
 	di, _ := newMutableState.GetInFlightDecisionTask()
 
-	event := newMutableState.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, workflow.DecisionTaskFailedCauseResetWorkflow, nil,
+	_, err := newMutableState.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, workflow.DecisionTaskFailedCauseResetWorkflow, nil,
 		identityHistoryService, resetReason, baseRunID, newRunID, forkEventVersion)
-	if event == nil {
+	if err != nil {
 		retError = &workflow.InternalServiceError{Message: "Failed to add decision failed event."}
 		return
 	}
@@ -311,8 +311,8 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 
 	// we always schedule a new decision after reset
-	di = newMutableState.AddDecisionTaskScheduledEvent()
-	if di == nil {
+	di, err = newMutableState.AddDecisionTaskScheduledEvent()
+	if err != nil {
 		retError = &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 		return
 	}

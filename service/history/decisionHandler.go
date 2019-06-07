@@ -192,8 +192,8 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, &h.EventAlreadyStartedError{Message: "Decision task already started."}
 			}
 
-			_, di = msBuilder.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
-			if di == nil {
+			_, di, err = msBuilder.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
+			if err != nil {
 				// Unable to add DecisionTaskStarted event to history
 				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskStarted event to history."}
 			}
@@ -334,8 +334,8 @@ Update_History_Loop:
 				tag.WorkflowRunID(workflowExecution.GetRunId()),
 				tag.Number(int64(maxResetPoints)))
 		}
-		completedEvent := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
-		if completedEvent == nil {
+		completedEvent, err := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
+		if err != nil {
 			return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
 		}
 
@@ -454,8 +454,8 @@ Update_History_Loop:
 			request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
 		var newDecisionTaskScheduledID int64
 		if createNewDecisionTask {
-			di := msBuilder.AddDecisionTaskScheduledEvent()
-			if di == nil {
+			di, err := msBuilder.AddDecisionTaskScheduledEvent()
+			if err != nil {
 				return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 			}
 			newDecisionTaskScheduledID = di.ScheduleID

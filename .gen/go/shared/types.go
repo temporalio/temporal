@@ -9546,6 +9546,7 @@ const (
 	DecisionTaskFailedCauseBadSignalInputSize                                  DecisionTaskFailedCause = 18
 	DecisionTaskFailedCauseResetWorkflow                                       DecisionTaskFailedCause = 19
 	DecisionTaskFailedCauseBadBinary                                           DecisionTaskFailedCause = 20
+	DecisionTaskFailedCauseScheduleActivityDuplicateID                         DecisionTaskFailedCause = 21
 )
 
 // DecisionTaskFailedCause_Values returns all recognized values of DecisionTaskFailedCause.
@@ -9572,6 +9573,7 @@ func DecisionTaskFailedCause_Values() []DecisionTaskFailedCause {
 		DecisionTaskFailedCauseBadSignalInputSize,
 		DecisionTaskFailedCauseResetWorkflow,
 		DecisionTaskFailedCauseBadBinary,
+		DecisionTaskFailedCauseScheduleActivityDuplicateID,
 	}
 }
 
@@ -9645,6 +9647,9 @@ func (v *DecisionTaskFailedCause) UnmarshalText(value []byte) error {
 	case "BAD_BINARY":
 		*v = DecisionTaskFailedCauseBadBinary
 		return nil
+	case "SCHEDULE_ACTIVITY_DUPLICATE_ID":
+		*v = DecisionTaskFailedCauseScheduleActivityDuplicateID
+		return nil
 	default:
 		val, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
@@ -9705,6 +9710,8 @@ func (v DecisionTaskFailedCause) MarshalText() ([]byte, error) {
 		return []byte("RESET_WORKFLOW"), nil
 	case 20:
 		return []byte("BAD_BINARY"), nil
+	case 21:
+		return []byte("SCHEDULE_ACTIVITY_DUPLICATE_ID"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -9758,6 +9765,8 @@ func (v DecisionTaskFailedCause) MarshalLogObject(enc zapcore.ObjectEncoder) err
 		enc.AddString("name", "RESET_WORKFLOW")
 	case 20:
 		enc.AddString("name", "BAD_BINARY")
+	case 21:
+		enc.AddString("name", "SCHEDULE_ACTIVITY_DUPLICATE_ID")
 	}
 	return nil
 }
@@ -9840,6 +9849,8 @@ func (v DecisionTaskFailedCause) String() string {
 		return "RESET_WORKFLOW"
 	case 20:
 		return "BAD_BINARY"
+	case 21:
+		return "SCHEDULE_ACTIVITY_DUPLICATE_ID"
 	}
 	return fmt.Sprintf("DecisionTaskFailedCause(%d)", w)
 }
@@ -9900,6 +9911,8 @@ func (v DecisionTaskFailedCause) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"RESET_WORKFLOW\""), nil
 	case 20:
 		return ([]byte)("\"BAD_BINARY\""), nil
+	case 21:
+		return ([]byte)("\"SCHEDULE_ACTIVITY_DUPLICATE_ID\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }

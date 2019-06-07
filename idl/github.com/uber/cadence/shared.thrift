@@ -199,6 +199,7 @@ enum DecisionTaskFailedCause {
   BAD_SIGNAL_INPUT_SIZE,
   RESET_WORKFLOW,
   BAD_BINARY,
+  SCHEDULE_ACTIVITY_DUPLICATE_ID,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {

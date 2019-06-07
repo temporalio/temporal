@@ -206,14 +206,23 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 		return nil
 	}
 
-	scheduleEvent, _ := handler.mutableState.AddActivityTaskScheduledEvent(handler.decisionTaskCompletedID, attr)
-	handler.transferTasks = append(handler.transferTasks, &persistence.ActivityTask{
-		DomainID:   targetDomainID,
-		TaskList:   attr.TaskList.GetName(),
-		ScheduleID: scheduleEvent.GetEventId(),
-	})
-
-	return nil
+	scheduleEvent, _, err := handler.mutableState.AddActivityTaskScheduledEvent(handler.decisionTaskCompletedID, attr)
+	switch err.(type) {
+	case nil:
+		handler.transferTasks = append(handler.transferTasks, &persistence.ActivityTask{
+			DomainID:   targetDomainID,
+			TaskList:   attr.TaskList.GetName(),
+			ScheduleID: scheduleEvent.GetEventId(),
+		})
+		return nil
+	case *workflow.BadRequestError:
+		handler.failDecision = true
+		handler.failDecisionCause = workflow.DecisionTaskFailedCauseScheduleActivityDuplicateID.Ptr()
+		handler.stopProcessing = true
+		return nil
+	default:
+		return err
+	}
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
@@ -227,34 +236,39 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		return err
 	}
 	activityID := attr.GetActivityId()
-	actCancelReqEvent, ai, isRunning := handler.mutableState.AddActivityTaskCancelRequestedEvent(
+	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
 		handler.decisionTaskCompletedID,
 		activityID,
 		handler.identity,
 	)
-	if !isRunning {
-		handler.mutableState.AddRequestCancelActivityTaskFailedEvent(
+	switch err.(type) {
+	case nil:
+		if ai.StartedID == common.EmptyEventID {
+			// We haven't started the activity yet, we can cancel the activity right away and
+			// schedule a decision task to ensure the workflow makes progress.
+			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
+				ai.ScheduleID,
+				ai.StartedID,
+				actCancelReqEvent.GetEventId(),
+				[]byte(activityCancellationMsgActivityNotStarted),
+				handler.identity,
+			)
+			if err != nil {
+				return err
+			}
+			handler.activityNotStartedCancelled = true
+		}
+		return nil
+	case *workflow.BadRequestError:
+		_, err = handler.mutableState.AddRequestCancelActivityTaskFailedEvent(
 			handler.decisionTaskCompletedID,
 			activityID,
 			activityCancellationMsgActivityIDUnknown,
 		)
-		return nil
+		return err
+	default:
+		return err
 	}
-
-	if ai.StartedID == common.EmptyEventID {
-		// We haven't started the activity yet, we can cancel the activity right away and
-		// schedule a decision task to ensure the workflow makes progress.
-		handler.mutableState.AddActivityTaskCanceledEvent(
-			ai.ScheduleID,
-			ai.StartedID,
-			actCancelReqEvent.GetEventId(),
-			[]byte(activityCancellationMsgActivityNotStarted),
-			handler.identity,
-		)
-		handler.activityNotStartedCancelled = true
-	}
-
-	return nil
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
@@ -268,15 +282,19 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 	if err := handler.attrValidator.validateTimerScheduleAttributes(attr); err != nil {
 		return err
 	}
-	_, ti := handler.mutableState.AddTimerStartedEvent(handler.decisionTaskCompletedID, attr)
-	if ti == nil {
+	_, ti, err := handler.mutableState.AddTimerStartedEvent(handler.decisionTaskCompletedID, attr)
+	switch err.(type) {
+	case nil:
+		handler.timerBuilder.AddUserTimer(ti, handler.mutableState)
+		return nil
+	case *workflow.BadRequestError:
 		handler.failDecision = true
 		handler.failDecisionCause = workflow.DecisionTaskFailedCauseStartTimerDuplicateID.Ptr()
 		handler.stopProcessing = true
 		return nil
+	default:
+		return err
 	}
-	handler.timerBuilder.AddUserTimer(ti, handler.mutableState)
-	return nil
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
@@ -328,7 +346,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	cronBackoff := handler.mutableState.GetCronBackoffDuration()
 	if cronBackoff == backoff.NoBackoff {
 		// not cron, so complete this workflow execution
-		if event := handler.mutableState.AddCompletedWorkflowEvent(handler.decisionTaskCompletedID, attr); event == nil {
+		if _, err := handler.mutableState.AddCompletedWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
 			return &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
 		}
 		return nil
@@ -404,11 +422,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		backoffInterval = handler.mutableState.GetCronBackoffDuration()
 		continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 	}
-
 	// second check the backoff / cron schedule
 	if backoffInterval == backoff.NoBackoff {
-		// no backoff or cron
-		if event := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, attr); event == nil {
+		// no retry or cron
+		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
 			return &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
 		}
 		return nil
@@ -442,16 +459,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 	if err := handler.attrValidator.validateTimerCancelAttributes(attr); err != nil {
 		return err
 	}
-	if handler.mutableState.AddTimerCanceledEvent(
+	_, err := handler.mutableState.AddTimerCanceledEvent(
 		handler.decisionTaskCompletedID,
 		attr,
-		handler.identity) == nil {
-		handler.mutableState.AddCancelTimerFailedEvent(
-			handler.decisionTaskCompletedID,
-			attr,
-			handler.identity,
-		)
-	} else {
+		handler.identity)
+	switch err.(type) {
+	case nil:
 		// timer deletion is success. we need to rebuild the timer builder
 		// since timer builder has a local cached version of timers
 		handler.timerBuilder = handler.timerBuilderProvider()
@@ -462,8 +475,17 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		// TODO deletion of timer fired event refreshing hasUnhandledEventsBeforeDecisions
 		//  is not entirely correct, since during these decisions processing, new event may appear
 		handler.hasUnhandledEventsBeforeDecisions = handler.mutableState.HasBufferedEvents()
+		return nil
+	case *workflow.BadRequestError:
+		_, err = handler.mutableState.AddCancelTimerFailedEvent(
+			handler.decisionTaskCompletedID,
+			attr,
+			handler.identity,
+		)
+		return err
+	default:
+		return err
 	}
-	return nil
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
@@ -498,8 +520,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
 	if err := handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr); err != nil {
 		return err
 	}
-	handler.mutableState.AddWorkflowExecutionCanceledEvent(handler.decisionTaskCompletedID, attr)
-	return nil
+	_, err := handler.mutableState.AddWorkflowExecutionCanceledEvent(handler.decisionTaskCompletedID, attr)
+	return err
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkflow(
@@ -530,10 +552,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 	}
 
 	cancelRequestID := uuid.New()
-	wfCancelReqEvent, _ := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	wfCancelReqEvent, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		handler.decisionTaskCompletedID, cancelRequestID, attr,
 	)
-	if wfCancelReqEvent == nil {
+	if err != nil {
 		return &workflow.InternalServiceError{Message: "Unable to add external cancel workflow request."}
 	}
 
@@ -570,8 +592,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 		return nil
 	}
 
-	handler.mutableState.AddRecordMarkerEvent(handler.decisionTaskCompletedID, attr)
-	return nil
+	_, err = handler.mutableState.AddRecordMarkerEvent(handler.decisionTaskCompletedID, attr)
+	return err
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
@@ -683,9 +705,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	}
 
 	requestID := uuid.New()
-	initiatedEvent, _ := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
+	initiatedEvent, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		handler.decisionTaskCompletedID, requestID, attr,
 	)
+	if err != nil {
+		return err
+	}
 	handler.transferTasks = append(handler.transferTasks, &persistence.StartChildExecutionTask{
 		TargetDomainID:   targetDomainID,
 		TargetWorkflowID: attr.GetWorkflowId(),
@@ -733,10 +758,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	}
 
 	signalRequestID := uuid.New() // for deduplicate
-	wfSignalReqEvent, _ := handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
+	wfSignalReqEvent, _, err := handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		handler.decisionTaskCompletedID, signalRequestID, attr,
 	)
-	if wfSignalReqEvent == nil {
+	if err != nil {
 		return &workflow.InternalServiceError{Message: "Unable to add external signal workflow request."}
 	}
 

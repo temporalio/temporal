@@ -92,7 +92,7 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 		Details: []byte(message),
 	}
 
-	if evt := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); evt == nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
 		return false, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
 	}
 

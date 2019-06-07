@@ -138,7 +138,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				}
 				parentDomainID = &parentDomainEntry.GetInfo().ID
 			}
-			b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, event)
+			err := b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, event)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			b.timerTasks = append(b.timerTasks, b.scheduleWorkflowTimerTask(event, b.msBuilder)...)
 			b.transferTasks = append(b.transferTasks, &persistence.RecordWorkflowStartedTask{})
@@ -151,8 +154,11 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes
-			di := b.msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(),
+			di, err := b.msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(),
 				attributes.TaskList.GetName(), attributes.GetStartToCloseTimeoutSeconds(), attributes.GetAttempt(), event.GetTimestamp())
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
 				di.ScheduleID))
@@ -162,8 +168,11 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeDecisionTaskStarted:
 			attributes := event.DecisionTaskStartedEventAttributes
-			di := b.msBuilder.ReplicateDecisionTaskStartedEvent(nil, event.GetVersion(), attributes.GetScheduledEventId(),
+			di, err := b.msBuilder.ReplicateDecisionTaskStartedEvent(nil, event.GetVersion(), attributes.GetScheduledEventId(),
 				event.GetEventId(), attributes.GetRequestId(), event.GetTimestamp())
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			b.timerTasks = append(b.timerTasks, b.scheduleDecisionTimerTask(event, di.ScheduleID, di.Attempt,
 				di.DecisionTimeout))
@@ -171,14 +180,25 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			lastDecision = di
 
 		case shared.EventTypeDecisionTaskCompleted:
-			b.msBuilder.ReplicateDecisionTaskCompletedEvent(event)
+			err := b.msBuilder.ReplicateDecisionTaskCompletedEvent(event)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeDecisionTaskTimedOut:
 			attributes := event.DecisionTaskTimedOutEventAttributes
-			b.msBuilder.ReplicateDecisionTaskTimedOutEvent(attributes.GetTimeoutType())
+			err := b.msBuilder.ReplicateDecisionTaskTimedOutEvent(attributes.GetTimeoutType())
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			// this is for transient decision
-			if di := b.msBuilder.ReplicateTransientDecisionTaskScheduled(); di != nil {
+			di, err := b.msBuilder.ReplicateTransientDecisionTaskScheduled()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			if di != nil {
 				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
 					di.ScheduleID))
 				// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
@@ -186,10 +206,17 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeDecisionTaskFailed:
-			b.msBuilder.ReplicateDecisionTaskFailedEvent()
+			if err := b.msBuilder.ReplicateDecisionTaskFailedEvent(); err != nil {
+				return nil, nil, nil, err
+			}
 
 			// this is for transient decision
-			if di := b.msBuilder.ReplicateTransientDecisionTaskScheduled(); di != nil {
+			di, err := b.msBuilder.ReplicateTransientDecisionTaskScheduled()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			if di != nil {
 				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
 					di.ScheduleID))
 				// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
@@ -197,7 +224,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeActivityTaskScheduled:
-			ai := b.msBuilder.ReplicateActivityTaskScheduledEvent(firstEvent.GetEventId(), event)
+			ai, err := b.msBuilder.ReplicateActivityTaskScheduledEvent(firstEvent.GetEventId(), event)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			b.transferTasks = append(b.transferTasks, b.scheduleActivityTransferTask(domainID, b.getTaskList(b.msBuilder),
 				ai.ScheduleID))
@@ -206,7 +236,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeActivityTaskStarted:
-			b.msBuilder.ReplicateActivityTaskStartedEvent(event)
+			if err := b.msBuilder.ReplicateActivityTaskStartedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
@@ -215,6 +248,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if err := b.msBuilder.ReplicateActivityTaskCompletedEvent(event); err != nil {
 				return nil, nil, nil, err
 			}
+
 			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
@@ -223,6 +257,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if err := b.msBuilder.ReplicateActivityTaskFailedEvent(event); err != nil {
 				return nil, nil, nil, err
 			}
+
 			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
@@ -231,17 +266,21 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if err := b.msBuilder.ReplicateActivityTaskTimedOutEvent(event); err != nil {
 				return nil, nil, nil, err
 			}
+
 			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
 
 		case shared.EventTypeActivityTaskCancelRequested:
-			b.msBuilder.ReplicateActivityTaskCancelRequestedEvent(event)
+			if err := b.msBuilder.ReplicateActivityTaskCancelRequestedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeActivityTaskCanceled:
 			if err := b.msBuilder.ReplicateActivityTaskCanceledEvent(event); err != nil {
 				return nil, nil, nil, err
 			}
+
 			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
@@ -250,19 +289,29 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			// No mutable state action is needed
 
 		case shared.EventTypeTimerStarted:
-			ti := b.msBuilder.ReplicateTimerStartedEvent(event)
+			ti, err := b.msBuilder.ReplicateTimerStartedEvent(event)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
 			if timerTask := b.scheduleUserTimerTask(event, ti, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
 
 		case shared.EventTypeTimerFired:
-			b.msBuilder.ReplicateTimerFiredEvent(event)
+			if err := b.msBuilder.ReplicateTimerFiredEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			if timerTask := b.refreshUserTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
 
 		case shared.EventTypeTimerCanceled:
-			b.msBuilder.ReplicateTimerCanceledEvent(event)
+			if err := b.msBuilder.ReplicateTimerCanceledEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			if timerTask := b.refreshUserTimerTask(event, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
@@ -273,19 +322,25 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeStartChildWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			createRequestID := uuid.New()
-			cei := b.msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(firstEvent.GetEventId(), event,
+			cei, err := b.msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(firstEvent.GetEventId(), event,
 				createRequestID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			attributes := event.StartChildWorkflowExecutionInitiatedEventAttributes
 			childDomainEntry, err := b.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 			if err != nil {
 				return nil, nil, nil, err
 			}
+
 			b.transferTasks = append(b.transferTasks, b.scheduleStartChildWorkflowTransferTask(childDomainEntry.GetInfo().ID,
 				attributes.GetWorkflowId(), cei.InitiatedID))
 
 		case shared.EventTypeStartChildWorkflowExecutionFailed:
-			b.msBuilder.ReplicateStartChildWorkflowExecutionFailedEvent(event)
+			if err := b.msBuilder.ReplicateStartChildWorkflowExecutionFailedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeChildWorkflowExecutionStarted:
 			if err := b.msBuilder.ReplicateChildWorkflowExecutionStartedEvent(event); err != nil {
@@ -293,24 +348,37 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeChildWorkflowExecutionCompleted:
-			b.msBuilder.ReplicateChildWorkflowExecutionCompletedEvent(event)
+			if err := b.msBuilder.ReplicateChildWorkflowExecutionCompletedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeChildWorkflowExecutionFailed:
-			b.msBuilder.ReplicateChildWorkflowExecutionFailedEvent(event)
+			if err := b.msBuilder.ReplicateChildWorkflowExecutionFailedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeChildWorkflowExecutionCanceled:
-			b.msBuilder.ReplicateChildWorkflowExecutionCanceledEvent(event)
+			if err := b.msBuilder.ReplicateChildWorkflowExecutionCanceledEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeChildWorkflowExecutionTimedOut:
-			b.msBuilder.ReplicateChildWorkflowExecutionTimedOutEvent(event)
+			if err := b.msBuilder.ReplicateChildWorkflowExecutionTimedOutEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeChildWorkflowExecutionTerminated:
-			b.msBuilder.ReplicateChildWorkflowExecutionTerminatedEvent(event)
+			if err := b.msBuilder.ReplicateChildWorkflowExecutionTerminatedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			cancelRequestID := uuid.New()
-			rci := b.msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+			rci, err := b.msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			attributes := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
 			targetDomainEntry, err := b.shard.GetDomainCache().GetDomain(attributes.GetDomain())
@@ -326,15 +394,22 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			))
 
 		case shared.EventTypeRequestCancelExternalWorkflowExecutionFailed:
-			b.msBuilder.ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(event)
+			if err := b.msBuilder.ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeExternalWorkflowExecutionCancelRequested:
-			b.msBuilder.ReplicateExternalWorkflowExecutionCancelRequested(event)
+			if err := b.msBuilder.ReplicateExternalWorkflowExecutionCancelRequested(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeSignalExternalWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			signalRequestID := uuid.New()
-			si := b.msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+			si, err := b.msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
 			attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
 			targetDomainEntry, err := b.shard.GetDomainCache().GetDomain(attributes.GetDomain())
@@ -350,50 +425,73 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			))
 
 		case shared.EventTypeSignalExternalWorkflowExecutionFailed:
-			b.msBuilder.ReplicateSignalExternalWorkflowExecutionFailedEvent(event)
+			if err := b.msBuilder.ReplicateSignalExternalWorkflowExecutionFailedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeExternalWorkflowExecutionSignaled:
-			b.msBuilder.ReplicateExternalWorkflowExecutionSignaled(event)
+			if err := b.msBuilder.ReplicateExternalWorkflowExecutionSignaled(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeMarkerRecorded:
 			// No mutable state action is needed
 
 		case shared.EventTypeWorkflowExecutionSignaled:
-			b.msBuilder.ReplicateWorkflowExecutionSignaled(event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionSignaled(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeWorkflowExecutionCancelRequested:
-			b.msBuilder.ReplicateWorkflowExecutionCancelRequestedEvent(event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionCancelRequestedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeWorkflowExecutionCompleted:
-			b.msBuilder.ReplicateWorkflowExecutionCompletedEvent(firstEvent.GetEventId(), event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionCompletedEvent(firstEvent.GetEventId(), event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionFailed:
-			b.msBuilder.ReplicateWorkflowExecutionFailedEvent(firstEvent.GetEventId(), event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionFailedEvent(firstEvent.GetEventId(), event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionTimedOut:
-			b.msBuilder.ReplicateWorkflowExecutionTimedoutEvent(firstEvent.GetEventId(), event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionTimedoutEvent(firstEvent.GetEventId(), event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionCanceled:
-			b.msBuilder.ReplicateWorkflowExecutionCanceledEvent(firstEvent.GetEventId(), event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionCanceledEvent(firstEvent.GetEventId(), event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 		case shared.EventTypeWorkflowExecutionTerminated:
-			b.msBuilder.ReplicateWorkflowExecutionTerminatedEvent(firstEvent.GetEventId(), event)
+			if err := b.msBuilder.ReplicateWorkflowExecutionTerminatedEvent(firstEvent.GetEventId(), event); err != nil {
+				return nil, nil, nil, err
+			}
+
 			err := b.appendTasksForFinishedExecutions(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
