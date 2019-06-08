@@ -158,6 +158,8 @@ type (
 		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn
 		// MaxQPS is overall max QPS
 		MaxQPS dynamicconfig.IntPropertyFn
+		// ValidSearchAttributes is legal indexed keys that can be used in list APIs
+		ValidSearchAttributes dynamicconfig.MapPropertyFn
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster

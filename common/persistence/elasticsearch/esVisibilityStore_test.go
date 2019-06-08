@@ -32,11 +32,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/valyala/fastjson"
-
 	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/definition"
 	es "github.com/uber/cadence/common/elasticsearch"
 	esMocks "github.com/uber/cadence/common/elasticsearch/mocks"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -44,6 +43,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/valyala/fastjson"
 )
 
 type ESVisibilitySuite struct {
@@ -99,6 +99,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockESClient = &esMocks.Client{}
 	config := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
+		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 	}
 
 	s.mockProducer = &mocks.KafkaProducer{}
@@ -465,22 +466,22 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for search after
 	runID := "runID"
 	token = &esVisibilityPageToken{
-		SortTime:   latestTime,
+		SortValue:  latestTime,
 		TieBreaker: runID,
 	}
 	params.From = 0
-	params.SearchAfter = []interface{}{token.SortTime, token.TieBreaker}
+	params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
 	s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
-	isOpen := true
+	sortField := definition.StartTime
 	token := &esVisibilityPageToken{From: 0}
 
 	// test for empty hits
 	searchHits := &elastic.SearchHits{}
-	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, isOpen, 1)
+	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, 1)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -498,16 +499,17 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	source := (*json.RawMessage)(&data)
 	searchHit := &elastic.SearchHit{
 		Source: source,
+		Sort:   []interface{}{1547596872371000000, "e481009e-14b3-45ae-91af-dce6e2a88365"},
 	}
 	searchHits.Hits = []*elastic.SearchHit{searchHit}
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, isOpen, 1)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, 1)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&esVisibilityPageToken{From: 1})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, isOpen, 2)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, 2)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
@@ -520,24 +522,18 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchHits.Hits = append(searchHits.Hits, searchHit)
 	}
 	numOfHits := len(searchHits.Hits)
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, true, numOfHits)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, numOfHits)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
 	s.NoError(err)
-	s.Equal(int64(1547596872371000000), nextPageToken.SortTime)
-	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.TieBreaker)
-	s.Equal(0, nextPageToken.From)
-	// for close record
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, false, numOfHits)
+	resultSortValue, err := nextPageToken.SortValue.(json.Number).Int64()
 	s.NoError(err)
-	s.Equal(numOfHits, len(resp.Executions))
-	nextPageToken, _ = s.visibilityStore.deserializePageToken(resp.NextPageToken)
-	s.Equal(int64(1547596872817380000), nextPageToken.SortTime)
+	s.Equal(int64(1547596872371000000), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.TieBreaker)
 	s.Equal(0, nextPageToken.From)
 	// for last page
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, false, numOfHits+1)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, numOfHits+1)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
@@ -558,11 +554,13 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "unable to deserialize page token"))
 
-	token = &esVisibilityPageToken{SortTime: 123, TieBreaker: "unique"}
+	token = &esVisibilityPageToken{SortValue: int64(64), TieBreaker: "unique"}
 	data, _ = s.visibilityStore.serializePageToken(token)
 	result, err = s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
-	s.Equal(token, result)
+	resultSortValue, err := result.SortValue.(json.Number).Int64()
+	s.NoError(err)
+	s.Equal(token.SortValue.(int64), resultSortValue)
 }
 
 func (s *ESVisibilitySuite) TestSerializePageToken() {
@@ -572,7 +570,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	token, err := s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
 	s.Equal(0, token.From)
-	s.Equal(int64(0), token.SortTime)
+	s.Equal(nil, token.SortValue)
 	s.Equal("", token.TieBreaker)
 
 	newToken := &esVisibilityPageToken{From: 5}
@@ -585,13 +583,16 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
-	newToken = &esVisibilityPageToken{SortTime: sortTime, TieBreaker: tieBreaker}
+	newToken = &esVisibilityPageToken{SortValue: sortTime, TieBreaker: tieBreaker}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
 	token, err = s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
-	s.Equal(newToken, token)
+	resultSortValue, err := token.SortValue.(json.Number).Int64()
+	s.NoError(err)
+	s.Equal(newToken.SortValue, resultSortValue)
+	s.Equal(newToken.TieBreaker, token.TieBreaker)
 }
 
 func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
@@ -610,8 +611,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	}
 
 	// test for open
-	isOpen := true
-	info := s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit, isOpen)
+	info := s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
@@ -619,8 +619,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 
 	// test for close
-	isOpen = false
-	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit, isOpen)
+	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
@@ -636,7 +635,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	searchHit = &elastic.SearchHit{
 		Source: source,
 	}
-	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit, isOpen)
+	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit)
 	s.Nil(info)
 }
 
@@ -645,9 +644,6 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 	s.False(shouldSearchAfter(token))
 
 	token.TieBreaker = "a"
-	s.False(shouldSearchAfter(token))
-
-	token.SortTime = 1
 	s.True(shouldSearchAfter(token))
 }
 
@@ -658,85 +654,98 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	}
 	token := &esVisibilityPageToken{}
 
+	v := s.visibilityStore
+
 	request.Query = ""
-	dsl, isOpen, err := getESQueryDSL(request, token)
+	dsl, sortField, err := v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = "invaild query"
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.NotNil(err)
-	s.False(isOpen)
+	s.Equal("", sortField)
 	s.Equal("", dsl)
 
 	request.Query = `WorkflowID = 'wid'`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' or WorkflowID = 'another-wid'`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' and CloseTime = missing`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.True(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}],"must_not":{"exists":{"field":"CloseTime"}}}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}],"must_not":{"exists":{"field":"CloseTime"}}}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `CloseTime = missing order by CloseTime desc`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.True(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[],"must_not":{"exists":{"field":"CloseTime"}}}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.CloseTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[],"must_not":{"exists":{"field":"CloseTime"}}}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000 or ExecutionTime > 2000`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `order by ExecutionTime desc`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"ExecutionTime":"desc"},{"WorkflowID":"desc"}]}`, dsl)
+	s.Equal(definition.ExecutionTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"ExecutionTime":"desc"},{"RunID":"desc"}]}`, dsl)
+
+	request.Query = `order by StartTime desc, CloseTime desc`
+	dsl, sortField, err = v.getESQueryDSL(request, token)
+	s.Equal(errors.New("only one field can be used to sort"), err)
+
+	request.Query = `order by CustomStringField desc`
+	dsl, sortField, err = v.getESQueryDSL(request, token)
+	s.Equal(errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field"), err)
+
+	request.Query = `order by CustomIntField asc`
+	dsl, sortField, err = v.getESQueryDSL(request, token)
+	s.Nil(err)
+	s.Equal(definition.CustomIntField, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"CustomIntField":"asc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < "unable to parse"`
-	_, _, err = getESQueryDSL(request, token)
+	_, _, err = v.getESQueryDSL(request, token)
 	s.Error(err)
 
-	token = &esVisibilityPageToken{
-		SortTime:   1,
-		TieBreaker: "a",
-	}
+	token = s.getTokenHelper(1)
 	request.Query = `WorkflowID = 'wid'`
-	dsl, isOpen, err = getESQueryDSL(request, token)
+	dsl, sortField, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.False(isOpen)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"WorkflowID":"desc"}],"search_after":[1,"a"]}`, dsl)
+	s.Equal(definition.StartTime, sortField)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}],"search_after":[1,"t"]}`, dsl)
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
@@ -744,30 +753,25 @@ func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 		DomainUUID: testDomainID,
 		PageSize:   10,
 	}
-	token := &esVisibilityPageToken{}
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
-	dsl, isOpen, err := getESQueryDSLForScan(request, token)
+	dsl, err := getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.False(isOpen)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10}`, dsl)
 
 	request.Query = `WorkflowID = 'wid'`
-	dsl, isOpen, err = getESQueryDSLForScan(request, token)
+	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.False(isOpen)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10}`, dsl)
 
 	request.Query = `CloseTime = missing and (ExecutionTime >= "2019-08-27T15:04:05+00:00" or StartTime <= "2018-06-07T15:04:05+00:00")`
-	dsl, isOpen, err = getESQueryDSLForScan(request, token)
+	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.True(isOpen)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"bool":{"should":[{"range":{"ExecutionTime":{"from":"1566918245000000000"}}},{"range":{"StartTime":{"to":"1528383845000000000"}}}]}}],"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10}`, dsl)
 
 	request.Query = `ExecutionTime < 1000 and ExecutionTime > 500`
-	dsl, isOpen, err = getESQueryDSLForScan(request, token)
+	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.False(isOpen)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"500"}}}]}}]}}]}},"from":0,"size":10}`, dsl)
 }
 
@@ -990,4 +994,77 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 		`"value8"`: struct{}{},
 	}
 	s.Equal(expectedProcessedValue, processedValue)
+}
+
+func (s *ESVisibilitySuite) TestGetFieldType() {
+	s.Equal(workflow.IndexedValueTypeInt, s.visibilityStore.getFieldType("StartTime"))
+	s.Equal(workflow.IndexedValueTypeDatetime, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
+}
+
+func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
+	v := s.visibilityStore
+
+	// Int field
+	token := s.getTokenHelper(123)
+	sortField := definition.CustomIntField
+	res, err := v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`[123, "t"]`, res)
+
+	jsonData := `{"SortValue": -9223372036854776000, "TieBreaker": "t"}`
+	dec := json.NewDecoder(strings.NewReader(jsonData))
+	dec.UseNumber()
+	err = dec.Decode(&token)
+	s.Nil(err)
+	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`[-9223372036854775808, "t"]`, res)
+
+	jsonData = `{"SortValue": 9223372036854776000, "TieBreaker": "t"}`
+	dec = json.NewDecoder(strings.NewReader(jsonData))
+	dec.UseNumber()
+	err = dec.Decode(&token)
+	s.Nil(err)
+	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`[9223372036854775807, "t"]`, res)
+
+	// Double field
+	token = s.getTokenHelper(1.11)
+	sortField = definition.CustomDoubleField
+	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`[1.11, "t"]`, res)
+
+	jsonData = `{"SortValue": "-Infinity", "TieBreaker": "t"}`
+	dec = json.NewDecoder(strings.NewReader(jsonData))
+	dec.UseNumber()
+	err = dec.Decode(&token)
+	s.Nil(err)
+	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`["-Infinity", "t"]`, res)
+
+	// Keyword field
+	token = s.getTokenHelper("keyword")
+	sortField = definition.CustomKeywordField
+	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`["keyword", "t"]`, res)
+
+	token = s.getTokenHelper(nil)
+	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
+	s.Nil(err)
+	s.Equal(`[null, "t"]`, res)
+}
+
+func (s *ESVisibilitySuite) getTokenHelper(sortValue interface{}) *esVisibilityPageToken {
+	v := s.visibilityStore
+	token := &esVisibilityPageToken{
+		SortValue:  sortValue,
+		TieBreaker: "t",
+	}
+	encoded, _ := v.serializePageToken(token) // necessary, otherwise token is fake and not json decoded
+	token, _ = v.deserializePageToken(encoded)
+	return token
 }
