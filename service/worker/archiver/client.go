@@ -49,6 +49,7 @@ type (
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64
+		BucketName           string
 	}
 
 	// Client is used to archive workflow histories

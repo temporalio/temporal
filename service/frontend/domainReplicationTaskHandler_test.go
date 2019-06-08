@@ -104,7 +104,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 		EmitMetric:     emitMetric,
 		ArchivalBucket: archivalBucket,
 		ArchivalStatus: archivalStatus,
-		BadBinaries:    shared.BadBinaries{},
+		BadBinaries:    shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -129,7 +129,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 				EmitMetric:                             common.BoolPtr(emitMetric),
 				ArchivalBucketName:                     common.StringPtr(archivalBucket),
 				ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
-				BadBinaries:                            &shared.BadBinaries{},
+				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &shared.DomainReplicationConfiguration{
 				ActiveClusterName: common.StringPtr(clusterActive),
@@ -232,7 +232,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 		EmitMetric:     emitMetric,
 		ArchivalBucket: archivalBucket,
 		ArchivalStatus: archivalStatus,
-		BadBinaries:    shared.BadBinaries{},
+		BadBinaries:    shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -257,7 +257,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 				EmitMetric:                             common.BoolPtr(emitMetric),
 				ArchivalBucketName:                     common.StringPtr(archivalBucket),
 				ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
-				BadBinaries:                            &shared.BadBinaries{},
+				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &shared.DomainReplicationConfiguration{
 				ActiveClusterName: common.StringPtr(clusterActive),

@@ -130,6 +130,8 @@ type (
 		DataStores map[string]DataStore `yaml:"datastores"`
 		// VisibilityConfig is config for visibility sampling
 		VisibilityConfig *VisibilityConfig
+		// TransactionSizeLimit is the largest allowed transaction size
+		TransactionSizeLimit dynamicconfig.IntPropertyFn
 	}
 
 	// DataStore is the configuration for a single datastore

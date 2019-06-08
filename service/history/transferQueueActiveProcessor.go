@@ -32,7 +32,6 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -697,7 +696,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 		RequestId: common.StringPtr(si.SignalRequestID),
 	}
 
-	t.historyClient.RemoveSignalMutableState(nil, removeRequest)
+	err = t.historyClient.RemoveSignalMutableState(nil, removeRequest)
 
 	return err
 }
@@ -796,7 +795,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 				},
 				InitiatedId: common.Int64Ptr(initiatedEventID),
 			},
-			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
+			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
 		}
 
 		var startResponse *workflow.StartWorkflowExecutionResponse
@@ -872,7 +871,10 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	workflowTimeout := executionInfo.WorkflowTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp.UnixNano()
-	startEvent, _ := msBuilder.GetStartEvent()
+	startEvent, found := msBuilder.GetStartEvent()
+	if !found {
+		return &workflow.InternalServiceError{Message: "Failed to load start event."}
+	}
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getVisibilityMemo(startEvent)
 	searchAttr := executionInfo.SearchAttributes
@@ -1027,7 +1029,7 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *per
 				return &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
 			}
 
-			msBuilder.AddChildWorkflowExecutionStartedEvent(
+			_, err := msBuilder.AddChildWorkflowExecutionStartedEvent(
 				domain,
 				&workflow.WorkflowExecution{
 					WorkflowId: common.StringPtr(task.TargetWorkflowID),
@@ -1038,7 +1040,7 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *per
 				initiatedAttributes.Header,
 			)
 
-			return nil
+			return err
 		})
 }
 
@@ -1058,10 +1060,10 @@ func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(task 
 				return &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
 			}
 
-			msBuilder.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
+			_, err := msBuilder.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
 				workflow.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning, initiatedAttributes)
 
-			return nil
+			return err
 		})
 }
 
@@ -1101,14 +1103,14 @@ func (t *transferQueueActiveProcessorImpl) requestCancelCompleted(task *persiste
 				return &workflow.EntityNotExistsError{Message: "Pending request cancellation not found."}
 			}
 
-			msBuilder.AddExternalWorkflowExecutionCancelRequested(
+			_, err := msBuilder.AddExternalWorkflowExecutionCancelRequested(
 				initiatedEventID,
 				request.GetDomainUUID(),
 				request.CancelRequest.WorkflowExecution.GetWorkflowId(),
 				request.CancelRequest.WorkflowExecution.GetRunId(),
 			)
 
-			return nil
+			return err
 		})
 }
 
@@ -1128,14 +1130,14 @@ func (t *transferQueueActiveProcessorImpl) requestSignalCompleted(task *persiste
 				return &workflow.EntityNotExistsError{Message: "Pending signal request not found."}
 			}
 
-			msBuilder.AddExternalWorkflowExecutionSignaled(
+			_, err := msBuilder.AddExternalWorkflowExecutionSignaled(
 				initiatedEventID,
 				request.GetDomainUUID(),
 				request.SignalRequest.WorkflowExecution.GetWorkflowId(),
 				request.SignalRequest.WorkflowExecution.GetRunId(),
 				request.SignalRequest.Control)
 
-			return nil
+			return err
 		})
 }
 
@@ -1154,7 +1156,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelFailed(task *persistence
 				return &workflow.EntityNotExistsError{Message: "Pending request cancellation not found."}
 			}
 
-			msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
+			_, err := msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
 				common.EmptyEventID,
 				initiatedEventID,
 				request.GetDomainUUID(),
@@ -1162,7 +1164,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelFailed(task *persistence
 				request.CancelRequest.WorkflowExecution.GetRunId(),
 				workflow.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution)
 
-			return nil
+			return err
 		})
 }
 
@@ -1182,7 +1184,7 @@ func (t *transferQueueActiveProcessorImpl) requestSignalFailed(task *persistence
 				return &workflow.EntityNotExistsError{Message: "Pending signal request not found."}
 			}
 
-			msBuilder.AddSignalExternalWorkflowExecutionFailedEvent(
+			_, err := msBuilder.AddSignalExternalWorkflowExecutionFailedEvent(
 				common.EmptyEventID,
 				initiatedEventID,
 				request.GetDomainUUID(),
@@ -1191,7 +1193,7 @@ func (t *transferQueueActiveProcessorImpl) requestSignalFailed(task *persistence
 				request.SignalRequest.Control,
 				workflow.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution)
 
-			return nil
+			return err
 		})
 }
 

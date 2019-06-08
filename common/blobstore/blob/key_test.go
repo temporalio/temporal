@@ -87,6 +87,12 @@ func (s *KeySuite) TestNewKey() {
 			expectError:    false,
 			expectBuiltKey: "valid_set_of_pieces.ext",
 		},
+		{
+			extension:      "ext",
+			pieces:         []string{"valid", "-10"},
+			expectError:    false,
+			expectBuiltKey: "valid_-10.ext",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -148,6 +154,13 @@ func (s *KeySuite) TestNewKeyFromString() {
 			expectBuiltKey:   "foo1_bar2_3baz.ext",
 			expectExtension:  "ext",
 			expectNamePieces: []string{"foo1", "bar2", "3baz"},
+		},
+		{
+			inputStr:         "foo1_bar2_-10.ext",
+			expectError:      false,
+			expectBuiltKey:   "foo1_bar2_-10.ext",
+			expectExtension:  "ext",
+			expectNamePieces: []string{"foo1", "bar2", "-10"},
 		},
 	}
 

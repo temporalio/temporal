@@ -40,7 +40,7 @@ const (
 
 var (
 	// allowedRegex indicates the allowed format of both key name pieces and extension
-	allowedRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	allowedRegex = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 )
 
 type (

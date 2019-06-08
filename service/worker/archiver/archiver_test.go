@@ -73,11 +73,13 @@ func (s *archiverSuite) TearDownTest() {
 
 func (s *archiverSuite) TestHandleRequest_UploadFails_NonRetryableError() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
+	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteBlobSuccessCount).Once()
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
 	archiverTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(cadence.NewCustomError(errGetDomainByID))
+	env.OnActivity(deleteBlobActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
@@ -88,11 +90,13 @@ func (s *archiverSuite) TestHandleRequest_UploadFails_NonRetryableError() {
 
 func (s *archiverSuite) TestHandleRequest_UploadFails_ExpireRetryTimeout() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
+	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteBlobSuccessCount).Once()
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
 	archiverTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(workflow.NewTimeoutError(shared.TimeoutTypeStartToClose))
+	env.OnActivity(deleteBlobActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 

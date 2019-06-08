@@ -24,6 +24,7 @@
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -106,7 +107,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 		startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
 		resp, err := s.engine.ListOpenWorkflowExecutions(createContext(), &workflow.ListOpenWorkflowExecutionsRequest{
 			Domain:          common.StringPtr(s.domainName),
-			MaximumPageSize: common.Int32Ptr(100),
+			MaximumPageSize: common.Int32Ptr(defaultTestValueOfESIndexMaxResultWindow),
 			StartTimeFilter: startFilter,
 			ExecutionFilter: &workflow.WorkflowExecutionFilter{
 				WorkflowId: common.StringPtr(id),
@@ -204,6 +205,167 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
 }
 
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
+	id := "es-integration-list-workflow-or-query-test"
+	wt := "es-integration-list-workflow-or-query-test-type"
+	tl := "es-integration-list-workflow-or-query-test-tasklist"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	// start 3 workflows
+	key := definition.CustomIntField
+	attrValBytes, _ := json.Marshal(1)
+	searchAttr := &workflow.SearchAttributes{
+		IndexedFields: map[string][]byte{
+			key: attrValBytes,
+		},
+	}
+	request.SearchAttributes = searchAttr
+	we1, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+
+	request.RequestId = common.StringPtr(uuid.New())
+	request.WorkflowId = common.StringPtr(id + "-2")
+	attrValBytes, _ = json.Marshal(2)
+	searchAttr.IndexedFields[key] = attrValBytes
+	we2, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+
+	request.RequestId = common.StringPtr(uuid.New())
+	request.WorkflowId = common.StringPtr(id + "-3")
+	attrValBytes, _ = json.Marshal(3)
+	searchAttr.IndexedFields[key] = attrValBytes
+	we3, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+
+	// query 1 workflow with search attr
+	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
+	var openExecution *workflow.WorkflowExecutionInfo
+	listRequest := &workflow.ListWorkflowExecutionsRequest{
+		Domain:   common.StringPtr(s.domainName),
+		PageSize: common.Int32Ptr(defaultTestValueOfESIndexMaxResultWindow),
+		Query:    common.StringPtr(query1),
+	}
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if len(resp.GetExecutions()) == 1 {
+			openExecution = resp.GetExecutions()[0]
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.NotNil(openExecution)
+	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
+	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime())
+	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
+	var searchVal int
+	json.Unmarshal(searchValBytes, &searchVal)
+	s.Equal(1, searchVal)
+
+	// query with or clause
+	query2 := fmt.Sprintf(`CustomIntField = %d or CustomIntField = %d`, 1, 2)
+	listRequest.Query = common.StringPtr(query2)
+	var openExecutions []*workflow.WorkflowExecutionInfo
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if len(resp.GetExecutions()) == 2 {
+			openExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.Equal(2, len(openExecutions))
+	e1 := openExecutions[0]
+	e2 := openExecutions[1]
+	if e1.GetExecution().GetRunId() != we1.GetRunId() {
+		// results are sorted by [CloseTime,RunID] desc, so find the correct mapping first
+		e1, e2 = e2, e1
+	}
+	s.Equal(we1.GetRunId(), e1.GetExecution().GetRunId())
+	s.Equal(we2.GetRunId(), e2.GetExecution().GetRunId())
+	searchValBytes = e2.SearchAttributes.GetIndexedFields()[key]
+	json.Unmarshal(searchValBytes, &searchVal)
+	s.Equal(2, searchVal)
+
+	// query for open
+	query3 := fmt.Sprintf(`(CustomIntField = %d or CustomIntField = %d) and CloseTime = missing`, 2, 3)
+	listRequest.Query = common.StringPtr(query3)
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if len(resp.GetExecutions()) == 2 {
+			openExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.Equal(2, len(openExecutions))
+	e1 = openExecutions[0]
+	e2 = openExecutions[1]
+	s.Equal(we3.GetRunId(), e1.GetExecution().GetRunId())
+	s.Equal(we2.GetRunId(), e2.GetExecution().GetRunId())
+	searchValBytes = e1.SearchAttributes.GetIndexedFields()[key]
+	json.Unmarshal(searchValBytes, &searchVal)
+	s.Equal(3, searchVal)
+}
+
+// To test last page search trigger max window size error
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
+	// set es index index settings
+	indexName := s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName]
+	_, err := s.esClient.IndexPutSettings(indexName).
+		BodyString(fmt.Sprintf(`{"max_result_window" : %d}`, defaultTestValueOfESIndexMaxResultWindow)).
+		Do(context.Background())
+	s.NoError(err)
+
+	id := "es-integration-list-workflow-max-window-size-test"
+	wt := "es-integration-list-workflow-max-window-size-test-type"
+	tl := "es-integration-list-workflow-max-window-size-test-tasklist"
+	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	for i := 0; i < defaultTestValueOfESIndexMaxResultWindow; i++ {
+		startRequest.RequestId = common.StringPtr(uuid.New())
+		startRequest.WorkflowId = common.StringPtr(id + strconv.Itoa(i))
+		_, err := s.engine.StartWorkflowExecution(createContext(), startRequest)
+		s.Nil(err)
+	}
+
+	var listResp *workflow.ListWorkflowExecutionsResponse
+	var nextPageToken []byte
+
+	listRequest := &workflow.ListWorkflowExecutionsRequest{
+		Domain:        common.StringPtr(s.domainName),
+		PageSize:      common.Int32Ptr(int32(defaultTestValueOfESIndexMaxResultWindow)),
+		NextPageToken: nextPageToken,
+		Query:         common.StringPtr(fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt)),
+	}
+	// get first page
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if len(resp.GetExecutions()) == defaultTestValueOfESIndexMaxResultWindow {
+			listResp = resp
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.True(len(listResp.GetNextPageToken()) != 0)
+
+	// the last request
+	listRequest.NextPageToken = listResp.GetNextPageToken()
+	resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+	s.Nil(err)
+	s.True(len(resp.GetExecutions()) == 0)
+	s.True(len(resp.GetNextPageToken()) == 0)
+
+	// revert es index index settings
+	_, err = s.esClient.IndexPutSettings(indexName).
+		BodyString(fmt.Sprintf(`{"max_result_window" : %d}`, 10000)).
+		Do(context.Background())
+	s.NoError(err)
+}
+
 func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
 	startRequest *workflow.StartWorkflowExecutionRequest, wid, wType string, isScan bool) {
 
@@ -276,7 +438,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 	var openExecution *workflow.WorkflowExecutionInfo
 	listRequest := &workflow.ListWorkflowExecutionsRequest{
 		Domain:   common.StringPtr(s.domainName),
-		PageSize: common.Int32Ptr(100),
+		PageSize: common.Int32Ptr(defaultTestValueOfESIndexMaxResultWindow),
 		Query:    common.StringPtr(query),
 	}
 	for i := 0; i < numOfRetry; i++ {

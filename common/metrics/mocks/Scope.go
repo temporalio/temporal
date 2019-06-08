@@ -24,7 +24,6 @@ import (
 	time "time"
 
 	mock "github.com/stretchr/testify/mock"
-	tally "github.com/uber-go/tally"
 	metrics "github.com/uber/cadence/common/metrics"
 )
 
@@ -49,14 +48,14 @@ func (_m *Scope) RecordTimer(timer int, d time.Duration) {
 }
 
 // StartTimer provides a mock function with given fields: timer
-func (_m *Scope) StartTimer(timer int) tally.Stopwatch {
+func (_m *Scope) StartTimer(timer int) metrics.Stopwatch {
 	ret := _m.Called(timer)
 
-	var r0 tally.Stopwatch
-	if rf, ok := ret.Get(0).(func(int) tally.Stopwatch); ok {
+	var r0 metrics.Stopwatch
+	if rf, ok := ret.Get(0).(func(int) metrics.Stopwatch); ok {
 		r0 = rf(timer)
 	} else {
-		r0 = ret.Get(0).(tally.Stopwatch)
+		r0 = ret.Get(0).(metrics.Stopwatch)
 	}
 
 	return r0

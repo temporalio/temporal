@@ -22,8 +22,6 @@ package common
 
 import (
 	"time"
-
-	"github.com/uber/cadence/common/cron"
 )
 
 const (
@@ -67,9 +65,6 @@ const (
 	EncodingTypeEmpty                 = ""
 )
 
-// NoRetryBackoff is used to represent backoff when no retry is needed
-const NoRetryBackoff = cron.NoBackoff
-
 type (
 	// EncodingType is an enum that represents various data encoding types
 	EncodingType string
@@ -106,4 +101,9 @@ const (
 	// CriticalLongPollTimeout is a threshold for the context timeout passed into long poll API,
 	// below which a warning will be logged
 	CriticalLongPollTimeout = time.Second * 20
+)
+
+const (
+	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
+	DefaultTransactionSizeLimit = 14 * 1024 * 1024
 )

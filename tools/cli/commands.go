@@ -32,6 +32,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +74,8 @@ const (
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
+
+	searchAttrInputSeparator = "|"
 )
 
 var envKeysForUserName = []string{
@@ -177,6 +180,15 @@ func RegisterDomain(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
 		}
 	}
+	isGlobalDomain := false
+	if !c.IsSet(FlagIsGlobalDomain) {
+		ErrorAndExit(fmt.Sprintf("Option %s must be provided.", FlagIsGlobalDomain), err)
+	} else {
+		isGlobalDomain, err = strconv.ParseBool(c.String(FlagIsGlobalDomain))
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagIsGlobalDomain), err)
+		}
+	}
 
 	domainData := map[string]string{}
 	if c.IsSet(FlagDomainData) {
@@ -222,6 +234,7 @@ func RegisterDomain(c *cli.Context) {
 		SecurityToken:                          common.StringPtr(securityToken),
 		ArchivalStatus:                         archivalStatus(c),
 		ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
 	}
 
 	ctx, cancel := newContext(c)
@@ -403,10 +416,11 @@ func DescribeDomain(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 	}
 
-	var formatStr = "Name: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
+	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nArchivalStatus: %v\n"
 	descValues := []interface{}{
 		resp.DomainInfo.GetName(),
+		resp.DomainInfo.GetUUID(),
 		resp.DomainInfo.GetDescription(),
 		resp.DomainInfo.GetOwnerEmail(),
 		resp.DomainInfo.Data,
@@ -612,6 +626,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	memoFields := processMemo(c)
 	if len(memoFields) != 0 {
 		startRequest.Memo = &s.Memo{Fields: memoFields}
+	}
+
+	searchAttrFields := processSearchAttr(c)
+	if len(searchAttrFields) != 0 {
+		startRequest.SearchAttributes = &s.SearchAttributes{IndexedFields: searchAttrFields}
 	}
 
 	startFn := func() {
@@ -837,7 +856,6 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 // ListWorkflow list workflow executions based on filters
 func ListWorkflow(c *cli.Context) {
 	more := c.Bool(FlagMore)
-	pageSize := c.Int(FlagPageSize)
 	queryOpen := c.Bool(FlagOpen)
 
 	printJSON := c.Bool(FlagPrintJSON)
@@ -862,14 +880,13 @@ func ListWorkflow(c *cli.Context) {
 		prepareTable(nil)
 		table.Render()
 	} else { // require input Enter to view next page
-		var resultSize int
 		var nextPageToken []byte
 		for {
-			nextPageToken, resultSize = prepareTable(nextPageToken)
+			nextPageToken, _ = prepareTable(nextPageToken)
 			table.Render()
 			table.ClearRows()
 
-			if resultSize < pageSize {
+			if len(nextPageToken) == 0 {
 				break
 			}
 
@@ -900,8 +917,7 @@ func ListAllWorkflow(c *cli.Context) {
 		for {
 			results, nextPageToken = getListResultInRaw(c, queryOpen, nextPageToken)
 			printListResults(results, printJSON)
-			//printListResultsInJson(results)
-			if len(results) < defaultPageSizeForList {
+			if len(nextPageToken) == 0 {
 				break
 			}
 		}
@@ -911,11 +927,10 @@ func ListAllWorkflow(c *cli.Context) {
 
 	table := createTableForListWorkflow(c, true, queryOpen)
 	prepareTable := listWorkflow(c, table, queryOpen)
-	var resultSize int
 	var nextPageToken []byte
 	for {
-		nextPageToken, resultSize = prepareTable(nextPageToken)
-		if resultSize < defaultPageSizeForList {
+		nextPageToken, _ = prepareTable(nextPageToken)
+		if len(nextPageToken) == 0 {
 			break
 		}
 	}
@@ -1095,6 +1110,10 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 		header = append(header, "Memo")
 		headerColor = append(headerColor, tableHeaderBlue)
 	}
+	if printSearchAttr := c.Bool(FlagPrintSearchAttr); printSearchAttr {
+		header = append(header, "Search Attributes")
+		headerColor = append(headerColor, tableHeaderBlue)
+	}
 	table.SetHeader(header)
 	if !listAll { // color is only friendly to ANSI terminal
 		table.SetHeaderColor(headerColor...)
@@ -1113,6 +1132,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	printRawTime := c.Bool(FlagPrintRawTime)
 	printDateTime := c.Bool(FlagPrintDateTime)
 	printMemo := c.Bool(FlagPrintMemo)
+	printSearchAttr := c.Bool(FlagPrintSearchAttr)
 	pageSize := c.Int(FlagPageSize)
 	if pageSize <= 0 {
 		pageSize = defaultPageSizeForList
@@ -1135,7 +1155,10 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	prepareTable := func(next []byte) ([]byte, int) {
 		var result []*s.WorkflowExecutionInfo
 		var nextPageToken []byte
-		if queryOpen {
+		if c.IsSet(FlagListQuery) {
+			listQuery := c.String(FlagListQuery)
+			result, nextPageToken = listWorkflowExecutions(wfClient, pageSize, next, listQuery, c)
+		} else if queryOpen {
 			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, c)
 		} else {
 			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, next, c)
@@ -1159,12 +1182,33 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 			if printMemo {
 				row = append(row, getPrintableMemo(e.Memo))
 			}
+			if printSearchAttr {
+				row = append(row, getPrintableSearchAttr(e.SearchAttributes))
+			}
 			table.Append(row)
 		}
 
 		return nextPageToken, len(result)
 	}
 	return prepareTable
+}
+
+func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) (
+	[]*s.WorkflowExecutionInfo, []byte) {
+
+	request := &s.ListWorkflowExecutionsRequest{
+		PageSize:      common.Int32Ptr(int32(pageSize)),
+		NextPageToken: nextPageToken,
+		Query:         common.StringPtr(query),
+	}
+
+	ctx, cancel := newContextForLongPoll(c)
+	defer cancel()
+	response, err := client.ListWorkflow(ctx, request)
+	if err != nil {
+		ErrorAndExit("Failed to list workflow.", err)
+	}
+	return response.Executions, response.NextPageToken
 }
 
 func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
@@ -1496,6 +1540,43 @@ func ResetInBatch(c *cli.Context) {
 	close(done)
 	fmt.Println("wait for all goroutines...")
 	wg.Wait()
+}
+
+// sort helper for search attributes
+type byKey [][]string
+
+func (s byKey) Len() int {
+	return len(s)
+}
+func (s byKey) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byKey) Less(i, j int) bool {
+	return s[i][0] < s[j][0]
+}
+
+// GetSearchAttributes get valid search attributes
+func GetSearchAttributes(c *cli.Context) {
+	wfClient := getWorkflowClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := wfClient.GetSearchAttributes(ctx)
+	if err != nil {
+		ErrorAndExit("Failed to get search attributes.", err)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	header := []string{"Key", "Value type"}
+	table.SetHeader(header)
+	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
+	rows := [][]string{}
+	for k, v := range resp.Keys {
+		rows = append(rows, []string{k, v.String()})
+	}
+	sort.Sort(byKey(rows))
+	table.AppendBulk(rows)
+	table.Render()
 }
 
 func printErrorAndReturn(msg string, err error) error {
@@ -1966,6 +2047,77 @@ func validateJSONs(str string) error {
 	}
 }
 
+// use parseBool to ensure all BOOL search attributes only be "true" or "false"
+func parseBool(str string) (bool, error) {
+	switch str {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("not parseable bool value: %s", str)
+}
+
+func trimSpace(strs []string) []string {
+	result := make([]string, len(strs))
+	for i, v := range strs {
+		result[i] = strings.TrimSpace(v)
+	}
+	return result
+}
+
+func convertStringToRealType(v string) interface{} {
+	var genVal interface{}
+	var err error
+
+	if genVal, err = strconv.ParseInt(v, 10, 64); err == nil {
+
+	} else if genVal, err = parseBool(v); err == nil {
+
+	} else if genVal, err = strconv.ParseFloat(v, 64); err == nil {
+
+	} else if genVal, err = time.Parse(defaultDateTimeFormat, v); err == nil {
+
+	} else {
+		genVal = v
+	}
+
+	return genVal
+}
+
+func processSearchAttr(c *cli.Context) map[string][]byte {
+	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
+	var searchAttrKeys []string
+	if strings.TrimSpace(rawSearchAttrKey) != "" {
+		searchAttrKeys = trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	}
+
+	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
+	var searchAttrVals []interface{}
+	if strings.TrimSpace(rawSearchAttrVal) != "" {
+		searchAttrValsStr := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
+
+		for _, v := range searchAttrValsStr {
+			searchAttrVals = append(searchAttrVals, convertStringToRealType(v))
+		}
+	}
+
+	if len(searchAttrKeys) != len(searchAttrVals) {
+		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
+	}
+
+	fields := map[string][]byte{}
+	for i, key := range searchAttrKeys {
+		val, err := json.Marshal(searchAttrVals[i])
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
+		}
+		fields[key] = val
+	}
+
+	return fields
+}
+
 func processMemo(c *cli.Context) map[string][]byte {
 	rawMemoKey := c.String(FlagMemoKey)
 	var memoKeys []string
@@ -1999,6 +2151,16 @@ func getPrintableMemo(memo *s.Memo) string {
 	buf := new(bytes.Buffer)
 	for k, v := range memo.Fields {
 		fmt.Fprintf(buf, "%s=%s\n", k, string(v))
+	}
+	return buf.String()
+}
+
+func getPrintableSearchAttr(searchAttr *s.SearchAttributes) string {
+	buf := new(bytes.Buffer)
+	for k, v := range searchAttr.IndexedFields {
+		var decodedVal interface{}
+		json.Unmarshal(v, &decodedVal)
+		fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
 	}
 	return buf.String()
 }

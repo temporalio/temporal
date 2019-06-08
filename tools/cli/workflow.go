@@ -31,7 +31,7 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:        "activity",
 			Aliases:     []string{"act"},
-			Usage:       "Operate activities of workflow",
+			Usage:       "operate activities of workflow",
 			Subcommands: newActivityCommands(),
 		},
 		{
@@ -215,7 +215,7 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagEventID,
-					Usage: "The eventID of a DecisionTaskCompleted/DecisionTaskFailed you want to reset to (exclusive)",
+					Usage: "The eventID of any event after DecisionTaskStarted you want to reset to (exclusive). It can be DecisionTaskCompleted, DecisionTaskFailed or others",
 				},
 				cli.StringFlag{
 					Name:  FlagReason,
@@ -278,6 +278,13 @@ func newWorkflowCommands() []cli.Command {
 				ResetInBatch(c)
 			},
 		},
+		{
+			Name:  "get-search-attr",
+			Usage: "get list of legal search attributes that can be used in list workflow query.",
+			Action: func(c *cli.Context) {
+				GetSearchAttributes(c)
+			},
+		},
 	}
 }
 
@@ -286,7 +293,7 @@ func newActivityCommands() []cli.Command {
 		{
 			Name:    "complete",
 			Aliases: []string{"comp"},
-			Usage:   "Complete an activity",
+			Usage:   "complete an activity",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,

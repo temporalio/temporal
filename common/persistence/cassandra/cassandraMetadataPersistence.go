@@ -138,7 +138,7 @@ func (m *cassandraMetadataPersistence) Close() {
 // orphaned entry from domains table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistence) CreateDomain(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
 	query := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name)
-	applied, err := query.ScanCAS()
+	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err),
@@ -275,6 +275,9 @@ func (m *cassandraMetadataPersistence) GetDomain(request *p.GetDomainRequest) (*
 		return nil, handleError(request.Name, request.ID, err)
 	}
 
+	if info.Data == nil {
+		info.Data = map[string]string{}
+	}
 	config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
 	replicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, replicationConfig.ActiveClusterName)
 	replicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)

@@ -441,10 +441,11 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 
 	s.mockEventsCache.On("putEvent", domainID, execution.GetWorkflowId(), execution.GetRunId(),
 		workflowStartEvent.GetEventId(), workflowStartEvent).Return(nil).Once()
-	s.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, nil, execution, uuid.New(), workflowStartEvent)
+	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, nil, execution, uuid.New(), workflowStartEvent)
+	s.Nil(err)
 
 	// setup transient decision
-	di := s.msBuilder.ReplicateDecisionTaskScheduledEvent(
+	di, err := s.msBuilder.ReplicateDecisionTaskScheduledEvent(
 		decisionScheduleEvent.GetVersion(),
 		decisionScheduleEvent.GetEventId(),
 		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
@@ -452,18 +453,21 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt(),
 		0,
 	)
+	s.Nil(err)
 	s.NotNil(di)
 
-	di = s.msBuilder.ReplicateDecisionTaskStartedEvent(nil,
+	di, err = s.msBuilder.ReplicateDecisionTaskStartedEvent(nil,
 		decisionStartedEvent.GetVersion(),
 		decisionScheduleEvent.GetEventId(),
 		decisionStartedEvent.GetEventId(),
 		decisionStartedEvent.DecisionTaskStartedEventAttributes.GetRequestId(),
 		decisionStartedEvent.GetTimestamp(),
 	)
+	s.Nil(err)
 	s.NotNil(di)
 
-	s.msBuilder.ReplicateDecisionTaskFailedEvent()
+	err = s.msBuilder.ReplicateDecisionTaskFailedEvent()
+	s.Nil(err)
 
 	decisionAttempt = int64(123)
 	newDecisionScheduleEvent := &shared.HistoryEvent{
@@ -491,7 +495,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	di = s.msBuilder.ReplicateDecisionTaskScheduledEvent(
+	di, err = s.msBuilder.ReplicateDecisionTaskScheduledEvent(
 		newDecisionScheduleEvent.GetVersion(),
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
@@ -499,15 +503,17 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt(),
 		0,
 	)
+	s.Nil(err)
 	s.NotNil(di)
 
-	di = s.msBuilder.ReplicateDecisionTaskStartedEvent(nil,
+	di, err = s.msBuilder.ReplicateDecisionTaskStartedEvent(nil,
 		newDecisionStartedEvent.GetVersion(),
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
 		newDecisionStartedEvent.DecisionTaskStartedEventAttributes.GetRequestId(),
 		newDecisionStartedEvent.GetTimestamp(),
 	)
+	s.Nil(err)
 	s.NotNil(di)
 
 	return newDecisionScheduleEvent, newDecisionStartedEvent

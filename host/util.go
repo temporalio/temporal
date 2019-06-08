@@ -21,10 +21,11 @@
 package host
 
 import (
-	"github.com/olivere/elastic"
-	"github.com/stretchr/testify/suite"
 	"io/ioutil"
 	"time"
+
+	"github.com/olivere/elastic"
+	"github.com/stretchr/testify/suite"
 )
 
 // CreateESClient create ElasticSearch client for test

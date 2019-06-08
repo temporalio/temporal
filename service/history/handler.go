@@ -51,7 +51,6 @@ import (
 // Handler - Thrift handler inteface for history service
 type (
 	Handler struct {
-		numberOfShards        int
 		shardManager          persistence.ShardManager
 		metadataMgr           persistence.MetadataManager
 		visibilityMgr         persistence.VisibilityManager
@@ -1250,6 +1249,9 @@ func (h *Handler) convertError(err error) error {
 	case *persistence.CurrentWorkflowConditionFailedError:
 		err := err.(*persistence.CurrentWorkflowConditionFailedError)
 		return &gen.InternalServiceError{Message: err.Msg}
+	case *persistence.TransactionSizeLimitError:
+		err := err.(*persistence.TransactionSizeLimitError)
+		return &gen.BadRequestError{Message: err.Msg}
 	}
 
 	return err

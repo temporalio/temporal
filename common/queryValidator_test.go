@@ -87,4 +87,32 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	query = "Invalid between 1 and 2 or WorkflowID = 'wid'"
 	listRequest.Query = StringPtr(query)
 	s.Equal("BadRequestError{Message: invalid search attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
+
+	// only order by
+	query = "order by CloseTime desc"
+	listRequest.Query = StringPtr(query)
+	s.Nil(qv.ValidateListRequestForQuery(listRequest))
+	s.Equal(" "+query, listRequest.GetQuery())
+
+	// only order by search attribute
+	query = "order by CustomIntField desc"
+	listRequest.Query = StringPtr(query)
+	s.Nil(qv.ValidateListRequestForQuery(listRequest))
+	s.Equal(" order by `Attr.CustomIntField` desc", listRequest.GetQuery())
+
+	// condition + order by
+	query = "WorkflowID = 'wid' order by CloseTime desc"
+	listRequest.Query = StringPtr(query)
+	s.Nil(qv.ValidateListRequestForQuery(listRequest))
+	s.Equal(query, listRequest.GetQuery())
+
+	// invalid order by attribute
+	query = "order by InvalidField desc"
+	listRequest.Query = StringPtr(query)
+	s.Equal("BadRequestError{Message: invalid order by attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
+
+	// invalid order by attribute expr
+	query = "order by 123"
+	listRequest.Query = StringPtr(query)
+	s.Equal("BadRequestError{Message: invalid order by expression}", qv.ValidateListRequestForQuery(listRequest).Error())
 }

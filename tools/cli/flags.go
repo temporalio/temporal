@@ -105,6 +105,8 @@ const (
 	FlagPrintDateTimeWithAlias      = FlagPrintDateTime + ", pdt"
 	FlagPrintMemo                   = "print_memo"
 	FlagPrintMemoWithAlias          = FlagPrintMemo + ", pme"
+	FlagPrintSearchAttr             = "print_search_attr"
+	FlagPrintSearchAttrWithAlias    = FlagPrintSearchAttr + ", psa"
 	FlagPrintJSON                   = "print_json"
 	FlagPrintJSONWithAlias          = FlagPrintJSON + ", pjson"
 	FlagDescription                 = "description"
@@ -131,6 +133,8 @@ const (
 	FlagActiveClusterNameWithAlias  = FlagActiveClusterName + ", ac"
 	FlagClusters                    = "clusters"
 	FlagClustersWithAlias           = FlagClusters + ", cl"
+	FlagIsGlobalDomain              = "global_domain"
+	FlagIsGlobalDomainWithAlias     = FlagIsGlobalDomain + ", gd"
 	FlagDomainData                  = "domain_data"
 	FlagDomainDataWithAlias         = FlagDomainData + ", dmd"
 	FlagEventID                     = "event_id"
@@ -156,11 +160,15 @@ const (
 	FlagMemoKey                     = "memo_key"
 	FlagMemo                        = "memo"
 	FlagMemoFile                    = "memo_file"
+	FlagSearchAttributesKey         = "search_attr_key"
+	FlagSearchAttributesVal         = "search_attr_value"
 	FlagAddBadBinary                = "add_bad_binary"
 	FlagRemoveBadBinary             = "remove_bad_binary"
 	FlagResetType                   = "reset_type"
 	FlagResetPointsOnly             = "reset_points_only"
 	FlagResetBadBinaryChecksum      = "reset_bad_binary_checksum"
+	FlagListQuery                   = "query"
+	FlagListQueryWithAlias          = FlagListQuery + ", q"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -278,6 +286,16 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "Optional info that can be listed in list workflow, from JSON format file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"The order must be same as memo_key",
 		},
+		cli.StringFlag{
+			Name: FlagSearchAttributesKey,
+			Usage: "Optional search attributes keys that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
+				"Use `workflow get-search-attr` cmd to list legal keys.",
+		},
+		cli.StringFlag{
+			Name: FlagSearchAttributesVal,
+			Usage: "Optional search attributes value that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
+				"Use `workflow get-search-attr` cmd to list legal keys and value types",
+		},
 	}
 }
 
@@ -347,6 +365,10 @@ func getFlagsForListAll() []cli.Flag {
 			Usage: "Print memo",
 		},
 		cli.BoolFlag{
+			Name:  FlagPrintSearchAttrWithAlias,
+			Usage: "Print search attributes",
+		},
+		cli.BoolFlag{
 			Name:  FlagPrintFullyDetailWithAlias,
 			Usage: "Print full message without table format",
 		},
@@ -357,6 +379,11 @@ func getFlagsForListAll() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,
 			Usage: "Closed workflow status [completed, failed, canceled, terminated, continuedasnew, timedout]",
+		},
+		cli.StringFlag{
+			Name: FlagListQueryWithAlias,
+			Usage: "Optional SQL like query for use of search attributes. NOTE: using query will ignore all other filter flags including: " +
+				"[open, earliest_time, latest_time, workflow_id, workflow_type]",
 		},
 	}
 }

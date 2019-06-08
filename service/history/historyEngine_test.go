@@ -174,6 +174,7 @@ func (s *engineSuite) SetupTest() {
 	}
 	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.mockMatchingClient, s.logger)
+	h.decisionHandler = newDecisionHandler(h)
 	h.historyEventNotifier.Start()
 	shardContextWrapper.txProcessor = h.txProcessor
 	s.mockHistoryEngine = h
@@ -278,7 +279,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -306,20 +307,21 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 				ReplicationConfig: &persistence.DomainReplicationConfig{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []*persistence.ClusterReplicationConfig{
-						&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+						{ClusterName: cluster.TestCurrentClusterName},
 					},
 				},
 				TableVersion: persistence.DomainTableVersionV1,
 			},
 			nil,
 		)
-		s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
 			DomainUUID: common.StringPtr(domainID),
 			CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
 				TaskToken: taskToken,
 				Identity:  &identity,
 			},
 		})
+		s.Nil(err)
 		// right now the next event ID is 5
 	}
 
@@ -371,7 +373,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -401,7 +403,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -438,7 +440,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -474,7 +476,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -524,7 +526,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -578,7 +580,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -627,7 +629,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -678,8 +680,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		activity1ID, activity1Type, tl, activity1Input, 100, 10, 5)
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent1.EventId,
 		activity2ID, activity2Type, tl, activity2Input, 100, 10, 5)
-	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, tl, identity)
-	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, tl, identity)
+	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, identity)
+	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, identity)
 	addActivityTaskCompletedEvent(msBuilder, *activity1ScheduledEvent.EventId,
 		*activity1StartedEvent.EventId, activity1Result, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
@@ -721,7 +723,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -837,7 +839,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -887,8 +889,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 		activity1ID, activity1Type, tl, activity1Input, 100, 10, 5)
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent1.EventId,
 		activity2ID, activity2Type, tl, activity2Input, 100, 10, 5)
-	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, tl, identity)
-	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, tl, identity)
+	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, identity)
+	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, identity)
 	addActivityTaskCompletedEvent(msBuilder, *activity1ScheduledEvent.EventId,
 		*activity1StartedEvent.EventId, activity1Result, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
@@ -925,7 +927,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -985,8 +987,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 		activity1Type, tl, activity1Input, 100, 10, 5)
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent1.EventId, activity2ID,
 		activity2Type, tl, activity2Input, 100, 10, 5)
-	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, tl, identity)
-	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, tl, identity)
+	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, identity)
+	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, identity)
 	addActivityTaskCompletedEvent(msBuilder, *activity1ScheduledEvent.EventId,
 		*activity1StartedEvent.EventId, activity1Result, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
@@ -1024,7 +1026,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1076,7 +1078,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 		*decisionStartedEvent1.EventId, nil, identity)
 	activity1ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent1.EventId, activity1ID,
 		activity1Type, tl, activity1Input, 100, 10, 5)
-	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, tl, identity)
+	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, identity)
 	addActivityTaskCompletedEvent(msBuilder, *activity1ScheduledEvent.EventId,
 		*activity1StartedEvent.EventId, activity1Result, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
@@ -1093,9 +1095,15 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 	}}
 
-	ms := createMutableState(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
+
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{
+		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil,
+	).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
@@ -1104,7 +1112,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1120,8 +1128,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 			Identity:         &identity,
 		},
 	})
-	s.NotNil(err)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.Nil(err)
 }
 
 // This test unit tests the activity schedule timeout validation logic of HistoryEngine's RespondDecisionTaskComplete function.
@@ -1139,7 +1146,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		expectedScheduleToClose int32
 		expectedScheduleToStart int32
 		expectedStartToClose    int32
-		expectError             bool
+		expectDecisionFail      bool
 	}{
 		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose
 		{nil, common.Int32Ptr(3), common.Int32Ptr(7), nil,
@@ -1216,15 +1223,15 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 			},
 		}}
 
-		ms := createMutableState(msBuilder)
-		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-
-		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-
-		if !iVar.expectError {
-			s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-			s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+		gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+		if iVar.expectDecisionFail {
+			gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+			s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 		}
+
+		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
 		s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 			&persistence.GetDomainResponse{
@@ -1233,7 +1240,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 				ReplicationConfig: &persistence.DomainReplicationConfig{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []*persistence.ClusterReplicationConfig{
-						&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+						{ClusterName: cluster.TestCurrentClusterName},
 					},
 				},
 				TableVersion: persistence.DomainTableVersionV1,
@@ -1250,15 +1257,23 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 			},
 		})
 
-		if !iVar.expectError {
-			s.Nil(err, s.printHistory(msBuilder))
-			executionBuilder := s.getBuilder(domainID, we)
+		s.Nil(err, s.printHistory(msBuilder))
+		executionBuilder := s.getBuilder(domainID, we)
+		if !iVar.expectDecisionFail {
+			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
+			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+			s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
+			s.False(executionBuilder.HasPendingDecisionTask())
+
 			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).ActivityTaskScheduledEventAttributes
 			s.Equal(iVar.expectedScheduleToClose, activity1Attributes.GetScheduleToCloseTimeoutSeconds())
 			s.Equal(iVar.expectedScheduleToStart, activity1Attributes.GetScheduleToStartTimeoutSeconds())
 			s.Equal(iVar.expectedStartToClose, activity1Attributes.GetStartToCloseTimeoutSeconds())
 		} else {
-			s.NotNil(err)
+			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
+			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
+			s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
+			s.True(executionBuilder.HasPendingDecisionTask())
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1288,10 +1303,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 
 	var decisions []*workflow.Decision
 
-	ms := createMutableState(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
@@ -1309,7 +1325,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1328,8 +1344,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(domainID, we)
-	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecisionTask())
@@ -1385,7 +1401,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1466,7 +1482,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1540,7 +1556,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1613,7 +1629,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1677,7 +1693,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1743,7 +1759,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1778,7 +1794,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1814,7 +1830,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1849,7 +1865,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1885,7 +1901,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1925,7 +1941,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -1967,7 +1983,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2014,7 +2030,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2026,7 +2042,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2076,7 +2092,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 	addActivityTaskCompletedEvent(msBuilder, *activityScheduledEvent.EventId, *activityStartedEvent.EventId,
 		activityResult, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
@@ -2091,7 +2107,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2150,7 +2166,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2203,8 +2219,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 		activity1Type, tl, activity1Input, 100, 10, 5)
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent1.EventId, activity2ID,
 		activity2Type, tl, activity2Input, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, tl, identity)
-	addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, identity)
+	addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, identity)
 
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
@@ -2227,7 +2243,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2283,7 +2299,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	for i := 0; i < conditionalRetryCount; i++ {
 		ms := createMutableState(msBuilder)
@@ -2301,7 +2317,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2346,7 +2362,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2362,7 +2378,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2419,7 +2435,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2437,7 +2453,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2478,7 +2494,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2513,7 +2529,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2549,7 +2565,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2586,7 +2602,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2627,7 +2643,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2669,7 +2685,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2715,7 +2731,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2732,7 +2748,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2777,7 +2793,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 	addActivityTaskFailedEvent(msBuilder, *activityScheduledEvent.EventId, *activityStartedEvent.EventId,
 		failReason, details, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
@@ -2792,7 +2808,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2851,7 +2867,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2905,8 +2921,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		activity1Type, tl, activity1Input, 100, 10, 5)
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent1.EventId, activity2ID,
 		activity2Type, tl, activity2Input, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, tl, identity)
-	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activity1ScheduledEvent.EventId, identity)
+	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, *activity2ScheduledEvent.EventId, identity)
 
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
@@ -2933,7 +2949,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -2989,7 +3005,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	for i := 0; i < conditionalRetryCount; i++ {
 		ms := createMutableState(msBuilder)
@@ -3007,7 +3023,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3052,7 +3068,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -3068,7 +3084,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3127,7 +3143,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -3145,7 +3161,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3201,7 +3217,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 0)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	// No HeartBeat timer running.
 	ms := createMutableState(msBuilder)
@@ -3218,7 +3234,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3262,7 +3278,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -3280,7 +3296,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3330,7 +3346,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 0)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 
 	// No HeartBeat timer running.
 	ms := createMutableState(msBuilder)
@@ -3347,7 +3363,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3404,7 +3420,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3449,8 +3465,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
-	msBuilder.AddActivityTaskCancelRequestedEvent(*decisionCompletedEvent.EventId, activityID, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(*decisionCompletedEvent.EventId, activityID, identity)
+	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -3466,14 +3483,14 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
-	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &history.RespondActivityTaskCanceledRequest{
+	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &history.RespondActivityTaskCanceledRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
@@ -3521,8 +3538,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
-	msBuilder.AddActivityTaskCancelRequestedEvent(*decisionCompletedEvent.EventId, activityID, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(*decisionCompletedEvent.EventId, activityID, identity)
+	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -3540,14 +3558,14 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
-	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &history.RespondActivityTaskCanceledRequest{
+	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &history.RespondActivityTaskCanceledRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
@@ -3586,7 +3604,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3628,7 +3646,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3670,7 +3688,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3729,7 +3747,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3803,7 +3821,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3858,7 +3876,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 0)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
@@ -3883,7 +3901,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -3939,13 +3957,13 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
 	decisions := []*workflow.Decision{
-		&workflow.Decision{
+		{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRequestCancelActivityTask),
 			RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
 				ActivityId: common.StringPtr(activityID),
 			},
 		},
-		&workflow.Decision{
+		{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: workflowResult,
@@ -3966,7 +3984,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4017,7 +4035,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 0)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
@@ -4042,7 +4060,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4098,7 +4116,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4148,7 +4166,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 		*decisionStartedEvent.EventId, nil, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1)
-	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
@@ -4173,7 +4191,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4229,7 +4247,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4297,7 +4315,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4411,7 +4429,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4479,7 +4497,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4531,7 +4549,8 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 	addTimerFiredEvent(msBuilder, di2.ScheduleID, timerID)
-	msBuilder.CloseUpdateSession()
+	_, err := msBuilder.CloseUpdateSession()
+	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4559,14 +4578,14 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
-	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
@@ -4626,7 +4645,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4683,7 +4702,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4733,7 +4752,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4776,7 +4795,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -4785,53 +4804,6 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	)
 	err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.Nil(err)
-}
-
-func (s *engineSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
-	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
-	maxIDLengthLimit := 1000
-	err := validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
-	s.EqualError(err, "BadRequestError{Message: SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.}")
-
-	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
-	s.EqualError(err, "BadRequestError{Message: Execution is nil on decision.}")
-
-	attributes.Execution = &workflow.WorkflowExecution{}
-	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
-	s.EqualError(err, "BadRequestError{Message: SignalName is not set on decision.}")
-
-	attributes.Execution.RunId = common.StringPtr("run-id")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
-	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
-	attributes.Execution.RunId = common.StringPtr(validRunID)
-
-	attributes.SignalName = common.StringPtr("my signal name")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
-	s.EqualError(err, "BadRequestError{Message: Input is not set on decision.}")
-
-	attributes.Input = []byte("test input")
-	err = validateSignalExternalWorkflowExecutionAttributes(attributes, maxIDLengthLimit)
-	s.Nil(err)
-}
-
-func (s *engineSuite) TestGetWorkflowStartedEvent() {
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   []byte{},
-		MinEventID:    common.FirstEventID,
-		MaxEventID:    common.FirstEventID + 1,
-		PageSize:      defaultHistoryPageSize,
-		NextPageToken: nil,
-		ShardID:       common.IntPtr(0),
-	}
-	events := []*workflow.HistoryEvent{
-		{EventId: common.Int64Ptr(int64(0))},
-	}
-	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: events}, nil)
-	event, err := getWorkflowStartedEvent(s.mockHistoryMgr, s.mockHistoryV2Mgr, p.EventStoreVersionV2, []byte{}, s.logger, "", "", "", common.IntPtr(0))
-	s.NoError(err)
-	s.NotNil(event)
 }
 
 func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
@@ -4868,13 +4840,13 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 		Identity:                            common.StringPtr(identity),
 	}
 
-	e := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &history.StartWorkflowExecutionRequest{
+	event, _ := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &history.StartWorkflowExecutionRequest{
 		DomainUUID:          common.StringPtr(domainID),
 		StartRequest:        startRequest,
 		ParentExecutionInfo: parentInfo,
 	})
 
-	return e
+	return event
 }
 
 func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution workflow.WorkflowExecution,
@@ -4885,7 +4857,8 @@ func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution wo
 }
 
 func addDecisionTaskScheduledEvent(builder mutableState) *decisionInfo {
-	return builder.AddDecisionTaskScheduledEvent()
+	di, _ := builder.AddDecisionTaskScheduledEvent()
+	return di
 }
 
 func addDecisionTaskStartedEvent(builder mutableState, scheduleID int64, taskList,
@@ -4895,31 +4868,31 @@ func addDecisionTaskStartedEvent(builder mutableState, scheduleID int64, taskLis
 
 func addDecisionTaskStartedEventWithRequestID(builder mutableState, scheduleID int64, requestID string,
 	taskList, identity string) *workflow.HistoryEvent {
-	e, _ := builder.AddDecisionTaskStartedEvent(scheduleID, requestID, &workflow.PollForDecisionTaskRequest{
+	event, _, _ := builder.AddDecisionTaskStartedEvent(scheduleID, requestID, &workflow.PollForDecisionTaskRequest{
 		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
 		Identity: common.StringPtr(identity),
 	})
 
-	return e
+	return event
 }
 
 func addDecisionTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, context []byte,
 	identity string) *workflow.HistoryEvent {
-	e := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflow.RespondDecisionTaskCompletedRequest{
+	event, _ := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflow.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: context,
 		Identity:         common.StringPtr(identity),
 	}, defaultHistoryMaxAutoResetPoints)
 
 	builder.FlushBufferedEvents()
 
-	return e
+	return event
 }
 
 func addActivityTaskScheduledEvent(builder mutableState, decisionCompletedID int64, activityID, activityType,
 	taskList string, input []byte, timeout, queueTimeout, heartbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 
-	return builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
+	event, ai, _ := builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
 		ActivityId:                    common.StringPtr(activityID),
 		ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityType)},
 		TaskList:                      &workflow.TaskList{Name: common.StringPtr(taskList)},
@@ -4929,51 +4902,55 @@ func addActivityTaskScheduledEvent(builder mutableState, decisionCompletedID int
 		HeartbeatTimeoutSeconds:       common.Int32Ptr(heartbeatTimeout),
 		StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 	})
+
+	return event, ai
 }
 
-func addActivityTaskStartedEvent(builder mutableState, scheduleID int64,
-	taskList, identity string) *workflow.HistoryEvent {
+func addActivityTaskStartedEvent(builder mutableState, scheduleID int64, identity string) *workflow.HistoryEvent {
 	ai, _ := builder.GetActivityInfo(scheduleID)
-	return builder.AddActivityTaskStartedEvent(ai, scheduleID, validRunID, identity)
+	event, _ := builder.AddActivityTaskStartedEvent(ai, scheduleID, validRunID, identity)
+	return event
 }
 
 func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, result []byte,
 	identity string) *workflow.HistoryEvent {
-	e := builder.AddActivityTaskCompletedEvent(scheduleID, startedID, &workflow.RespondActivityTaskCompletedRequest{
+	event, _ := builder.AddActivityTaskCompletedEvent(scheduleID, startedID, &workflow.RespondActivityTaskCompletedRequest{
 		Result:   result,
 		Identity: common.StringPtr(identity),
 	})
 
-	return e
+	return event
 }
 
 func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details []byte,
 	identity string) *workflow.HistoryEvent {
-	e := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflow.RespondActivityTaskFailedRequest{
+	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflow.RespondActivityTaskFailedRequest{
 		Reason:   common.StringPtr(reason),
 		Details:  details,
 		Identity: common.StringPtr(identity),
 	})
 
-	return e
+	return event
 }
 
 func addTimerStartedEvent(builder mutableState, decisionCompletedEventID int64, timerID string,
 	timeOut int64) (*workflow.HistoryEvent, *persistence.TimerInfo) {
-	return builder.AddTimerStartedEvent(decisionCompletedEventID,
+	event, ti, _ := builder.AddTimerStartedEvent(decisionCompletedEventID,
 		&workflow.StartTimerDecisionAttributes{
 			TimerId:                   common.StringPtr(timerID),
 			StartToFireTimeoutSeconds: common.Int64Ptr(timeOut),
 		})
+	return event, ti
 }
 
 func addTimerFiredEvent(builder mutableState, scheduleID int64, timerID string) *workflow.HistoryEvent {
-	return builder.AddTimerFiredEvent(scheduleID, timerID)
+	event, _ := builder.AddTimerFiredEvent(scheduleID, timerID)
+	return event
 }
 
 func addRequestCancelInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
 	cancelRequestID, domain, workflowID, runID string) (*workflow.HistoryEvent, *persistence.RequestCancelInfo) {
-	event, rci := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID,
+	event, rci, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID,
 		cancelRequestID, &workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 			Domain:     common.StringPtr(domain),
 			WorkflowId: common.StringPtr(workflowID),
@@ -4984,13 +4961,13 @@ func addRequestCancelInitiatedEvent(builder mutableState, decisionCompletedEvent
 }
 
 func addCancelRequestedEvent(builder mutableState, initiatedID int64, domain, workflowID, runID string) *workflow.HistoryEvent {
-	event := builder.AddExternalWorkflowExecutionCancelRequested(initiatedID, domain, workflowID, runID)
+	event, _ := builder.AddExternalWorkflowExecutionCancelRequested(initiatedID, domain, workflowID, runID)
 	return event
 }
 
 func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
 	signalRequestID, domain, workflowID, runID, signalName string, input, control []byte) (*workflow.HistoryEvent, *persistence.SignalInfo) {
-	event, si := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
+	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
 		&workflow.SignalExternalWorkflowExecutionDecisionAttributes{
 			Domain: common.StringPtr(domain),
 			Execution: &workflow.WorkflowExecution{
@@ -5006,7 +4983,7 @@ func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEvent
 }
 
 func addSignaledEvent(builder mutableState, initiatedID int64, domain, workflowID, runID string, control []byte) *workflow.HistoryEvent {
-	event := builder.AddExternalWorkflowExecutionSignaled(initiatedID, domain, workflowID, runID, control)
+	event, _ := builder.AddExternalWorkflowExecutionSignaled(initiatedID, domain, workflowID, runID, control)
 	return event
 }
 
@@ -5014,7 +4991,8 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decision
 	createRequestID, domain, workflowID, workflowType, tasklist string, input []byte,
 	executionStartToCloseTimeout, taskStartToCloseTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ChildExecutionInfo) {
-	return builder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedID, createRequestID,
+
+	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedID, createRequestID,
 		&workflow.StartChildWorkflowExecutionDecisionAttributes{
 			Domain:                              common.StringPtr(domain),
 			WorkflowId:                          common.StringPtr(workflowID),
@@ -5026,11 +5004,12 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decision
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 			Control:                             nil,
 		})
+	return event, cei
 }
 
 func addChildWorkflowExecutionStartedEvent(builder mutableState, initiatedID int64, domain, workflowID, runID string,
 	workflowType string) *workflow.HistoryEvent {
-	event := builder.AddChildWorkflowExecutionStartedEvent(
+	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		common.StringPtr(domain),
 		&workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -5045,17 +5024,17 @@ func addChildWorkflowExecutionStartedEvent(builder mutableState, initiatedID int
 
 func addChildWorkflowExecutionCompletedEvent(builder mutableState, initiatedID int64, childExecution *workflow.WorkflowExecution,
 	attributes *workflow.WorkflowExecutionCompletedEventAttributes) *workflow.HistoryEvent {
-	event := builder.AddChildWorkflowExecutionCompletedEvent(initiatedID, childExecution, attributes)
+	event, _ := builder.AddChildWorkflowExecutionCompletedEvent(initiatedID, childExecution, attributes)
 	return event
 }
 
 func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int64,
 	result []byte) *workflow.HistoryEvent {
-	e := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &workflow.CompleteWorkflowExecutionDecisionAttributes{
+	event, _ := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &workflow.CompleteWorkflowExecutionDecisionAttributes{
 		Result: result,
 	})
 
-	return e
+	return event
 }
 
 func newMutableStateBuilderWithEventV2(currentCluster string, shard ShardContext, eventsCache eventsCache,

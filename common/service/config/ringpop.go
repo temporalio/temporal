@@ -21,14 +21,17 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery"
@@ -49,6 +52,9 @@ const (
 	BootstrapModeHosts
 	// BootstrapModeCustom represents a custom bootstrap mode
 	BootstrapModeCustom
+	// BootstrapModeDNS represents a list of hosts passed in the configuration
+	// to be resolved, and the resulting addresses are used for bootstrap
+	BootstrapModeDNS
 )
 
 const (
@@ -104,6 +110,8 @@ func parseBootstrapMode(s string) (BootstrapMode, error) {
 		return BootstrapModeFile, nil
 	case "custom":
 		return BootstrapModeCustom, nil
+	case "dns":
+		return BootstrapModeDNS, nil
 	}
 	return BootstrapModeNone, errors.New("invalid or no ringpop bootstrap mode")
 }
@@ -114,7 +122,7 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 		if len(rpConfig.BootstrapFile) == 0 {
 			return fmt.Errorf("ringpop config missing bootstrap file param")
 		}
-	case BootstrapModeHosts:
+	case BootstrapModeHosts, BootstrapModeDNS:
 		if len(rpConfig.BootstrapHosts) == 0 {
 			return fmt.Errorf("ringpop config missing boostrap hosts param")
 		}
@@ -174,7 +182,7 @@ func (factory *RingpopFactory) createRingpop(dispatcher *yarpc.Dispatcher) (*rin
 		return nil, err
 	}
 
-	discoveryProvider, err := newDiscoveryProvider(factory.config)
+	discoveryProvider, err := newDiscoveryProvider(factory.config, factory.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +210,63 @@ func (factory *RingpopFactory) getChannel(dispatcher *yarpc.Dispatcher) (*tcg.Ch
 	return ch, nil
 }
 
-func newDiscoveryProvider(cfg *Ringpop) (discovery.DiscoverProvider, error) {
+type dnsHostResolver interface {
+	LookupHost(ctx context.Context, host string) (addrs []string, err error)
+}
+
+type dnsProvider struct {
+	UnresolvedHosts []string
+	Resolver        dnsHostResolver
+	Logger          log.Logger
+}
+
+func newDNSProvider(hosts []string, resolver dnsHostResolver, logger log.Logger) *dnsProvider {
+	set := map[string]struct{}{}
+	for _, hostport := range hosts {
+		set[hostport] = struct{}{}
+	}
+
+	keys := []string{}
+	for key := range set {
+		keys = append(keys, key)
+	}
+	return &dnsProvider{
+		UnresolvedHosts: keys,
+		Resolver:        resolver,
+		Logger:          logger,
+	}
+}
+
+func (provider *dnsProvider) Hosts() ([]string, error) {
+	results := []string{}
+	resolvedHosts := map[string][]string{}
+	for _, hostport := range provider.UnresolvedHosts {
+		host, port, err := net.SplitHostPort(hostport)
+		if err != nil {
+			provider.Logger.Warn("Could not split host and port", tag.Address(hostport), tag.Error(err))
+			continue
+		}
+
+		resolved, exists := resolvedHosts[host]
+		if !exists {
+			resolved, err = provider.Resolver.LookupHost(context.Background(), host)
+			if err != nil {
+				provider.Logger.Warn("Could not resolve host", tag.Address(host), tag.Error(err))
+				continue
+			}
+			resolvedHosts[host] = resolved
+		}
+		for _, r := range resolved {
+			results = append(results, net.JoinHostPort(r, port))
+		}
+	}
+	if len(results) == 0 {
+		return nil, errors.New("No hosts found, and bootstrap requires at least one")
+	}
+	return results, nil
+}
+
+func newDiscoveryProvider(cfg *Ringpop, logger log.Logger) (discovery.DiscoverProvider, error) {
 
 	if cfg.DiscoveryProvider != nil {
 		// custom discovery provider takes first precedence
@@ -214,6 +278,8 @@ func newDiscoveryProvider(cfg *Ringpop) (discovery.DiscoverProvider, error) {
 		return statichosts.New(cfg.BootstrapHosts...), nil
 	case BootstrapModeFile:
 		return jsonfile.New(cfg.BootstrapFile), nil
+	case BootstrapModeDNS:
+		return newDNSProvider(cfg.BootstrapHosts, net.DefaultResolver, logger), nil
 	}
 	return nil, fmt.Errorf("unknown bootstrap mode")
 }

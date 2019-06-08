@@ -23,6 +23,8 @@ package indexer
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	"github.com/olivere/elastic"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
@@ -31,7 +33,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"time"
 )
 
 type (

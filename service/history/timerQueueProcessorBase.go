@@ -314,7 +314,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 		case <-t.timerQueueAckMgr.getFinishedChan():
 			// timer queue ack manager indicate that all task scanned
 			// are finished and no more tasks
-			// use a separate gorouting since the caller hold the shutdownWG
+			// use a separate goroutine since the caller hold the shutdownWG
 			go t.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
@@ -646,6 +646,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 		BranchToken:          msBuilder.GetCurrentBranch(),
 		NextEventID:          msBuilder.GetNextEventID(),
 		CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
+		BucketName:           domainCacheEntry.GetConfig().ArchivalBucket,
 	}
 
 	// send signal before deleting mutable state to make sure archival is idempotent

@@ -297,7 +297,9 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 		if activityInfo, pending := msBuilder.GetActivityInfo(timerTask.EventID); isHeartBeatTask && pending {
 			doUpdate = true
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
-			msBuilder.UpdateActivity(activityInfo)
+			if err := msBuilder.UpdateActivity(activityInfo); err != nil {
+				return err
+			}
 		}
 		newTimerTasks := []persistence.Task{}
 		if newTimerTask := t.getTimerBuilder().GetActivityTimerTaskIfNeeded(msBuilder); newTimerTask != nil {

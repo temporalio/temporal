@@ -199,6 +199,7 @@ enum DecisionTaskFailedCause {
   BAD_SIGNAL_INPUT_SIZE,
   RESET_WORKFLOW,
   BAD_BINARY,
+  SCHEDULE_ACTIVITY_DUPLICATE_ID,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {
@@ -464,8 +465,9 @@ struct WorkflowExecutionStartedEventAttributes {
   56: optional string continuedFailureReason
   57: optional binary continuedFailureDetails
   58: optional binary lastCompletionResult
-  59: optional string originalExecutionRunId // This is the very first runID along the chain of ContinueAsNew and Reset.
+  59: optional string originalExecutionRunId // This is the runID when the WorkflowExecutionStarted event is written
   60: optional string identity
+  61: optional string firstExecutionRunId // This is the very first runID along the chain of ContinueAsNew and Reset.
   70: optional RetryPolicy retryPolicy
   80: optional i32 attempt
   90: optional i64 (js.type = "Long") expirationTimestamp
@@ -939,6 +941,7 @@ struct RegisterDomainRequest {
   90: optional string securityToken
   100: optional ArchivalStatus archivalStatus
   110: optional string archivalBucketName
+  120: optional bool isGlobalDomain
 }
 
 struct ListDomainsRequest {

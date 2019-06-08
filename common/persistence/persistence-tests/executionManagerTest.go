@@ -31,8 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/cadence/.gen/go/shared"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -111,7 +109,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&shared.InternalServiceError{}, err)
+		s.IsType(&gen.InternalServiceError{}, err)
 	}
 	req.CloseStatus = p.WorkflowCloseStatusNone
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
@@ -130,7 +128,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&shared.InternalServiceError{}, err)
+		s.IsType(&gen.InternalServiceError{}, err)
 	}
 	req.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -149,11 +147,11 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&shared.InternalServiceError{}, err)
+		s.IsType(&gen.InternalServiceError{}, err)
 	}
 	req.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
-	s.IsType(&shared.InternalServiceError{}, err)
+	s.IsType(&gen.InternalServiceError{}, err)
 
 	// for zombie workflow creation, we must use existing workflow ID which got created
 	// since we do not allow creation of zombie workflow without current record
@@ -167,7 +165,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&shared.InternalServiceError{}, err)
+		s.IsType(&gen.InternalServiceError{}, err)
 	}
 	req.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -307,7 +305,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			Condition:     nextEventID,
 			RangeID:       s.ShardInfo.RangeID,
 		})
-		s.IsType(&shared.InternalServiceError{}, err)
+		s.IsType(&gen.InternalServiceError{}, err)
 	}
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
@@ -318,7 +316,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 		Condition:     nextEventID,
 		RangeID:       s.ShardInfo.RangeID,
 	})
-	s.IsType(&shared.InternalServiceError{}, err)
+	s.IsType(&gen.InternalServiceError{}, err)
 
 	for _, closeStatus := range closeStatuses {
 		updatedInfo.CloseStatus = closeStatus
@@ -372,7 +370,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			Condition:     nextEventID,
 			RangeID:       s.ShardInfo.RangeID,
 		})
-		s.IsType(&shared.InternalServiceError{}, err)
+		s.IsType(&gen.InternalServiceError{}, err)
 	}
 }
 

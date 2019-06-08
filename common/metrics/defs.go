@@ -749,6 +749,8 @@ const (
 	ArchiverUploadHistoryActivityScope
 	// ArchiverDeleteHistoryActivityScope is scope used by all metrics emitted by archiver.DeleteHistoryActivity
 	ArchiverDeleteHistoryActivityScope
+	// ArchiverDeleteBlobActivityScope is scope used by all metrics emitted by archiver.DeleteBlobActivity
+	ArchiverDeleteBlobActivityScope
 	// ArchiverScope is scope used by all metrics emitted by archiver.Archiver
 	ArchiverScope
 	// ArchiverPumpScope is scope used by all metrics emitted by archiver.Pump
@@ -1099,6 +1101,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		IndexProcessorScope:                 {operation: "IndexProcessor"},
 		ArchiverUploadHistoryActivityScope:  {operation: "ArchiverUploadHistoryActivity"},
 		ArchiverDeleteHistoryActivityScope:  {operation: "ArchiverDeleteHistoryActivity"},
+		ArchiverDeleteBlobActivityScope:     {operation: "ArchiverDeleteBlobActivity"},
 		ArchiverScope:                       {operation: "Archiver"},
 		ArchiverPumpScope:                   {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
@@ -1330,6 +1333,9 @@ const (
 	IndexProcessorCorruptedData
 	ArchiverNonRetryableErrorCount
 	ArchiverSkipUploadCount
+	ArchiverHistoryMutatedCount
+	ArchiverBlobSize
+	ArchiverTotalUploadSize
 	ArchiverRunningDeterministicConstructionCheckCount
 	ArchiverDeterministicConstructionCheckFailedCount
 	ArchiverCouldNotRunDeterministicConstructionCheckCount
@@ -1339,9 +1345,12 @@ const (
 	ArchiverCoroutineStoppedCount
 	ArchiverHandleRequestLatency
 	ArchiverUploadWithRetriesLatency
+	ArchiverDeleteBlobWithRetriesLatency
 	ArchiverDeleteWithRetriesLatency
 	ArchiverUploadFailedAllRetriesCount
 	ArchiverUploadSuccessCount
+	ArchiverDeleteBlobFailedAllRetriesCount
+	ArchiverDeleteBlobSuccessCount
 	ArchiverDeleteLocalFailedAllRetriesCount
 	ArchiverDeleteLocalSuccessCount
 	ArchiverDeleteFailedAllRetriesCount
@@ -1567,6 +1576,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		IndexProcessorCorruptedData:                            {metricName: "index_processor_corrupted_data"},
 		ArchiverNonRetryableErrorCount:                         {metricName: "archiver_non_retryable_error"},
 		ArchiverSkipUploadCount:                                {metricName: "archiver_skip_upload"},
+		ArchiverHistoryMutatedCount:                            {metricName: "archiver_history_mutated"},
+		ArchiverBlobSize:                                       {metricName: "archiver_blob_size", metricType: Timer},
+		ArchiverTotalUploadSize:                                {metricName: "archiver_total_upload_size", metricType: Timer},
 		ArchiverRunningDeterministicConstructionCheckCount:     {metricName: "archiver_running_deterministic_construction_check"},
 		ArchiverDeterministicConstructionCheckFailedCount:      {metricName: "archiver_deterministic_construction_check_failed"},
 		ArchiverCouldNotRunDeterministicConstructionCheckCount: {metricName: "archiver_could_not_run_deterministic_construction_check"},
@@ -1576,9 +1588,12 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchiverCoroutineStoppedCount:                          {metricName: "archiver_coroutine_stopped"},
 		ArchiverHandleRequestLatency:                           {metricName: "archiver_handle_request_latency"},
 		ArchiverUploadWithRetriesLatency:                       {metricName: "archiver_upload_with_retries_latency"},
+		ArchiverDeleteBlobWithRetriesLatency:                   {metricName: "archiver_delete_blob_with_retries_latency"},
 		ArchiverDeleteWithRetriesLatency:                       {metricName: "archiver_delete_with_retries_latency"},
 		ArchiverUploadFailedAllRetriesCount:                    {metricName: "archiver_upload_failed_all_retries"},
 		ArchiverUploadSuccessCount:                             {metricName: "archiver_upload_success"},
+		ArchiverDeleteBlobFailedAllRetriesCount:                {metricName: "archiver_delete_blob_failed_all_retries"},
+		ArchiverDeleteBlobSuccessCount:                         {metricName: "archiver_delete_blob_success"},
 		ArchiverDeleteLocalFailedAllRetriesCount:               {metricName: "archiver_delete_local_failed_all_retries"},
 		ArchiverDeleteLocalSuccessCount:                        {metricName: "archiver_delete_local_success"},
 		ArchiverDeleteFailedAllRetriesCount:                    {metricName: "archiver_delete_failed_all_retries"},

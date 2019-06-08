@@ -127,13 +127,14 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 	}
 }
 
+// CreateDomain create a domain
 // Cassandra does not support conditional updates across multiple tables.  For this reason we have to first insert into
 // 'Domains' table and then do a conditional insert into domains_by_name table.  If the conditional write fails we
 // delete the orphaned entry from domains table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from domains table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
 	query := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name)
-	applied, err := query.ScanCAS()
+	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err),
@@ -145,6 +146,11 @@ func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.InternalCreateD
 		}
 	}
 
+	return m.CreateDomainInV2Table(request)
+}
+
+// CreateDomainInV2Table is the temporary function used by domain v1 -> v2 migration
+func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
 	metadata, err := m.GetMetadata()
 	if err != nil {
 		return nil, err

@@ -86,7 +86,8 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	historyCache.disabled = true
 	// set the standby cluster's timer ack level to max since we are not testing it
 	// but we are testing the complete timer functionality
-	s.ShardContext.UpdateTimerClusterAckLevel(cluster.TestAlternativeClusterName, maximumTime)
+	err := s.ShardContext.UpdateTimerClusterAckLevel(cluster.TestAlternativeClusterName, maximumTime)
+	s.Nil(err)
 	s.matchingClient = &mocks.MatchingClient{}
 	s.engineImpl = &historyEngineImpl{
 		currentClusterName: s.ShardContext.GetService().GetClusterMetadata().GetCurrentClusterName(),
@@ -166,11 +167,12 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, clock.NewRealTimeSource())
 
 	for _, timeOut := range timeOuts {
-		_, ti := builder.AddTimerStartedEvent(decisionCompletedID,
+		_, ti, err := builder.AddTimerStartedEvent(decisionCompletedID,
 			&workflow.StartTimerDecisionAttributes{
 				TimerId:                   common.StringPtr(uuid.New()),
 				StartToFireTimeoutSeconds: common.Int64Ptr(int64(timeOut)),
 			})
+		s.Nil(err)
 		timerInfos = append(timerInfos, ti)
 		tBuilder.AddUserTimer(ti, builder)
 	}
@@ -222,8 +224,9 @@ func (s *timerQueueProcessorSuite) addUserTimer(domainID string, we workflow.Wor
 	condition := state.ExecutionInfo.NextEventID
 
 	// create a user timer
-	_, ti := builder.AddTimerStartedEvent(common.EmptyEventID,
+	_, ti, err := builder.AddTimerStartedEvent(common.EmptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr(timerID), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
+	s.Nil(err)
 	tb.AddUserTimer(ti, builder)
 	t := tb.GetUserTimerTaskIfNeeded(builder)
 	s.NotNil(t)
@@ -242,14 +245,16 @@ func (s *timerQueueProcessorSuite) addHeartBeatTimer(domainID string,
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:              common.StringPtr("testID"),
 			HeartbeatTimeoutSeconds: common.Int32Ptr(1),
 			TaskList:                &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase)
-	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	_, err = builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
 
 	// create a heart beat timeout
 	tt := tb.GetActivityTimerTaskIfNeeded(builder)
@@ -419,13 +424,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	activityScheduledEvent, _ := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	activityScheduledEvent, _, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(2),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(activityScheduledEvent)
 
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -463,15 +469,17 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase)
-	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	_, err = builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
 
 	// create a schedule to start timeout
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -509,7 +517,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	activityScheduledEvent, _ := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	activityScheduledEvent, _, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
@@ -517,6 +525,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(3),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(activityScheduledEvent)
 
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -555,14 +564,16 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
-	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
+	_, err = builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
 
 	// create a start to close timeout
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -599,18 +610,21 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
-	aste := builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
-	builder.AddActivityTaskCompletedEvent(*ase.EventId, *aste.EventId, &workflow.RespondActivityTaskCompletedRequest{
+	s.Nil(err)
+	aste, err := builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
+	_, err = builder.AddActivityTaskCompletedEvent(*ase.EventId, *aste.EventId, &workflow.RespondActivityTaskCompletedRequest{
 		Identity: common.StringPtr("test-id"),
 		Result:   []byte("result"),
 	})
+	s.Nil(err)
 
 	// create a start to close timeout
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -648,13 +662,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, _ := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, _, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase)
 
 	// create a schedule to close timeout
@@ -692,7 +707,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
@@ -700,8 +715,10 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase)
-	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	_, err = builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
 
 	// create a schedule to close timeout
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -738,19 +755,22 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase)
-	aste := builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
-	builder.AddActivityTaskCompletedEvent(*ase.EventId, *aste.EventId, &workflow.RespondActivityTaskCompletedRequest{
+	aste, err := builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
+	s.Nil(err)
+	_, err = builder.AddActivityTaskCompletedEvent(*ase.EventId, *aste.EventId, &workflow.RespondActivityTaskCompletedRequest{
 		Identity: common.StringPtr("test-id"),
 		Result:   []byte("result"),
 	})
+	s.Nil(err)
 
 	// create a schedule to close timeout
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
@@ -814,21 +834,23 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask_SameExpiry() {
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
-	ase1, ai1 := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase1, ai1, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID-1"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase1)
-	ase2, ai2 := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase2, ai2, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("testID-2"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	s.NotNil(ase2)
 
 	// create a schedule to close timeout
@@ -908,10 +930,12 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers_SameExpiry() {
 	timerTasks := []persistence.Task{}
 
 	// create two user timers.
-	_, ti := builder.AddTimerStartedEvent(common.EmptyEventID,
+	_, ti, err := builder.AddTimerStartedEvent(common.EmptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid1"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
-	_, ti2 := builder.AddTimerStartedEvent(common.EmptyEventID,
+	s.Nil(err)
+	_, ti2, err := builder.AddTimerStartedEvent(common.EmptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid2"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
+	s.Nil(err)
 
 	tBuilder.AddUserTimer(ti, builder)
 	tBuilder.AddUserTimer(ti2, builder)

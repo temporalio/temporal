@@ -287,7 +287,10 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		workflowCloseTimestamp := wfCloseTime
 		workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := msBuilder.GetNextEventID() - 1
-		startEvent, _ := msBuilder.GetStartEvent()
+		startEvent, found := msBuilder.GetStartEvent()
+		if !found {
+			return &workflow.InternalServiceError{Message: "Failed to load start event."}
+		}
 		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 		visibilityMemo := getVisibilityMemo(startEvent)
 		searchAttr := executionInfo.SearchAttributes
@@ -441,7 +444,10 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStarted(transfe
 		workflowTimeout := executionInfo.WorkflowTimeout
 		wfTypeName := executionInfo.WorkflowTypeName
 		startTimestamp := executionInfo.StartTimestamp.UnixNano()
-		startEvent, _ := msBuilder.GetStartEvent()
+		startEvent, found := msBuilder.GetStartEvent()
+		if !found {
+			return &workflow.InternalServiceError{Message: "Failed to load start event."}
+		}
 		executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 		visibilityMemo := getVisibilityMemo(startEvent)
 		searchAttr := executionInfo.SearchAttributes

@@ -21,13 +21,14 @@
 package filestore
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/blobstore/blob"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/blobstore/blob"
 )
 
 type UtilSuite struct {
@@ -152,7 +153,7 @@ func (s *UtilSuite) TestDeleteFile() {
 	filename := "test-file-name"
 	fpath := filepath.Join(dir, filename)
 	deleted, err := deleteFile(fpath)
-	s.NoError(err)
+	s.True(os.IsNotExist(err))
 	s.False(deleted)
 
 	err = writeFile(fpath, []byte("file contents"))

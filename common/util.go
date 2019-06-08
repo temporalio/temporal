@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +33,6 @@ import (
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cron"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -79,6 +79,8 @@ const (
 	FailureReasonDecisionBlobSizeExceedsLimit = "DECISION_BLOB_SIZE_EXCEEDS_LIMIT"
 	// TerminateReasonSizeExceedsLimit is reason to terminate workflow when history size or count exceed limit
 	TerminateReasonSizeExceedsLimit = "HISTORY_EXCEEDS_LIMIT"
+	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
+	FailureReasonTransactionSizeExceedsLimit = "TRANSACTION_SIZE_EXCEEDS_LIMIT"
 )
 
 var (
@@ -377,7 +379,7 @@ func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.S
 		deadline := time.Now().Add(time.Second * time.Duration(expirationInSeconds))
 		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(cron.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), time.Now()))
+	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), time.Now()))
 	return histRequest
 }
 
@@ -436,4 +438,11 @@ func GetSizeOfMapStringToByteArray(input map[string][]byte) int {
 		res += len(k) + len(v)
 	}
 	return res + golandMapReserverNumberOfBytes
+}
+
+// IsJustOrderByClause return true is query start with order by
+func IsJustOrderByClause(clause string) bool {
+	whereClause := strings.TrimSpace(clause)
+	whereClause = strings.ToLower(whereClause)
+	return strings.HasPrefix(whereClause, "order by")
 }

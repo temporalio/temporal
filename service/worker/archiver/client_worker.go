@@ -100,6 +100,7 @@ var (
 func init() {
 	workflow.RegisterWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
 	activity.RegisterWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
+	activity.RegisterWithOptions(deleteBlobActivity, activity.RegisterOptions{Name: deleteBlobActivityFnName})
 	activity.RegisterWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
 }
 

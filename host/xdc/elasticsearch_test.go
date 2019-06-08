@@ -29,6 +29,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -43,10 +48,6 @@ import (
 	"github.com/uber/cadence/host"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"os"
-	"testing"
-	"time"
 )
 
 const (
@@ -140,9 +141,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	domainName := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflow.RegisterDomainRequest{
-		Name:              common.StringPtr(domainName),
-		Clusters:          clusterReplicationConfigES,
-		ActiveClusterName: common.StringPtr(clusterNameES[0]),
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfigES,
+		ActiveClusterName:                      common.StringPtr(clusterNameES[0]),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
 	}
 	err := client1.RegisterDomain(createContext(), regReq)
 	s.NoError(err)

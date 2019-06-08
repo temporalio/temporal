@@ -54,7 +54,7 @@ type (
 		AddCounter(counter int, delta int64)
 		// StartTimer starts a timer for the given
 		// metric name. Time will be recorded when stopwatch is stopped.
-		StartTimer(timer int) tally.Stopwatch
+		StartTimer(timer int) Stopwatch
 		// RecordTimer starts a timer for the given
 		// metric name
 		RecordTimer(timer int, d time.Duration)

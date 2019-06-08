@@ -33,7 +33,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/environment"
 )
 
@@ -86,6 +88,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 			"default":    {Cassandra: &defaultCfg},
 			"visibility": {Cassandra: &visibilityCfg},
 		},
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
 	s.NoError(VerifyCompatibleVersion(cfg, root))
 }

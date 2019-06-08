@@ -87,6 +87,11 @@ dcRedirectionPolicy:
   toDC: ""
 
 kafka:
+  tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+    bundleFile: ""
   clusters:
     test:
       brokers:

@@ -175,6 +175,19 @@ func (i *historyBlobIterator) readBlobEvents(pageToken []byte) ([]*shared.Histor
 		size += currSize
 		nextPageToken = currNextPageToken
 	}
+	// If nextPageToken is not empty it is still possible there are no more events.
+	// This occurs if history was read exactly to the last event.
+	// Here we look forward one page so that we can treat reading exactly to the end of history
+	// the same way as reading through the end of history.
+	if len(nextPageToken) > 0 {
+		lookAheadHistoryEvents, _, _, err := i.readHistory(nextPageToken)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		if len(lookAheadHistoryEvents) == 0 {
+			nextPageToken = nil
+		}
+	}
 	return historyEvents, nextPageToken, len(nextPageToken) == 0, nil
 }
 

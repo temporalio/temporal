@@ -165,6 +165,9 @@ func (c *client) Delete(_ context.Context, bucket string, key blob.Key) (bool, e
 	blobPath := bucketItemPath(c.storeDirectory, bucket, key.String())
 	deleted, err := deleteFile(blobPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return false, blobstore.ErrBlobNotExists
+		}
 		return false, ErrDeleteFile
 	}
 	return deleted, nil

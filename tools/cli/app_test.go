@@ -124,21 +124,27 @@ func (s *cliAppSuite) TestAppCommands() {
 	}
 }
 
-func (s *cliAppSuite) TestDomainRegister() {
+func (s *cliAppSuite) TestDomainRegister_LocalDomain() {
 	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "register"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "false"})
+	s.Equal(0, errorCode)
+}
+
+func (s *cliAppSuite) TestDomainRegister_GlobalDomain() {
+	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
+	s.Equal(0, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainRegister_DomainExist() {
 	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(&shared.DomainAlreadyExistsError{})
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainRegister_Failed() {
 	s.serverFrontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(&shared.BadRequestError{"fake error"})
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
 	s.Equal(1, errorCode)
 }
 
@@ -609,4 +615,53 @@ func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
 	}
 	getWorkflowIDReusePolicy(-1)
 	s.Equal(1, errorCode)
+}
+
+func (s *cliAppSuite) TestGetSearchAttributes() {
+	resp := &shared.GetSearchAttributesResponse{}
+	s.clientFrontendClient.EXPECT().GetSearchAttributes(gomock.Any(), callOptions...).Return(resp, nil).Times(1)
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "get-search-attr"})
+	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestParseBool() {
+	res, err := parseBool("true")
+	s.NoError(err)
+	s.True(res)
+
+	res, err = parseBool("false")
+	s.NoError(err)
+	s.False(res)
+
+	for _, v := range []string{"True, TRUE, False, FALSE, T, F"} {
+		res, err = parseBool(v)
+		s.Error(err)
+		s.False(res)
+	}
+}
+
+func (s *cliAppSuite) TestConvertStringToRealType() {
+	var res interface{}
+
+	// int
+	res = convertStringToRealType("1")
+	s.Equal(int64(1), res)
+
+	// bool
+	res = convertStringToRealType("true")
+	s.Equal(true, res)
+	res = convertStringToRealType("false")
+	s.Equal(false, res)
+
+	// double
+	res = convertStringToRealType("1.0")
+	s.Equal(float64(1.0), res)
+
+	// datetime
+	res = convertStringToRealType("2019-01-01T01:01:01Z")
+	s.Equal(time.Date(2019, 1, 1, 1, 1, 1, 0, time.UTC), res)
+
+	// string
+	res = convertStringToRealType("test string")
+	s.Equal("test string", res)
 }

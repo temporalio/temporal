@@ -21,10 +21,12 @@
 package archiver
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/common"
-	"testing"
+	"go.uber.org/cadence"
 )
 
 type UtilSuite struct {
@@ -38,99 +40,6 @@ func TestUtilSuite(t *testing.T) {
 
 func (s *UtilSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-}
-
-func (s *UtilSuite) TestNewHistoryBlobKey() {
-	testCases := []struct {
-		domainID       string
-		workflowID     string
-		runID          string
-		pageToken      int
-		expectError    bool
-		expectBuiltKey string
-	}{
-		{
-			domainID:    "",
-			expectError: true,
-		},
-		{
-			domainID:       "testDomainID",
-			workflowID:     "testWorkflowID",
-			runID:          "testRunID",
-			pageToken:      common.FirstBlobPageToken,
-			expectError:    false,
-			expectBuiltKey: "17971674567288329890367046253745284795510285995943906173973_1.history",
-		},
-		{
-			domainID:    "testDomainID",
-			workflowID:  "testWorkflowID",
-			runID:       "testRunID",
-			pageToken:   -1,
-			expectError: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		key, err := NewHistoryBlobKey(tc.domainID, tc.workflowID, tc.runID, tc.pageToken)
-		if tc.expectError {
-			s.Error(err)
-			s.Nil(key)
-		} else {
-			s.NoError(err)
-			s.NotNil(key)
-			s.Equal(tc.expectBuiltKey, key.String())
-		}
-	}
-}
-
-func (s *UtilSuite) TestConvertHeaderToTags() {
-	testCases := []struct {
-		header     *HistoryBlobHeader
-		expectTags map[string]string
-	}{
-		{
-			header:     nil,
-			expectTags: map[string]string{},
-		},
-		{
-			header:     &HistoryBlobHeader{},
-			expectTags: map[string]string{},
-		},
-		{
-			header: &HistoryBlobHeader{
-				DomainID: nil,
-			},
-			expectTags: map[string]string{},
-		},
-		{
-			header: &HistoryBlobHeader{
-				DomainID: common.StringPtr("test-domain-id"),
-			},
-			expectTags: map[string]string{"domain_id": "test-domain-id"},
-		},
-		{
-			header: &HistoryBlobHeader{
-				EventCount: nil,
-			},
-			expectTags: map[string]string{},
-		},
-		{
-			header: &HistoryBlobHeader{
-				DomainID:   common.StringPtr("test-domain-id"),
-				EventCount: common.Int64Ptr(9),
-			},
-			expectTags: map[string]string{
-				"domain_id":   "test-domain-id",
-				"event_count": "9",
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		tags, err := ConvertHeaderToTags(tc.header)
-		s.NoError(err)
-		s.Equal(tc.expectTags, tags)
-	}
 }
 
 func (s *UtilSuite) TestHashesEqual() {
@@ -181,27 +90,85 @@ func (s *UtilSuite) TestHashesEqual() {
 	}
 }
 
-func (s *UtilSuite) TestIsLast() {
+func (s *UtilSuite) TestHistoryMutated() {
 	testCases := []struct {
-		header *HistoryBlobHeader
-		isLast bool
+		historyBlob *HistoryBlob
+		request     *ArchiveRequest
+		isMutated   bool
 	}{
 		{
-			header: &HistoryBlobHeader{IsLast: common.BoolPtr(true)},
-			isLast: true,
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(15),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 3,
+			},
+			isMutated: true,
 		},
 		{
-			header: &HistoryBlobHeader{IsLast: common.BoolPtr(false)},
-			isLast: false,
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(10),
+					LastEventID:         common.Int64Ptr(50),
+					IsLast:              common.BoolPtr(true),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 10,
+				NextEventID:          34,
+			},
+			isMutated: true,
 		},
 		{
-			header: &HistoryBlobHeader{},
-			isLast: false,
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(9),
+					IsLast:              common.BoolPtr(true),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 10,
+			},
+			isMutated: true,
+		},
+		{
+			historyBlob: &HistoryBlob{
+				Header: &HistoryBlobHeader{
+					LastFailoverVersion: common.Int64Ptr(10),
+					LastEventID:         common.Int64Ptr(33),
+					IsLast:              common.BoolPtr(true),
+				},
+			},
+			request: &ArchiveRequest{
+				CloseFailoverVersion: 10,
+				NextEventID:          34,
+			},
+			isMutated: false,
 		},
 	}
 	for _, tc := range testCases {
-		tags, err := ConvertHeaderToTags(tc.header)
-		s.NoError(err)
-		s.Equal(tc.isLast, IsLast(tags))
+		s.Equal(tc.isMutated, historyMutated(tc.historyBlob, tc.request))
+	}
+}
+
+func (s *UtilSuite) TestValidateRequest() {
+	testCases := []struct {
+		request     *ArchiveRequest
+		expectedErr error
+	}{
+		{
+			request:     &ArchiveRequest{},
+			expectedErr: cadence.NewCustomError(errEmptyBucket),
+		},
+		{
+			request:     &ArchiveRequest{BucketName: "some random bucket name"},
+			expectedErr: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Equal(tc.expectedErr, validateArchivalRequest(tc.request))
 	}
 }

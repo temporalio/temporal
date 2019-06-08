@@ -230,6 +230,19 @@ func (s *configSuite) TestGetDurationPropertyFilteredByTaskListInfo() {
 	s.Equal(time.Minute, value(domain, taskList, taskType))
 }
 
+func (s *configSuite) TestGetMapProperty() {
+	key := testGetMapPropertyKey
+	val := map[string]interface{}{
+		"testKey": 123,
+	}
+	value := s.cln.GetMapProperty(key, val)
+	s.Equal(val, value())
+	val["testKey"] = "321"
+	s.client.SetValue(key, val)
+	s.Equal(val, value())
+	s.Equal("321", value()["testKey"])
+}
+
 func TestDynamicConfigKeyIsMapped(t *testing.T) {
 	for i := unknownKey; i < lastKeyForTest; i++ {
 		key, ok := keys[i]
@@ -243,4 +256,13 @@ func TestDynamicConfigFilterTypeIsMapped(t *testing.T) {
 	for i := unknownFilter; i < lastFilterTypeForTest; i++ {
 		require.NotEmpty(t, filters[i])
 	}
+}
+
+func TestMapToString(t *testing.T) {
+	require.Equal(t, "", mapToString(nil))
+	m := map[string]interface{}{
+		"k1": 1,
+		"k2": 2,
+	}
+	require.Equal(t, "map[k1:1 k2:2]", mapToString(m))
 }

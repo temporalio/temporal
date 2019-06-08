@@ -1,4 +1,4 @@
-# Cadence [![Build Status](https://travis-ci.org/uber/cadence.svg?branch=master)](https://travis-ci.org/uber/cadence) [![Coverage Status](https://coveralls.io/repos/github/uber/cadence/badge.svg?branch=master)](https://coveralls.io/github/uber/cadence?branch=master)
+# Cadence [![Build Status](https://badge.buildkite.com/159887afd42000f11126f85237317d4090de97b26c287ebc40.svg?theme=github&branch=master)](https://buildkite.com/uberopensource/cadence-server) [![Coverage Status](https://coveralls.io/repos/github/uber/cadence/badge.svg?branch=master)](https://coveralls.io/github/uber/cadence?branch=master)
 
 Cadence is a distributed, scalable, durable, and highly available orchestration engine we developed at Uber Engineering to execute asynchronous long-running business logic in a scalable and resilient way.
 
@@ -50,7 +50,7 @@ Try out [Cadence command-line tool](tools/cli/README.md) to perform various task
 ### Use Cadence Web
 
 Try out [Cadence Web UI](https://github.com/uber/cadence-web) to view your workflows on Cadence.  
-(This is already available at localhost:8080 if you run Cadence with docker compose)
+(This is already available at localhost:8088 if you run Cadence with docker compose)
 
 ## Contributing
 We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).

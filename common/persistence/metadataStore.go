@@ -21,6 +21,7 @@
 package persistence
 
 import (
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 )
@@ -147,6 +148,9 @@ func (m *metadataManagerImpl) serializeDomainConfig(c *DomainConfig) (InternalDo
 	if c == nil {
 		return InternalDomainConfig{}, nil
 	}
+	if c.BadBinaries.Binaries == nil {
+		c.BadBinaries.Binaries = map[string]*shared.BadBinaryInfo{}
+	}
 	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeThriftRW)
 	if err != nil {
 		return InternalDomainConfig{}, err
@@ -167,6 +171,9 @@ func (m *metadataManagerImpl) deserializeDomainConfig(ic *InternalDomainConfig) 
 	badBinaries, err := m.serializer.DeserializeBadBinaries(ic.BadBinaries)
 	if err != nil {
 		return DomainConfig{}, err
+	}
+	if badBinaries.Binaries == nil {
+		badBinaries.Binaries = map[string]*shared.BadBinaryInfo{}
 	}
 	return DomainConfig{
 		Retention:      ic.Retention,

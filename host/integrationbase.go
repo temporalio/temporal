@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/environment"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
@@ -101,9 +102,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.Require().NoError(
 		s.registerDomain(s.foreignDomainName, 1, workflow.ArchivalStatusDisabled, ""))
 
-	s.archivalDomainName = s.randomizeStr("integration-archival-enabled-domain")
-	s.Require().NoError(
-		s.registerDomain(s.archivalDomainName, 0, workflow.ArchivalStatusEnabled, s.testCluster.blobstore.bucketName))
+	s.Require().NoError(s.registerArchivalDomain())
 
 	// this sleep is necessary because domainv2 cache gets refreshed in the
 	// background only every domainCacheRefreshInterval period
@@ -206,4 +205,42 @@ func (s *IntegrationBase) getHistory(domain string, execution *workflow.Workflow
 	}
 
 	return events
+}
+
+// To register archival domain we can't use frontend API as the retention period is set to 0 for testing,
+// and request will be rejected by frontend. Here we make a call directly to persistence to register
+// the domain.
+func (s *IntegrationBase) registerArchivalDomain() error {
+	s.archivalDomainName = s.randomizeStr("integration-archival-enabled-domain")
+	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
+	domainRequest := &persistence.CreateDomainRequest{
+		Info: &persistence.DomainInfo{
+			ID:     uuid.New(),
+			Name:   s.archivalDomainName,
+			Status: persistence.DomainStatusRegistered,
+		},
+		Config: &persistence.DomainConfig{
+			Retention:      0,
+			ArchivalBucket: s.testCluster.blobstore.bucketName,
+			ArchivalStatus: workflow.ArchivalStatusEnabled,
+			BadBinaries:    workflow.BadBinaries{Binaries: map[string]*workflow.BadBinaryInfo{}},
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: currentClusterName,
+			Clusters: []*persistence.ClusterReplicationConfig{
+				&persistence.ClusterReplicationConfig{
+					ClusterName: currentClusterName,
+				},
+			},
+		},
+		IsGlobalDomain:  false,
+		FailoverVersion: 0,
+	}
+	response, err := s.testCluster.testBase.MetadataProxy.CreateDomain(domainRequest)
+
+	s.Logger.Info("Register domain succeeded",
+		tag.WorkflowDomainName(s.archivalDomainName),
+		tag.WorkflowDomainID(response.ID),
+	)
+	return err
 }

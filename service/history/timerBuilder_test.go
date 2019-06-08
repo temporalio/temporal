@@ -22,23 +22,21 @@ package history
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
-
-	"encoding/json"
-
-	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/suite"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/log"
 )
 
 type (
@@ -92,10 +90,11 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(201)},
 		TimerInfos:    make(map[string]*persistence.TimerInfo),
 	})
-	_, ti1 := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, ti1, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid1"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(1),
 	})
+	s.Nil(err)
 
 	tb.AddUserTimer(ti1, msb)
 	t1 := tb.GetUserTimerTaskIfNeeded(msb)
@@ -125,16 +124,18 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 		TimerInfos:    timerInfos,
 	})
 
-	_, tiBefore := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, tiBefore, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-before"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(1),
 	})
+	s.Nil(err)
 	tb.AddUserTimer(tiBefore, msb)
 
-	_, tiAfter := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, tiAfter, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-after"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
+	s.Nil(err)
 	tb.AddUserTimer(tiAfter, msb)
 
 	t1 := tb.GetUserTimerTaskIfNeeded(msb)
@@ -152,10 +153,11 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 		TimerInfos:    timerInfos,
 	})
 
-	_, ti3 := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, ti3, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-after"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
+	s.Nil(err)
 	tb.AddUserTimer(ti3, msb)
 
 	t1 = tb.GetUserTimerTaskIfNeeded(msb)
@@ -179,18 +181,18 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 		TimerInfos:    timerInfos,
 	})
 
-	_, ti := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, ti, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-exist"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
-
+	s.IsType(&workflow.BadRequestError{}, err)
 	s.Nil(ti)
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	// ScheduleToStart being more than HB.
 	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger)
-	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
+	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("test-id"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
@@ -199,6 +201,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(3),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
+	s.Nil(err)
 	// create a schedule to start timeout
 	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tb.GetActivityTimerTaskIfNeeded(builder)
