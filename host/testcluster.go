@@ -21,6 +21,7 @@
 package host
 
 import (
+	"github.com/uber/cadence/common/definition"
 	"io/ioutil"
 	"os"
 
@@ -129,6 +130,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		visConfig := &config.VisibilityConfig{
 			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByDomain(2000),
 			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
+			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 		}
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(esClient, indexName, visProducer, visConfig, logger)
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)

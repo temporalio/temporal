@@ -170,6 +170,7 @@ func (s *Service) Start() {
 			MaxQPS:                 s.config.PersistenceMaxQPS,
 			VisibilityListMaxQPS:   s.config.ESVisibilityListMaxQPS,
 			ESIndexMaxResultWindow: s.config.ESIndexMaxResultWindow,
+			ValidSearchAttributes:  s.config.ValidSearchAttributes,
 		}
 		visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 			nil, base.GetMetricsClient(), log)
