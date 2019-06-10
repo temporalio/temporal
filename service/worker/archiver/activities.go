@@ -123,8 +123,11 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	}
 	blobstoreClient := container.Blobstore
 
-	handledLastBlob := false
+	var handledLastBlob bool
 	var totalUploadSize int64
+
+	runBlobIntegrityCheck := shouldRun(container.Config.BlobIntegrityCheckProbability())
+	var uploadedHistoryEventHashes []uint64
 	for pageToken := common.FirstBlobPageToken; !handledLastBlob; pageToken++ {
 		key, err := NewHistoryBlobKey(request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, pageToken)
 		if err != nil {
@@ -155,6 +158,11 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		if err != nil {
 			logger.Error(uploadErrorMsg, tag.ArchivalUploadFailReason(errorDetails(err)), tag.Error(err))
 			return err
+		}
+		if runBlobIntegrityCheck {
+			for _, e := range historyBlob.Body.Events {
+				uploadedHistoryEventHashes = append(uploadedHistoryEventHashes, hash(e.String()))
+			}
 		}
 
 		if historyMutated(historyBlob, &request) {
@@ -199,7 +207,6 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			}
 			continue
 		}
-
 		if err := uploadBlob(ctx, blobstoreClient, request.BucketName, key, blob); err != nil {
 			logger.Error(uploadErrorMsg, tag.ArchivalUploadFailReason(errorDetails(err)), tag.ArchivalBlobKey(key.String()), tag.Error(err))
 			return err
@@ -224,6 +231,37 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	if err := uploadBlob(ctx, blobstoreClient, request.BucketName, indexBlobKey, indexBlobWithVersion); err != nil {
 		logger.Error(uploadErrorMsg, tag.ArchivalUploadFailReason(errorDetails(err)), tag.ArchivalBlobKey(indexBlobKey.String()), tag.Error(err))
 		return err
+	}
+	if runBlobIntegrityCheck {
+		scope.IncCounter(metrics.ArchiverRunningBlobIntegrityCheckCount)
+		blobDownloader := container.HistoryBlobDownloader
+		if blobDownloader == nil {
+			blobDownloader = NewHistoryBlobDownloader(blobstoreClient)
+		}
+		req := &DownloadBlobRequest{
+			ArchivalBucket:       request.BucketName,
+			DomainID:             request.DomainID,
+			WorkflowID:           request.WorkflowID,
+			RunID:                request.RunID,
+			CloseFailoverVersion: common.Int64Ptr(request.CloseFailoverVersion),
+		}
+		var fetchedHistoryEventHashes []uint64
+		for len(fetchedHistoryEventHashes) == 0 || len(req.NextPageToken) != 0 {
+			resp, err := blobDownloader.DownloadBlob(ctx, req)
+			if err != nil {
+				scope.IncCounter(metrics.ArchiverCouldNotRunBlobIntegrityCheckCount)
+				logger.Error("failed to access history for blob integrity check", tag.Error(err))
+				return nil
+			}
+			for _, e := range resp.HistoryBlob.Body.Events {
+				fetchedHistoryEventHashes = append(fetchedHistoryEventHashes, hash(e.String()))
+			}
+			req.NextPageToken = resp.NextPageToken
+		}
+		if !hashesEqual(fetchedHistoryEventHashes, uploadedHistoryEventHashes) {
+			scope.IncCounter(metrics.ArchiverBlobIntegrityCheckFailedCount)
+			logger.Error("uploaded history does not match fetched history")
+		}
 	}
 	return nil
 }

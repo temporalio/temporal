@@ -98,7 +98,7 @@ func (p *pump) Run() PumpResult {
 	for i := 0; i < carryoverBoundIndex; i++ {
 		request := p.carryover[i]
 		p.requestCh.Send(p.ctx, request)
-		pumpResult.PumpedHashes = append(pumpResult.PumpedHashes, hashArchiveRequest(request))
+		pumpResult.PumpedHashes = append(pumpResult.PumpedHashes, hash(request))
 	}
 	if len(pumpResult.PumpedHashes) == p.requestLimit {
 		sw.Stop()
@@ -125,7 +125,7 @@ func (p *pump) Run() PumpResult {
 		var request ArchiveRequest
 		ch.Receive(p.ctx, &request)
 		p.requestCh.Send(p.ctx, request)
-		pumpResult.PumpedHashes = append(pumpResult.PumpedHashes, hashArchiveRequest(request))
+		pumpResult.PumpedHashes = append(pumpResult.PumpedHashes, hash(request))
 		finished = len(pumpResult.PumpedHashes) == p.requestLimit
 		if finished {
 			p.metricsClient.IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalThresholdCount)
