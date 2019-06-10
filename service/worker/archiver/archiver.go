@@ -78,7 +78,7 @@ func (a *archiver) Start() {
 					break
 				}
 				handleRequest(ctx, a.logger, a.metricsClient, request)
-				handledHashes = append(handledHashes, hashArchiveRequest(request))
+				handledHashes = append(handledHashes, hash(request))
 			}
 			a.resultCh.Send(ctx, handledHashes)
 			a.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount)

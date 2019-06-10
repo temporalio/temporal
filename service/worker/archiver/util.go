@@ -39,9 +39,9 @@ func MaxArchivalIterationTimeout() time.Duration {
 	return workflowStartToCloseTimeout / 2
 }
 
-func hashArchiveRequest(archiveRequest ArchiveRequest) uint64 {
+func hash(i interface{}) uint64 {
 	var b bytes.Buffer
-	gob.NewEncoder(&b).Encode(archiveRequest)
+	gob.NewEncoder(&b).Encode(i)
 	return farm.Fingerprint64(b.Bytes())
 }
 

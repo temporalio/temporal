@@ -200,5 +200,5 @@ func randomArchiveRequest() (ArchiveRequest, uint64) {
 		WorkflowID: fmt.Sprintf("%v", rand.Intn(1000)),
 		RunID:      fmt.Sprintf("%v", rand.Intn(1000)),
 	}
-	return ar, hashArchiveRequest(ar)
+	return ar, hash(ar)
 }

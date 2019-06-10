@@ -261,7 +261,7 @@ func channelContainsExpected(ctx workflow.Context, ch workflow.Channel, expected
 		if !ch.Receive(ctx, &actual) {
 			return false
 		}
-		if hashArchiveRequest(expected[i]) != hashArchiveRequest(actual) {
+		if hash(expected[i]) != hash(actual) {
 			return false
 		}
 	}
@@ -291,7 +291,7 @@ func requestsEqual(expected []ArchiveRequest, actual []ArchiveRequest) bool {
 		return false
 	}
 	for i := 0; i < len(expected); i++ {
-		if hashArchiveRequest(expected[i]) != hashArchiveRequest(actual[i]) {
+		if hash(expected[i]) != hash(actual[i]) {
 			return false
 		}
 	}
