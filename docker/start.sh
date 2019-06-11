@@ -33,7 +33,7 @@ export KEYSPACE="${KEYSPACE:-cadence}"
 export VISIBILITY_KEYSPACE="${VISIBILITY_KEYSPACE:-cadence_visibility}"
 export CASSANDRA_CONSISTENCY="${CASSANDRA_CONSISTENCY:-One}"
 
-#mysql env
+# mysql env
 export DBNAME="${DBNAME:-cadence}"
 export VISIBILITY_DBNAME="${VISIBILITY_DBNAME:-cadence_visibility}"
 export DB_PORT=${DB_PORT:-3306}

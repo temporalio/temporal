@@ -35,3 +35,7 @@
 #         - false
 #         - key4: true
 #           key5: 2.0
+
+# enable this only for localhost development
+frontend.enableClientVersionCheck:
+  - value: true

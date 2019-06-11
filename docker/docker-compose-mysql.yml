@@ -26,6 +26,7 @@ services:
       - "MYSQL_PWD=root"
       - "MYSQL_SEEDS=mysql"
       - "STATSD_ENDPOINT=statsd:8125"
+      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - mysql
       - statsd

@@ -103,3 +103,7 @@ archival:
 
 publicClient:
   hostPort: ${BIND_ON_IP}:7933
+
+dynamicConfigClient:
+  filepath: ${DYNAMIC_CONFIG_FILE_PATH}
+  pollInterval: "60s"

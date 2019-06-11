@@ -78,7 +78,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TearDownSuite() {
 
 func (s *domainHandlerGlobalDomainDisabledSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
-	s.config = NewConfig(dc.NewCollection(dc.NewNopClient(), logger), numHistoryShards, false, false)
+	s.config = NewConfig(dc.NewCollection(dc.NewNopClient(), logger), numHistoryShards, false)
 	s.metadataMgr = s.TestBase.MetadataProxy
 	s.mockBlobstoreClient = &mocks.BlobstoreClient{}
 	s.mockProducer = &mocks.KafkaProducer{}
