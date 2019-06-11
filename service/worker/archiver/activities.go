@@ -92,7 +92,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 	}()
 
-	logger := tagLoggerWithRequest(container.Logger, request).WithTags(tag.Attempt(activity.GetInfo(ctx).Attempt))
+	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
 	domainCache := container.DomainCache
 	clusterMetadata := container.ClusterMetadata
 	domainCacheEntry, err := getDomainByID(ctx, domainCache, request.DomainID)
@@ -283,7 +283,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			}
 		}
 	}()
-	logger := tagLoggerWithRequest(container.Logger, request).WithTags(tag.Attempt(activity.GetInfo(ctx).Attempt))
+	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
 	if request.EventStoreVersion == persistence.EventStoreVersionV2 {
 		if err := deleteHistoryV2(ctx, container, request); err != nil {
 			logger.Error("failed to delete history from events v2", tag.ArchivalDeleteHistoryFailReason(errorDetails(err)), tag.Error(err))
@@ -317,7 +317,7 @@ func deleteBlobActivity(ctx context.Context, request ArchiveRequest) (err error)
 			}
 		}
 	}()
-	logger := tagLoggerWithRequest(container.Logger, request).WithTags(tag.Attempt(activity.GetInfo(ctx).Attempt))
+	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
 	blobstoreClient := container.Blobstore
 
 	if err := validateArchivalRequest(&request); err != nil {

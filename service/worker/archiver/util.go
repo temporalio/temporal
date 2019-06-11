@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence"
+	"go.uber.org/cadence/activity"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -76,6 +77,13 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
 		tag.ArchivalBucket(request.BucketName),
 	)
+}
+
+func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) log.Logger {
+	return logger.WithTags(
+		tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+		tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
+		tag.Attempt(activityInfo.Attempt))
 }
 
 func contextExpired(ctx context.Context) bool {
