@@ -60,6 +60,7 @@ var keys = map[Key]string{
 	EnableReadFromArchival:              "system.enableReadFromArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
+	EnableBatcher:                       "worker.enableBatcher",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -510,6 +511,8 @@ const (
 	WorkerThrottledLogRPS
 	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
 	ScannerPersistenceMaxQPS
+	// EnableBatcher decides whether start batcher in our worker
+	EnableBatcher
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

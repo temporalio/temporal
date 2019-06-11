@@ -111,7 +111,7 @@ func init() {
 
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
-	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemDomainName))
+	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemLocalDomainName))
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
@@ -119,7 +119,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	return &clientWorker{
-		worker:      worker.New(container.PublicClient, common.SystemDomainName, decisionTaskList, wo),
+		worker:      worker.New(container.PublicClient, common.SystemLocalDomainName, decisionTaskList, wo),
 		domainCache: container.DomainCache,
 	}
 }

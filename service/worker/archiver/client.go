@@ -79,7 +79,7 @@ func NewClient(
 	return &client{
 		metricsClient: metricsClient,
 		logger:        logger,
-		cadenceClient: cclient.NewClient(publicClient, common.SystemDomainName, &cclient.Options{}),
+		cadenceClient: cclient.NewClient(publicClient, common.SystemLocalDomainName, &cclient.Options{}),
 		numWorkflows:  numWorkflows,
 		rateLimiter:   tokenbucket.NewDynamicTokenBucket(requestRPS, clock.NewRealTimeSource()),
 	}
