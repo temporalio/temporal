@@ -2794,12 +2794,17 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(firstEventID, decisionComple
 	return continueAsNewEvent, newStateBuilder, nil
 }
 
-func rolloverAutoResetPointsWithExpiringTime(resetPoints *workflow.ResetPoints, prevRunID string, domainRetentionDays int32) *workflow.ResetPoints {
+func rolloverAutoResetPointsWithExpiringTime(
+	resetPoints *workflow.ResetPoints,
+	prevRunID string,
+	nowNano int64,
+	domainRetentionDays int32,
+) *workflow.ResetPoints {
 	if resetPoints == nil || resetPoints.Points == nil {
 		return resetPoints
 	}
 	newPoints := make([]*workflow.ResetPointInfo, 0, len(resetPoints.Points))
-	expiringTimeNano := time.Now().Add(time.Duration(domainRetentionDays) * time.Hour * 24).UnixNano()
+	expiringTimeNano := nowNano + int64(time.Duration(domainRetentionDays)*time.Hour*24)
 	for _, rp := range resetPoints.Points {
 		if rp.GetRunId() == prevRunID {
 			rp.ExpiringTimeNano = common.Int64Ptr(expiringTimeNano)
@@ -2877,7 +2882,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(firs
 		CronSchedule:            startedAttributes.GetCronSchedule(),
 		EventStoreVersion:       newStateBuilder.GetEventStoreVersion(),
 		BranchToken:             newStateBuilder.GetCurrentBranch(),
-		PreviousAutoResetPoints: rolloverAutoResetPointsWithExpiringTime(startedAttributes.GetPrevAutoResetPoints(), prevRunID, domainRetentionDays),
+		PreviousAutoResetPoints: rolloverAutoResetPointsWithExpiringTime(startedAttributes.GetPrevAutoResetPoints(), prevRunID, continueAsNewEvent.GetTimestamp(), domainRetentionDays),
 	}
 
 	if continueAsNew.HasRetryPolicy {
