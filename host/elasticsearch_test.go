@@ -43,8 +43,9 @@ import (
 )
 
 const (
-	numOfRetry   = 50
-	waitTimeInMs = 400
+	numOfRetry        = 50
+	waitTimeInMs      = 400
+	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )
 
 type elasticsearchIntegrationSuite struct {
@@ -183,7 +184,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
-	s.T().Skip("fixme: flaky test")
 	id := "es-integration-list-workflow-token-test"
 	wt := "es-integration-list-workflow-token-test-type"
 	tl := "es-integration-list-workflow-token-test-tasklist"
@@ -196,7 +196,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
-	s.T().Skip("fixme: flaky test")
 	id := "es-integration-list-workflow-searchAfter-test"
 	wt := "es-integration-list-workflow-searchAfter-test-type"
 	tl := "es-integration-list-workflow-searchAfter-test-tasklist"
@@ -239,6 +238,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	searchAttr.IndexedFields[key] = attrValBytes
 	we3, err := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
+
+	time.Sleep(waitForESToSettle)
 
 	// query 1 workflow with search attr
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
@@ -315,7 +316,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 
 // To test last page search trigger max window size error
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
-	s.T().Skip("fixme: flaky test")
 	// set es index index settings
 	indexName := s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName]
 	_, err := s.esClient.IndexPutSettings(indexName).
@@ -334,6 +334,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 		_, err := s.engine.StartWorkflowExecution(createContext(), startRequest)
 		s.Nil(err)
 	}
+
+	time.Sleep(waitForESToSettle)
 
 	var listResp *workflow.ListWorkflowExecutionsResponse
 	var nextPageToken []byte
@@ -354,6 +356,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
+	s.NotNil(listResp)
 	s.True(len(listResp.GetNextPageToken()) != 0)
 
 	// the last request
@@ -401,6 +404,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		_, err := s.engine.StartWorkflowExecution(createContext(), startRequest)
 		s.Nil(err)
 	}
+
+	time.Sleep(waitForESToSettle)
 
 	desc := "desc"
 	asc := "asc"
@@ -512,6 +517,8 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		s.Nil(err)
 	}
 
+	time.Sleep(waitForESToSettle)
+
 	var openExecutions []*workflow.WorkflowExecutionInfo
 	var nextPageToken []byte
 
@@ -534,7 +541,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		s.Nil(err)
 		if len(resp.GetExecutions()) == pageSize {
 			openExecutions = resp.GetExecutions()
-			nextPageToken = resp.NextPageToken
+			nextPageToken = resp.GetNextPageToken()
 			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
@@ -559,7 +566,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		if len(resp.GetExecutions()) == numOfWorkflows-pageSize {
 			inIf = true
 			openExecutions = resp.GetExecutions()
-			nextPageToken = resp.NextPageToken
+			nextPageToken = resp.GetNextPageToken()
 			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
