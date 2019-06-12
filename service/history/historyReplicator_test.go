@@ -1304,12 +1304,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			},
 		},
 	})
+	currentState := persistence.WorkflowStateRunning
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp: startTimeStamp,
 		RunID:          runID,
+		State:          currentState,
+		CloseStatus:    persistence.WorkflowCloseStatusNone,
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
-	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
@@ -1318,7 +1322,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderMid := &mockMutableState{}
 	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
-	mockConflictResolver.On("reset", runID, mock.Anything, currentReplicationInfoLastEventID, exeInfo).Return(msBuilderMid, nil)
+	mockConflictResolver.On("reset",
+		runID, currentLastWriteVersion, currentState, mock.Anything, currentReplicationInfoLastEventID, exeInfo,
+	).Return(msBuilderMid, nil)
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderMid, msBuilderOut)
 	s.Nil(err)
@@ -1365,12 +1371,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 			},
 		},
 	})
+	currentState := persistence.WorkflowStateRunning
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp: startTimeStamp,
 		RunID:          runID,
+		State:          currentState,
+		CloseStatus:    persistence.WorkflowCloseStatusNone,
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
-	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
@@ -1379,7 +1389,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderMid := &mockMutableState{}
 	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
-	mockConflictResolver.On("reset", runID, mock.Anything, currentReplicationInfoLastEventID, exeInfo).Return(msBuilderMid, nil)
+	mockConflictResolver.On("reset",
+		runID, currentLastWriteVersion, currentState, mock.Anything, currentReplicationInfoLastEventID, exeInfo,
+	).Return(msBuilderMid, nil)
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderMid, msBuilderOut)
 	s.Nil(err)
@@ -1454,12 +1466,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID,
 	})
 	msBuilderIn.On("HasBufferedEvents").Return(false)
+	currentState := persistence.WorkflowStateCreated
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp: startTimeStamp,
 		RunID:          runID,
+		State:          currentState,
+		CloseStatus:    persistence.WorkflowCloseStatusNone,
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
-	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
@@ -1468,7 +1484,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderMid := &mockMutableState{}
 	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
-	mockConflictResolver.On("reset", runID, mock.Anything, incomingReplicationInfoLastEventID, exeInfo).Return(msBuilderMid, nil)
+	mockConflictResolver.On("reset",
+		runID, currentLastWriteVersion, currentState, mock.Anything, incomingReplicationInfoLastEventID, exeInfo,
+	).Return(msBuilderMid, nil)
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderMid, msBuilderOut)
 	s.Nil(err)
@@ -1604,13 +1622,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID + 2,
 	}).Once()
-
+	currentState := persistence.WorkflowStateRunning
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp: startTimeStamp,
 		RunID:          runID,
+		State:          currentState,
+		CloseStatus:    persistence.WorkflowCloseStatusNone,
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
-	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
@@ -1619,7 +1640,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderMid := &mockMutableState{}
 	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
-	mockConflictResolver.On("reset", runID, mock.Anything, incomingReplicationInfoLastEventID, exeInfo).Return(msBuilderMid, nil)
+	mockConflictResolver.On("reset",
+		runID, currentLastWriteVersion, currentState, mock.Anything, incomingReplicationInfoLastEventID, exeInfo,
+	).Return(msBuilderMid, nil)
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderMid, msBuilderOut)
 	s.Nil(err)
@@ -3274,6 +3297,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetRunning() {
 	runID := uuid.New()
+	lastWriteVersion := int64(1394)
+	state := persistence.WorkflowStateRunning
 	incomingVersion := int64(4096)
 	incomingTimestamp := int64(11238)
 
@@ -3281,10 +3306,18 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	defer msBuilderTarget.AssertExpectations(s.T())
 
 	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{RunID: runID})
-	prevRunID, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
+	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
+		RunID: runID,
+		State: state,
+	})
+	msBuilderTarget.On("GetLastWriteVersion").Return(lastWriteVersion)
+	prevRunID, prevLastWriteVersion, prevState, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(
+		ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger,
+	)
 	s.Nil(err)
 	s.Equal(runID, prevRunID)
+	s.Equal(lastWriteVersion, prevLastWriteVersion)
+	s.Equal(state, prevState)
 }
 
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentClosed() {
@@ -3303,21 +3336,30 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       targetRunID,
+		State:       persistence.WorkflowStateCompleted,
 		CloseStatus: persistence.WorkflowCloseStatusContinuedAsNew,
 	})
 
 	currentRunID := uuid.New()
+	currentLastWriteVersion := int64(1394)
+	currentState := persistence.WorkflowStateCompleted
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
-		RunID:       currentRunID,
-		CloseStatus: persistence.WorkflowCloseStatusCompleted,
+		RunID:            currentRunID,
+		State:            currentState,
+		CloseStatus:      persistence.WorkflowCloseStatusCompleted,
+		LastWriteVersion: currentLastWriteVersion,
 	}, nil)
 
-	prevRunID, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
+	prevRunID, prevLastWriteVersion, prevState, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(
+		ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger,
+	)
 	s.Nil(err)
 	s.Equal(currentRunID, prevRunID)
+	s.Equal(currentLastWriteVersion, prevLastWriteVersion)
+	s.Equal(currentState, prevState)
 }
 
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning_LowerVersion() {
@@ -3339,6 +3381,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       targetRunID,
+		State:       persistence.WorkflowStateCompleted,
 		CloseStatus: persistence.WorkflowCloseStatusContinuedAsNew,
 	})
 
@@ -3390,6 +3433,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
+		State:            persistence.WorkflowStateRunning,
 		CloseStatus:      persistence.WorkflowCloseStatusNone,
 		LastWriteVersion: incomingVersion - 10,
 	}, nil)
@@ -3424,9 +3468,11 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	s.mockTimerProcessor.On("NotifyNewTimers", incomingCluster, mock.Anything, mock.Anything)
 	msBuilderCurrent.On("ClearStickyness").Once()
 
-	prevRunID, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
+	prevRunID, prevLastWriteVersion, prevState, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
 	s.Nil(err)
 	s.Equal(currentRunID, prevRunID)
+	s.Equal(incomingVersion, prevLastWriteVersion)
+	s.Equal(persistence.WorkflowStateCompleted, prevState)
 }
 
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIfNotSelf_TargetClosed_CurrentRunning_NotLowerVersion() {
@@ -3459,7 +3505,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		LastWriteVersion: incomingVersion,
 	}, nil)
 
-	prevRunID, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
+	prevRunID, _, _, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)
 	s.Nil(err)
 	s.Equal("", prevRunID)
 }

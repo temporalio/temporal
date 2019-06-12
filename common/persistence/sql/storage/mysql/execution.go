@@ -64,11 +64,7 @@ FROM current_executions ce
 INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.domain_id = ? AND ce.workflow_id = ? FOR UPDATE`
 
-	lockCurrentExecutionQry = `SELECT run_id FROM current_executions WHERE
-shard_id = ? AND
-domain_id = ? AND
-workflow_id = ?
-FOR UPDATE`
+	lockCurrentExecutionQry = getCurrentExecutionQry + ` FOR UPDATE`
 
 	updateCurrentExecutionsQry = `UPDATE current_executions SET
 run_id = :run_id,
@@ -186,10 +182,10 @@ func (mdb *DB) DeleteFromCurrentExecutions(filter *sqldb.CurrentExecutionsFilter
 }
 
 // LockCurrentExecutions acquires a write lock on a single row in current_executions table
-func (mdb *DB) LockCurrentExecutions(filter *sqldb.CurrentExecutionsFilter) (sqldb.UUID, error) {
-	var runID sqldb.UUID
-	err := mdb.conn.Get(&runID, lockCurrentExecutionQry, filter.ShardID, filter.DomainID, filter.WorkflowID)
-	return runID, err
+func (mdb *DB) LockCurrentExecutions(filter *sqldb.CurrentExecutionsFilter) (*sqldb.CurrentExecutionsRow, error) {
+	var row sqldb.CurrentExecutionsRow
+	err := mdb.conn.Get(&row, lockCurrentExecutionQry, filter.ShardID, filter.DomainID, filter.WorkflowID)
+	return &row, err
 }
 
 // LockCurrentExecutionsJoinExecutions joins a row in current_executions with executions table and acquires a

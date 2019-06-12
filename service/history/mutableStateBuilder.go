@@ -256,7 +256,14 @@ func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationStat
 	return e.replicationState
 }
 
-func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.ResetMutableStateRequest {
+func (e *mutableStateBuilder) ResetSnapshot(
+	prevRunID string,
+	prevLastWriteVersion int64,
+	prevState int,
+	replicationTasks []persistence.Task,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+) *persistence.ResetMutableStateRequest {
 	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
 
 	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
@@ -291,6 +298,8 @@ func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.Reset
 
 	return &persistence.ResetMutableStateRequest{
 		PrevRunID:                 prevRunID,
+		PrevLastWriteVersion:      prevLastWriteVersion,
+		PrevState:                 prevState,
 		ExecutionInfo:             e.executionInfo,
 		ReplicationState:          e.replicationState,
 		InsertActivityInfos:       insertActivities,
@@ -299,6 +308,9 @@ func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.Reset
 		InsertRequestCancelInfos:  insertRequestCancels,
 		InsertSignalInfos:         insertSignals,
 		InsertSignalRequestedIDs:  insertSignalRequested,
+		InsertReplicationTasks:    replicationTasks,
+		InsertTransferTasks:       transferTasks,
+		InsertTimerTasks:          timerTasks,
 	}
 }
 

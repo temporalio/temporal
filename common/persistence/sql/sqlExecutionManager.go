@@ -568,11 +568,11 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 		startVersion := common.EmptyVersion
 		lastWriteVersion := common.EmptyVersion
 		if request.ContinueAsNew.ReplicationState != nil {
-			startVersion = request.ReplicationState.StartVersion
-			lastWriteVersion = request.ReplicationState.LastWriteVersion
+			startVersion = request.ContinueAsNew.ReplicationState.StartVersion
+			lastWriteVersion = request.ContinueAsNew.ReplicationState.LastWriteVersion
 		}
 
-		if err := assertAndUpdateCurrentExecution(tx,
+		if err := assertRunIDAndUpdateCurrentExecution(tx,
 			shardID,
 			domainID,
 			workflowID,
@@ -618,7 +618,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 			lastWriteVersion = request.ReplicationState.LastWriteVersion
 		}
 		// this is only to update the current record
-		if err := assertAndUpdateCurrentExecution(tx,
+		if err := assertRunIDAndUpdateCurrentExecution(tx,
 			shardID,
 			domainID,
 			workflowID,
@@ -900,6 +900,8 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx sqldb.Tx, request *p.Intern
 	domainID := sqldb.MustParseUUID(info.DomainID)
 	runID := sqldb.MustParseUUID(info.RunID)
 	prevRunID := sqldb.MustParseUUID(request.PrevRunID)
+	prevLastWriteVersion := request.PrevLastWriteVersion
+	prevState := request.PrevState
 
 	if err := assertAndUpdateCurrentExecution(tx,
 		m.shardID,
@@ -907,14 +909,17 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx sqldb.Tx, request *p.Intern
 		info.WorkflowID,
 		runID,
 		prevRunID,
+		prevLastWriteVersion,
+		prevState,
 		info.CreateRequestID,
 		info.State,
 		info.CloseStatus,
 		replicationState.StartVersion,
 		replicationState.LastWriteVersion); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState. Failed to comare and swat the current record. Error: %v", err),
-		}
+		return &workflow.InternalServiceError{Message: fmt.Sprintf(
+			"ResetMutableState. Failed to comare and swap the current record. Error: %v",
+			err,
+		)}
 	}
 
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
@@ -1880,21 +1885,75 @@ func createTimerTasks(
 	return nil
 }
 
-func assertAndUpdateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, newRunID sqldb.UUID, previousRunID sqldb.UUID,
+func assertRunIDAndUpdateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, newRunID sqldb.UUID, previousRunID sqldb.UUID,
 	createRequestID string, state int, closeStatus int, startVersion int64, lastWriteVersion int64) error {
-	runID, err := tx.LockCurrentExecutions(&sqldb.CurrentExecutionsFilter{
-		ShardID: int64(shardID), DomainID: domainID, WorkflowID: workflowID})
+
+	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
+		if !bytes.Equal(currentRow.RunID, previousRunID) {
+			return &p.ConditionFailedError{Msg: fmt.Sprintf(
+				"Update current record failed failed. Current run ID was %v, expected %v",
+				currentRow.RunID,
+				previousRunID,
+			)}
+		}
+		return nil
+	}
+	if err := assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn); err != nil {
+		return err
+	}
+
+	return updateCurrentExecution(tx, shardID, domainID, workflowID, newRunID, createRequestID, state, closeStatus, startVersion, lastWriteVersion)
+}
+
+func assertAndUpdateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, newRunID sqldb.UUID,
+	previousRunID sqldb.UUID, previousLastWriteVersion int64, previousState int,
+	createRequestID string, state int, closeStatus int, startVersion int64, lastWriteVersion int64) error {
+
+	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
+		if !bytes.Equal(currentRow.RunID, previousRunID) {
+			return &p.ConditionFailedError{Msg: fmt.Sprintf(
+				"Update current record failed failed. Current run ID was %v, expected %v",
+				currentRow.RunID,
+				previousRunID,
+			)}
+		}
+		if currentRow.LastWriteVersion != previousLastWriteVersion {
+			return &p.ConditionFailedError{Msg: fmt.Sprintf(
+				"Update current record failed failed. Current last write version was %v, expected %v",
+				currentRow.LastWriteVersion,
+				previousLastWriteVersion,
+			)}
+		}
+		if currentRow.State != previousState {
+			return &p.ConditionFailedError{Msg: fmt.Sprintf(
+				"Update current record failed failed. Current state %v, expected %v",
+				currentRow.State,
+				previousState,
+			)}
+		}
+		return nil
+	}
+	if err := assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn); err != nil {
+		return err
+	}
+
+	return updateCurrentExecution(tx, shardID, domainID, workflowID, newRunID, createRequestID, state, closeStatus, startVersion, lastWriteVersion)
+}
+
+func assertCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string,
+	assertFn func(currentRow *sqldb.CurrentExecutionsRow) error) error {
+
+	currentRow, err := tx.LockCurrentExecutions(&sqldb.CurrentExecutionsFilter{
+		ShardID:    int64(shardID),
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	})
 	if err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ContinueAsNew failed. Failed to check current run ID. Error: %v", err),
+			Message: fmt.Sprintf("Unable to load current record. Error: %v", err),
 		}
 	}
-	if !bytes.Equal(runID, previousRunID) {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("ContinueAsNew failed. Current run ID was %v, expected %v", runID, previousRunID),
-		}
-	}
-	return updateCurrentExecution(tx, shardID, domainID, workflowID, newRunID, createRequestID, state, closeStatus, startVersion, lastWriteVersion)
+	return assertFn(currentRow)
 }
 
 func updateCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID,

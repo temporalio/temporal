@@ -22,6 +22,7 @@ package history
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
@@ -151,7 +152,8 @@ func (r *conflictResolverV2Impl) resetMutableState(msBuilder *mutableStateBuilde
 	execution *persistence.WorkflowExecutionInfo,
 	lastEvent *shared.HistoryEvent,
 	replayEventID int64,
-	prevRunID string) (mutableState, error) {
+	prevRunID string,
+) (mutableState, error) {
 	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)
 	// TODO: Get this branch token from state builder or historyv2 manager ForkHistoryBranch
 	msBuilder.executionInfo.BranchToken = []byte{}
@@ -161,5 +163,5 @@ func (r *conflictResolverV2Impl) resetMutableState(msBuilder *mutableStateBuilde
 	// the last updated time is not important here, since this should be updated with event time afterwards
 	msBuilder.executionInfo.LastUpdatedTimestamp = execution.StartTimestamp
 	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(msBuilder.GetNextEventID()))
-	return r.context.resetMutableState(prevRunID, msBuilder)
+	return r.context.resetMutableState(prevRunID, 0, 0, nil, nil, nil, msBuilder)
 }

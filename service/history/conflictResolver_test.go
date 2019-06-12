@@ -194,6 +194,8 @@ func (s *conflictResolverSuite) TestGetHistory() {
 
 func (s *conflictResolverSuite) TestReset() {
 	prevRunID := uuid.New()
+	prevLastWriteVersion := int64(123)
+	prevState := persistence.WorkflowStateRunning
 	sourceCluster := "some random source cluster"
 	startTime := time.Now()
 	domainID := s.mockContext.domainID
@@ -266,8 +268,10 @@ func (s *conflictResolverSuite) TestReset() {
 	// the mutable state only has the minimal information
 	// so we can test the conflict resolver
 	s.mockExecutionMgr.On("ResetMutableState", &persistence.ResetMutableStateRequest{
-		PrevRunID:     prevRunID,
-		ExecutionInfo: executionInfo,
+		PrevRunID:            prevRunID,
+		PrevLastWriteVersion: prevLastWriteVersion,
+		PrevState:            prevState,
+		ExecutionInfo:        executionInfo,
 		ReplicationState: &persistence.ReplicationState{
 			CurrentVersion:   event1.GetVersion(),
 			StartVersion:     event1.GetVersion(),
@@ -288,6 +292,9 @@ func (s *conflictResolverSuite) TestReset() {
 		InsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
 		InsertSignalInfos:         []*persistence.SignalInfo{},
 		InsertSignalRequestedIDs:  []string{},
+		InsertReplicationTasks:    nil,
+		InsertTransferTasks:       nil,
+		InsertTimerTasks:          nil,
 		Encoding:                  common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
 	}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
@@ -298,6 +305,6 @@ func (s *conflictResolverSuite) TestReset() {
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, nil), nil)
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
-	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, executionInfo)
+	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo)
 	s.Nil(err)
 }

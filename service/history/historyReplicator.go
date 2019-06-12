@@ -800,15 +800,22 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	)
 }
 
-func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(ctx ctx.Context,
-	msBuilder mutableState, incomingVersion int64, incomingTimestamp int64, logger log.Logger) (currentRunID string, retError error) {
+func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
+	ctx ctx.Context,
+	msBuilder mutableState,
+	incomingVersion int64,
+	incomingTimestamp int64,
+	logger log.Logger,
+) (string, int64, int, error) {
+
 	// this function aims to solve the edge case when this workflow, when going through
 	// reset, has already started a next generation (continue as new-ed workflow)
 
 	if msBuilder.IsWorkflowExecutionRunning() {
 		// workflow still running, no continued as new edge case to solve
 		logger.Info("Conflict resolution self workflow running, skip.")
-		return msBuilder.GetExecutionInfo().RunID, nil
+		executionInfo := msBuilder.GetExecutionInfo()
+		return executionInfo.RunID, msBuilder.GetLastWriteVersion(), executionInfo.State, nil
 	}
 
 	// terminate the current running workflow
@@ -821,9 +828,10 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 	})
 	if err != nil {
 		logError(logger, "Conflict resolution error getting current workflow.", err)
-		return "", err
+		return "", 0, 0, err
 	}
-	currentRunID = resp.RunID
+	currentRunID := resp.RunID
+	currentState := resp.State
 	currentCloseStatus := resp.CloseStatus
 	currentLastWriteVetsion := resp.LastWriteVersion
 
@@ -834,14 +842,14 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 	// remote run 1's version trigger a conflict resolution trying to force terminate run 2R
 	// conflict resolution should only force terminate workflow if that workflow has lower last write version
 	if incomingVersion <= currentLastWriteVetsion {
-		return "", nil
+		return "", 0, 0, nil
 	}
 
 	if currentCloseStatus != persistence.WorkflowCloseStatusNone {
 		// current workflow finished
 		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")
-		return currentRunID, nil
+		return currentRunID, currentLastWriteVetsion, currentState, nil
 	}
 
 	// need to terminate the current workflow
@@ -849,8 +857,9 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
 	if err != nil {
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
+		return "", 0, 0, err
 	}
-	return currentRunID, err
+	return currentRunID, incomingVersion, persistence.WorkflowStateCompleted, nil
 }
 
 // func (r *historyReplicator) getCurrentWorkflowInfo(domainID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
@@ -957,7 +966,13 @@ func (r *historyReplicator) resetMutableState(ctx ctx.Context, context workflowE
 
 	// handling edge case when resetting a workflow, and this workflow has done continue as new
 	// we need to terminate the continue as new-ed workflow
-	currentRunID, err := r.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx, msBuilder, incomingVersion, incomingTimestamp, logger)
+	currentRunID, currentLastWriteVersion, currentState, err := r.conflictResolutionTerminateCurrentRunningIfNotSelf(
+		ctx,
+		msBuilder,
+		incomingVersion,
+		incomingTimestamp,
+		logger,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -970,7 +985,14 @@ func (r *historyReplicator) resetMutableState(ctx ctx.Context, context workflowE
 	}
 
 	resolver := r.getNewConflictResolver(context, logger)
-	msBuilder, err = resolver.reset(currentRunID, uuid.New(), lastEventID, msBuilder.GetExecutionInfo())
+	msBuilder, err = resolver.reset(
+		currentRunID,
+		currentLastWriteVersion,
+		currentState,
+		uuid.New(),
+		lastEventID,
+		msBuilder.GetExecutionInfo(),
+	)
 	logger.Info("Completed Resetting of workflow execution.")
 	if err != nil {
 		return nil, err

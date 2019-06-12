@@ -194,7 +194,7 @@ type (
 		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *workflow.HistoryEvent) error
-		ResetSnapshot(string) *persistence.ResetMutableStateRequest
+		ResetSnapshot(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task) *persistence.ResetMutableStateRequest
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
 		SetNewRunSize(size int)

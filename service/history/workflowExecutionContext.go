@@ -59,9 +59,17 @@ type (
 		getExecution() *workflow.WorkflowExecution
 		getLogger() log.Logger
 		loadWorkflowExecution() (mutableState, error)
-		lock(context.Context) error
+		lock(ctx context.Context) error
 		replicateWorkflowExecution(request *h.ReplicateEventsRequest, transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID int64, now time.Time) error
-		resetMutableState(prevRunID string, resetBuilder mutableState) (mutableState, error)
+		resetMutableState(
+			prevRunID string,
+			prevLastWriteVersion int64,
+			prevState int,
+			replicationTasks []persistence.Task,
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			resetBuilder mutableState,
+		) (mutableState, error)
 		resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task, newMutableState mutableState, transferTasks, timerTasks, currReplicationTasks, insertReplicationTasks []persistence.Task, baseRunID string, forkRunNextEventID, prevRunVersion int64) (retError error)
 		scheduleNewDecision(transferTasks []persistence.Task, timerTasks []persistence.Task) ([]persistence.Task, []persistence.Task, error)
 		unlock()
@@ -92,7 +100,6 @@ var _ workflowExecutionContext = (*workflowExecutionContextImpl)(nil)
 
 var (
 	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
-	kafkaOperationRetryPolicy       = common.CreateKafkaOperationRetryPolicy()
 )
 
 func newWorkflowExecutionContext(
@@ -262,10 +269,25 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 	return err
 }
 
-func (c *workflowExecutionContextImpl) resetMutableState(prevRunID string, resetBuilder mutableState) (mutableState,
+func (c *workflowExecutionContextImpl) resetMutableState(
+	prevRunID string,
+	prevLastWriteVersion int64,
+	prevState int,
+	replicationTasks []persistence.Task,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	resetBuilder mutableState,
+) (mutableState,
 	error) {
 	// this only resets one mutableState for a workflow
-	snapshotRequest := resetBuilder.ResetSnapshot(prevRunID)
+	snapshotRequest := resetBuilder.ResetSnapshot(
+		prevRunID,
+		prevLastWriteVersion,
+		prevState,
+		replicationTasks,
+		transferTasks,
+		timerTasks,
+	)
 	snapshotRequest.Condition = c.updateCondition
 
 	err := c.shard.ResetMutableState(snapshotRequest)
@@ -353,7 +375,8 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	}
 	newMutableState.IncrementHistorySize(size)
 
-	snapshotRequest := newMutableState.ResetSnapshot("")
+	// ResetSnapshot function used here really does rely on inputs below
+	snapshotRequest := newMutableState.ResetSnapshot("", 0, 0, nil, nil, nil)
 	if len(snapshotRequest.InsertChildExecutionInfos) > 0 ||
 		len(snapshotRequest.InsertSignalInfos) > 0 ||
 		len(snapshotRequest.InsertSignalRequestedIDs) > 0 {

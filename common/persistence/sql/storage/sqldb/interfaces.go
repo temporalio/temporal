@@ -562,7 +562,7 @@ type (
 		// Callers can check the output of Result.RowsAffected() to see if a row was deleted or not
 		// Required params - {shardID, domainID, workflowID, runID}
 		DeleteFromCurrentExecutions(filter *CurrentExecutionsFilter) (sql.Result, error)
-		LockCurrentExecutions(filter *CurrentExecutionsFilter) (UUID, error)
+		LockCurrentExecutions(filter *CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
 
 		InsertIntoTransferTasks(rows []TransferTasksRow) (sql.Result, error)
 		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
