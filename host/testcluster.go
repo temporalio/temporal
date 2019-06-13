@@ -34,11 +34,10 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
-	metricsmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	pes "github.com/uber/cadence/common/persistence/elasticsearch"
-	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/zap"
@@ -94,15 +93,14 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
 			logger,
-			&metricsmocks.Client{},
 			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalDomain),
 			options.ClusterMetadata.FailoverVersionIncrement,
 			options.ClusterMetadata.MasterClusterName,
 			options.ClusterMetadata.CurrentClusterName,
 			options.ClusterMetadata.ClusterInformation,
-			dynamicconfig.GetStringPropertyFn("disabled"),
+			"disabled",
 			"",
-			dynamicconfig.GetBoolPropertyFn(false),
+			false,
 		)
 	}
 
