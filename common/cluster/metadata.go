@@ -24,8 +24,6 @@ import (
 	"fmt"
 
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -56,8 +54,7 @@ type (
 	}
 
 	metadataImpl struct {
-		logger        log.Logger
-		metricsClient metrics.Client
+		logger log.Logger
 		// EnableGlobalDomain whether the global domain is enabled,
 		// this attr should be discarded when cross DC is made public
 		enableGlobalDomain dynamicconfig.BoolPropertyFn
@@ -75,27 +72,22 @@ type (
 		// clusterToAddress contains the cluster name to corresponding frontend client
 		clusterToAddress map[string]config.Address
 
-		// archivalStatus is cluster's archival status
-		archivalStatus dynamicconfig.StringPropertyFn
-		// defaultBucket is the default archival bucket name used for this cluster
-		defaultBucket string
-		// enableReadFromArchival whether reading history from archival is enabled
-		enableReadFromArchival dynamicconfig.BoolPropertyFn
+		// archivalConfig is cluster's archival config
+		archivalConfig *ArchivalConfig
 	}
 )
 
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
 	logger log.Logger,
-	metricsClient metrics.Client,
 	enableGlobalDomain dynamicconfig.BoolPropertyFn,
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
 	clusterInfo map[string]config.ClusterInformation,
-	archivalStatus dynamicconfig.StringPropertyFn,
+	archivalStatus string,
 	defaultBucket string,
-	enableReadFromArchival dynamicconfig.BoolPropertyFn,
+	enableReadFromArchival bool,
 ) Metadata {
 
 	if len(clusterInfo) == 0 {
@@ -137,27 +129,19 @@ func NewMetadata(
 		panic("Cluster info initial versions have duplicates")
 	}
 
-	status, err := getArchivalStatus(archivalStatus())
+	status, err := getArchivalStatus(archivalStatus)
 	if err != nil {
 		panic(err)
 	}
-	archivalConfig := NewArchivalConfig(status, defaultBucket, enableReadFromArchival())
-	if !archivalConfig.isValid() {
-		panic("Archival config is not valid")
-	}
-
 	return &metadataImpl{
 		logger:                   logger,
-		metricsClient:            metricsClient,
 		enableGlobalDomain:       enableGlobalDomain,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
 		currentClusterName:       currentClusterName,
 		clusterInfo:              clusterInfo,
 		versionToClusterName:     versionToClusterName,
-		archivalStatus:           archivalStatus,
-		defaultBucket:            defaultBucket,
-		enableReadFromArchival:   enableReadFromArchival,
+		archivalConfig:           NewArchivalConfig(status, defaultBucket, enableReadFromArchival),
 	}
 }
 
@@ -224,15 +208,6 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 }
 
 // ArchivalConfig returns the archival config of the cluster.
-// This method always return a well formed ArchivalConfig (this means ArchivalConfig().IsValid always returns true).
-func (metadata *metadataImpl) ArchivalConfig() (retCfg *ArchivalConfig) {
-	inputStatus := metadata.archivalStatus()
-	status, err := getArchivalStatus(inputStatus)
-	if err != nil {
-		metadata.logger.Error("error getting archival config, invalid archival status in dynamic config",
-			tag.ArchivalClusterArchivalStatus(inputStatus),
-			tag.Error(err))
-		metadata.metricsClient.IncCounter(metrics.ClusterMetadataArchivalConfigScope, metrics.ArchivalConfigFailures)
-	}
-	return NewArchivalConfig(status, metadata.defaultBucket, metadata.enableReadFromArchival())
+func (metadata *metadataImpl) ArchivalConfig() *ArchivalConfig {
+	return metadata.archivalConfig
 }

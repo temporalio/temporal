@@ -23,7 +23,6 @@ package cluster
 import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -93,28 +92,26 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 	if enableGlobalDomain {
 		return NewMetadata(
 			loggerimpl.NewNopLogger(),
-			&mocks.Client{},
 			dynamicconfig.GetBoolPropertyFn(true),
 			TestFailoverVersionIncrement,
 			masterClusterName,
 			TestCurrentClusterName,
 			TestAllClusterInfo,
-			dynamicconfig.GetStringPropertyFn(archivalStatus),
+			archivalStatus,
 			clusterDefaultBucket,
-			dynamicconfig.GetBoolPropertyFn(enableArchival),
+			enableArchival,
 		)
 	}
 
 	return NewMetadata(
 		loggerimpl.NewNopLogger(),
-		&mocks.Client{},
 		dynamicconfig.GetBoolPropertyFn(false),
 		TestFailoverVersionIncrement,
 		TestCurrentClusterName,
 		TestCurrentClusterName,
 		TestSingleDCClusterInfo,
-		dynamicconfig.GetStringPropertyFn(archivalStatus),
+		archivalStatus,
 		clusterDefaultBucket,
-		dynamicconfig.GetBoolPropertyFn(enableArchival),
+		enableArchival,
 	)
 }
