@@ -546,7 +546,9 @@ func checkAndClearTimerFiredEvent(
 	if timerFiredIdx == -1 {
 		return events, nil
 	}
-	return append(events[:timerFiredIdx], events[timerFiredIdx+1:]...), events[timerFiredIdx]
+
+	timerEvent := events[timerFiredIdx]
+	return append(events[:timerFiredIdx], events[timerFiredIdx+1:]...), timerEvent
 }
 
 func convertUpdateActivityInfos(inputs map[*persistence.ActivityInfo]struct{}) []*persistence.ActivityInfo {
