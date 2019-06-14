@@ -686,9 +686,19 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 		rangeQuery = elastic.NewRangeQuery(es.CloseTime)
 	}
 	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
+	// Also has to use string instead of int64 to avoid data conversion issue,
+	// 9223372036854775807 to 9223372036854776000 (long overflow)
+	if request.LatestStartTime > math.MaxInt64-oneMilliSecondInNano { // prevent latestTime overflow
+		request.LatestStartTime = math.MaxInt64 - oneMilliSecondInNano
+	}
+	if request.EarliestStartTime < math.MinInt64+oneMilliSecondInNano { // prevent earliestTime overflow
+		request.EarliestStartTime = math.MinInt64 + oneMilliSecondInNano
+	}
+	earliestTimeStr := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
+	latestTimeStr := strconv.FormatInt(request.LatestStartTime+oneMilliSecondInNano, 10)
 	rangeQuery = rangeQuery.
-		Gte(request.EarliestStartTime - oneMilliSecondInNano).
-		Lte(request.LatestStartTime + oneMilliSecondInNano)
+		Gte(earliestTimeStr).
+		Lte(latestTimeStr)
 
 	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery)
 	if matchQuery != nil {

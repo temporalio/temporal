@@ -25,6 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -430,8 +432,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
-	earliestTime := request.EarliestStartTime - oneMilliSecondInNano
-	latestTime := request.LatestStartTime + oneMilliSecondInNano
+	earliestTime := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
+	latestTime := strconv.FormatInt(request.LatestStartTime+oneMilliSecondInNano, 10)
 
 	// test for open
 	isOpen := true
@@ -446,6 +448,21 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
 	s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+
+	// test request latestTime overflow
+	request.LatestStartTime = math.MaxInt64
+	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(strconv.FormatInt(request.LatestStartTime, 10))
+	boolQuery1 := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery1).MustNot(existClosedStatusQuery)
+	param1 := &es.SearchParameters{
+		Index:    testIndex,
+		Query:    boolQuery1,
+		From:     from,
+		PageSize: testPageSize,
+		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
+	}
+	s.mockESClient.On("Search", mock.Anything, param1).Return(nil, nil).Once()
+	s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	request.LatestStartTime = testLatestTime // revert
 
 	// test for closed
 	isOpen = false
