@@ -27,7 +27,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
@@ -58,7 +57,7 @@ func (s *pumpSuite) SetupSuite() {
 
 func (s *pumpSuite) SetupTest() {
 	pumpTestMetrics = &mmocks.Client{}
-	pumpTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{})).Once()
+	pumpTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NopStopwatch()).Once()
 	pumpTestLogger = &log.MockLogger{}
 }
 

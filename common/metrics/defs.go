@@ -1330,7 +1330,9 @@ const (
 	ESProcessorRetries
 	ESProcessorFailures
 	ESProcessorCorruptedData
+	ESProcessorProcessMsgLatency
 	IndexProcessorCorruptedData
+	IndexProcessorProcessMsgLatency
 	ArchiverNonRetryableErrorCount
 	ArchiverSkipUploadCount
 	ArchiverHistoryMutatedCount
@@ -1576,7 +1578,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ESProcessorRetries:                                     {metricName: "es_processor_retries"},
 		ESProcessorFailures:                                    {metricName: "es_processor_errors"},
 		ESProcessorCorruptedData:                               {metricName: "es_processor_corrupted_data"},
+		ESProcessorProcessMsgLatency:                           {metricName: "es_processor_process_msg_latency", metricType: Timer},
 		IndexProcessorCorruptedData:                            {metricName: "index_processor_corrupted_data"},
+		IndexProcessorProcessMsgLatency:                        {metricName: "index_processor_process_msg_latency", metricType: Timer},
 		ArchiverNonRetryableErrorCount:                         {metricName: "archiver_non_retryable_error"},
 		ArchiverSkipUploadCount:                                {metricName: "archiver_skip_upload"},
 		ArchiverHistoryMutatedCount:                            {metricName: "archiver_history_mutated"},
