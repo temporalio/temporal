@@ -75,11 +75,12 @@ const (
 const (
 	UnknownDirectoryTagValue = "Unknown"
 
-	HistoryRoleTagValue   = "history"
-	MatchingRoleTagValue  = "matching"
-	FrontendRoleTagValue  = "frontend"
-	AdminRoleTagValue     = "admin"
-	BlobstoreRoleTagValue = "blobstore"
+	HistoryRoleTagValue       = "history"
+	MatchingRoleTagValue      = "matching"
+	FrontendRoleTagValue      = "frontend"
+	AdminRoleTagValue         = "admin"
+	DCRedirectionRoleTagValue = "dc_redirection"
+	BlobstoreRoleTagValue     = "blobstore"
 
 	SizeStatsTypeTagValue  = "size"
 	CountStatsTypeTagValue = "count"
@@ -358,6 +359,76 @@ const (
 	AdminClientDescribeWorkflowExecutionScope
 	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryScope
+	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
+	DCRedirectionDeprecateDomainScope
+	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeDomainScope
+	// DCRedirectionDescribeTaskListScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeTaskListScope
+	// DCRedirectionDescribeWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeWorkflowExecutionScope
+	// DCRedirectionGetWorkflowExecutionHistoryScope tracks RPC calls for dc redirection
+	DCRedirectionGetWorkflowExecutionHistoryScope
+	// DCRedirectionListClosedWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionListClosedWorkflowExecutionsScope
+	// DCRedirectionListDomainsScope tracks RPC calls for dc redirection
+	DCRedirectionListDomainsScope
+	// DCRedirectionListOpenWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionListOpenWorkflowExecutionsScope
+	// DCRedirectionListWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionListWorkflowExecutionsScope
+	// DCRedirectionScanWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionScanWorkflowExecutionsScope
+	// DCRedirectionCountWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionCountWorkflowExecutionsScope
+	// DCRedirectionGetSearchAttributesScope tracks RPC calls for dc redirection
+	DCRedirectionGetSearchAttributesScope
+	// DCRedirectionPollForActivityTaskScope tracks RPC calls for dc redirection
+	DCRedirectionPollForActivityTaskScope
+	// DCRedirectionPollForDecisionTaskScope tracks RPC calls for dc redirection
+	DCRedirectionPollForDecisionTaskScope
+	// DCRedirectionQueryWorkflowScope tracks RPC calls for dc redirection
+	DCRedirectionQueryWorkflowScope
+	// DCRedirectionRecordActivityTaskHeartbeatScope tracks RPC calls for dc redirection
+	DCRedirectionRecordActivityTaskHeartbeatScope
+	// DCRedirectionRecordActivityTaskHeartbeatByIDScope tracks RPC calls for dc redirection
+	DCRedirectionRecordActivityTaskHeartbeatByIDScope
+	// DCRedirectionRegisterDomainScope tracks RPC calls for dc redirection
+	DCRedirectionRegisterDomainScope
+	// DCRedirectionRequestCancelWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionRequestCancelWorkflowExecutionScope
+	// DCRedirectionResetStickyTaskListScope tracks RPC calls for dc redirection
+	DCRedirectionResetStickyTaskListScope
+	// DCRedirectionResetWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionResetWorkflowExecutionScope
+	// DCRedirectionRespondActivityTaskCanceledScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCanceledScope
+	// DCRedirectionRespondActivityTaskCanceledByIDScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCanceledByIDScope
+	// DCRedirectionRespondActivityTaskCompletedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCompletedScope
+	// DCRedirectionRespondActivityTaskCompletedByIDScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCompletedByIDScope
+	// DCRedirectionRespondActivityTaskFailedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskFailedScope
+	// DCRedirectionRespondActivityTaskFailedByIDScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskFailedByIDScope
+	// DCRedirectionRespondDecisionTaskCompletedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondDecisionTaskCompletedScope
+	// DCRedirectionRespondDecisionTaskFailedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondDecisionTaskFailedScope
+	// DCRedirectionRespondQueryTaskCompletedScope tracks RPC calls for dc redirection
+	DCRedirectionRespondQueryTaskCompletedScope
+	// DCRedirectionSignalWithStartWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionSignalWithStartWorkflowExecutionScope
+	// DCRedirectionSignalWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionSignalWorkflowExecutionScope
+	// DCRedirectionStartWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionStartWorkflowExecutionScope
+	// DCRedirectionTerminateWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionTerminateWorkflowExecutionScope
+	// DCRedirectionUpdateDomainScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateDomainScope
 
 	// MessagingPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -922,6 +993,41 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		DCRedirectionDeprecateDomainScope:                   {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeDomainScope:                    {operation: "DCRedirectionDescribeDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeTaskListScope:                  {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeWorkflowExecutionScope:         {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetWorkflowExecutionHistoryScope:       {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListClosedWorkflowExecutionsScope:      {operation: "DCRedirectionListClosedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListDomainsScope:                       {operation: "DCRedirectionListDomains", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListOpenWorkflowExecutionsScope:        {operation: "DCRedirectionListOpenWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListWorkflowExecutionsScope:            {operation: "DCRedirectionListWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionScanWorkflowExecutionsScope:            {operation: "DCRedirectionScanWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionCountWorkflowExecutionsScope:           {operation: "DCRedirectionCountWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetSearchAttributesScope:               {operation: "DCRedirectionGetSearchAttributes", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollForActivityTaskScope:               {operation: "DCRedirectionPollForActivityTask", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollForDecisionTaskScope:               {operation: "DCRedirectionPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionQueryWorkflowScope:                     {operation: "DCRedirectionQueryWorkflow", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRecordActivityTaskHeartbeatScope:       {operation: "DCRedirectionRecordActivityTaskHeartbeat", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRecordActivityTaskHeartbeatByIDScope:   {operation: "DCRedirectionRecordActivityTaskHeartbeatByID", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRegisterDomainScope:                    {operation: "DCRedirectionRegisterDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRequestCancelWorkflowExecutionScope:    {operation: "DCRedirectionRequestCancelWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionResetStickyTaskListScope:               {operation: "DCRedirectionResetStickyTaskList", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionResetWorkflowExecutionScope:            {operation: "DCRedirectionResetWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCanceledScope:       {operation: "DCRedirectionRespondActivityTaskCanceled", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCanceledByIDScope:   {operation: "DCRedirectionRespondActivityTaskCanceledByID", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCompletedScope:      {operation: "DCRedirectionRespondActivityTaskCompleted", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCompletedByIDScope:  {operation: "DCRedirectionRespondActivityTaskCompletedByID", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskFailedScope:         {operation: "DCRedirectionRespondActivityTaskFailed", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskFailedByIDScope:     {operation: "DCRedirectionRespondActivityTaskFailedByID", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondDecisionTaskCompletedScope:      {operation: "DCRedirectionRespondDecisionTaskCompleted", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondDecisionTaskFailedScope:         {operation: "DCRedirectionRespondDecisionTaskFailed", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondQueryTaskCompletedScope:         {operation: "DCRedirectionRespondQueryTaskCompleted", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionSignalWithStartWorkflowExecutionScope:  {operation: "DCRedirectionSignalWithStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionSignalWorkflowExecutionScope:           {operation: "DCRedirectionSignalWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionStartWorkflowExecutionScope:            {operation: "DCRedirectionStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionTerminateWorkflowExecutionScope:        {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateDomainScope:                      {operation: "DCRedirectionUpdateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},

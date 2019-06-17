@@ -27,11 +27,12 @@ const (
 	buildVersionTag = "build_version"
 	goVersionTag    = "go_version"
 
-	instance = "instance"
-	domain   = "domain"
+	instance      = "instance"
+	domain        = "domain"
+	targetCluster = "target_cluster"
 
-	domainAllValue     = "all"
-	domainUnknownValue = "_unknown_"
+	domainAllValue = "all"
+	unknownValue   = "_unknown_"
 )
 
 // Tag is an interface to define metrics tags
@@ -40,16 +41,28 @@ type Tag interface {
 	Value() string
 }
 
-type domainTag struct {
-	value string
-}
+type (
+	domainTag struct {
+		value string
+	}
+
+	domainUnknownTag struct{}
+
+	instanceTag struct {
+		value string
+	}
+
+	targetClusterTag struct {
+		value string
+	}
+)
 
 // DomainTag returns a new domain tag. For timers, this also ensures that we
 // dual emit the metric with the all tag. If a blank domain is provided then
 // this converts that to an unknown domain.
 func DomainTag(value string) Tag {
 	if len(value) == 0 {
-		value = domainUnknownValue
+		value = unknownValue
 	}
 	return domainTag{value}
 }
@@ -64,8 +77,6 @@ func (d domainTag) Value() string {
 	return d.value
 }
 
-type domainUnknownTag struct{}
-
 // DomainUnknownTag returns a new domain:unknown tag-value
 func DomainUnknownTag() Tag {
 	return domainUnknownTag{}
@@ -78,11 +89,7 @@ func (d domainUnknownTag) Key() string {
 
 // Value returns the value of the domain unknown tag
 func (d domainUnknownTag) Value() string {
-	return domainUnknownValue
-}
-
-type instanceTag struct {
-	value string
+	return unknownValue
 }
 
 // InstanceTag returns a new instance tag
@@ -98,4 +105,22 @@ func (i instanceTag) Key() string {
 // Value returns the value of a instance tag
 func (i instanceTag) Value() string {
 	return i.value
+}
+
+// TargetClusterTag returns a new target cluster tag.
+func TargetClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return targetClusterTag{value}
+}
+
+// Key returns the key of the target cluster tag
+func (d targetClusterTag) Key() string {
+	return targetCluster
+}
+
+// Value returns the value of a target cluster tag
+func (d targetClusterTag) Value() string {
+	return d.value
 }

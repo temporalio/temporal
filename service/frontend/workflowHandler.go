@@ -158,6 +158,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		historyV2Mgr:    historyV2Mgr,
 		visibilityMgr:   visibilityMgr,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		metricsClient:   sVice.GetMetricsClient(),
 		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
 		rateLimiter:     tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
 		blobstoreClient: blobstoreClient,
@@ -193,7 +194,6 @@ func (wh *WorkflowHandler) Start() error {
 	wh.matchingRawClient = wh.GetClientBean().GetMatchingClient()
 	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
-	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
 	return nil
 }
