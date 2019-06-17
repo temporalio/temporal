@@ -21,10 +21,13 @@
 package history
 
 import (
+	"fmt"
+
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -32,6 +35,7 @@ import (
 
 type (
 	decisionAttrValidator struct {
+		domainCache      cache.DomainCache
 		maxIDLengthLimit int
 	}
 
@@ -45,8 +49,14 @@ type (
 	}
 )
 
-func newDecisionAttrValidator(maxIDLengthLimit int) *decisionAttrValidator {
-	return &decisionAttrValidator{maxIDLengthLimit: maxIDLengthLimit}
+func newDecisionAttrValidator(
+	domainCache cache.DomainCache,
+	maxIDLengthLimit int,
+) *decisionAttrValidator {
+	return &decisionAttrValidator{
+		domainCache:      domainCache,
+		maxIDLengthLimit: maxIDLengthLimit,
+	}
 }
 
 func newDecisionBlobSizeChecker(
@@ -100,9 +110,18 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 }
 
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(
+	domainID string,
+	targetDomainID string,
 	attributes *workflow.ScheduleActivityTaskDecisionAttributes,
 	wfTimeout int32,
 ) error {
+
+	if err := v.validateCrossDomainCall(
+		domainID,
+		targetDomainID,
+	); err != nil {
+		return err
+	}
 
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "ScheduleActivityTaskDecisionAttributes is not set on decision."}
@@ -295,8 +314,17 @@ func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
+	domainID string,
+	targetDomainID string,
 	attributes *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes,
 ) error {
+
+	if err := v.validateCrossDomainCall(
+		domainID,
+		targetDomainID,
+	); err != nil {
+		return err
+	}
 
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "RequestCancelExternalWorkflowExecutionDecisionAttributes is not set on decision."}
@@ -319,8 +347,17 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 }
 
 func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
+	domainID string,
+	targetDomainID string,
 	attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes,
 ) error {
+
+	if err := v.validateCrossDomainCall(
+		domainID,
+		targetDomainID,
+	); err != nil {
+		return err
+	}
 
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision."}
@@ -353,8 +390,8 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 }
 
 func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
-	executionInfo *persistence.WorkflowExecutionInfo,
 	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	executionInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
 	if attributes == nil {
@@ -391,9 +428,18 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 }
 
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
-	parentInfo *persistence.WorkflowExecutionInfo,
+	domainID string,
+	targetDomainID string,
 	attributes *workflow.StartChildWorkflowExecutionDecisionAttributes,
+	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
+
+	if err := v.validateCrossDomainCall(
+		domainID,
+		targetDomainID,
+	); err != nil {
+		return err
+	}
 
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "StartChildWorkflowExecutionDecisionAttributes is not set on decision."}
@@ -451,4 +497,54 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	return nil
+}
+
+func (v *decisionAttrValidator) validateCrossDomainCall(
+	domainID string,
+	targetDomainID string,
+) error {
+
+	// same name, no check needed
+	if domainID == targetDomainID {
+		return nil
+	}
+
+	domainEntry, err := v.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return err
+	}
+
+	targetDomainEntry, err := v.domainCache.GetDomainByID(targetDomainID)
+	if err != nil {
+		return err
+	}
+
+	// both local domain
+	if !domainEntry.IsGlobalDomain() && !targetDomainEntry.IsGlobalDomain() {
+		return nil
+	}
+
+	domainClusters := domainEntry.GetReplicationConfig().Clusters
+	targetDomainClusters := targetDomainEntry.GetReplicationConfig().Clusters
+
+	// one is local domain, another one is global domain or both global domain
+	// treat global domain with one replication cluster as local domain
+	if len(domainClusters) == 1 && len(targetDomainClusters) == 1 {
+		if *domainClusters[0] == *targetDomainClusters[0] {
+			return nil
+		}
+		return v.createCrossDomainCallError(domainEntry, targetDomainEntry)
+	}
+	return v.createCrossDomainCallError(domainEntry, targetDomainEntry)
+}
+
+func (v *decisionAttrValidator) createCrossDomainCallError(
+	domainEntry *cache.DomainCacheEntry,
+	targetDomainEntry *cache.DomainCacheEntry,
+) error {
+	return &workflow.BadRequestError{Message: fmt.Sprintf(
+		"cannot make cross domain call between %v and %v",
+		domainEntry.GetInfo().Name,
+		targetDomainEntry.GetInfo().Name,
+	)}
 }

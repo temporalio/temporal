@@ -375,7 +375,10 @@ Update_History_Loop:
 			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
 		} else {
 
-			decisionAttrValidator := newDecisionAttrValidator(handler.config.MaxIDLengthLimit())
+			decisionAttrValidator := newDecisionAttrValidator(
+				handler.domainCache,
+				handler.config.MaxIDLengthLimit(),
+			)
 			decisionBlobSizeChecker := newDecisionBlobSizeChecker(
 				handler.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name),
 				handler.config.BlobSizeLimitError(domainEntry.GetInfo().Name),
