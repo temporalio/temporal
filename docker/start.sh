@@ -23,6 +23,8 @@
 CADENCE_HOME=$1
 DB="${DB:-cassandra}"
 CFG_TEMPLATE=docker_template_$DB.yaml
+ENABLE_ES="${ENABLE_ES:-false}"
+ES_PORT="${ES_PORT:-9200}"
 SERVICES="${SERVICES:-history,matching,frontend,worker}"
 RF=${RF:-1}
 export LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -61,11 +63,22 @@ setup_mysql_schema() {
     $CADENCE_HOME/cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
+setup_es_template() {
+    SCHEMA_FILE=$CADENCE_HOME/schema/elasticsearch/visibility/index_template.json
+    server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
+    URL="http://$server:$ES_PORT/_template/cadence-visibility-template"
+    curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
+}
+
 setup_schema() {
     if [ "$DB" == "mysql" ]; then
         setup_mysql_schema
     else
         setup_cassandra_schema
+    fi
+
+    if [ "$ENABLE_ES" == "true" ]; then
+        setup_es_template
     fi
 }
 
@@ -89,14 +102,29 @@ wait_for_mysql() {
     echo 'mysql started'
 }
 
+wait_for_es() {
+    server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
+    URL="http://$server:$ES_PORT"
+    curl -s $URL 2>&1 > /dev/null
+    until [ $? -eq 0 ]; do
+        echo 'waiting for elasticsearch to start up'
+        sleep 1
+        curl -s $URL 2>&1 > /dev/null
+    done
+    echo 'elasticsearch started'
+}
+
 wait_for_db() {
     if [ "$DB" == "mysql" ]; then
         wait_for_mysql
     else
         wait_for_cassandra
     fi
-}
 
+    if [ "$ENABLE_ES" == "true" ]; then
+        wait_for_es
+    fi
+}
 
 json_array() {
   echo -n '['

@@ -101,6 +101,31 @@ archival:
         owner: "custom-owner-2"
         retentionDays: 5
 
+kafka:
+  tls:
+    enabled: false
+  clusters:
+    test:
+      brokers:
+        - ${KAFKA_SEEDS}:9092
+  topics:
+    cadence-visibility-dev:
+      cluster: test
+    cadence-visibility-dev-dlq:
+      cluster: test
+  applications:
+    visibility:
+      topic: cadence-visibility-dev
+      dlq-topic: cadence-visibility-dev-dlq
+
+elasticsearch:
+  enable: false
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: cadence-visibility-dev
+
 publicClient:
   hostPort: ${BIND_ON_IP}:7933
 
