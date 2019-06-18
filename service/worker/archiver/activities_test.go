@@ -320,6 +320,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_GetTagsTimeout() {
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobAlreadyExists() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverBlobExistsCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	historyBlobKey, _ := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, common.FirstBlobPageToken)
@@ -354,6 +355,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobAlreadyExists() 
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_MultipleBlobsAlreadyExist() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverBlobExistsCount).Twice()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	firstKey, _ := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, common.FirstBlobPageToken)
@@ -462,6 +464,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CouldNotRunCheck() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverCouldNotRunDeterministicConstructionCheckCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverRunningDeterministicConstructionCheckCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverBlobExistsCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	historyBlobKey, _ := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, common.FirstBlobPageToken)
@@ -505,6 +508,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Fail_CheckFailed() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverDeterministicConstructionCheckFailedCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverRunningDeterministicConstructionCheckCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverBlobExistsCount).Once()
 	domainCache, mockClusterMetadata := s.archivalConfig(true, testArchivalBucket, true)
 	mockBlobstore := &mocks.BlobstoreClient{}
 	historyBlobKey, _ := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, common.FirstBlobPageToken)
@@ -665,6 +669,7 @@ func (s *activitiesSuite) TestUploadHistoryActivity_Success_BlobDoesNotAlreadyEx
 
 func (s *activitiesSuite) TestUploadHistoryActivity_Success_ConcurrentUploads() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverBlobExistsCount).Once()
 	firstKey, _ := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, common.FirstBlobPageToken)
 	secondKey, _ := NewHistoryBlobKey(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, common.FirstBlobPageToken+1)
 	historyIndexBlobKey, _ := NewHistoryIndexBlobKey(testDomainID, testWorkflowID, testRunID)

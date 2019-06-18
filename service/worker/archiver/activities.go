@@ -144,6 +144,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		runConstTest := false
 		blobAlreadyExists := err == nil
 		if blobAlreadyExists {
+			scope.IncCounter(metrics.ArchiverBlobExistsCount)
 			handledLastBlob = IsLast(tags)
 			// this is a sampling based sanity check used to ensure deterministic blob construction
 			// is operating as expected, the correctness of archival depends on this deterministic construction
