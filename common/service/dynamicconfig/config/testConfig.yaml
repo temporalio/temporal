@@ -3,7 +3,7 @@ testGetBoolPropertyKey:
   - value: true
     constraints:
       domainName: "global-samples-domain"
-  - value: false
+  - value: true
     constraints:
       domainName: "samples-domain"
 testGetIntPropertyKey:

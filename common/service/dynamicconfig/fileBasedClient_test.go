@@ -80,6 +80,21 @@ func (s *fileBasedClientSuite) TestGetValueWithFilters() {
 	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
 	s.NoError(err)
 	s.Equal(true, v)
+
+	filters = map[Filter]interface{}{
+		DomainName: "non-exist-domain",
+	}
+	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, true)
+	s.NoError(err)
+	s.Equal(false, v)
+
+	filters = map[Filter]interface{}{
+		DomainName:   "samples-domain",
+		TaskListName: "non-exist-tasklist",
+	}
+	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
+	s.NoError(err)
+	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
@@ -87,10 +102,9 @@ func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
 		DomainName:    "global-samples-domain",
 		unknownFilter: "unknown-filter",
 	}
-	defaultValue := false
-	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, defaultValue)
-	s.Error(err)
-	s.Equal(defaultValue, v)
+	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
+	s.NoError(err)
+	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue() {
@@ -100,13 +114,12 @@ func (s *fileBasedClientSuite) TestGetIntValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
-	defaultValue := 2000
 	filters := map[Filter]interface{}{
 		DomainName: "samples-domain",
 	}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, defaultValue)
-	s.Error(err)
-	s.Equal(defaultValue, v)
+	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 500)
+	s.NoError(err)
+	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
@@ -217,4 +230,80 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 		PollInterval: time.Second,
 	}, nil, nil)
 	s.Error(err)
+}
+
+func (s *fileBasedClientSuite) TestMatch() {
+	testCases := []struct {
+		v       *constrainedValue
+		filters map[Filter]interface{}
+		matched bool
+	}{
+		{
+			v: &constrainedValue{
+				Constraints: map[string]interface{}{},
+			},
+			filters: map[Filter]interface{}{
+				DomainName: "some random domain",
+			},
+			matched: false,
+		},
+		{
+			v: &constrainedValue{
+				Constraints: map[string]interface{}{"some key": "some value"},
+			},
+			filters: map[Filter]interface{}{},
+			matched: false,
+		},
+		{
+			v: &constrainedValue{
+				Constraints: map[string]interface{}{"domainName": "samples-domain"},
+			},
+			filters: map[Filter]interface{}{
+				DomainName: "some random domain",
+			},
+			matched: false,
+		},
+		{
+			v: &constrainedValue{
+				Constraints: map[string]interface{}{
+					"domainName":   "samples-domain",
+					"taskListName": "sample-task-list",
+				},
+			},
+			filters: map[Filter]interface{}{
+				DomainName:   "samples-domain",
+				TaskListName: "sample-task-list",
+			},
+			matched: true,
+		},
+		{
+			v: &constrainedValue{
+				Constraints: map[string]interface{}{
+					"domainName":        "samples-domain",
+					"some-other-filter": "sample-task-list",
+				},
+			},
+			filters: map[Filter]interface{}{
+				DomainName:   "samples-domain",
+				TaskListName: "sample-task-list",
+			},
+			matched: false,
+		},
+		{
+			v: &constrainedValue{
+				Constraints: map[string]interface{}{
+					"domainName": "samples-domain",
+				},
+			},
+			filters: map[Filter]interface{}{
+				TaskListName: "sample-task-list",
+			},
+			matched: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		matched := match(tc.v, tc.filters)
+		s.Equal(tc.matched, matched)
+	}
 }

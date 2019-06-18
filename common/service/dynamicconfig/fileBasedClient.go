@@ -225,18 +225,30 @@ func (fc *fileBasedClient) update() error {
 func (fc *fileBasedClient) getValueWithFilters(key Key, filters map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
 	keyName := keys[key]
 	values := fc.values.Load().(map[string][]*constrainedValue)
+	found := false
 	for _, constrainedValue := range values[keyName] {
+		if len(constrainedValue.Constraints) == 0 {
+			// special handling for default value (value without any constraints)
+			defaultValue = constrainedValue.Value
+			found = true
+			continue
+		}
 		if match(constrainedValue, filters) {
 			return constrainedValue.Value, nil
 		}
 	}
-	return defaultValue, errors.New("unable to find key")
+	if !found {
+		return defaultValue, errors.New("unable to find key")
+	}
+	return defaultValue, nil
 }
 
+// match will return true if the constraints matches the filters exactly
 func match(v *constrainedValue, filters map[Filter]interface{}) bool {
 	if len(v.Constraints) != len(filters) {
 		return false
 	}
+
 	for filter, filterValue := range filters {
 		if v.Constraints[filter.String()] != filterValue {
 			return false
