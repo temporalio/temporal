@@ -1580,7 +1580,11 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(ctx ctx.Context, terminat
 				return nil, ErrWorkflowCompleted
 			}
 
-			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(request); err != nil {
+			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
+				request.GetReason(),
+				request.GetDetails(),
+				request.GetIdentity(),
+			); err != nil {
 				return nil, &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
 			}
 

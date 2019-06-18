@@ -536,11 +536,11 @@ Update_History_Loop:
 					return nil, err
 				}
 
-				_, err := msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
-					Reason:   common.StringPtr(common.FailureReasonTransactionSizeExceedsLimit),
-					Identity: common.StringPtr("cadence-history-server"),
-					Details:  []byte(updateErr.Error()),
-				})
+				_, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
+					common.FailureReasonTransactionSizeExceedsLimit,
+					[]byte(updateErr.Error()),
+					"cadence-history-server",
+				)
 				if err != nil {
 					return nil, err
 				}

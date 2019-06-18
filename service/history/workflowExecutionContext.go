@@ -693,10 +693,13 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 					return err1
 				}
 
-				c.msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
-					Reason:   common.StringPtr(common.TerminateReasonSizeExceedsLimit),
-					Identity: common.StringPtr("cadence-history-server"),
-				})
+				if _, err = c.msBuilder.AddWorkflowExecutionTerminatedEvent(
+					common.TerminateReasonSizeExceedsLimit,
+					nil,
+					"cadence-history-server",
+				); err != nil {
+					return err
+				}
 
 				updates, err = c.msBuilder.CloseUpdateSession()
 				if err != nil {

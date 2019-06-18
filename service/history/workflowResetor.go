@@ -347,11 +347,13 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 
 	if currMutableState.IsWorkflowExecutionRunning() {
 		terminateCurr = true
-		currMutableState.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
-			Reason:   common.StringPtr(reason),
-			Details:  nil,
-			Identity: common.StringPtr(identityHistoryService),
-		})
+		if _, retError = currMutableState.AddWorkflowExecutionTerminatedEvent(
+			reason,
+			nil,
+			identityHistoryService,
+		); retError != nil {
+			return
+		}
 		closeTask, cleanupTask, retError = w.eng.getWorkflowHistoryCleanupTasks(
 			currMutableState.GetExecutionInfo().DomainID,
 			currMutableState.GetExecutionInfo().WorkflowID,

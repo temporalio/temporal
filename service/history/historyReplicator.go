@@ -428,16 +428,11 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(ctx ctx.Context,
 	}
 	if currentLastWriteVersion < lastEvent.GetVersion() {
 		if currentStillRunning {
-			err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, lastEvent.GetVersion(), lastEvent.GetTimestamp(), logger)
+			_, err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, lastEvent.GetVersion(), logger)
 			if err != nil {
-				if _, ok := err.(*shared.EntityNotExistsError); !ok {
-					return err
-				}
-				// if workflow is completed just when the call is made, will get EntityNotExistsError
-				// we are not sure whether the workflow to be terminated ends with continue as new or not
-				// so when encounter EntityNotExistsError, just continue to execute, if err occurs,
-				// there will be retry on the worker level
+				return err
 			}
+
 		}
 		if request.GetResetWorkflow() {
 			return r.resetor.ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID)
@@ -758,7 +753,11 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 		return nil
 	}
 	if currentLastWriteVersion == incomingVersion {
-		_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, execution.GetWorkflowId())
+		_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(
+			ctx,
+			domainID,
+			execution.GetWorkflowId(),
+		)
 		if err != nil {
 			return err
 		}
@@ -770,7 +769,13 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 		if executionInfo.LastEventTaskID < currentLastEventTaskID {
 			return nil
 		}
-		return newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, domainID, execution.GetWorkflowId(), currentRunID, currentNextEventID)
+		return newRetryTaskErrorWithHint(
+			ErrRetryExistingWorkflowMsg,
+			domainID,
+			execution.GetWorkflowId(),
+			currentRunID,
+			currentNextEventID,
+		)
 	}
 
 	// currentStartVersion < incomingVersion && current workflow still running
@@ -780,8 +785,14 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	// start the new workflow from the request
 
 	// same workflow ID, same shard
-	incomingTimestamp := lastEvent.GetTimestamp()
-	err = r.terminateWorkflow(ctx, domainID, executionInfo.WorkflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
+	currentLastWriteVersion, err = r.terminateWorkflow(
+		ctx,
+		domainID,
+		executionInfo.WorkflowID,
+		currentRunID,
+		incomingVersion,
+		logger,
+	)
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
 			return err
@@ -793,7 +804,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx ctx.Context, context wo
 	}
 	createMode = persistence.CreateWorkflowModeWorkflowIDReuse
 	prevRunID = currentRunID
-	prevLastWriteVersion = incomingVersion
+	prevLastWriteVersion = currentLastWriteVersion
 	return context.createWorkflowExecution(
 		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
@@ -842,6 +853,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	// remote run 1's version trigger a conflict resolution trying to force terminate run 2R
 	// conflict resolution should only force terminate workflow if that workflow has lower last write version
 	if incomingVersion <= currentLastWriteVetsion {
+		logger.Info("Conflict resolution current workflow has equal or higher version.")
 		return "", 0, 0, nil
 	}
 
@@ -854,12 +866,19 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 
 	// need to terminate the current workflow
 	// same workflow ID, same shard
-	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
+	currentLastWriteVetsion, err = r.terminateWorkflow(
+		ctx,
+		domainID,
+		workflowID,
+		currentRunID,
+		incomingVersion,
+		logger,
+	)
 	if err != nil {
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
 		return "", 0, 0, err
 	}
-	return currentRunID, incomingVersion, persistence.WorkflowStateCompleted, nil
+	return currentRunID, currentLastWriteVetsion, persistence.WorkflowStateCompleted, nil
 }
 
 // func (r *historyReplicator) getCurrentWorkflowInfo(domainID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
@@ -884,58 +903,84 @@ func (r *historyReplicator) getCurrentWorkflowMutableState(ctx ctx.Context, doma
 	return context, msBuilder, release, nil
 }
 
-func (r *historyReplicator) terminateWorkflow(ctx ctx.Context, domainID string, workflowID string,
-	runID string, incomingVersion int64, incomingTimestamp int64, logger log.Logger) (retError error) {
+func (r *historyReplicator) terminateWorkflow(
+	ctx ctx.Context,
+	domainID string,
+	workflowID string,
+	runID string,
+	incomingVersion int64,
+	logger log.Logger,
+) (int64, error) {
 
+	// same workflow ID, same shard
 	execution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(runID),
 	}
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
+	var currentLastWriteVersion int64
+	err := r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, true, false,
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+
+			// compare the current last write version first
+			// since this function has assumption that
+			// incomingVersion <= currentLastWriteVersion
+			// if assumption is broken (race condition), then retry
+			currentLastWriteVersion = msBuilder.GetLastWriteVersion()
+			if incomingVersion <= currentLastWriteVersion {
+				return nil, newRetryTaskErrorWithHint(
+					ErrRetryExistingWorkflowMsg,
+					domainID,
+					workflowID,
+					runID,
+					msBuilder.GetNextEventID(),
+				)
+			}
+
+			if !msBuilder.IsWorkflowExecutionRunning() {
+				return nil, ErrWorkflowCompleted
+			}
+
+			// incomingVersion > currentLastWriteVersion
+
+			// need to check if able to force terminate the workflow, by using last write version
+			// if last write version indicates not from current cluster, need to fetch from remote
+			sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(currentLastWriteVersion)
+			if sourceCluster != r.clusterMetadata.GetCurrentClusterName() {
+				return nil, newRetryTaskErrorWithHint(
+					ErrRetryExistingWorkflowMsg,
+					domainID,
+					workflowID,
+					runID,
+					msBuilder.GetNextEventID(),
+				)
+			}
+
+			// setting the current version to be the last write version
+			msBuilder.UpdateReplicationStateVersion(currentLastWriteVersion, true)
+			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
+				workflowTerminationReason,
+				[]byte(fmt.Sprintf("terminated by version: %v", incomingVersion)),
+				workflowTerminationIdentity,
+			); err != nil {
+				return nil, &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+			}
+
+			return nil, nil
+		})
+
 	if err != nil {
-		return err
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return 0, err
+		}
+		err = nil
 	}
-	defer func() { release(retError) }()
-
-	msBuilder, err := context.loadWorkflowExecution()
-	if err != nil {
-		return err
-	}
-	if !msBuilder.IsWorkflowExecutionRunning() {
-		return nil
-	}
-
-	nextEventID := msBuilder.GetNextEventID()
-	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(incomingVersion)
-	terminationEvent := &shared.HistoryEvent{
-		EventId:   common.Int64Ptr(nextEventID),
-		Timestamp: common.Int64Ptr(incomingTimestamp),
-		Version:   common.Int64Ptr(incomingVersion),
-		// TaskId is default to 0 since this event is not generated by remote
-		EventType: shared.EventTypeWorkflowExecutionTerminated.Ptr(),
-		WorkflowExecutionTerminatedEventAttributes: &shared.WorkflowExecutionTerminatedEventAttributes{
-			Reason:   common.StringPtr(workflowTerminationReason),
-			Identity: common.StringPtr(workflowTerminationIdentity),
-			Details:  nil,
-		},
-	}
-	history := &shared.History{Events: []*shared.HistoryEvent{terminationEvent}}
-
-	req := &h.ReplicateEventsRequest{
-		SourceCluster:     common.StringPtr(sourceCluster),
-		DomainUUID:        common.StringPtr(domainID),
-		WorkflowExecution: &execution,
-		FirstEventId:      common.Int64Ptr(nextEventID),
-		NextEventId:       common.Int64Ptr(nextEventID + 1),
-		Version:           common.Int64Ptr(incomingVersion),
-		History:           history,
-		NewRunHistory:     nil,
-	}
-	return r.ApplyReplicationTask(ctx, context, msBuilder, req, logger)
+	return currentLastWriteVersion, nil
 }
 
-func (r *historyReplicator) getLatestCheckpoint(replicationInfoRemote map[string]*workflow.ReplicationInfo,
-	replicationInfoLocal map[string]*persistence.ReplicationInfo) (int64, int64) {
+func (r *historyReplicator) getLatestCheckpoint(
+	replicationInfoRemote map[string]*workflow.ReplicationInfo,
+	replicationInfoLocal map[string]*persistence.ReplicationInfo,
+) (int64, int64) {
 
 	// this only applies to 2 data center case
 

@@ -88,7 +88,7 @@ type (
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input []byte, identity string) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(*workflow.TerminateWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(reason string, details []byte, identity string) (*workflow.HistoryEvent, error)
 		ClearStickyness()
 		CloseUpdateSession() (*mutableStateSessionUpdates, error)
 		CheckResettable() error
