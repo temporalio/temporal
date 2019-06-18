@@ -171,19 +171,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 		WorkflowId: common.StringPtr("test-eventsv2-workflow"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 	}
-	versionHistories := &p.VersionHistories{
-		Histories: []p.VersionHistory{
-			{
-				BranchToken: []byte{1},
-				History: []p.VersionHistoryItem{
-					{
-						EventID: 1,
-						Version: 0,
-					},
-				},
-			},
-		},
-	}
+	versionHistory := p.NewVersionHistory(
+		[]byte{1},
+		[]*p.VersionHistoryItem{p.NewVersionHistoryItem(1, 0)},
+	)
+	versionHistories := p.NewVersionHistories(versionHistory)
 
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
@@ -224,7 +216,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(int32(p.EventStoreVersionV2), info0.EventStoreVersion)
-	s.Equal(state0.VersionHistories, versionHistories)
+	s.Equal(versionHistories, state0.VersionHistories)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.LastProcessedEvent = int64(2)
@@ -237,7 +229,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 		TaskID:     2,
 		StartedID:  5,
 	}}
-	versionHistories.Histories[0].History[0].EventID = 2
+	versionHistory, err := versionHistories.GetVersionHistory(versionHistories.GetCurrentBranchIndex())
+	s.NoError(err)
+	err = versionHistory.AddOrUpdateItem(p.NewVersionHistoryItem(2, 0))
+	s.NoError(err)
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, versionHistories, []int64{int64(4)}, nil, common.EmptyEventID, nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)

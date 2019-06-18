@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -305,6 +306,9 @@ func (m *executionManagerImpl) DeserializeActivityInfos(infos map[int64]*Interna
 }
 
 func (m *executionManagerImpl) DeserializeVersionHistories(blob *DataBlob) (*VersionHistories, error) {
+	if blob == nil {
+		return nil, nil
+	}
 	tVersionHistoroes, err := m.serializer.DeserializeVersionHistories(blob)
 	if err != nil {
 		return nil, err

@@ -114,7 +114,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 		Histories: []*workflow.VersionHistory{
 			{
 				BranchToken: []byte{1},
-				History: []*workflow.VersionHistoryItem{
+				Items: []*workflow.VersionHistoryItem{
 					{
 						EventID: common.Int64Ptr(1),
 						Version: common.Int64Ptr(0),
@@ -127,7 +127,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			},
 			{
 				BranchToken: []byte{2},
-				History: []*workflow.VersionHistoryItem{
+				Items: []*workflow.VersionHistoryItem{
 					{
 						EventID: common.Int64Ptr(2),
 						Version: common.Int64Ptr(0),

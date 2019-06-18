@@ -1450,11 +1450,11 @@ struct VersionHistoryItem{
 // VersionHistory contains the version history of a branch
 struct VersionHistory{
   10: optional binary branchToken
-  20: optional list<VersionHistoryItem> history
+  20: optional list<VersionHistoryItem> items
 }
 
 // VersionHistories contains all version histories from all branches
 struct VersionHistories{
-  10: optional i32 currentBranch
+  10: optional i32 currentBranchIndex
   20: optional list<VersionHistory> histories
 }

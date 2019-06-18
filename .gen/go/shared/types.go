@@ -46688,8 +46688,8 @@ func (v *UpdateDomainResponse) IsSetIsGlobalDomain() bool {
 }
 
 type VersionHistories struct {
-	CurrentBranch *int32            `json:"currentBranch,omitempty"`
-	Histories     []*VersionHistory `json:"histories,omitempty"`
+	CurrentBranchIndex *int32            `json:"currentBranchIndex,omitempty"`
+	Histories          []*VersionHistory `json:"histories,omitempty"`
 }
 
 type _List_VersionHistory_ValueList []*VersionHistory
@@ -46744,8 +46744,8 @@ func (v *VersionHistories) ToWire() (wire.Value, error) {
 		err    error
 	)
 
-	if v.CurrentBranch != nil {
-		w, err = wire.NewValueI32(*(v.CurrentBranch)), error(nil)
+	if v.CurrentBranchIndex != nil {
+		w, err = wire.NewValueI32(*(v.CurrentBranchIndex)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -46814,7 +46814,7 @@ func (v *VersionHistories) FromWire(w wire.Value) error {
 			if field.Value.Type() == wire.TI32 {
 				var x int32
 				x, err = field.Value.GetI32(), error(nil)
-				v.CurrentBranch = &x
+				v.CurrentBranchIndex = &x
 				if err != nil {
 					return err
 				}
@@ -46843,8 +46843,8 @@ func (v *VersionHistories) String() string {
 
 	var fields [2]string
 	i := 0
-	if v.CurrentBranch != nil {
-		fields[i] = fmt.Sprintf("CurrentBranch: %v", *(v.CurrentBranch))
+	if v.CurrentBranchIndex != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchIndex: %v", *(v.CurrentBranchIndex))
 		i++
 	}
 	if v.Histories != nil {
@@ -46880,7 +46880,7 @@ func (v *VersionHistories) Equals(rhs *VersionHistories) bool {
 	} else if rhs == nil {
 		return false
 	}
-	if !_I32_EqualsPtr(v.CurrentBranch, rhs.CurrentBranch) {
+	if !_I32_EqualsPtr(v.CurrentBranchIndex, rhs.CurrentBranchIndex) {
 		return false
 	}
 	if !((v.Histories == nil && rhs.Histories == nil) || (v.Histories != nil && rhs.Histories != nil && _List_VersionHistory_Equals(v.Histories, rhs.Histories))) {
@@ -46907,8 +46907,8 @@ func (v *VersionHistories) MarshalLogObject(enc zapcore.ObjectEncoder) (err erro
 	if v == nil {
 		return nil
 	}
-	if v.CurrentBranch != nil {
-		enc.AddInt32("currentBranch", *v.CurrentBranch)
+	if v.CurrentBranchIndex != nil {
+		enc.AddInt32("currentBranchIndex", *v.CurrentBranchIndex)
 	}
 	if v.Histories != nil {
 		err = multierr.Append(err, enc.AddArray("histories", (_List_VersionHistory_Zapper)(v.Histories)))
@@ -46916,19 +46916,19 @@ func (v *VersionHistories) MarshalLogObject(enc zapcore.ObjectEncoder) (err erro
 	return err
 }
 
-// GetCurrentBranch returns the value of CurrentBranch if it is set or its
+// GetCurrentBranchIndex returns the value of CurrentBranchIndex if it is set or its
 // zero value if it is unset.
-func (v *VersionHistories) GetCurrentBranch() (o int32) {
-	if v != nil && v.CurrentBranch != nil {
-		return *v.CurrentBranch
+func (v *VersionHistories) GetCurrentBranchIndex() (o int32) {
+	if v != nil && v.CurrentBranchIndex != nil {
+		return *v.CurrentBranchIndex
 	}
 
 	return
 }
 
-// IsSetCurrentBranch returns true if CurrentBranch is not nil.
-func (v *VersionHistories) IsSetCurrentBranch() bool {
-	return v != nil && v.CurrentBranch != nil
+// IsSetCurrentBranchIndex returns true if CurrentBranchIndex is not nil.
+func (v *VersionHistories) IsSetCurrentBranchIndex() bool {
+	return v != nil && v.CurrentBranchIndex != nil
 }
 
 // GetHistories returns the value of Histories if it is set or its
@@ -46948,7 +46948,7 @@ func (v *VersionHistories) IsSetHistories() bool {
 
 type VersionHistory struct {
 	BranchToken []byte                `json:"branchToken,omitempty"`
-	History     []*VersionHistoryItem `json:"history,omitempty"`
+	Items       []*VersionHistoryItem `json:"items,omitempty"`
 }
 
 type _List_VersionHistoryItem_ValueList []*VersionHistoryItem
@@ -47011,8 +47011,8 @@ func (v *VersionHistory) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
-	if v.History != nil {
-		w, err = wire.NewValueList(_List_VersionHistoryItem_ValueList(v.History)), error(nil)
+	if v.Items != nil {
+		w, err = wire.NewValueList(_List_VersionHistoryItem_ValueList(v.Items)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -47079,7 +47079,7 @@ func (v *VersionHistory) FromWire(w wire.Value) error {
 			}
 		case 20:
 			if field.Value.Type() == wire.TList {
-				v.History, err = _List_VersionHistoryItem_Read(field.Value.GetList())
+				v.Items, err = _List_VersionHistoryItem_Read(field.Value.GetList())
 				if err != nil {
 					return err
 				}
@@ -47104,8 +47104,8 @@ func (v *VersionHistory) String() string {
 		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
 		i++
 	}
-	if v.History != nil {
-		fields[i] = fmt.Sprintf("History: %v", v.History)
+	if v.Items != nil {
+		fields[i] = fmt.Sprintf("Items: %v", v.Items)
 		i++
 	}
 
@@ -47140,7 +47140,7 @@ func (v *VersionHistory) Equals(rhs *VersionHistory) bool {
 	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
 		return false
 	}
-	if !((v.History == nil && rhs.History == nil) || (v.History != nil && rhs.History != nil && _List_VersionHistoryItem_Equals(v.History, rhs.History))) {
+	if !((v.Items == nil && rhs.Items == nil) || (v.Items != nil && rhs.Items != nil && _List_VersionHistoryItem_Equals(v.Items, rhs.Items))) {
 		return false
 	}
 
@@ -47167,8 +47167,8 @@ func (v *VersionHistory) MarshalLogObject(enc zapcore.ObjectEncoder) (err error)
 	if v.BranchToken != nil {
 		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
 	}
-	if v.History != nil {
-		err = multierr.Append(err, enc.AddArray("history", (_List_VersionHistoryItem_Zapper)(v.History)))
+	if v.Items != nil {
+		err = multierr.Append(err, enc.AddArray("items", (_List_VersionHistoryItem_Zapper)(v.Items)))
 	}
 	return err
 }
@@ -47188,19 +47188,19 @@ func (v *VersionHistory) IsSetBranchToken() bool {
 	return v != nil && v.BranchToken != nil
 }
 
-// GetHistory returns the value of History if it is set or its
+// GetItems returns the value of Items if it is set or its
 // zero value if it is unset.
-func (v *VersionHistory) GetHistory() (o []*VersionHistoryItem) {
-	if v != nil && v.History != nil {
-		return v.History
+func (v *VersionHistory) GetItems() (o []*VersionHistoryItem) {
+	if v != nil && v.Items != nil {
+		return v.Items
 	}
 
 	return
 }
 
-// IsSetHistory returns true if History is not nil.
-func (v *VersionHistory) IsSetHistory() bool {
-	return v != nil && v.History != nil
+// IsSetItems returns true if Items is not nil.
+func (v *VersionHistory) IsSetItems() bool {
+	return v != nil && v.Items != nil
 }
 
 type VersionHistoryItem struct {

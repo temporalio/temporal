@@ -21,399 +21,584 @@
 package persistence
 
 import (
-	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"testing"
+
+	"github.com/uber/cadence/.gen/go/shared"
+
+	"github.com/stretchr/testify/suite"
 )
 
 type (
-	versionHistoryStoreSuite struct {
+	versionHistorySuite struct {
+		suite.Suite
+	}
+
+	versionHistoriesSuite struct {
 		suite.Suite
 	}
 )
 
-func TestVersionHistoryStore(t *testing.T) {
-	s := new(versionHistoryStoreSuite)
+func TestVersionHistorySuite(t *testing.T) {
+	s := new(versionHistorySuite)
 	suite.Run(t, s)
 }
 
-func (s *versionHistoryStoreSuite) TestNewVersionHistory() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	result := history.History
-	s.Equal(items, result)
+func TestVersionHistoriesSuite(t *testing.T) {
+	s := new(versionHistoriesSuite)
+	suite.Run(t, s)
 }
 
-func (s *versionHistoryStoreSuite) TestNewVersionHistory_Panic() {
-	items := []VersionHistoryItem{}
-
-	expectedPanic := func() {
-		NewVersionHistory(items)
+func (s *versionHistorySuite) TestConversion() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
 	}
-	s.Panics(expectedPanic)
+
+	history := NewVersionHistory(branchToken, items)
+	s.Equal(&VersionHistory{
+		branchToken: branchToken,
+		items:       items,
+	}, history)
+
+	s.Equal(history, NewVersionHistoryFromThrift(history.ToThrift()))
 }
 
-func (s *versionHistoryStoreSuite) TestUpdateVersionHistory_CreateNewItem() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
+func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
 	}
 
-	history := NewVersionHistory(items)
-	err := history.Update(VersionHistoryItem{
-		EventID: 8,
-		Version: 5,
-	})
+	history := NewVersionHistory(branchToken, items)
 
+	newHistory, err := history.DuplicateUntilLCAItem(NewVersionHistoryItem(2, 0))
 	s.NoError(err)
-	s.Equal(len(history.History), len(items)+1)
-	s.Equal(int64(8), history.History[2].EventID)
-	s.Equal(int64(5), history.History[2].Version)
-}
-
-func (s *versionHistoryStoreSuite) TestUpdateVersionHistory_UpdateEventID() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	err := history.Update(VersionHistoryItem{
-		EventID: 8,
-		Version: 4,
-	})
-
+	newBranchToken := []byte("other random branch token")
+	err = newHistory.SetBranchToken(newBranchToken)
 	s.NoError(err)
-	s.Equal(len(history.History), len(items))
-	s.Equal(int64(8), history.History[1].EventID)
-	s.Equal(int64(4), history.History[1].Version)
-}
+	s.Equal(newBranchToken, newHistory.GetBranchToken())
+	s.Equal(NewVersionHistory(
+		newBranchToken,
+		[]*VersionHistoryItem{{eventID: 2, version: 0}},
+	), newHistory)
 
-func (s *versionHistoryStoreSuite) TestUpdateVersionHistory_Failed_LowerVersion() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	err := history.Update(VersionHistoryItem{
-		EventID: 8,
-		Version: 3,
-	})
-
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestUpdateVersionHistory_Failed_EventIDNotIncrease() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	err := history.Update(VersionHistoryItem{
-		EventID: 5,
-		Version: 4,
-	})
-
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestUpdateVersionHistory_Failed_EventIDMatch_VersionNotMatch() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	err := history.Update(VersionHistoryItem{
-		EventID: 6,
-		Version: 7,
-	})
-
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestIsAppendable_True() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	appendItem := VersionHistoryItem{
-		EventID: 6,
-		Version: 4,
-	}
-
-	s.True(history.IsAppendable(appendItem))
-}
-
-func (s *versionHistoryStoreSuite) TestIsAppendable_False_VersionNotMatch() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	appendItem := VersionHistoryItem{
-		EventID: 6,
-		Version: 7,
-	}
-
-	s.False(history.IsAppendable(appendItem))
-}
-
-func (s *versionHistoryStoreSuite) TestIsAppendable_False_EventIDNotMatch() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 4},
-	}
-
-	history := NewVersionHistory(items)
-	appendItem := VersionHistoryItem{
-		EventID: 7,
-		Version: 4,
-	}
-
-	s.False(history.IsAppendable(appendItem))
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistoryItem_ReturnLocal() {
-	localItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 7, Version: 4},
-		{EventID: 8, Version: 8},
-		{EventID: 11, Version: 12},
-	}
-	local := NewVersionHistory(localItems)
-	remote := NewVersionHistory(remoteItems)
-	item, err := local.FindLowestCommonVersionHistoryItem(remote)
+	newHistory, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(5, 4))
 	s.NoError(err)
-	s.Equal(int64(5), item.EventID)
-	s.Equal(int64(4), item.Version)
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistoryItem_ReturnRemote() {
-	localItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 6, Version: 6},
-		{EventID: 11, Version: 12},
-	}
-	local := NewVersionHistory(localItems)
-	remote := NewVersionHistory(remoteItems)
-	item, err := local.FindLowestCommonVersionHistoryItem(remote)
+	newBranchToken = []byte("another random branch token")
+	err = newHistory.SetBranchToken(newBranchToken)
 	s.NoError(err)
-	s.Equal(int64(6), item.EventID)
-	s.Equal(int64(6), item.Version)
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistoryItem_Error_NoLCA() {
-	localItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 1},
-		{EventID: 7, Version: 2},
-		{EventID: 8, Version: 3},
-	}
-	local := NewVersionHistory(localItems)
-	remote := NewVersionHistory(remoteItems)
-	_, err := local.FindLowestCommonVersionHistoryItem(remote)
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistoryItem_Error_InvalidInput() {
-	localItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 1},
-		{EventID: 7, Version: 2},
-		{EventID: 6, Version: 3},
-	}
-	local := NewVersionHistory(localItems)
-	remote := NewVersionHistory(remoteItems)
-	_, err := local.FindLowestCommonVersionHistoryItem(remote)
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistoryItem_Error_NilInput() {
-	localItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	local := NewVersionHistory(localItems)
-	_, err := local.FindLowestCommonVersionHistoryItem(VersionHistory{})
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestNewVersionHistories_Panic() {
-	expectedPanic := func() { NewVersionHistories([]VersionHistory{}) }
-	s.Panics(expectedPanic)
-}
-
-func (s *versionHistoryStoreSuite) TestNewVersionHistories() {
-	localItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	local := NewVersionHistory(localItems)
-	histories := NewVersionHistories([]VersionHistory{local})
-	s.NotNil(histories)
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistory_UpdateExistingHistory() {
-	localItems1 := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	localItems2 := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 8, Version: 4},
-		{EventID: 9, Version: 6},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 8, Version: 4},
-		{EventID: 10, Version: 6},
-		{EventID: 11, Version: 12},
-	}
-	local1 := NewVersionHistory(localItems1)
-	local2 := NewVersionHistory(localItems2)
-	remote := NewVersionHistory(remoteItems)
-	histories := NewVersionHistories([]VersionHistory{local1, local2})
-	item, history, err := histories.FindLowestCommonVersionHistory(remote)
-	s.NoError(err)
-	s.Equal(history, local2)
-	s.Equal(int64(9), item.EventID)
-	s.Equal(int64(6), item.Version)
-
-	err = histories.AddHistory(item, history, remote)
-	s.NoError(err)
-	s.Equal(histories.Histories[1], remote)
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistory_ForkNewHistory() {
-	localItems1 := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	localItems2 := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 8, Version: 4},
-		{EventID: 9, Version: 6},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 6, Version: 7},
-		{EventID: 10, Version: 12},
-	}
-	local1 := NewVersionHistory(localItems1)
-	local2 := NewVersionHistory(localItems2)
-	remote := NewVersionHistory(remoteItems)
-	histories := NewVersionHistories([]VersionHistory{local1, local2})
-	item, history, err := histories.FindLowestCommonVersionHistory(remote)
-	s.NoError(err)
-	s.Equal(int64(3), item.EventID)
-	s.Equal(int64(0), item.Version)
-
-	err = histories.AddHistory(item, history, remote)
-	s.NoError(err)
-	s.Equal(3, len(histories.Histories))
-}
-
-func (s *versionHistoryStoreSuite) TestFindLowestCommonVersionHistory_Error() {
-	localItems1 := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
-	}
-	localItems2 := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 8, Version: 4},
-		{EventID: 9, Version: 6},
-	}
-	remoteItems := []VersionHistoryItem{
-		{EventID: 3, Version: 1},
-		{EventID: 6, Version: 7},
-		{EventID: 10, Version: 12},
-	}
-	local1 := NewVersionHistory(localItems1)
-	local2 := NewVersionHistory(localItems2)
-	remote := NewVersionHistory(remoteItems)
-	histories := NewVersionHistories([]VersionHistory{local1, local2})
-	_, _, err := histories.FindLowestCommonVersionHistory(remote)
-	s.Error(err)
-}
-
-func (s *versionHistoryStoreSuite) TestNewVersionHistoriesFromThrift() {
-	tHistories := shared.VersionHistories{
-		Histories: []*shared.VersionHistory{
-			{
-				BranchToken: []byte{},
-				History: []*shared.VersionHistoryItem{
-					{
-						EventID: common.Int64Ptr(1),
-						Version: common.Int64Ptr(1),
-					},
-				},
-			},
+	s.Equal(newBranchToken, newHistory.GetBranchToken())
+	s.Equal(NewVersionHistory(
+		newBranchToken,
+		[]*VersionHistoryItem{
+			{eventID: 3, version: 0},
+			{eventID: 5, version: 4},
 		},
-	}
+	), newHistory)
 
-	histories := NewVersionHistoriesFromThrift(&tHistories)
-	s.NotNil(histories)
-	s.Equal(tHistories.GetHistories()[0].GetHistory()[0].GetEventID(), histories.Histories[0].History[0].EventID)
-	s.Equal(tHistories.GetHistories()[0].GetHistory()[0].GetVersion(), histories.Histories[0].History[0].Version)
+	newHistory, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(6, 4))
+	s.NoError(err)
+	newBranchToken = []byte("yet another random branch token")
+	err = newHistory.SetBranchToken(newBranchToken)
+	s.NoError(err)
+	s.Equal(newBranchToken, newHistory.GetBranchToken())
+	s.Equal(NewVersionHistory(
+		newBranchToken,
+		[]*VersionHistoryItem{
+			{eventID: 3, version: 0},
+			{eventID: 6, version: 4},
+		},
+	), newHistory)
 }
 
-func (s *versionHistoryStoreSuite) TestToThrift() {
-	items := []VersionHistoryItem{
-		{EventID: 3, Version: 0},
-		{EventID: 5, Version: 4},
-		{EventID: 7, Version: 6},
-		{EventID: 9, Version: 10},
+func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
 	}
-	history := NewVersionHistory(items)
-	histories := NewVersionHistories([]VersionHistory{history})
-	tHistories := histories.ToThrift()
-	s.NotNil(tHistories)
-	for idx, item := range items {
-		s.Equal(tHistories.GetHistories()[0].GetHistory()[idx].GetEventID(), item.EventID)
-		s.Equal(tHistories.GetHistories()[0].GetHistory()[idx].GetVersion(), item.Version)
+
+	history := NewVersionHistory(branchToken, items)
+
+	_, err := history.DuplicateUntilLCAItem(NewVersionHistoryItem(4, 0))
+	s.IsType(&shared.BadRequestError{}, err)
+
+	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(2, 1))
+	s.IsType(&shared.BadRequestError{}, err)
+
+	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(5, 3))
+	s.IsType(&shared.BadRequestError{}, err)
+
+	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(7, 5))
+	s.IsType(&shared.BadRequestError{}, err)
+
+	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(4, 0))
+	s.IsType(&shared.BadRequestError{}, err)
+
+	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(7, 4))
+	s.IsType(&shared.BadRequestError{}, err)
+}
+
+func (s *versionHistorySuite) TestSetBranchToken_Success() {
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
 	}
+	history := NewVersionHistory(nil, items)
+
+	err := history.SetBranchToken([]byte("some random branch token"))
+	s.NoError(err)
+}
+
+func (s *versionHistorySuite) TestSetBranchToken_Failure() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	err := history.SetBranchToken([]byte("some random branch token"))
+	s.Error(err)
+}
+
+func (s *versionHistorySuite) TestUpdateItem_VersionIncrease() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	item := &VersionHistoryItem{
+		eventID: 8,
+		version: 5,
+	}
+	err := history.AddOrUpdateItem(item)
+	s.NoError(err)
+
+	s.Equal(NewVersionHistory(
+		branchToken,
+		[]*VersionHistoryItem{
+			{eventID: 3, version: 0},
+			{eventID: 6, version: 4},
+			{eventID: 8, version: 5},
+		},
+	), history)
+
+}
+
+func (s *versionHistorySuite) TestUpdateItem_EventIDIncrease() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	item := &VersionHistoryItem{
+		eventID: 8,
+		version: 4,
+	}
+	err := history.AddOrUpdateItem(item)
+	s.NoError(err)
+
+	s.Equal(NewVersionHistory(
+		branchToken,
+		[]*VersionHistoryItem{
+			{eventID: 3, version: 0},
+			{eventID: 8, version: 4},
+		},
+	), history)
+}
+
+func (s *versionHistorySuite) TestUpdateItem_Failed_LowerVersion() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	err := history.AddOrUpdateItem(NewVersionHistoryItem(8, 3))
+	s.Error(err)
+}
+
+func (s *versionHistorySuite) TestUpdateItem_Failed_SameVersion_EventIDNotIncreasing() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	err := history.AddOrUpdateItem(NewVersionHistoryItem(5, 4))
+	s.Error(err)
+
+	err = history.AddOrUpdateItem(NewVersionHistoryItem(6, 4))
+	s.Error(err)
+}
+
+func (s *versionHistorySuite) TestUpdateItem_Failed_VersionNoIncreasing() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	err := history.AddOrUpdateItem(NewVersionHistoryItem(6, 3))
+	s.Error(err)
+
+	err = history.AddOrUpdateItem(NewVersionHistoryItem(2, 3))
+	s.Error(err)
+
+	err = history.AddOrUpdateItem(NewVersionHistoryItem(7, 3))
+	s.Error(err)
+}
+
+func (s *versionHistorySuite) TestIsLCAAppendable_True() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	ret := history.IsLCAAppendable(NewVersionHistoryItem(6, 4))
+	s.True(ret)
+}
+
+func (s *versionHistorySuite) TestIsLCAAppendable_False_VersionNotMatch() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	ret := history.IsLCAAppendable(NewVersionHistoryItem(6, 7))
+	s.False(ret)
+}
+
+func (s *versionHistorySuite) TestIsLCAAppendable_False_EventIDNotMatch() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	ret := history.IsLCAAppendable(NewVersionHistoryItem(7, 4))
+	s.False(ret)
+}
+
+func (s *versionHistorySuite) TestFindLCAItem_ReturnLocal() {
+	localBranchToken := []byte("local branch token")
+	localItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	}
+	remoteBranchToken := []byte("remote branch token")
+	remoteItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 7, version: 4},
+		{eventID: 8, version: 8},
+		{eventID: 11, version: 12},
+	}
+	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
+	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
+
+	item, err := localVersionHistory.FindLCAItem(remoteVersionHistory)
+	s.NoError(err)
+	s.Equal(NewVersionHistoryItem(5, 4), item)
+}
+
+func (s *versionHistorySuite) TestFindLCAItem_ReturnRemote() {
+	localBranchToken := []byte("local branch token")
+	localItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	}
+	remoteBranchToken := []byte("remote branch token")
+	remoteItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 6, version: 6},
+		{eventID: 11, version: 12},
+	}
+	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
+	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
+
+	item, err := localVersionHistory.FindLCAItem(remoteVersionHistory)
+	s.NoError(err)
+	s.Equal(NewVersionHistoryItem(6, 6), item)
+}
+
+func (s *versionHistorySuite) TestFindLCAItem_Error_NoLCA() {
+	localBranchToken := []byte("local branch token")
+	localItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	}
+	remoteBranchToken := []byte("remote branch token")
+	remoteItems := []*VersionHistoryItem{
+		{eventID: 3, version: 1},
+		{eventID: 7, version: 2},
+		{eventID: 8, version: 3},
+	}
+	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
+	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
+
+	_, err := localVersionHistory.FindLCAItem(remoteVersionHistory)
+	s.Error(err)
+}
+
+func (s *versionHistorySuite) TestGetFirstItem_Success() {
+	branchToken := []byte("some random branch token")
+	item := NewVersionHistoryItem(3, 0)
+	history := NewVersionHistory(branchToken, []*VersionHistoryItem{item})
+
+	firstItem, err := history.GetFirstItem()
+	s.NoError(err)
+	s.Equal(item, firstItem)
+
+	item = NewVersionHistoryItem(4, 0)
+	err = history.AddOrUpdateItem(item)
+	s.NoError(err)
+
+	firstItem, err = history.GetFirstItem()
+	s.NoError(err)
+	s.Equal(item, firstItem)
+
+	err = history.AddOrUpdateItem(NewVersionHistoryItem(7, 1))
+	s.NoError(err)
+
+	firstItem, err = history.GetFirstItem()
+	s.NoError(err)
+	s.Equal(item, firstItem)
+}
+
+func (s *versionHistorySuite) TestGetFirstItem_Failure() {
+	branchToken := []byte("some random branch token")
+	history := NewVersionHistory(branchToken, []*VersionHistoryItem{})
+
+	_, err := history.GetFirstItem()
+	s.IsType(&shared.BadRequestError{}, err)
+}
+
+func (s *versionHistorySuite) TestGetLastItem_Success() {
+	branchToken := []byte("some random branch token")
+	item := NewVersionHistoryItem(3, 0)
+	history := NewVersionHistory(branchToken, []*VersionHistoryItem{item})
+
+	lastItem, err := history.GetLastItem()
+	s.NoError(err)
+	s.Equal(item, lastItem)
+
+	item = NewVersionHistoryItem(4, 0)
+	err = history.AddOrUpdateItem(item)
+	s.NoError(err)
+
+	lastItem, err = history.GetLastItem()
+	s.NoError(err)
+	s.Equal(item, lastItem)
+
+	item = NewVersionHistoryItem(7, 1)
+	err = history.AddOrUpdateItem(item)
+	s.NoError(err)
+
+	lastItem, err = history.GetLastItem()
+	s.NoError(err)
+	s.Equal(item, lastItem)
+}
+
+func (s *versionHistorySuite) TestGetLastItem_Failure() {
+	branchToken := []byte("some random branch token")
+	history := NewVersionHistory(branchToken, []*VersionHistoryItem{})
+
+	_, err := history.GetLastItem()
+	s.IsType(&shared.BadRequestError{}, err)
+}
+
+func (s *versionHistorySuite) TestEquals() {
+	localBranchToken := []byte("local branch token")
+	localItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	}
+	remoteBranchToken := []byte("remote branch token")
+	remoteItems := []*VersionHistoryItem{
+		{eventID: 3, version: 1},
+		{eventID: 7, version: 2},
+		{eventID: 8, version: 3},
+	}
+	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
+	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
+
+	s.False(localVersionHistory.Equals(remoteVersionHistory))
+	s.True(localVersionHistory.Equals(localVersionHistory.Duplicate()))
+	s.True(remoteVersionHistory.Equals(remoteVersionHistory.Duplicate()))
+}
+
+func (s *versionHistoriesSuite) TestConversion() {
+	branchToken := []byte("some random branch token")
+	localItems := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	}
+	versionHistory := NewVersionHistory(branchToken, localItems)
+	histories := NewVersionHistories(versionHistory)
+
+	s.Equal(&VersionHistories{
+		currentBranchIndex: 0,
+		histories:          []*VersionHistory{versionHistory},
+	}, histories)
+
+	s.Equal(histories, NewVersionHistoriesFromThrift(histories.ToThrift()))
+}
+
+func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
+	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	})
+	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 6, version: 6},
+		{eventID: 11, version: 12},
+	})
+
+	histories := NewVersionHistories(versionHistory1)
+	s.Equal(0, histories.currentBranchIndex)
+
+	currentBranchChanged, newVersionHistoryIndex, err := histories.AddVersionHistory(versionHistory2)
+	s.Nil(err)
+	s.True(currentBranchChanged)
+	s.Equal(1, newVersionHistoryIndex)
+	s.Equal(1, histories.currentBranchIndex)
+
+	resultVersionHistory1, err := histories.GetVersionHistory(0)
+	s.Nil(err)
+	s.Equal(versionHistory1, resultVersionHistory1)
+
+	resultVersionHistory2, err := histories.GetVersionHistory(1)
+	s.Nil(err)
+	s.Equal(versionHistory2, resultVersionHistory2)
+}
+
+func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEventIDWins() {
+	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	})
+	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 6, version: 6},
+		{eventID: 11, version: 12},
+	})
+
+	histories := NewVersionHistories(versionHistory1)
+	_, _, err := histories.AddVersionHistory(versionHistory2)
+	s.Nil(err)
+
+	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 8, version: 6},
+		{eventID: 11, version: 100},
+	})
+
+	index, item, err := histories.FindLCAVersionHistoryIndexAndItem(versionHistoryIncoming)
+	s.Nil(err)
+	s.Equal(0, index)
+	s.Equal(NewVersionHistoryItem(7, 6), item)
+}
+
+func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventIDShorterLengthWins() {
+	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	})
+	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+	})
+
+	histories := NewVersionHistories(versionHistory1)
+	_, _, err := histories.AddVersionHistory(versionHistory2)
+	s.Nil(err)
+
+	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 8, version: 6},
+		{eventID: 11, version: 100},
+	})
+
+	index, item, err := histories.FindLCAVersionHistoryIndexAndItem(versionHistoryIncoming)
+	s.Nil(err)
+	s.Equal(1, index)
+	s.Equal(NewVersionHistoryItem(7, 6), item)
+}
+
+func (s *versionHistoriesSuite) TestCurrentBranchIndexIsInReplay() {
+	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	})
+	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 6, version: 6},
+		{eventID: 11, version: 12},
+	})
+
+	histories := NewVersionHistories(versionHistory1)
+	s.Equal(0, histories.currentBranchIndex)
+
+	currentBranchChanged, newVersionHistoryIndex, err := histories.AddVersionHistory(versionHistory2)
+	s.Nil(err)
+	s.True(currentBranchChanged)
+	s.Equal(1, newVersionHistoryIndex)
+	s.Equal(1, histories.currentBranchIndex)
+
+	isInReplay, err := histories.IsInReplay()
+	s.NoError(err)
+	s.False(isInReplay)
+
+	err = histories.SetCurrentBranchIndex(0)
+	s.NoError(err)
+	isInReplay, err = histories.IsInReplay()
+	s.NoError(err)
+	s.True(isInReplay)
+
+	err = histories.SetCurrentBranchIndex(1)
+	s.NoError(err)
+	isInReplay, err = histories.IsInReplay()
+	s.NoError(err)
+	s.False(isInReplay)
 }
