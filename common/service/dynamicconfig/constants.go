@@ -60,6 +60,7 @@ var keys = map[Key]string{
 	EnableReadFromArchival:              "system.enableReadFromArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
+	MinRetentionDays:                    "system.minRetentionDays",
 	EnableBatcher:                       "worker.enableBatcher",
 
 	// size limit
@@ -242,6 +243,8 @@ const (
 	EnableDomainNotActiveAutoForwarding
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
+	// MinRetentionDays is the minimal allowed retention days for domain
+	MinRetentionDays
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
