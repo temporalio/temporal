@@ -1744,7 +1744,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 }
 
 func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
-	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	if err != nil {
 		return nil
 	}

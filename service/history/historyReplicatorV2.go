@@ -110,7 +110,7 @@ func (r *historyReplicatorV2) ApplyEvents(ctx ctx.Context, request *h.ReplicateE
 		return err
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		task.domainID,
 		task.execution,
@@ -446,7 +446,7 @@ func (r *historyReplicatorV2) getCurrentWorkflowMutableState(ctx ctx.Context, do
 	// TODO refactor for case if context is already current workflow
 
 	// we need to check the current workflow execution
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx,
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx,
 		domainID,
 		// only use the workflow ID, to get the current running one
 		shared.WorkflowExecution{WorkflowId: common.StringPtr(workflowID)},

@@ -463,7 +463,7 @@ func (t *timerQueueStandbyProcessorImpl) getTimerBuilder() *timerBuilder {
 
 func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.TimerTaskInfo,
 	action func(workflowExecutionContext, mutableState) error, postAction func() error) (retError error) {
-	context, release, err := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
 	if err != nil {
 		return err
 	}

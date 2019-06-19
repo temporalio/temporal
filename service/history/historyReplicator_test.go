@@ -183,7 +183,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -218,7 +218,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 	lastWriteVersion := version + 100
 	nextEventID := scheduleID - 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -278,7 +278,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 	lastWriteVersion := version - 100
 	nextEventID := scheduleID - 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -338,7 +338,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	lastWriteVersion := version
 	nextEventID := scheduleID + 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -398,7 +398,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivityV
 	lastWriteVersion := version + 10
 	nextEventID := scheduleID + 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -465,7 +465,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVer
 
 	nextEventID := scheduleID + 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -545,7 +545,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVer
 
 	nextEventID := scheduleID + 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),
@@ -625,7 +625,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_Update_LargerV
 
 	nextEventID := scheduleID + 10
 
-	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(workflowID),

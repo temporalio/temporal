@@ -153,7 +153,7 @@ func (r *historyReplicator) SyncActivity(ctx ctx.Context, request *h.SyncActivit
 		RunId:      request.RunId,
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -344,7 +344,7 @@ func (r *historyReplicator) ApplyEvents(ctx ctx.Context, request *h.ReplicateEve
 	}
 
 	execution := *request.WorkflowExecution
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -885,7 +885,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 func (r *historyReplicator) getCurrentWorkflowMutableState(ctx ctx.Context, domainID string,
 	workflowID string) (workflowExecutionContext, mutableState, releaseWorkflowExecutionFunc, error) {
 	// we need to check the current workflow execution
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx,
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx,
 		domainID,
 		// only use the workflow ID, to get the current running one
 		shared.WorkflowExecution{WorkflowId: common.StringPtr(workflowID)},

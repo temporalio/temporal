@@ -152,7 +152,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
-	context, release, err := p.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err := p.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
 	if err != nil {
 		return err
 	}

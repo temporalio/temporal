@@ -284,7 +284,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	clientFeatureVersion := call.Header(common.FeatureVersionHeaderName)
 	clientImpl := call.Header(common.ClientImplHeaderName)
 
-	context, release, err := handler.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, workflowExecution)
+	context, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, domainID, workflowExecution)
 	if err != nil {
 		return nil, err
 	}

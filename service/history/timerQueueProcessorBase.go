@@ -563,7 +563,7 @@ func (t *timerQueueProcessorBase) getDomainIDAndWorkflowExecution(task *persiste
 
 func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.TimerTaskInfo) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(task))
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
 	if err != nil {
 		return err
 	}

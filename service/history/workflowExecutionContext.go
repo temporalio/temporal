@@ -46,21 +46,50 @@ const (
 
 type (
 	workflowExecutionContext interface {
-		appendFirstBatchHistoryForContinueAsNew(newStateBuilder mutableState, transactionID int64) error
-		appendFirstBatchEventsForActive(msBuilder mutableState, createReplicationTask bool) (int, persistence.Task, error)
-		appendFirstBatchEventsForStandby(msBuilder mutableState, history []*workflow.HistoryEvent) (int, persistence.Task, error)
+		appendFirstBatchHistoryForContinueAsNew(
+			newStateBuilder mutableState,
+			transactionID int64,
+		) error
+		appendFirstBatchEventsForActive(
+			msBuilder mutableState,
+			createReplicationTask bool,
+		) (int, persistence.Task, error)
+		appendFirstBatchEventsForStandby(
+			msBuilder mutableState,
+			history []*workflow.HistoryEvent,
+		) (int, persistence.Task, error)
 		clear()
-		continueAsNewWorkflowExecution(context []byte, newStateBuilder mutableState, transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
+		continueAsNewWorkflowExecution(
+			context []byte,
+			newStateBuilder mutableState,
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			transactionID int64,
+		) error
 		createWorkflowExecution(
-			msBuilder mutableState, sourceCluster string, createReplicationTask bool, now time.Time,
-			transferTasks []persistence.Task, replicationTasks []persistence.Task, timerTasks []persistence.Task,
-			createMode int, prevRunID string, prevLastWriteVersion int64) error
+			msBuilder mutableState,
+			sourceCluster string,
+			createReplicationTask bool,
+			now time.Time,
+			transferTasks []persistence.Task,
+			replicationTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			createMode int,
+			prevRunID string,
+			prevLastWriteVersion int64,
+		) error
 		getDomainID() string
 		getExecution() *workflow.WorkflowExecution
 		getLogger() log.Logger
 		loadWorkflowExecution() (mutableState, error)
 		lock(ctx context.Context) error
-		replicateWorkflowExecution(request *h.ReplicateEventsRequest, transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID int64, now time.Time) error
+		replicateWorkflowExecution(
+			request *h.ReplicateEventsRequest,
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			lastEventID int64,
+			now time.Time,
+		) error
 		resetMutableState(
 			prevRunID string,
 			prevLastWriteVersion int64,
@@ -70,12 +99,45 @@ type (
 			timerTasks []persistence.Task,
 			resetBuilder mutableState,
 		) (mutableState, error)
-		resetWorkflowExecution(currMutableState mutableState, updateCurr bool, closeTask, cleanupTask persistence.Task, newMutableState mutableState, transferTasks, timerTasks, currReplicationTasks, insertReplicationTasks []persistence.Task, baseRunID string, forkRunNextEventID, prevRunVersion int64) (retError error)
-		scheduleNewDecision(transferTasks []persistence.Task, timerTasks []persistence.Task) ([]persistence.Task, []persistence.Task, error)
+		resetWorkflowExecution(
+			currMutableState mutableState,
+			updateCurr bool,
+			closeTask persistence.Task,
+			cleanupTask persistence.Task,
+			newMutableState mutableState,
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			currReplicationTasks []persistence.Task,
+			insertReplicationTasks []persistence.Task,
+			baseRunID string,
+			forkRunNextEventID int64,
+			prevRunVersion int64,
+		) (retError error)
+		scheduleNewDecision(
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+		) ([]persistence.Task, []persistence.Task, error)
 		unlock()
-		updateWorkflowExecutionForStandby(transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64, now time.Time, createReplicationTask bool, standbyHistoryBuilder *historyBuilder, sourceCluster string) error
-		updateWorkflowExecution(transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
-		updateWorkflowExecutionWithContext(context []byte, transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
+		updateWorkflowExecutionForStandby(
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			transactionID int64,
+			now time.Time,
+			createReplicationTask bool,
+			standbyHistoryBuilder *historyBuilder,
+			sourceCluster string,
+		) error
+		updateWorkflowExecution(
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			transactionID int64,
+		) error
+		updateWorkflowExecutionWithContext(
+			context []byte,
+			transferTasks []persistence.Task,
+			timerTasks []persistence.Task,
+			transactionID int64,
+		) error
 	}
 )
 
@@ -109,10 +171,12 @@ func newWorkflowExecutionContext(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
+
 	lg := logger.WithTags(
 		tag.WorkflowID(execution.GetWorkflowId()),
 		tag.WorkflowRunID(execution.GetRunId()),
-		tag.WorkflowDomainID(domainID))
+		tag.WorkflowDomainID(domainID),
+	)
 
 	return &workflowExecutionContextImpl{
 		domainID:          domainID,
@@ -192,9 +256,17 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 }
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
-	msBuilder mutableState, sourceCluster string, createReplicationTask bool, now time.Time,
-	transferTasks []persistence.Task, replicationTasks []persistence.Task, timerTasks []persistence.Task,
-	createMode int, prevRunID string, prevLastWriteVersion int64) error {
+	msBuilder mutableState,
+	sourceCluster string,
+	createReplicationTask bool,
+	now time.Time,
+	transferTasks []persistence.Task,
+	replicationTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	createMode int,
+	prevRunID string,
+	prevLastWriteVersion int64,
+) error {
 
 	if msBuilder.GetReplicationState() != nil {
 		msBuilder.UpdateReplicationStateLastEventID(
@@ -277,8 +349,8 @@ func (c *workflowExecutionContextImpl) resetMutableState(
 	transferTasks []persistence.Task,
 	timerTasks []persistence.Task,
 	resetBuilder mutableState,
-) (mutableState,
-	error) {
+) (mutableState, error) {
+
 	// this only resets one mutableState for a workflow
 	snapshotRequest := resetBuilder.ResetSnapshot(
 		prevRunID,
@@ -308,9 +380,13 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	updateCurr bool,
 	closeTask, cleanupTask persistence.Task,
 	newMutableState mutableState,
-	newTransferTasks, newTimerTasks, currReplicationTasks, insertReplicationTasks []persistence.Task,
+	newTransferTasks []persistence.Task,
+	newTimerTasks []persistence.Task,
+	currReplicationTasks []persistence.Task,
+	insertReplicationTasks []persistence.Task,
 	baseRunID string,
-	baseRunNextEventID, prevRunVersion int64,
+	baseRunNextEventID int64,
+	prevRunVersion int64,
 ) (retError error) {
 
 	now := time.Now()
@@ -420,22 +496,36 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	return c.shard.ResetWorkflowExecution(resetWFReq)
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithContext(context []byte, transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64) error {
-	c.msBuilder.GetExecutionInfo().ExecutionContext = context
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithContext(
+	context []byte,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+) error {
 
+	c.msBuilder.GetExecutionInfo().ExecutionContext = context
 	return c.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewRunAndContext(context []byte, transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64, newStateBuilder mutableState) error {
-	c.msBuilder.GetExecutionInfo().ExecutionContext = context
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewRunAndContext(
+	context []byte,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+	newStateBuilder mutableState,
+) error {
 
+	c.msBuilder.GetExecutionInfo().ExecutionContext = context
 	return c.updateWorkflowExecutionForActive(transferTasks, timerTasks, transactionID, newStateBuilder)
 }
 
-func (c *workflowExecutionContextImpl) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
-	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID int64, now time.Time) error {
+func (c *workflowExecutionContextImpl) replicateWorkflowExecution(
+	request *h.ReplicateEventsRequest,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	lastEventID int64,
+	now time.Time,
+) error {
 
 	transactionID, err := c.shard.GetNextTransferTaskID()
 	if err != nil {
@@ -446,7 +536,15 @@ func (c *workflowExecutionContextImpl) replicateWorkflowExecution(request *h.Rep
 	c.msBuilder.GetExecutionInfo().SetNextEventID(nextEventID)
 
 	standbyHistoryBuilder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
-	return c.updateWorkflowExecutionForStandby(transferTasks, timerTasks, transactionID, now, false, standbyHistoryBuilder, request.GetSourceCluster())
+	return c.updateWorkflowExecutionForStandby(
+		transferTasks,
+		timerTasks,
+		transactionID,
+		now,
+		false,
+		standbyHistoryBuilder,
+		request.GetSourceCluster(),
+	)
 }
 
 func (c *workflowExecutionContextImpl) updateVersion() error {
@@ -468,8 +566,13 @@ func (c *workflowExecutionContextImpl) updateVersion() error {
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64, newStateBuilder mutableState) error {
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+	newStateBuilder mutableState,
+) error {
+
 	if c.msBuilder.GetReplicationState() != nil {
 		currentVersion := c.msBuilder.GetCurrentVersion()
 
@@ -485,8 +588,19 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(transfer
 		if di, ok := c.msBuilder.GetInFlightDecisionTask(); ok && c.msBuilder.IsWorkflowExecutionRunning() {
 			if di.Version < currentVersion {
 				// we have a decision on the fly with a lower version, fail it
-				c.msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
-					workflow.DecisionTaskFailedCauseFailoverCloseDecision, nil, identityHistoryService, "", "", "", 0)
+				if _, err := c.msBuilder.AddDecisionTaskFailedEvent(
+					di.ScheduleID,
+					di.StartedID,
+					workflow.DecisionTaskFailedCauseFailoverCloseDecision,
+					nil,
+					identityHistoryService,
+					"",
+					"",
+					"",
+					0,
+				); err != nil {
+					return err
+				}
 
 				var transT, timerT []persistence.Task
 				transT, timerT, err := c.scheduleNewDecision(transT, timerT)
@@ -500,9 +614,14 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(transfer
 	}
 
 	if !c.createReplicationTask {
-		c.logger.Debug(fmt.Sprintf("Skipping replication task creation: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
-			c.domainID, c.workflowExecution.GetWorkflowId(), c.workflowExecution.GetRunId(),
-			c.msBuilder.GetExecutionInfo().LastFirstEventID, c.msBuilder.GetExecutionInfo().NextEventID))
+		c.logger.Debug(fmt.Sprintf(
+			"Skipping replication task creation: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
+			c.domainID,
+			c.workflowExecution.GetWorkflowId(),
+			c.workflowExecution.GetRunId(),
+			c.msBuilder.GetExecutionInfo().LastFirstEventID,
+			c.msBuilder.GetExecutionInfo().NextEventID),
+		)
 	}
 
 	// compare with bad binaries and schedule a reset task
@@ -528,23 +647,58 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(transfer
 	}
 
 	now := time.Now()
-	return c.update(transferTasks, timerTasks, transactionID, now, c.createReplicationTask, nil, "", newStateBuilder)
+	return c.update(
+		transferTasks,
+		timerTasks,
+		transactionID,
+		now,
+		c.createReplicationTask,
+		nil,
+		"",
+		newStateBuilder,
+	)
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecution(transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64) error {
+func (c *workflowExecutionContextImpl) updateWorkflowExecution(
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+) error {
 	return c.updateWorkflowExecutionForActive(transferTasks, timerTasks, transactionID, nil)
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionForStandby(transferTasks []persistence.Task, timerTasks []persistence.Task,
-	transactionID int64, now time.Time,
-	createReplicationTask bool, standbyHistoryBuilder *historyBuilder, sourceCluster string) (errRet error) {
-	return c.update(transferTasks, timerTasks, transactionID, now, createReplicationTask, standbyHistoryBuilder, sourceCluster, nil)
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionForStandby(
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+	now time.Time,
+	createReplicationTask bool,
+	standbyHistoryBuilder *historyBuilder,
+	sourceCluster string,
+) (errRet error) {
+
+	return c.update(
+		transferTasks,
+		timerTasks,
+		transactionID,
+		now,
+		createReplicationTask,
+		standbyHistoryBuilder,
+		sourceCluster,
+		nil,
+	)
 }
 
-func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, timerTasks []persistence.Task,
-	transactionID int64, now time.Time,
-	createReplicationTask bool, standbyHistoryBuilder *historyBuilder, sourceCluster string, newStateBuilder mutableState) (errRet error) {
+func (c *workflowExecutionContextImpl) update(
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+	now time.Time,
+	createReplicationTask bool,
+	standbyHistoryBuilder *historyBuilder,
+	sourceCluster string,
+	newStateBuilder mutableState,
+) (errRet error) {
 
 	defer func() {
 		if errRet != nil {
@@ -825,7 +979,11 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) appendFirstBatchEventsForActive(msBuilder mutableState, createReplicationTask bool) (int, persistence.Task, error) {
+func (c *workflowExecutionContextImpl) appendFirstBatchEventsForActive(
+	msBuilder mutableState,
+	createReplicationTask bool,
+) (int, persistence.Task, error) {
+
 	// call FlushBufferedEvents to assign task id to event
 	// as well as update last event task id in mutable state builder
 	err := msBuilder.FlushBufferedEvents()
@@ -836,19 +994,33 @@ func (c *workflowExecutionContextImpl) appendFirstBatchEventsForActive(msBuilder
 	return c.appendFirstBatchEvents(msBuilder, events, createReplicationTask)
 }
 
-func (c *workflowExecutionContextImpl) appendFirstBatchEventsForStandby(msBuilder mutableState, history []*workflow.HistoryEvent) (int, persistence.Task, error) {
+func (c *workflowExecutionContextImpl) appendFirstBatchEventsForStandby(
+	msBuilder mutableState,
+	history []*workflow.HistoryEvent,
+) (int, persistence.Task, error) {
+
 	return c.appendFirstBatchEvents(msBuilder, history, false)
 }
 
-func (c *workflowExecutionContextImpl) appendFirstBatchEvents(msBuilder mutableState, history []*workflow.HistoryEvent, replicateEvents bool) (int, persistence.Task, error) {
+func (c *workflowExecutionContextImpl) appendFirstBatchEvents(
+	msBuilder mutableState,
+	history []*workflow.HistoryEvent,
+	replicateEvents bool,
+) (int, persistence.Task, error) {
+
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
 	var historySize int
 	var err error
+
 	if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
 		historySize, err = c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
 			IsNewBranch: true,
-			Info:        historyGarbageCleanupInfo(c.domainID, c.workflowExecution.GetWorkflowId(), c.workflowExecution.GetRunId()),
+			Info: historyGarbageCleanupInfo(
+				c.domainID,
+				c.workflowExecution.GetWorkflowId(),
+				c.workflowExecution.GetRunId(),
+			),
 			BranchToken: msBuilder.GetCurrentBranch(),
 			Events:      history,
 			// It is ok to use 0 for TransactionID because RunID is unique so there are
@@ -887,8 +1059,13 @@ func (c *workflowExecutionContextImpl) appendFirstBatchEvents(msBuilder mutableS
 	return historySize, replicationTask, err
 }
 
-func (c *workflowExecutionContextImpl) appendHistoryEvents(history []*workflow.HistoryEvent,
-	transactionID int64, doLastEventValidation bool, replicateEvents bool, newStateBuilder mutableState) (int, persistence.Task, error) {
+func (c *workflowExecutionContextImpl) appendHistoryEvents(
+	history []*workflow.HistoryEvent,
+	transactionID int64,
+	doLastEventValidation bool,
+	replicateEvents bool,
+	newStateBuilder mutableState,
+) (int, persistence.Task, error) {
 
 	if doLastEventValidation {
 		if err := c.validateNoEventsAfterWorkflowFinish(history); err != nil {
@@ -955,8 +1132,13 @@ func (c *workflowExecutionContextImpl) appendHistoryEvents(history []*workflow.H
 	return historySize, replicationTask, nil
 }
 
-func (c *workflowExecutionContextImpl) continueAsNewWorkflowExecution(context []byte, newStateBuilder mutableState,
-	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
+func (c *workflowExecutionContextImpl) continueAsNewWorkflowExecution(
+	context []byte,
+	newStateBuilder mutableState,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	transactionID int64,
+) error {
 
 	err1 := c.appendFirstBatchHistoryForContinueAsNew(newStateBuilder, transactionID)
 	if err1 != nil {
@@ -971,8 +1153,11 @@ func (c *workflowExecutionContextImpl) continueAsNewWorkflowExecution(context []
 	return err2
 }
 
-func (c *workflowExecutionContextImpl) appendFirstBatchHistoryForContinueAsNew(newStateBuilder mutableState,
-	transactionID int64) error {
+func (c *workflowExecutionContextImpl) appendFirstBatchHistoryForContinueAsNew(
+	newStateBuilder mutableState,
+	transactionID int64,
+) error {
+
 	executionInfo := newStateBuilder.GetExecutionInfo()
 	domainID := executionInfo.DomainID
 	newExecution := workflow.WorkflowExecution{
@@ -1013,7 +1198,9 @@ func (c *workflowExecutionContextImpl) appendFirstBatchHistoryForContinueAsNew(n
 }
 
 func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
-	request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.GetWorkflowExecutionResponse, error) {
+
 	var response *persistence.GetWorkflowExecutionResponse
 	op := func() error {
 		var err error
@@ -1031,7 +1218,9 @@ func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
 }
 
 func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
-	request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
+
 	resp := &persistence.UpdateWorkflowExecutionResponse{}
 	op := func() error {
 		var err error
@@ -1053,8 +1242,11 @@ func (c *workflowExecutionContextImpl) clear() {
 // and may append more tasks to it.  It also returns back the slice with new tasks appended to it.  It is expected
 // caller to assign returned slice to original passed in slices.  For this reason we return the original slices
 // even if the method fails due to an error on loading workflow execution.
-func (c *workflowExecutionContextImpl) scheduleNewDecision(transferTasks []persistence.Task,
-	timerTasks []persistence.Task) ([]persistence.Task, []persistence.Task, error) {
+func (c *workflowExecutionContextImpl) scheduleNewDecision(
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+) ([]persistence.Task, []persistence.Task, error) {
+
 	msBuilder, err := c.loadWorkflowExecution()
 	if err != nil {
 		return transferTasks, timerTasks, err
@@ -1086,35 +1278,50 @@ func (c *workflowExecutionContextImpl) failInflightDecision() error {
 	c.clear()
 
 	// Reload workflow execution so we can apply the decision task failure event
-	msBuilder, err1 := c.loadWorkflowExecution()
-	if err1 != nil {
-		return err1
+	msBuilder, err := c.loadWorkflowExecution()
+	if err != nil {
+		return err
 	}
 
 	if di, ok := msBuilder.GetInFlightDecisionTask(); ok {
-		msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
-			workflow.DecisionTaskFailedCauseForceCloseDecision, nil, identityHistoryService, "", "", "", 0)
+		if _, err := msBuilder.AddDecisionTaskFailedEvent(
+			di.ScheduleID,
+			di.StartedID,
+			workflow.DecisionTaskFailedCauseForceCloseDecision,
+			nil,
+			identityHistoryService,
+			"",
+			"",
+			"",
+			0,
+		); err != nil {
+			return err
+		}
 
 		var transT, timerT []persistence.Task
-		transT, timerT, err1 = c.scheduleNewDecision(transT, timerT)
-		if err1 != nil {
-			return err1
+		transT, timerT, err = c.scheduleNewDecision(transT, timerT)
+		if err != nil {
+			return err
 		}
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err1 := c.shard.GetNextTransferTaskID()
-		if err1 != nil {
-			return err1
+		transactionID, err := c.shard.GetNextTransferTaskID()
+		if err != nil {
+			return err
 		}
-		err1 = c.updateWorkflowExecution(transT, timerT, transactionID)
-		if err1 != nil {
-			return err1
+		err = c.updateWorkflowExecution(transT, timerT, transactionID)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(stats *persistence.MutableStateStats, executionInfoHistorySize int64) {
+func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(
+	stats *persistence.MutableStateStats,
+	executionInfoHistorySize int64,
+) {
+
 	if stats == nil {
 		return
 	}
@@ -1129,7 +1336,10 @@ func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(stats *persist
 	emitWorkflowExecutionStats(domainSizeScope, domainCountScope, stats, executionInfoHistorySize)
 }
 
-func (c *workflowExecutionContextImpl) emitSessionUpdateStats(stats *persistence.MutableStateUpdateSessionStats) {
+func (c *workflowExecutionContextImpl) emitSessionUpdateStats(
+	stats *persistence.MutableStateUpdateSessionStats,
+) {
+
 	if stats == nil {
 		return
 	}
@@ -1144,7 +1354,10 @@ func (c *workflowExecutionContextImpl) emitSessionUpdateStats(stats *persistence
 	emitSessionUpdateStats(domainSizeScope, domainCountScope, stats)
 }
 
-func (c *workflowExecutionContextImpl) emitWorkflowCompletionStats(event *workflow.HistoryEvent) {
+func (c *workflowExecutionContextImpl) emitWorkflowCompletionStats(
+	event *workflow.HistoryEvent,
+) {
+
 	domain := ""
 	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
 		domain = entry.GetInfo().Name
@@ -1154,7 +1367,13 @@ func (c *workflowExecutionContextImpl) emitWorkflowCompletionStats(event *workfl
 	emitWorkflowCompletionStats(domainScope, event)
 }
 
-func emitWorkflowExecutionStats(sizeScope, countScope metrics.Scope, stats *persistence.MutableStateStats, executionInfoHistorySize int64) {
+func emitWorkflowExecutionStats(
+	sizeScope metrics.Scope,
+	countScope metrics.Scope,
+	stats *persistence.MutableStateStats,
+	executionInfoHistorySize int64,
+) {
+
 	sizeScope.RecordTimer(metrics.HistorySize, time.Duration(executionInfoHistorySize))
 	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
 	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.MutableStateSize))
@@ -1174,7 +1393,12 @@ func emitWorkflowExecutionStats(sizeScope, countScope metrics.Scope, stats *pers
 	countScope.RecordTimer(metrics.BufferedReplicationTasksCount, time.Duration(stats.BufferedReplicationTasksCount))
 }
 
-func emitSessionUpdateStats(sizeScope, countScope metrics.Scope, stats *persistence.MutableStateUpdateSessionStats) {
+func emitSessionUpdateStats(
+	sizeScope metrics.Scope,
+	countScope metrics.Scope,
+	stats *persistence.MutableStateUpdateSessionStats,
+) {
+
 	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
 	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.ExecutionInfoSize))
 	sizeScope.RecordTimer(metrics.ActivityInfoSize, time.Duration(stats.ActivityInfoSize))
@@ -1196,7 +1420,11 @@ func emitSessionUpdateStats(sizeScope, countScope metrics.Scope, stats *persiste
 	countScope.RecordTimer(metrics.DeleteRequestCancelInfoCount, time.Duration(stats.DeleteRequestCancelInfoCount))
 }
 
-func emitWorkflowCompletionStats(scope metrics.Scope, event *workflow.HistoryEvent) {
+func emitWorkflowCompletionStats(
+	scope metrics.Scope,
+	event *workflow.HistoryEvent,
+) {
+
 	if event.EventType == nil {
 		return
 	}
@@ -1217,7 +1445,10 @@ func emitWorkflowCompletionStats(scope metrics.Scope, event *workflow.HistoryEve
 // validateNoEventsAfterWorkflowFinish perform check on history event batch
 // NOTE: do not apply this check on every batch, since transient
 // decision && workflow finish will be broken (the first batch)
-func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(input []*workflow.HistoryEvent) error {
+func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(
+	input []*workflow.HistoryEvent,
+) error {
+
 	if len(input) == 0 {
 		return nil
 	}
