@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -122,9 +123,33 @@ func historyMutated(historyBlob *HistoryBlob, request *ArchiveRequest) bool {
 func validateArchivalRequest(request *ArchiveRequest) error {
 	if len(request.BucketName) == 0 {
 		// this should not be able to occur, if domain enables archival bucket should always be set
-		return cadence.NewCustomError(errEmptyBucket)
+		return cadence.NewCustomError(errInvalidRequest, errEmptyBucket)
 	}
 	return nil
+}
+
+func getUploadHistoryActivityResponse(progress uploadProgress, err error) (*uploadResult, error) {
+	if err == nil {
+		return nil, nil
+	}
+
+	fatalError := map[string]bool{
+		errGetDomainByID:  true,
+		errInvalidRequest: true,
+	}
+	errReason := err.Error()
+	if _, ok := fatalError[errReason]; ok {
+		return nil, err
+	}
+
+	errorWithDetails := errReason
+	if details := errorDetails(err); details != "" {
+		errorWithDetails = fmt.Sprintf("%v: %v", errReason, details)
+	}
+	return &uploadResult{
+		BlobsToDelete:    progress.UploadedBlobs,
+		ErrorWithDetails: errorWithDetails,
+	}, nil
 }
 
 func errorDetails(err error) string {

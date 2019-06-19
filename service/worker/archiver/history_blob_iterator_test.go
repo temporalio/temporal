@@ -59,13 +59,6 @@ type (
 		suite.Suite
 	}
 
-	iteratorState struct {
-		blobPageToken        int
-		persistencePageToken []byte
-		finishedIteration    bool
-		numEventsToSkip      int
-	}
-
 	page struct {
 		numEvents                 int
 		firstEventID              int64
@@ -95,7 +88,7 @@ func (s *HistoryBlobIteratorSuite) SetupTest() {
 func (s *HistoryBlobIteratorSuite) TestReadHistory_Failed_EventsV2() {
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	mockHistoryV2Manager.On("ReadHistoryBranch", mock.Anything).Return(nil, errors.New("got error reading history branch"))
-	itr := s.constructTestHistoryBlobIterator(nil, mockHistoryV2Manager, nil)
+	itr := s.constructTestHistoryBlobIterator(nil, mockHistoryV2Manager, nil, nil)
 	events, nextPageToken, err := itr.readHistory([]byte{})
 	s.Error(err)
 	s.Nil(events)
@@ -109,7 +102,7 @@ func (s *HistoryBlobIteratorSuite) TestReadHistory_Success_EventsV2() {
 		NextPageToken: []byte{},
 	}
 	mockHistoryV2Manager.On("ReadHistoryBranch", mock.Anything).Return(&resp, nil)
-	itr := s.constructTestHistoryBlobIterator(nil, mockHistoryV2Manager, nil)
+	itr := s.constructTestHistoryBlobIterator(nil, mockHistoryV2Manager, nil, nil)
 	events, nextPageToken, err := itr.readHistory([]byte{})
 	s.NoError(err)
 	s.NotNil(events)
@@ -119,7 +112,7 @@ func (s *HistoryBlobIteratorSuite) TestReadHistory_Success_EventsV2() {
 func (s *HistoryBlobIteratorSuite) TestReadHistory_Failed_EventsV1() {
 	mockHistoryManager := &mocks.HistoryManager{}
 	mockHistoryManager.On("GetWorkflowExecutionHistory", mock.Anything).Return(nil, errors.New("error getting workflow execution history"))
-	itr := s.constructTestHistoryBlobIterator(mockHistoryManager, nil, nil)
+	itr := s.constructTestHistoryBlobIterator(mockHistoryManager, nil, nil, nil)
 	events, nextPageToken, err := itr.readHistory([]byte{})
 	s.Error(err)
 	s.Nil(events)
@@ -134,7 +127,7 @@ func (s *HistoryBlobIteratorSuite) TestReadHistory_Success_EventsV1() {
 		},
 	}
 	mockHistoryManager.On("GetWorkflowExecutionHistory", mock.Anything).Return(&resp, nil)
-	itr := s.constructTestHistoryBlobIterator(mockHistoryManager, nil, nil)
+	itr := s.constructTestHistoryBlobIterator(mockHistoryManager, nil, nil, nil)
 	events, nextPageToken, err := itr.readHistory([]byte{})
 	s.NotNil(events)
 	s.Empty(nextPageToken)
@@ -151,13 +144,13 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Fail_FirstCallToReadHistor
 		},
 	}
 	historyManager, pageTokens := s.constructMockHistoryManager(0, false, pages...)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, nil)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, nil, nil)
 	startingIteratorState := s.copyIteratorState(itr)
-	events, nextPageToken, historyEndReached, numEventsToSkip, err := itr.readBlobEvents(pageTokens[0], 0)
+	events, nextIterState, err := itr.readBlobEvents(pageTokens[0], 0)
 	s.Nil(events)
-	s.Nil(nextPageToken)
-	s.False(historyEndReached)
-	s.Zero(numEventsToSkip)
+	s.Nil(nextIterState.PersistencePageToken)
+	s.False(nextIterState.FinishedIteration)
+	s.Zero(nextIterState.NumEventsToSkip)
 	s.Error(err)
 	s.assertStateMatches(startingIteratorState, itr)
 }
@@ -178,13 +171,13 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Fail_NonFirstCallToReadHis
 		},
 	}
 	historyManager, pageTokens := s.constructMockHistoryManager(1, false, pages...)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, nil)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, nil, nil)
 	startingIteratorState := s.copyIteratorState(itr)
-	events, nextPageToken, historyEndReached, numEventsToSkip, err := itr.readBlobEvents(pageTokens[0], 0)
+	events, nextIterState, err := itr.readBlobEvents(pageTokens[0], 0)
 	s.Nil(events)
-	s.Nil(nextPageToken)
-	s.False(historyEndReached)
-	s.Zero(numEventsToSkip)
+	s.Nil(nextIterState.PersistencePageToken)
+	s.False(nextIterState.FinishedIteration)
+	s.Zero(nextIterState.NumEventsToSkip)
 	s.Error(err)
 	s.assertStateMatches(startingIteratorState, itr)
 }
@@ -213,14 +206,14 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_ReadToHistoryEnd()
 	historyManager, pageTokens := s.constructMockHistoryManager(-1, false, pages...)
 	// ensure target blob size is greater than total history length to ensure all of history is read
 	config := constructConfig(testDefaultPersistencePageSize, 20*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 	startingIteratorState := s.copyIteratorState(itr)
-	events, nextPageToken, historyEndReached, numEventsToSkip, err := itr.readBlobEvents(pageTokens[0], 0)
+	events, nextIterState, err := itr.readBlobEvents(pageTokens[0], 0)
 	s.NotNil(events)
 	s.Len(events, 16)
-	s.Len(nextPageToken, 0)
-	s.True(historyEndReached)
-	s.Zero(numEventsToSkip)
+	s.Empty(nextIterState.PersistencePageToken)
+	s.True(nextIterState.FinishedIteration)
+	s.Zero(nextIterState.NumEventsToSkip)
 	s.NoError(err)
 	s.assertStateMatches(startingIteratorState, itr)
 }
@@ -249,15 +242,15 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_TargetSizeSatisfie
 	historyManager, pageTokens := s.constructMockHistoryManager(-1, false, pages...)
 	// ensure target blob size is smaller than full length of history so that not all of history is read
 	config := constructConfig(testDefaultPersistencePageSize, 11*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 	startingIteratorState := s.copyIteratorState(itr)
-	events, nextPageToken, historyEndReached, numEventsToSkip, err := itr.readBlobEvents(pageTokens[0], 0)
+	events, nextIterState, err := itr.readBlobEvents(pageTokens[0], 0)
 	s.NotNil(events)
 	s.Len(events, 11)
-	s.NotEmpty(nextPageToken)
-	s.Equal(pageTokens[len(pageTokens)-1], nextPageToken)
-	s.False(historyEndReached)
-	s.Equal(5, numEventsToSkip)
+	s.NotEmpty(nextIterState.PersistencePageToken)
+	s.Equal(pageTokens[len(pageTokens)-1], nextIterState.PersistencePageToken)
+	s.False(nextIterState.FinishedIteration)
+	s.Equal(5, nextIterState.NumEventsToSkip)
 	s.NoError(err)
 	s.assertStateMatches(startingIteratorState, itr)
 }
@@ -286,14 +279,14 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_ReadExactlyToHisto
 	historyManager, pageTokens := s.constructMockHistoryManager(-1, true, pages...)
 	// ensure target blob size is equal to the full length of history so that all of history is read
 	config := constructConfig(testDefaultPersistencePageSize, 16*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 	startingIteratorState := s.copyIteratorState(itr)
-	events, nextPageToken, historyEndReached, numEventsToSkip, err := itr.readBlobEvents(pageTokens[0], 0)
+	events, nextIterState, err := itr.readBlobEvents(pageTokens[0], 0)
 	s.NotNil(events)
 	s.Len(events, 16)
-	s.Len(nextPageToken, 0)
-	s.True(historyEndReached)
-	s.Zero(numEventsToSkip)
+	s.Empty(nextIterState.PersistencePageToken)
+	s.True(nextIterState.FinishedIteration)
+	s.Zero(nextIterState.NumEventsToSkip)
 	s.NoError(err)
 	s.assertStateMatches(startingIteratorState, itr)
 }
@@ -310,33 +303,33 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_ReadPageMultipleTi
 	historyManager, pageTokens := s.constructMockHistoryManager(-1, false, pages...)
 	// ensure target blob size is very small so that one page needs multiple read
 	config := constructConfig(testDefaultPersistencePageSize, 2*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 	startingIteratorState := s.copyIteratorState(itr)
-	events, nextPageToken, historyEndReached, numEventsToSkip, err := itr.readBlobEvents(pageTokens[0], 0)
+	events, nextIterState, err := itr.readBlobEvents(pageTokens[0], 0)
 	s.NotNil(events)
 	s.Len(events, 2)
-	s.Len(nextPageToken, 0)
-	s.False(historyEndReached)
-	s.Equal(2, numEventsToSkip)
+	s.Empty(nextIterState.PersistencePageToken)
+	s.False(nextIterState.FinishedIteration)
+	s.Equal(2, nextIterState.NumEventsToSkip)
 	s.NoError(err)
 	s.assertStateMatches(startingIteratorState, itr)
 
-	events, nextPageToken, historyEndReached, numEventsToSkip, err = itr.readBlobEvents(nextPageToken, numEventsToSkip)
+	events, nextIterState, err = itr.readBlobEvents(nextIterState.PersistencePageToken, nextIterState.NumEventsToSkip)
 	s.NotNil(events)
 	s.Len(events, 2)
-	s.Len(nextPageToken, 0)
-	s.False(historyEndReached)
-	s.Equal(4, numEventsToSkip)
+	s.Empty(nextIterState.PersistencePageToken)
+	s.False(nextIterState.FinishedIteration)
+	s.Equal(4, nextIterState.NumEventsToSkip)
 	s.NoError(err)
 	s.Equal(int64(3), events[0].GetEventId())
 	s.assertStateMatches(startingIteratorState, itr)
 
-	events, nextPageToken, historyEndReached, numEventsToSkip, err = itr.readBlobEvents(nextPageToken, numEventsToSkip)
+	events, nextIterState, err = itr.readBlobEvents(nextIterState.PersistencePageToken, nextIterState.NumEventsToSkip)
 	s.NotNil(events)
 	s.Len(events, 2)
-	s.Len(nextPageToken, 0)
-	s.True(historyEndReached)
-	s.Zero(numEventsToSkip)
+	s.Empty(nextIterState.PersistencePageToken)
+	s.True(nextIterState.FinishedIteration)
+	s.Zero(nextIterState.NumEventsToSkip)
 	s.NoError(err)
 	s.Equal(int64(5), events[0].GetEventId())
 	s.assertStateMatches(startingIteratorState, itr)
@@ -366,15 +359,15 @@ func (s *HistoryBlobIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	historyManager, _ := s.constructMockHistoryManager(-1, true, pages...)
 	// set target blob size such that a single call to next will read all of history
 	config := constructConfig(testDefaultPersistencePageSize, 16*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	blob, err := itr.Next()
-	expectedIteratorState := iteratorState{
+	expectedIteratorState := historyBlobIteratorState{
 		// when iteration is finished page token is not advanced
-		blobPageToken:        startingIteratorState.blobPageToken,
-		persistencePageToken: nil,
-		finishedIteration:    true,
-		numEventsToSkip:      0,
+		BlobPageToken:        startingIteratorState.BlobPageToken,
+		PersistencePageToken: nil,
+		FinishedIteration:    true,
+		NumEventsToSkip:      0,
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
@@ -424,14 +417,14 @@ func (s *HistoryBlobIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	historyManager, pageTokens := s.constructMockHistoryManager(3, false, pages...)
 	// set target blob size such that the first two pages are read for blob one without error, third page will return error
 	config := constructConfig(testDefaultPersistencePageSize, 6*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	blob, err := itr.Next()
-	expectedIteratorState := iteratorState{
-		blobPageToken:        startingIteratorState.blobPageToken + 1,
-		persistencePageToken: pageTokens[2],
-		finishedIteration:    false,
-		numEventsToSkip:      0,
+	expectedIteratorState := historyBlobIteratorState{
+		BlobPageToken:        startingIteratorState.BlobPageToken + 1,
+		PersistencePageToken: pageTokens[2],
+		FinishedIteration:    false,
+		NumEventsToSkip:      0,
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
@@ -464,12 +457,12 @@ func (s *HistoryBlobIteratorSuite) TestNext_Success_TenCallsToNext() {
 	historyManager, pageTokens := s.constructMockHistoryManager(-1, false, pages...)
 	// set config such that every 10 persistence pages is one blob
 	config := constructConfig(testDefaultPersistencePageSize, 20*10*testDefaultHistoryEventSize)
-	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config)
-	expectedIteratorState := iteratorState{
-		blobPageToken:        common.FirstBlobPageToken,
-		persistencePageToken: nil,
-		finishedIteration:    false,
-		numEventsToSkip:      0,
+	itr := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
+	expectedIteratorState := historyBlobIteratorState{
+		BlobPageToken:        common.FirstBlobPageToken,
+		PersistencePageToken: nil,
+		FinishedIteration:    false,
+		NumEventsToSkip:      0,
 	}
 	for i := 0; i < 10; i++ {
 		s.assertStateMatches(expectedIteratorState, itr)
@@ -489,15 +482,31 @@ func (s *HistoryBlobIteratorSuite) TestNext_Success_TenCallsToNext() {
 		}
 		s.Equal(int64(200), *blob.Header.EventCount)
 		if i < 9 {
-			expectedIteratorState.blobPageToken = expectedIteratorState.blobPageToken + 1
-			expectedIteratorState.persistencePageToken = pageTokens[10+(i*10)]
+			expectedIteratorState.BlobPageToken = expectedIteratorState.BlobPageToken + 1
+			expectedIteratorState.PersistencePageToken = pageTokens[10+(i*10)]
 		} else {
-			expectedIteratorState.persistencePageToken = nil
-			expectedIteratorState.finishedIteration = true
+			expectedIteratorState.PersistencePageToken = nil
+			expectedIteratorState.FinishedIteration = true
 		}
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.False(itr.HasNext())
+}
+
+func (s *HistoryBlobIteratorSuite) TestNewIteratorWithState() {
+	itr := s.constructTestHistoryBlobIterator(nil, nil, nil, nil)
+	testIteratorState := historyBlobIteratorState{
+		BlobPageToken:        123,
+		PersistencePageToken: []byte{'r', 'a', 'n', 'd', 'o', 'm'},
+		FinishedIteration:    true,
+		NumEventsToSkip:      3,
+	}
+	itr.historyBlobIteratorState = testIteratorState
+	stateToken, err := itr.GetState()
+	s.NoError(err)
+
+	newItr := s.constructTestHistoryBlobIterator(nil, nil, nil, stateToken)
+	s.assertStateMatches(testIteratorState, newItr)
 }
 
 func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_SameHistoryDifferentPage() {
@@ -525,7 +534,7 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_SameHistoryDiffere
 	targetBlobSize := eventsPerBlob * testDefaultHistoryEventSize
 	historyManager, _ := s.constructMockHistoryManager(-1, false, pages...)
 	config := constructConfig(testDefaultPersistencePageSize, targetBlobSize)
-	itr1 := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr1 := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 
 	pages = []page{
 		{
@@ -554,7 +563,7 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_SameHistoryDiffere
 		},
 	}
 	historyManager, _ = s.constructMockHistoryManager(-1, false, pages...)
-	itr2 := s.constructTestHistoryBlobIterator(historyManager, nil, config)
+	itr2 := s.constructTestHistoryBlobIterator(historyManager, nil, config, nil)
 
 	totalPages := 4
 	for i := 0; i != totalPages; i++ {
@@ -571,11 +580,11 @@ func (s *HistoryBlobIteratorSuite) TestReadBlobEvents_Success_SameHistoryDiffere
 		s.Equal(*blob1.Header.FirstEventID, *blob2.Header.FirstEventID)
 		s.Equal(*blob1.Header.LastEventID, *blob2.Header.LastEventID)
 	}
-	expectedIteratorState := iteratorState{
-		blobPageToken:        totalPages,
-		persistencePageToken: nil,
-		finishedIteration:    true,
-		numEventsToSkip:      0,
+	expectedIteratorState := historyBlobIteratorState{
+		BlobPageToken:        totalPages,
+		PersistencePageToken: nil,
+		FinishedIteration:    true,
+		NumEventsToSkip:      0,
 	}
 	s.assertStateMatches(expectedIteratorState, itr1)
 	s.assertStateMatches(expectedIteratorState, itr2)
@@ -641,20 +650,15 @@ func (s *HistoryBlobIteratorSuite) constructMockHistoryManager(returnErrorOnPage
 	return mockHistoryManager, pageTokens
 }
 
-func (s *HistoryBlobIteratorSuite) copyIteratorState(itr *historyBlobIterator) iteratorState {
-	return iteratorState{
-		blobPageToken:        itr.blobPageToken,
-		persistencePageToken: itr.persistencePageToken,
-		finishedIteration:    itr.finishedIteration,
-		numEventsToSkip:      itr.numEventsToSkip,
-	}
+func (s *HistoryBlobIteratorSuite) copyIteratorState(itr *historyBlobIterator) historyBlobIteratorState {
+	return itr.historyBlobIteratorState
 }
 
-func (s *HistoryBlobIteratorSuite) assertStateMatches(expected iteratorState, itr *historyBlobIterator) {
-	s.Equal(expected.blobPageToken, itr.blobPageToken)
-	s.Equal(expected.persistencePageToken, itr.persistencePageToken)
-	s.Equal(expected.finishedIteration, itr.finishedIteration)
-	s.Equal(expected.numEventsToSkip, itr.numEventsToSkip)
+func (s *HistoryBlobIteratorSuite) assertStateMatches(expected historyBlobIteratorState, itr *historyBlobIterator) {
+	s.Equal(expected.BlobPageToken, itr.BlobPageToken)
+	s.Equal(expected.PersistencePageToken, itr.PersistencePageToken)
+	s.Equal(expected.FinishedIteration, itr.FinishedIteration)
+	s.Equal(expected.NumEventsToSkip, itr.NumEventsToSkip)
 }
 
 func (s *HistoryBlobIteratorSuite) constructHistoryEvents(page page) []*shared.HistoryEvent {
@@ -676,6 +680,7 @@ func (s *HistoryBlobIteratorSuite) constructTestHistoryBlobIterator(
 	mockHistoryManager *mocks.HistoryManager,
 	mockHistoryV2Manager *mocks.HistoryV2Manager,
 	config *Config,
+	initialState []byte,
 ) *historyBlobIterator {
 	var eventStoreVersion int32
 	if mockHistoryV2Manager != nil {
@@ -701,7 +706,9 @@ func (s *HistoryBlobIteratorSuite) constructTestHistoryBlobIterator(
 		Config:               config,
 		HistorySizeEstimator: newTestSizeEstimator(),
 	}
-	return NewHistoryBlobIterator(request, container, testDomain, testClusterName).(*historyBlobIterator)
+	iterator, err := NewHistoryBlobIterator(request, container, testDomain, testClusterName, initialState)
+	s.NoError(err)
+	return iterator.(*historyBlobIterator)
 }
 
 func constructConfig(historyPageSize, targetArchivalBlobSize int) *Config {
