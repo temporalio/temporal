@@ -171,7 +171,7 @@ func NewGlobalDomainCacheEntryForTest(
 	}
 }
 
-// NeLocalDomainCacheEntryForTest returns an entry with test data
+// NewLocalDomainCacheEntryForTest returns an entry with test data
 func NewLocalDomainCacheEntryForTest(
 	info *persistence.DomainInfo,
 	config *persistence.DomainConfig,

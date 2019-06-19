@@ -171,6 +171,7 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 	return NewKafkaProducer(topic, producer, c.logger), nil
 }
 
+// CreateTLSConfig return tls config
 func CreateTLSConfig(tlsConfig TLS) (*tls.Config, error) {
 	if !tlsConfig.Enabled {
 		return nil, nil

@@ -114,7 +114,7 @@ func (handler *DCRedirectionHandlerImpl) DeprecateDomain(
 	request *shared.DeprecateDomainRequest,
 ) (retError error) {
 
-	var cluster string = handler.currentClusterName
+	var cluster = handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeprecateDomainScope)
 	defer func() {
@@ -130,7 +130,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeDomain(
 	request *shared.DescribeDomainRequest,
 ) (resp *shared.DescribeDomainResponse, retError error) {
 
-	var cluster string = handler.currentClusterName
+	var cluster = handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeDomainScope)
 	defer func() {
@@ -146,7 +146,7 @@ func (handler *DCRedirectionHandlerImpl) ListDomains(
 	request *shared.ListDomainsRequest,
 ) (resp *shared.ListDomainsResponse, retError error) {
 
-	var cluster string = handler.currentClusterName
+	var cluster = handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListDomainsScope)
 	defer func() {
@@ -162,7 +162,7 @@ func (handler *DCRedirectionHandlerImpl) RegisterDomain(
 	request *shared.RegisterDomainRequest,
 ) (retError error) {
 
-	var cluster string = handler.currentClusterName
+	var cluster = handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRegisterDomainScope)
 	defer func() {
@@ -178,7 +178,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateDomain(
 	request *shared.UpdateDomainRequest,
 ) (resp *shared.UpdateDomainResponse, retError error) {
 
-	var cluster string = handler.currentClusterName
+	var cluster = handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateDomainScope)
 	defer func() {
@@ -434,7 +434,7 @@ func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 	ctx context.Context,
 ) (resp *shared.GetSearchAttributesResponse, retError error) {
 
-	var cluster string = handler.currentClusterName
+	var cluster = handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetSearchAttributesScope)
 	defer func() {
