@@ -1396,6 +1396,20 @@ func (_m *mockMutableState) GetAllSignalsToSend() map[int64]*persistence.SignalI
 	return r0
 }
 
+// GetVersionHistories provide mocks
+func (_m *mockMutableState) GetVersionHistories() *persistence.VersionHistories {
+	ret := _m.Called()
+
+	var r0 *persistence.VersionHistories
+	if rf, ok := ret.Get(0).(func() *persistence.VersionHistories); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(*persistence.VersionHistories)
+	}
+
+	return r0
+}
+
 // GetChildExecutionInfo provides a mock function with given fields: _a0
 func (_m *mockMutableState) GetChildExecutionInfo(_a0 int64) (*persistence.ChildExecutionInfo, bool) {
 	ret := _m.Called(_a0)
@@ -1906,6 +1920,27 @@ func (_m *mockMutableState) GetWorkflowType() *shared.WorkflowType {
 	}
 
 	return r0
+}
+
+// GetWorkflowStateCloseStatus provides a mock function with given fields:
+func (_m *mockMutableState) GetWorkflowStateCloseStatus() (int, int) {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	var r1 int
+	if rf, ok := ret.Get(1).(func() int); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	return r0, r1
 }
 
 // HasBufferedEvents provides a mock function with given fields:
@@ -2737,6 +2772,20 @@ func (_m *mockMutableState) SetNewRunSize(size int) {
 	_m.Called(size)
 }
 
+// SetVersionHistories provides a mock function with given fields: _a0
+func (_m *mockMutableState) SetVersionHistories(_a0 *persistence.VersionHistories) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.VersionHistories) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // UpdateActivity provides a mock function with given fields: _a0
 func (_m *mockMutableState) UpdateActivity(_a0 *persistence.ActivityInfo) error {
 	ret := _m.Called(_a0)
@@ -2776,15 +2825,15 @@ func (_m *mockMutableState) UpdateUserTimer(_a0 string, _a1 *persistence.TimerIn
 	_m.Called(_a0, _a1)
 }
 
-// GetAllVersionHistories provide mocks
-func (_m *mockMutableState) GetAllVersionHistories() *persistence.VersionHistories {
-	ret := _m.Called()
+// UpdateActivity provides a mock function with given fields: _a0
+func (_m *mockMutableState) UpdateWorkflowStateCloseStatus(_a0 int, _a1 int) error {
+	ret := _m.Called(_a0, _a1)
 
-	var r0 *persistence.VersionHistories
-	if rf, ok := ret.Get(0).(func() *persistence.VersionHistories); ok {
-		r0 = rf()
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, int) error); ok {
+		r0 = rf(_a0, _a1)
 	} else {
-		r0 = ret.Get(0).(*persistence.VersionHistories)
+		r0 = ret.Error(0)
 	}
 
 	return r0

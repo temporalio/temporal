@@ -37,9 +37,15 @@ import (
 
 type (
 	stateBuilder interface {
-		applyEvents(domainID, requestID string, execution shared.WorkflowExecution, history []*shared.HistoryEvent,
-			newRunHistory []*shared.HistoryEvent, eventStoreVersion, newRunEventStoreVersion int32) (*shared.HistoryEvent,
-			*decisionInfo, mutableState, error)
+		applyEvents(
+			domainID string,
+			requestID string,
+			execution shared.WorkflowExecution,
+			history []*shared.HistoryEvent,
+			newRunHistory []*shared.HistoryEvent,
+			eventStoreVersion int32,
+			newRunEventStoreVersion int32,
+		) (*shared.HistoryEvent, *decisionInfo, mutableState, error)
 		getTransferTasks() []persistence.Task
 		getTimerTasks() []persistence.Task
 		getNewRunTransferTasks() []persistence.Task
@@ -124,6 +130,18 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
 			sourceClusterName := b.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
 			b.msBuilder.UpdateReplicationStateLastEventID(sourceClusterName, lastEvent.GetVersion(), lastEvent.GetEventId())
+		} else if b.msBuilder.GetVersionHistories() != nil {
+			versionHistories := b.msBuilder.GetVersionHistories()
+			versionHistory, err := versionHistories.GetVersionHistory(versionHistories.GetCurrentBranchIndex())
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if err := versionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+				event.GetEventId(),
+				event.GetVersion(),
+			)); err != nil {
+				return nil, nil, nil, err
+			}
 		}
 		b.msBuilder.GetExecutionInfo().LastEventTaskID = event.GetTaskId()
 
@@ -503,13 +521,27 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 			newRunStartedEvent := newRunHistory[0]
 			// Create mutable state updates for the new run
-			newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-				b.clusterMetadata.GetCurrentClusterName(),
-				b.shard,
-				b.shard.GetEventsCache(),
-				b.logger,
-				newRunStartedEvent.GetVersion(),
-			)
+			if b.msBuilder.GetReplicationState() != nil {
+				newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
+					b.clusterMetadata.GetCurrentClusterName(),
+					b.shard,
+					b.shard.GetEventsCache(),
+					b.logger,
+					newRunStartedEvent.GetVersion(),
+				)
+			} else if b.msBuilder.GetVersionHistories() != nil {
+				// TODO add a configuration to migrate from replication state
+				//  to version histories
+				newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
+					b.clusterMetadata.GetCurrentClusterName(),
+					b.shard,
+					b.shard.GetEventsCache(),
+					b.logger,
+					newRunStartedEvent.GetVersion(),
+				)
+			} else {
+				return nil, nil, nil, errors.NewInternalFailureError("either replication state or version histories should be set")
+			}
 			newRunStateBuilder := newStateBuilder(b.shard, newRunMutableStateBuilder, b.logger)
 
 			newRunID := event.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()

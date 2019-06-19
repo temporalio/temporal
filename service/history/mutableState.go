@@ -117,7 +117,7 @@ type (
 		GetStartEvent() (*workflow.HistoryEvent, bool)
 		GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest
 		GetCurrentBranch() []byte
-		GetAllVersionHistories() *persistence.VersionHistories
+		GetVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetEventStoreVersion() int32
@@ -143,6 +143,7 @@ type (
 		GetStartVersion() int64
 		GetUserTimer(string) (bool, *persistence.TimerInfo)
 		GetWorkflowType() *workflow.WorkflowType
+		GetWorkflowStateCloseStatus() (int, int)
 		HasBufferedEvents() bool
 		HasBufferedReplicationTasks() bool
 		HasInFlightDecisionTask() bool
@@ -199,11 +200,13 @@ type (
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
 		SetNewRunSize(size int)
+		SetVersionHistories(*persistence.VersionHistories) error
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
 		UpdateDecision(*decisionInfo)
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(string, int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
+		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
 	}
 )

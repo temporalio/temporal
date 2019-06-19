@@ -613,7 +613,7 @@ func (e *historyEngineImpl) getMutableState(ctx ctx.Context,
 			}
 		}
 	}
-	versionHistories := msBuilder.GetAllVersionHistories()
+	versionHistories := msBuilder.GetVersionHistories()
 	if versionHistories != nil {
 		retResp.VersionHistories = versionHistories.ToThrift()
 	}

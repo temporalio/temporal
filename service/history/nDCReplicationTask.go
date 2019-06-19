@@ -30,10 +30,11 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
-	historyReplicationTask interface {
+	nDCReplicationTask interface {
 		getDomainID() string
 		getExecution() shared.WorkflowExecution
 		getWorkflowID() string
@@ -46,10 +47,11 @@ type (
 		getEvents() []*shared.HistoryEvent
 		getNewRunEvents() []*shared.HistoryEvent
 		getLogger() log.Logger
+		getVersionHistory() *persistence.VersionHistory
 		getRequest() *h.ReplicateEventsRequest
 	}
 
-	historyReplicationTaskImpl struct {
+	nDCReplicationTaskImpl struct {
 		sourceCluster       string
 		domainID            string
 		execution           shared.WorkflowExecution
@@ -67,8 +69,21 @@ type (
 	}
 )
 
-func newReplicationTask(clusterMetadata cluster.Metadata, now time.Time, logger log.Logger,
-	request *h.ReplicateEventsRequest) (*historyReplicationTaskImpl, error) {
+var (
+	// ErrInvalidDomainID is returned if domain ID is invalid
+	ErrInvalidDomainID = &shared.BadRequestError{Message: "invalid domain ID"}
+	// ErrInvalidExecution is returned if execution is invalid
+	ErrInvalidExecution = &shared.BadRequestError{Message: "invalid execution"}
+	// ErrInvalidRunID is returned if run ID is invalid
+	ErrInvalidRunID = &shared.BadRequestError{Message: "invalid run ID"}
+	// ErrEventIDMismatch is returned if event ID mis-matched
+	ErrEventIDMismatch = &shared.BadRequestError{Message: "event ID mismatch"}
+	// ErrEventVersionMismatch is returned if event version mis-matched
+	ErrEventVersionMismatch = &shared.BadRequestError{Message: "event version mismatch"}
+)
+
+func newNDCReplicationTask(clusterMetadata cluster.Metadata, now time.Time, logger log.Logger,
+	request *h.ReplicateEventsRequest) (*nDCReplicationTaskImpl, error) {
 
 	if err := validateReplicateEventsRequest(request); err != nil {
 		return nil, err
@@ -105,7 +120,7 @@ func newReplicationTask(clusterMetadata cluster.Metadata, now time.Time, logger 
 		tag.WorkflowNextEventID(lastEvent.GetTaskId()+1),
 	)
 
-	return &historyReplicationTaskImpl{
+	return &nDCReplicationTaskImpl{
 		sourceCluster: sourceCluster,
 		domainID:      domainID,
 		execution: shared.WorkflowExecution{
@@ -126,55 +141,59 @@ func newReplicationTask(clusterMetadata cluster.Metadata, now time.Time, logger 
 	}, nil
 }
 
-func (t *historyReplicationTaskImpl) getDomainID() string {
+func (t *nDCReplicationTaskImpl) getDomainID() string {
 	return t.domainID
 }
 
-func (t *historyReplicationTaskImpl) getExecution() shared.WorkflowExecution {
+func (t *nDCReplicationTaskImpl) getExecution() shared.WorkflowExecution {
 	return t.execution
 }
 
-func (t *historyReplicationTaskImpl) getWorkflowID() string {
+func (t *nDCReplicationTaskImpl) getWorkflowID() string {
 	return t.execution.GetWorkflowId()
 }
 
-func (t *historyReplicationTaskImpl) getRunID() string {
+func (t *nDCReplicationTaskImpl) getRunID() string {
 	return t.execution.GetRunId()
 }
 
-func (t *historyReplicationTaskImpl) getEventTime() time.Time {
+func (t *nDCReplicationTaskImpl) getEventTime() time.Time {
 	return t.eventTime
 }
 
-func (t *historyReplicationTaskImpl) getFirstEvent() *shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getFirstEvent() *shared.HistoryEvent {
 	return t.firstEvent
 }
 
-func (t *historyReplicationTaskImpl) getLastEvent() *shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getLastEvent() *shared.HistoryEvent {
 	return t.lastEvent
 }
 
-func (t *historyReplicationTaskImpl) getVersion() int64 {
+func (t *nDCReplicationTaskImpl) getVersion() int64 {
 	return t.version
 }
 
-func (t *historyReplicationTaskImpl) getSourceCluster() string {
+func (t *nDCReplicationTaskImpl) getSourceCluster() string {
 	return t.sourceCluster
 }
 
-func (t *historyReplicationTaskImpl) getEvents() []*shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getEvents() []*shared.HistoryEvent {
 	return t.historyEvents
 }
 
-func (t *historyReplicationTaskImpl) getNewRunEvents() []*shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getNewRunEvents() []*shared.HistoryEvent {
 	return t.newRunHistoryEvents
 }
 
-func (t *historyReplicationTaskImpl) getLogger() log.Logger {
+func (t *nDCReplicationTaskImpl) getLogger() log.Logger {
 	return t.logger
 }
 
-func (t *historyReplicationTaskImpl) getRequest() *h.ReplicateEventsRequest {
+func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory {
+	panic("implement this")
+}
+
+func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsRequest {
 	return t.request
 }
 

@@ -97,6 +97,35 @@ func (_m *mockWorkflowExecutionContext) appendFirstBatchEventsForStandby(_a0 mut
 	return r0, r1, r2
 }
 
+func (_m *mockWorkflowExecutionContext) appendHistoryEvents(_a0 []*workflow.HistoryEvent, _a1 int64, _a2 bool, _a3 bool, _a4 mutableState) (int, persistence.Task, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func([]*workflow.HistoryEvent, int64, bool, bool, mutableState) int); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	var r1 persistence.Task
+	if rf, ok := ret.Get(1).(func([]*workflow.HistoryEvent, int64, bool, bool, mutableState) persistence.Task); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(persistence.Task)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func([]*workflow.HistoryEvent, int64, bool, bool, mutableState) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 func (_m *mockWorkflowExecutionContext) clear() {
 	_m.Called()
 }

@@ -148,7 +148,6 @@ func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCac
 		CloseStatus:        persistence.WorkflowCloseStatusNone,
 		LastProcessedEvent: common.EmptyEventID,
 	}
-	s.versionHistories = &persistence.VersionHistories{}
 	s.hBuilder = newHistoryBuilder(s, logger)
 
 	return s
@@ -172,11 +171,15 @@ func newMutableStateBuilderWithReplicationState(
 	return s
 }
 
-//TODO: revisit this method to make sure versionHistories initializes in a correct way
-func newMutableStateBuilderWithVersionHistories(currentCluster string, shard ShardContext, eventsCache eventsCache,
-	logger log.Logger, versionHistories persistence.VersionHistories) *mutableStateBuilder {
+func newMutableStateBuilderWithVersionHistories(
+	currentCluster string,
+	shard ShardContext,
+	eventsCache eventsCache,
+	logger log.Logger,
+	version int64, // TODO the version is in memory only, where should we put it?
+) *mutableStateBuilder {
 	s := newMutableStateBuilder(currentCluster, shard, eventsCache, logger)
-	s.versionHistories = &versionHistories
+	s.versionHistories = persistence.NewVersionHistories(&persistence.VersionHistory{})
 	return s
 }
 
@@ -224,7 +227,7 @@ func (e *mutableStateBuilder) GetCurrentBranch() []byte {
 	return e.executionInfo.GetCurrentBranch()
 }
 
-func (e *mutableStateBuilder) GetAllVersionHistories() *persistence.VersionHistories {
+func (e *mutableStateBuilder) GetVersionHistories() *persistence.VersionHistories {
 	return e.versionHistories
 }
 
@@ -252,6 +255,11 @@ func (e *mutableStateBuilder) SetNewRunSize(size int) {
 	if e.continueAsNew != nil {
 		e.continueAsNew.HistorySize = int64(size)
 	}
+}
+
+func (e *mutableStateBuilder) SetVersionHistories(versionHistories *persistence.VersionHistories) error {
+	e.versionHistories = versionHistories
+	return nil
 }
 
 func (e *mutableStateBuilder) GetHistoryBuilder() *historyBuilder {
@@ -1475,8 +1483,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTimeout = event.GetExecutionStartToCloseTimeoutSeconds()
 	e.executionInfo.DecisionTimeoutValue = event.GetTaskStartToCloseTimeoutSeconds()
 
-	e.executionInfo.State = persistence.WorkflowStateCreated
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusNone
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCreated,
+		persistence.WorkflowCloseStatusNone,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.LastProcessedEvent = common.EmptyEventID
 	e.executionInfo.LastFirstEventID = startEvent.GetEventId()
 	e.executionInfo.CreateRequestID = requestID
@@ -1537,10 +1549,6 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, er
 			tag.WorkflowScheduleID(e.executionInfo.DecisionScheduleID))
 		return nil, e.createInternalServerError(opTag)
 	}
-
-	// set workflow state to running
-	// since decision is scheduled
-	e.executionInfo.State = persistence.WorkflowStateRunning
 
 	// Tasklist and decision timeout should already be set from workflow execution started event
 	taskList := e.executionInfo.TaskList
@@ -1620,6 +1628,17 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(
 	attempt int64,
 	timestamp int64,
 ) (*decisionInfo, error) {
+
+	// set workflow state to running, since decision is scheduled
+	if state, _ := e.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCreated {
+		if err := e.UpdateWorkflowStateCloseStatus(
+			persistence.WorkflowStateRunning,
+			persistence.WorkflowCloseStatusNone,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	di := &decisionInfo{
 		Version:            version,
 		ScheduleID:         scheduleID,
@@ -1710,7 +1729,6 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskStartedEvent(
 		di.Attempt = 0
 	}
 
-	e.executionInfo.State = persistence.WorkflowStateRunning
 	// Update mutable decision state
 	di = &decisionInfo{
 		Version:            version,
@@ -2414,8 +2432,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 	event *workflow.HistoryEvent,
 ) error {
 
-	e.executionInfo.State = persistence.WorkflowStateCompleted
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusCompleted
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCompleted,
+		persistence.WorkflowCloseStatusCompleted,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
 	e.writeEventToCache(event)
 	return nil
@@ -2443,8 +2465,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 	event *workflow.HistoryEvent,
 ) error {
 
-	e.executionInfo.State = persistence.WorkflowStateCompleted
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusFailed
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCompleted,
+		persistence.WorkflowCloseStatusFailed,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
 	e.writeEventToCache(event)
 	return nil
@@ -2469,8 +2495,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 	event *workflow.HistoryEvent,
 ) error {
 
-	e.executionInfo.State = persistence.WorkflowStateCompleted
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusTimedOut
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCompleted,
+		persistence.WorkflowCloseStatusTimedOut,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
 	e.writeEventToCache(event)
 	return nil
@@ -2533,8 +2563,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 	firstEventID int64,
 	event *workflow.HistoryEvent,
 ) error {
-	e.executionInfo.State = persistence.WorkflowStateCompleted
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusCanceled
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCompleted,
+		persistence.WorkflowCloseStatusCanceled,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
 	e.writeEventToCache(event)
 	return nil
@@ -2961,8 +2995,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 	event *workflow.HistoryEvent,
 ) error {
 
-	e.executionInfo.State = persistence.WorkflowStateCompleted
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusTerminated
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCompleted,
+		persistence.WorkflowCloseStatusTerminated,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
 	e.writeEventToCache(event)
 	return nil
@@ -3034,12 +3072,23 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
+	// TODO use version history for both local & global workflow
 	var newStateBuilder *mutableStateBuilder
 	if domainEntry.IsGlobalDomain() {
-		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
-		// target clusters or not
-		newStateBuilder = newMutableStateBuilderWithReplicationState(e.currentCluster, e.shard, e.eventsCache, e.logger,
-			domainEntry.GetFailoverVersion())
+		// all workflows within a global domain should have replication state,
+		// no matter whether it will be replicated to multiple
+		// target clusters or not, for 2DC case
+		if e.GetReplicationState() != nil {
+			newStateBuilder = newMutableStateBuilderWithReplicationState(
+				e.currentCluster, e.shard, e.eventsCache, e.logger, domainEntry.GetFailoverVersion(),
+			)
+		} else if e.GetVersionHistories() != nil {
+			newStateBuilder = newMutableStateBuilderWithVersionHistories(
+				e.currentCluster, e.shard, e.eventsCache, e.logger, domainEntry.GetFailoverVersion(),
+			)
+		} else {
+			return nil, nil, &workflow.InternalServiceError{Message: "Continue as new missing both replication state and version history."}
+		}
 	} else {
 		newStateBuilder = newMutableStateBuilder(e.currentCluster, e.shard, e.eventsCache, e.logger)
 	}
@@ -3127,8 +3176,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		}
 	}
 
-	e.executionInfo.State = persistence.WorkflowStateCompleted
-	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusContinuedAsNew
+	if err := e.UpdateWorkflowStateCloseStatus(
+		persistence.WorkflowStateCompleted,
+		persistence.WorkflowCloseStatusContinuedAsNew,
+	); err != nil {
+		return err
+	}
 	e.executionInfo.CompletionEventBatchID = firstEventID // Used when completion event needs to be loaded from database
 	e.writeEventToCache(continueAsNewEvent)
 
@@ -3649,4 +3702,17 @@ func (e *mutableStateBuilder) createCallerError(actionTag tag.Tag) error {
 	return &workflow.BadRequestError{
 		Message: fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String),
 	}
+}
+
+func (e *mutableStateBuilder) GetWorkflowStateCloseStatus() (int, int) {
+
+	executionInfo := e.executionInfo
+	return executionInfo.State, executionInfo.CloseStatus
+}
+
+func (e *mutableStateBuilder) UpdateWorkflowStateCloseStatus(
+	state int,
+	closeStatus int,
+) error {
+	return e.executionInfo.UpdateWorkflowStateCloseStatus(state, closeStatus)
 }

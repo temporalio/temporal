@@ -49,6 +49,13 @@ type (
 		appendFirstBatchHistoryForContinueAsNew(newStateBuilder mutableState, transactionID int64) error
 		appendFirstBatchEventsForActive(msBuilder mutableState, createReplicationTask bool) (int, persistence.Task, error)
 		appendFirstBatchEventsForStandby(msBuilder mutableState, history []*workflow.HistoryEvent) (int, persistence.Task, error)
+		appendHistoryEvents(
+			history []*workflow.HistoryEvent,
+			transactionID int64,
+			doLastEventValidation bool,
+			replicateEvents bool,
+			newStateBuilder mutableState,
+		) (int, persistence.Task, error)
 		clear()
 		continueAsNewWorkflowExecution(context []byte, newStateBuilder mutableState, transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error
 		createWorkflowExecution(
@@ -861,8 +868,13 @@ func (c *workflowExecutionContextImpl) appendFirstBatchEvents(msBuilder mutableS
 	return historySize, replicationTask, err
 }
 
-func (c *workflowExecutionContextImpl) appendHistoryEvents(history []*workflow.HistoryEvent,
-	transactionID int64, doLastEventValidation bool, replicateEvents bool, newStateBuilder mutableState) (int, persistence.Task, error) {
+func (c *workflowExecutionContextImpl) appendHistoryEvents(
+	history []*workflow.HistoryEvent,
+	transactionID int64,
+	doLastEventValidation bool,
+	replicateEvents bool,
+	newStateBuilder mutableState,
+) (int, persistence.Task, error) {
 
 	if doLastEventValidation {
 		if err := c.validateNoEventsAfterWorkflowFinish(history); err != nil {
