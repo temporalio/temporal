@@ -489,7 +489,9 @@ func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsReque
 		dsl.Set(dslFieldFrom, fastjson.MustParse(strconv.Itoa(token.From)))
 	}
 
-	return dsl.String(), sortField, nil
+	dslStr := cleanDSL(dsl.String())
+
+	return dslStr, sortField, nil
 }
 
 func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
@@ -986,4 +988,12 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 		obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%v"`, parsedTime.UnixNano())))
 		return nil
 	})
+}
+
+// elasticsql may transfer `Attr.Name` to "`Attr.Name`" instead of "Attr.Name" in dsl in some operator like "between and"
+// this function is used to clean up
+func cleanDSL(input string) string {
+	var re = regexp.MustCompile("(`)(Attr.\\w+)(`)")
+	result := re.ReplaceAllString(input, `$2`)
+	return result
 }
