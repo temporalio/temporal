@@ -124,7 +124,7 @@ var (
 	errInvalidRetentionPeriod                     = &gen.BadRequestError{Message: "A valid retention period is not set on request."}
 
 	// err for archival
-	errDomainHasNeverBeenEnabledForArchival = &gen.BadRequestError{Message: "Attempted to fetch history from archival, but domain has never been enabled for archival."}
+	errHistoryHasPassedRetentionPeriod = &gen.BadRequestError{Message: "Requested workflow history has passed retention period."}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -3200,7 +3200,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	}
 	archivalBucket := entry.GetConfig().ArchivalBucket
 	if archivalBucket == "" {
-		return nil, wh.error(errDomainHasNeverBeenEnabledForArchival, scope)
+		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
 	}
 	downloadReq := &archiver.DownloadBlobRequest{
 		NextPageToken:  request.NextPageToken,

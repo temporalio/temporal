@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/blobstore/blob"
@@ -62,6 +63,11 @@ type (
 	}
 )
 
+var (
+	errArchivalTokenCorrupted = &gen.BadRequestError{Message: "Next page token is corrupted."}
+	errHistoryNotExist        = &gen.BadRequestError{Message: "Requested workflow history does not exist."}
+)
+
 // NewHistoryBlobDownloader returns a new HistoryBlobDownloader
 func NewHistoryBlobDownloader(blobstoreClient blobstore.Client) HistoryBlobDownloader {
 	return &historyBlobDownloader{
@@ -77,7 +83,7 @@ func (d *historyBlobDownloader) DownloadBlob(ctx context.Context, request *Downl
 	if request.NextPageToken != nil {
 		token, err = deserializeArchivalToken(request.NextPageToken)
 		if err != nil {
-			return nil, err
+			return nil, errArchivalTokenCorrupted
 		}
 	} else if request.CloseFailoverVersion != nil {
 		token = &archivalToken{
@@ -90,7 +96,9 @@ func (d *historyBlobDownloader) DownloadBlob(ctx context.Context, request *Downl
 			return nil, err
 		}
 		indexTags, err := d.blobstoreClient.GetTags(ctx, request.ArchivalBucket, indexKey)
-		if err != nil {
+		if err == blobstore.ErrBlobNotExists {
+			return nil, errHistoryNotExist
+		} else if err != nil {
 			return nil, err
 		}
 		highestVersion, err := GetHighestVersion(indexTags)
@@ -107,7 +115,9 @@ func (d *historyBlobDownloader) DownloadBlob(ctx context.Context, request *Downl
 		return nil, err
 	}
 	b, err := d.blobstoreClient.Download(ctx, request.ArchivalBucket, key)
-	if err != nil {
+	if err == blobstore.ErrBlobNotExists {
+		return nil, errHistoryNotExist
+	} else if err != nil {
 		return nil, err
 	}
 	unwrappedBlob, wrappingLayers, err := blob.Unwrap(b)

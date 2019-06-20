@@ -104,12 +104,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	sw := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleRequestLatency)
 	logger = tagLoggerWithRequest(logger, request)
 	ao := workflow.ActivityOptions{
-		ScheduleToStartTimeout: 10 * time.Minute,
-		StartToCloseTimeout:    5 * time.Minute,
+		ScheduleToStartTimeout: 2 * time.Minute,
+		StartToCloseTimeout:    2 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       10 * time.Minute,
+			ExpirationInterval:       4 * time.Minute,
 			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
 		},
 	}
@@ -146,12 +146,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	}
 	if len(blobsToDelete) != 0 {
 		ao := workflow.ActivityOptions{
-			ScheduleToStartTimeout: 10 * time.Minute,
-			StartToCloseTimeout:    5 * time.Minute,
+			ScheduleToStartTimeout: 2 * time.Minute,
+			StartToCloseTimeout:    2 * time.Minute,
 			RetryPolicy: &cadence.RetryPolicy{
 				InitialInterval:          time.Second,
 				BackoffCoefficient:       2.0,
-				ExpirationInterval:       10 * time.Minute,
+				ExpirationInterval:       4 * time.Minute,
 				NonRetriableErrorReasons: deleteBlobActivityNonRetryableErrors,
 			},
 		}
@@ -187,12 +187,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalFailedAllRetriesCount)
 	logger.Warn("deleting history though local activity failed, attempting to run as normal activity", tag.Error(err))
 	ao = workflow.ActivityOptions{
-		ScheduleToStartTimeout: 10 * time.Minute,
-		StartToCloseTimeout:    5 * time.Minute,
+		ScheduleToStartTimeout: 2 * time.Minute,
+		StartToCloseTimeout:    2 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       10 * time.Minute,
+			ExpirationInterval:       4 * time.Minute,
 			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
 		},
 	}
