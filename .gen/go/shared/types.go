@@ -14102,9 +14102,7 @@ type DomainConfiguration struct {
 	WorkflowExecutionRetentionPeriodInDays *int32          `json:"workflowExecutionRetentionPeriodInDays,omitempty"`
 	EmitMetric                             *bool           `json:"emitMetric,omitempty"`
 	ArchivalBucketName                     *string         `json:"archivalBucketName,omitempty"`
-	ArchivalRetentionPeriodInDays          *int32          `json:"archivalRetentionPeriodInDays,omitempty"`
 	ArchivalStatus                         *ArchivalStatus `json:"archivalStatus,omitempty"`
-	ArchivalBucketOwner                    *string         `json:"archivalBucketOwner,omitempty"`
 	BadBinaries                            *BadBinaries    `json:"badBinaries,omitempty"`
 }
 
@@ -14125,7 +14123,7 @@ type DomainConfiguration struct {
 //   }
 func (v *DomainConfiguration) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -14155,28 +14153,12 @@ func (v *DomainConfiguration) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
-	if v.ArchivalRetentionPeriodInDays != nil {
-		w, err = wire.NewValueI32(*(v.ArchivalRetentionPeriodInDays)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 40, Value: w}
-		i++
-	}
 	if v.ArchivalStatus != nil {
 		w, err = v.ArchivalStatus.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
-		i++
-	}
-	if v.ArchivalBucketOwner != nil {
-		w, err = wire.NewValueString(*(v.ArchivalBucketOwner)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
 	if v.BadBinaries != nil {
@@ -14255,31 +14237,11 @@ func (v *DomainConfiguration) FromWire(w wire.Value) error {
 				}
 
 			}
-		case 40:
-			if field.Value.Type() == wire.TI32 {
-				var x int32
-				x, err = field.Value.GetI32(), error(nil)
-				v.ArchivalRetentionPeriodInDays = &x
-				if err != nil {
-					return err
-				}
-
-			}
 		case 50:
 			if field.Value.Type() == wire.TI32 {
 				var x ArchivalStatus
 				x, err = _ArchivalStatus_Read(field.Value)
 				v.ArchivalStatus = &x
-				if err != nil {
-					return err
-				}
-
-			}
-		case 60:
-			if field.Value.Type() == wire.TBinary {
-				var x string
-				x, err = field.Value.GetString(), error(nil)
-				v.ArchivalBucketOwner = &x
 				if err != nil {
 					return err
 				}
@@ -14306,7 +14268,7 @@ func (v *DomainConfiguration) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [5]string
 	i := 0
 	if v.WorkflowExecutionRetentionPeriodInDays != nil {
 		fields[i] = fmt.Sprintf("WorkflowExecutionRetentionPeriodInDays: %v", *(v.WorkflowExecutionRetentionPeriodInDays))
@@ -14320,16 +14282,8 @@ func (v *DomainConfiguration) String() string {
 		fields[i] = fmt.Sprintf("ArchivalBucketName: %v", *(v.ArchivalBucketName))
 		i++
 	}
-	if v.ArchivalRetentionPeriodInDays != nil {
-		fields[i] = fmt.Sprintf("ArchivalRetentionPeriodInDays: %v", *(v.ArchivalRetentionPeriodInDays))
-		i++
-	}
 	if v.ArchivalStatus != nil {
 		fields[i] = fmt.Sprintf("ArchivalStatus: %v", *(v.ArchivalStatus))
-		i++
-	}
-	if v.ArchivalBucketOwner != nil {
-		fields[i] = fmt.Sprintf("ArchivalBucketOwner: %v", *(v.ArchivalBucketOwner))
 		i++
 	}
 	if v.BadBinaries != nil {
@@ -14369,13 +14323,7 @@ func (v *DomainConfiguration) Equals(rhs *DomainConfiguration) bool {
 	if !_String_EqualsPtr(v.ArchivalBucketName, rhs.ArchivalBucketName) {
 		return false
 	}
-	if !_I32_EqualsPtr(v.ArchivalRetentionPeriodInDays, rhs.ArchivalRetentionPeriodInDays) {
-		return false
-	}
 	if !_ArchivalStatus_EqualsPtr(v.ArchivalStatus, rhs.ArchivalStatus) {
-		return false
-	}
-	if !_String_EqualsPtr(v.ArchivalBucketOwner, rhs.ArchivalBucketOwner) {
 		return false
 	}
 	if !((v.BadBinaries == nil && rhs.BadBinaries == nil) || (v.BadBinaries != nil && rhs.BadBinaries != nil && v.BadBinaries.Equals(rhs.BadBinaries))) {
@@ -14400,14 +14348,8 @@ func (v *DomainConfiguration) MarshalLogObject(enc zapcore.ObjectEncoder) (err e
 	if v.ArchivalBucketName != nil {
 		enc.AddString("archivalBucketName", *v.ArchivalBucketName)
 	}
-	if v.ArchivalRetentionPeriodInDays != nil {
-		enc.AddInt32("archivalRetentionPeriodInDays", *v.ArchivalRetentionPeriodInDays)
-	}
 	if v.ArchivalStatus != nil {
 		err = multierr.Append(err, enc.AddObject("archivalStatus", *v.ArchivalStatus))
-	}
-	if v.ArchivalBucketOwner != nil {
-		enc.AddString("archivalBucketOwner", *v.ArchivalBucketOwner)
 	}
 	if v.BadBinaries != nil {
 		err = multierr.Append(err, enc.AddObject("badBinaries", v.BadBinaries))
@@ -14460,21 +14402,6 @@ func (v *DomainConfiguration) IsSetArchivalBucketName() bool {
 	return v != nil && v.ArchivalBucketName != nil
 }
 
-// GetArchivalRetentionPeriodInDays returns the value of ArchivalRetentionPeriodInDays if it is set or its
-// zero value if it is unset.
-func (v *DomainConfiguration) GetArchivalRetentionPeriodInDays() (o int32) {
-	if v != nil && v.ArchivalRetentionPeriodInDays != nil {
-		return *v.ArchivalRetentionPeriodInDays
-	}
-
-	return
-}
-
-// IsSetArchivalRetentionPeriodInDays returns true if ArchivalRetentionPeriodInDays is not nil.
-func (v *DomainConfiguration) IsSetArchivalRetentionPeriodInDays() bool {
-	return v != nil && v.ArchivalRetentionPeriodInDays != nil
-}
-
 // GetArchivalStatus returns the value of ArchivalStatus if it is set or its
 // zero value if it is unset.
 func (v *DomainConfiguration) GetArchivalStatus() (o ArchivalStatus) {
@@ -14488,21 +14415,6 @@ func (v *DomainConfiguration) GetArchivalStatus() (o ArchivalStatus) {
 // IsSetArchivalStatus returns true if ArchivalStatus is not nil.
 func (v *DomainConfiguration) IsSetArchivalStatus() bool {
 	return v != nil && v.ArchivalStatus != nil
-}
-
-// GetArchivalBucketOwner returns the value of ArchivalBucketOwner if it is set or its
-// zero value if it is unset.
-func (v *DomainConfiguration) GetArchivalBucketOwner() (o string) {
-	if v != nil && v.ArchivalBucketOwner != nil {
-		return *v.ArchivalBucketOwner
-	}
-
-	return
-}
-
-// IsSetArchivalBucketOwner returns true if ArchivalBucketOwner is not nil.
-func (v *DomainConfiguration) IsSetArchivalBucketOwner() bool {
-	return v != nil && v.ArchivalBucketOwner != nil
 }
 
 // GetBadBinaries returns the value of BadBinaries if it is set or its

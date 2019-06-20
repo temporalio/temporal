@@ -228,48 +228,6 @@ func (c *client) ListByPrefix(ctx context.Context, bucket string, prefix string)
 	return keys, nil
 }
 
-func (c *client) BucketMetadata(ctx context.Context, bucket string) (*blobstore.BucketMetadataResponse, error) {
-	ctx, cancel := c.ensureContextTimeout(ctx)
-	defer cancel()
-	results, err := c.s3cli.GetBucketAclWithContext(ctx, &s3.GetBucketAclInput{
-		Bucket: aws.String(bucket),
-	})
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchBucket {
-			return nil, blobstore.ErrBucketNotExists
-		}
-		return nil, err
-	}
-
-	lifecycleResults, err := c.s3cli.GetBucketLifecycleConfigurationWithContext(ctx, &s3.GetBucketLifecycleConfigurationInput{
-		Bucket: aws.String(bucket),
-	})
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchBucket {
-			return nil, blobstore.ErrBucketNotExists
-		}
-		return nil, err
-	}
-	retentionDays := 0
-	for _, v := range lifecycleResults.Rules {
-		if *v.Status == s3.ExpirationStatusEnabled && retentionDays < int(*v.Expiration.Days) {
-			retentionDays = int(*v.Expiration.Days)
-		}
-	}
-	owner := ""
-	if results.Owner != nil {
-		if results.Owner.DisplayName != nil {
-			owner = *results.Owner.DisplayName
-		} else if results.Owner.ID != nil {
-			owner = *results.Owner.ID
-		}
-	}
-	return &blobstore.BucketMetadataResponse{
-		Owner:         owner,
-		RetentionDays: retentionDays,
-	}, nil
-}
-
 func (c *client) BucketExists(ctx context.Context, bucket string) (bool, error) {
 	ctx, cancel := c.ensureContextTimeout(ctx)
 	defer cancel()

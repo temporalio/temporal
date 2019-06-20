@@ -36,13 +36,9 @@ import (
 )
 
 const (
-	defaultBucketName          = "default-bucket-name"
-	defaultBucketOwner         = "default-bucket-owner"
-	defaultBucketRetentionDays = 10
-	customBucketNamePrefix     = "custom-bucket-name"
-	customBucketOwner          = "custom-bucket-owner"
-	customBucketRetentionDays  = 100
-	numberOfCustomBuckets      = 5
+	defaultBucketName      = "default-bucket-name"
+	customBucketNamePrefix = "custom-bucket-name"
+	numberOfCustomBuckets  = 5
 )
 
 type ClientSuite struct {
@@ -61,24 +57,10 @@ func (s *ClientSuite) SetupTest() {
 func (s *ClientSuite) TestNewClient_Fail_InvalidConfig() {
 	invalidCfg := &Config{
 		StoreDirectory: "/test/store/dir",
-		DefaultBucket: BucketConfig{
-			Name: "default-bucket-name",
-		},
+		DefaultBucket:  "",
 	}
 
 	client, err := NewClient(invalidCfg)
-	s.Error(err)
-	s.Nil(client)
-}
-
-func (s *ClientSuite) TestNewClient_Fail_WriteMetadataFilesFailure() {
-	dir, err := ioutil.TempDir("", "TestNewClient_Fail_WriteMetadataFilesFailure")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	s.NoError(mkdirAll(filepath.Join(dir, defaultBucketName, metadataFilename, "foo")))
-
-	cfg := s.constructConfig(dir)
-	client, err := NewClient(cfg)
 	s.Error(err)
 	s.Nil(client)
 }
@@ -290,54 +272,6 @@ func (s *ClientSuite) TestListByPrefix_Success() {
 	s.Equal([]string{"matching_1.ext", "matching_2.ext", "matching_3.ext"}, matchingFilenames)
 }
 
-func (s *ClientSuite) TestBucketMetadata_Fail_BucketNotExists() {
-	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_BucketNotExists")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	client := s.constructClient(dir)
-
-	metadata, err := client.BucketMetadata(context.Background(), "bucket-not-exists")
-	s.Equal(blobstore.ErrBucketNotExists, err)
-	s.Nil(metadata)
-}
-
-func (s *ClientSuite) TestBucketMetadata_Fail_FileNotExistsError() {
-	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_FileNotExistsError")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	client := s.constructClient(dir)
-	s.NoError(os.Remove(bucketItemPath(dir, defaultBucketName, metadataFilename)))
-
-	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.Equal(ErrReadFile, err)
-	s.Nil(metadata)
-}
-
-func (s *ClientSuite) TestBucketMetadata_Fail_InvalidFileFormat() {
-	dir, err := ioutil.TempDir("", "TestBucketMetadata_Fail_InvalidFileFormat")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	client := s.constructClient(dir)
-	s.NoError(writeFile(bucketItemPath(dir, defaultBucketName, metadataFilename), []byte("invalid")))
-
-	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.Equal(ErrBucketConfigDeserialization, err)
-	s.Nil(metadata)
-}
-
-func (s *ClientSuite) TestBucketMetadata_Success() {
-	dir, err := ioutil.TempDir("", "TestBucketMetadata_Success")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	client := s.constructClient(dir)
-
-	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.NoError(err)
-	s.NotNil(metadata)
-	s.Equal(defaultBucketRetentionDays, metadata.RetentionDays)
-	s.Equal(defaultBucketOwner, metadata.Owner)
-}
-
 func (s *ClientSuite) TestBucketExists() {
 	dir, err := ioutil.TempDir("", "TestBucketExists")
 	s.NoError(err)
@@ -365,18 +299,10 @@ func (s *ClientSuite) constructConfig(storeDir string) *Config {
 	cfg := &Config{
 		StoreDirectory: storeDir,
 	}
-	cfg.DefaultBucket = BucketConfig{
-		Name:          defaultBucketName,
-		Owner:         defaultBucketOwner,
-		RetentionDays: defaultBucketRetentionDays,
-	}
+	cfg.DefaultBucket = defaultBucketName
 
 	for i := 0; i < numberOfCustomBuckets; i++ {
-		cfg.CustomBuckets = append(cfg.CustomBuckets, BucketConfig{
-			Name:          fmt.Sprintf("%v-%v", customBucketNamePrefix, i),
-			Owner:         customBucketOwner,
-			RetentionDays: customBucketRetentionDays,
-		})
+		cfg.CustomBuckets = append(cfg.CustomBuckets, fmt.Sprintf("%v-%v", customBucketNamePrefix, i))
 	}
 	return cfg
 }

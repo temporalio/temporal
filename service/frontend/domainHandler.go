@@ -636,13 +636,6 @@ func (d *domainHandlerImpl) createResponse(
 		ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
 		BadBinaries:                            &config.BadBinaries,
 	}
-	if d.clusterMetadata.ArchivalConfig().ConfiguredForArchival() && config.ArchivalBucket != "" {
-		metadata, err := d.blobstoreClient.BucketMetadata(ctx, config.ArchivalBucket)
-		if err == nil {
-			configResult.ArchivalRetentionPeriodInDays = common.Int32Ptr(int32(metadata.RetentionDays))
-			configResult.ArchivalBucketOwner = common.StringPtr(metadata.Owner)
-		}
-	}
 
 	clusters := []*shared.ClusterReplicationConfiguration{}
 	for _, cluster := range replicationConfig.Clusters {
@@ -728,9 +721,6 @@ func (d *domainHandlerImpl) toArchivalUpdateEvent(request *shared.UpdateDomainRe
 	}
 	if request.Configuration != nil {
 		cfg := request.GetConfiguration()
-		if cfg.ArchivalBucketOwner != nil || cfg.ArchivalRetentionPeriodInDays != nil {
-			return nil, errDisallowedBucketMetadata
-		}
 		event.bucket = cfg.GetArchivalBucketName()
 		event.status = cfg.ArchivalStatus
 	}

@@ -322,9 +322,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention1),
 				EmitMetric:                             common.BoolPtr(emitMetric1),
 				ArchivalBucketName:                     common.StringPtr(""),
-				ArchivalRetentionPeriodInDays:          nil,
 				ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-				ArchivalBucketOwner:                    nil,
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfiguration: &shared.DomainReplicationConfiguration{
@@ -347,9 +345,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention2),
 				EmitMetric:                             common.BoolPtr(emitMetric2),
 				ArchivalBucketName:                     common.StringPtr(""),
-				ArchivalRetentionPeriodInDays:          nil,
 				ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-				ArchivalBucketOwner:                    nil,
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfiguration: &shared.DomainReplicationConfiguration{

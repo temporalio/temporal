@@ -119,17 +119,10 @@ archival:
   defaultBucket: "cadence-development"
   filestore:
     storeDirectory: "/tmp/development/blobstore/"
-    defaultBucket:
-      name: "cadence-development"
-      owner: "cadence"
-      retentionDays: 10
+    defaultBucket: "cadence-development"
     customBuckets:
-      - name: "custom-bucket-1"
-        owner: "custom-owner-1"
-        retentionDays: 10
-      - name: "custom-bucket-2"
-        owner: "custom-owner-2"
-        retentionDays: 5
+      - "custom-bucket-1"
+      - "custom-bucket-2"
 
 publicClient:
   hostPort: "127.0.0.1:7933"

@@ -132,9 +132,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
 		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalRetentionPeriodInDays:          nil,
 		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-		ArchivalBucketOwner:                    nil,
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -199,9 +197,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalRetentionPeriodInDays:          nil,
 		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-		ArchivalBucketOwner:                    nil,
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -256,9 +252,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -320,9 +314,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -344,9 +336,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		},
 		ReplicationConfiguration: &shared.DomainReplicationConfiguration{
@@ -403,9 +393,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
 		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalRetentionPeriodInDays:          nil,
 		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-		ArchivalBucketOwner:                    nil,
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -471,9 +459,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalRetentionPeriodInDays:          nil,
 		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-		ArchivalBucketOwner:                    nil,
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -536,9 +522,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -611,9 +595,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -635,9 +617,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		},
 		ReplicationConfiguration: &shared.DomainReplicationConfiguration{
@@ -708,9 +688,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{

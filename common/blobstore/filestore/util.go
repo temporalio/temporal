@@ -28,7 +28,6 @@ import (
 	"os"
 
 	"github.com/uber/cadence/common/blobstore/blob"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -117,18 +116,6 @@ func listFiles(path string) ([]string, error) {
 		files = append(files, c.Name())
 	}
 	return files, nil
-}
-
-func serializeBucketConfig(bucketCfg *BucketConfig) ([]byte, error) {
-	return yaml.Marshal(bucketCfg)
-}
-
-func deserializeBucketConfig(data []byte) (*BucketConfig, error) {
-	bucketCfg := &BucketConfig{}
-	if err := yaml.Unmarshal(data, bucketCfg); err != nil {
-		return nil, err
-	}
-	return bucketCfg, nil
 }
 
 func serializeBlob(blob *blob.Blob) ([]byte, error) {

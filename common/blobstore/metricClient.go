@@ -133,23 +133,6 @@ func (c *metricClient) ListByPrefix(ctx context.Context, bucket string, prefix s
 	return resp, err
 }
 
-func (c *metricClient) BucketMetadata(ctx context.Context, bucket string) (*BucketMetadataResponse, error) {
-	c.metricsClient.IncCounter(metrics.BlobstoreClientBucketMetadataScope, metrics.CadenceClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.BlobstoreClientBucketMetadataScope, metrics.CadenceClientLatency)
-	resp, err := c.client.BucketMetadata(ctx, bucket)
-	sw.Stop()
-
-	if err != nil {
-		if err == ErrBucketNotExists {
-			c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceErrEntityNotExistsCounter)
-		} else {
-			c.metricsClient.IncCounter(metrics.BlobstoreClientGetTagsScope, metrics.CadenceClientFailures)
-		}
-	}
-	return resp, err
-}
-
 func (c *metricClient) BucketExists(ctx context.Context, bucket string) (bool, error) {
 	c.metricsClient.IncCounter(metrics.BlobstoreClientBucketExistsScope, metrics.CadenceClientRequests)
 

@@ -27,43 +27,23 @@ import (
 type (
 	// Config describes the configuration needed to construct a blobstore client backed by file system
 	Config struct {
-		StoreDirectory string         `yaml:"storeDirectory"`
-		DefaultBucket  BucketConfig   `yaml:"defaultBucket"`
-		CustomBuckets  []BucketConfig `yaml:"customBuckets"`
-	}
-
-	// BucketConfig describes the config for a bucket
-	BucketConfig struct {
-		Name          string `yaml:"name"`
-		Owner         string `yaml:"owner"`
-		RetentionDays int    `yaml:"retentionDays"`
+		StoreDirectory string   `yaml:"storeDirectory"`
+		DefaultBucket  string   `yaml:"defaultBucket"`
+		CustomBuckets  []string `yaml:"customBuckets"`
 	}
 )
 
 // Validate validates config
 func (c *Config) Validate() error {
-	validateBucketConfig := func(b BucketConfig) error {
-		if len(b.Name) == 0 {
-			return errors.New("empty bucket name")
-		}
-		if len(b.Owner) == 0 {
-			return errors.New("empty bucket owner")
-		}
-		if b.RetentionDays < 0 {
-			return errors.New("negative retention days")
-		}
-		return nil
-	}
-
 	if len(c.StoreDirectory) == 0 {
 		return errors.New("empty store directory")
 	}
-	if err := validateBucketConfig(c.DefaultBucket); err != nil {
-		return err
+	if len(c.DefaultBucket) == 0 {
+		return errors.New("empty bucket name")
 	}
 	for _, b := range c.CustomBuckets {
-		if err := validateBucketConfig(b); err != nil {
-			return err
+		if len(b) == 0 {
+			return errors.New("empty bucket name")
 		}
 	}
 	return nil

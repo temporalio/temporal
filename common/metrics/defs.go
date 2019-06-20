@@ -473,8 +473,6 @@ const (
 	BlobstoreClientDeleteScope
 	// BlobstoreClientListByPrefixScope tracks ListByPrefix calls to blobstore
 	BlobstoreClientListByPrefixScope
-	// BlobstoreClientBucketMetadataScope tracks BucketMetadata calls to blobstore
-	BlobstoreClientBucketMetadataScope
 	// BlobstoreClientBucketExistsScope tracks BucketExists calls to blobstore
 	BlobstoreClientBucketExistsScope
 
@@ -850,8 +848,6 @@ const (
 	BlobstoreDeleteScope
 	// BlobstoreListByPrefixScope tracks ListByPrefix API calls received by blobstore
 	BlobstoreListByPrefixScope
-	// BlobstoreBucketMetadataScope tracks BucketMetadata API calls received by blobstore
-	BlobstoreBucketMetadataScope
 
 	NumBlobstoreScopes
 )
@@ -918,14 +914,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceCompleteForkBranchScope:                       {operation: "CompleteForkBranch"},
 		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree"},
 
-		BlobstoreClientUploadScope:         {operation: "BlobstoreClientUpload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientDownloadScope:       {operation: "BlobstoreClientDownload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientGetTagsScope:        {operation: "BlobstoreClientGetTags", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientExistsScope:         {operation: "BlobstoreClientExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientDeleteScope:         {operation: "BlobstoreClientDelete", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientListByPrefixScope:   {operation: "BlobstoreClientListByPrefix", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientBucketMetadataScope: {operation: "BlobstoreClientBucketMetadata", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
-		BlobstoreClientBucketExistsScope:   {operation: "BlobstoreClientBucketExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientUploadScope:       {operation: "BlobstoreClientUpload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDownloadScope:     {operation: "BlobstoreClientDownload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientGetTagsScope:      {operation: "BlobstoreClientGetTags", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientExistsScope:       {operation: "BlobstoreClientExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDeleteScope:       {operation: "BlobstoreClientDelete", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientListByPrefixScope: {operation: "BlobstoreClientListByPrefix", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientBucketExistsScope: {operation: "BlobstoreClientBucketExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 
@@ -1218,13 +1213,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Blobstore Scope Names
 	Blobstore: {
-		BlobstoreUploadScope:         {operation: "Upload"},
-		BlobstoreDownloadScope:       {operation: "Download"},
-		BlobstoreGetTagsScope:        {operation: "GetTags"},
-		BlobstoreExistsScope:         {operation: "Exists"},
-		BlobstoreDeleteScope:         {operation: "Delete"},
-		BlobstoreListByPrefixScope:   {operation: "ListByPrefix"},
-		BlobstoreBucketMetadataScope: {operation: "BucketMetadata"},
+		BlobstoreUploadScope:       {operation: "Upload"},
+		BlobstoreDownloadScope:     {operation: "Download"},
+		BlobstoreGetTagsScope:      {operation: "GetTags"},
+		BlobstoreExistsScope:       {operation: "Exists"},
+		BlobstoreDeleteScope:       {operation: "Delete"},
+		BlobstoreListByPrefixScope: {operation: "ListByPrefix"},
 	},
 }
 

@@ -41,12 +41,6 @@ var (
 	ErrConstructKey = &shared.BadRequestError{Message: "could not construct key"}
 )
 
-// BucketMetadataResponse contains information relating to a bucket's configuration
-type BucketMetadataResponse struct {
-	Owner         string
-	RetentionDays int
-}
-
 // Client is used to operate on blobs in a blobstore
 type Client interface {
 	Upload(ctx context.Context, bucket string, key blob.Key, blob *blob.Blob) error
@@ -55,7 +49,6 @@ type Client interface {
 	Exists(ctx context.Context, bucket string, key blob.Key) (bool, error)
 	Delete(ctx context.Context, bucket string, key blob.Key) (bool, error)
 	ListByPrefix(ctx context.Context, bucket string, prefix string) ([]blob.Key, error)
-	BucketMetadata(ctx context.Context, bucket string) (*BucketMetadataResponse, error)
 	BucketExists(ctx context.Context, bucket string) (bool, error)
 
 	IsRetryableError(err error) bool

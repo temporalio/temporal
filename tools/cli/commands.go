@@ -435,19 +435,6 @@ func DescribeDomain(c *cli.Context) {
 		formatStr = formatStr + "BucketName: %v\n"
 		descValues = append(descValues, resp.Configuration.GetArchivalBucketName())
 	}
-	if resp.Configuration.ArchivalRetentionPeriodInDays != nil {
-		formatStr = formatStr + "ArchivalRetentionInDays: %v\n"
-		archivalRetentionDays := resp.Configuration.GetArchivalRetentionPeriodInDays()
-		if archivalRetentionDays == 0 {
-			descValues = append(descValues, "unlimited")
-		} else {
-			descValues = append(descValues, archivalRetentionDays)
-		}
-	}
-	if resp.Configuration.GetArchivalBucketOwner() != "" {
-		formatStr = formatStr + "BucketOwner: %v\n"
-		descValues = append(descValues, resp.Configuration.GetArchivalBucketOwner())
-	}
 	fmt.Printf(formatStr, descValues...)
 	if resp.Configuration.BadBinaries != nil {
 		fmt.Println("Bad binaries to reset:")

@@ -106,17 +106,6 @@ func (c *retryableClient) ListByPrefix(ctx context.Context, bucket string, prefi
 	return resp, err
 }
 
-func (c *retryableClient) BucketMetadata(ctx context.Context, bucket string) (*BucketMetadataResponse, error) {
-	var resp *BucketMetadataResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.BucketMetadata(ctx, bucket)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) BucketExists(ctx context.Context, bucket string) (bool, error) {
 	var resp bool
 	op := func() error {

@@ -896,9 +896,7 @@ struct DomainConfiguration {
   10: optional i32 workflowExecutionRetentionPeriodInDays
   20: optional bool emitMetric
   30: optional string archivalBucketName
-  40: optional i32 archivalRetentionPeriodInDays
   50: optional ArchivalStatus archivalStatus
-  60: optional string archivalBucketOwner
   70: optional BadBinaries badBinaries
 }
 
