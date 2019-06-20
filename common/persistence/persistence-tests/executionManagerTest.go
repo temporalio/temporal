@@ -3244,8 +3244,15 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		WorkflowId: common.StringPtr("test-reset-mutable-state-test-current-is-self"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 	}
-
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	version := int64(1234)
+	nextEventID := int64(3)
+	replicationState := &p.ReplicationState{
+		StartVersion:     version,
+		CurrentVersion:   version,
+		LastWriteVersion: version,
+		LastWriteEventID: nextEventID - 1,
+	}
+	task0, err0 := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecution, "taskList", "wType", 20, 13, 3, 0, 2, replicationState, nil)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -3418,7 +3425,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NoError(err2)
 	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
-	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1, false)
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, replicationState, bufferUpdateInfo.NextEventID, eventsBatch1, false)
 	s.NoError(err2)
 	stats0, state0, err2 = s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
 	s.NoError(err2)
@@ -3430,7 +3437,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.True(history.Equals(history0))
 	history.Events = append(history.Events, eventsBatch2...)
 
-	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch2, false)
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, replicationState, bufferUpdateInfo.NextEventID, eventsBatch2, false)
 	s.NoError(err2)
 
 	stats1, state1, err1 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
@@ -3613,7 +3620,9 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		StartVersion:   int64(8780),
 	}
 
-	err3 := s.ResetMutableState(workflowExecution.GetRunId(), updatedInfo1, rState, int64(5), resetActivityInfos, resetTimerInfos,
+	err3 := s.ResetMutableState(
+		workflowExecution.GetRunId(), state1.ReplicationState.LastWriteVersion, state1.ExecutionInfo.State,
+		updatedInfo1, rState, int64(5), resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NoError(err3)
 
@@ -3718,9 +3727,17 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0"),
 	}
-	task, err := s.CreateWorkflowExecution(domainID, workflowExecutionReset, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	version := int64(1234)
+	nextEventID := int64(3)
+	replicationState := &p.ReplicationState{
+		StartVersion:     version,
+		CurrentVersion:   version,
+		LastWriteVersion: version,
+		LastWriteEventID: nextEventID - 1,
+	}
+	resp, err := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecutionReset, "taskList", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
-	s.NotNil(task, "Expected non empty task identifier.")
+	s.NotNil(resp)
 
 	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
 	s.NoError(err)
@@ -3735,22 +3752,15 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"),
 	}
-	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent, int64(3), int64(2), nil)
+	err = s.ContinueAsNewExecutionWithReplication(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent, int64(3), int64(2), nil, replicationState, replicationState)
 	s.NoError(err)
 
-	runID1, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
-	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
+	currentRunID, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.Equal(workflowExecutionCurrent.GetRunId(), currentRunID)
 	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent)
 	s.NoError(err)
-	updatedInfo1 := copyWorkflowExecutionInfo(state.ExecutionInfo)
-	updatedInfo1.State = p.WorkflowStateCompleted
-	updatedInfo1.CloseStatus = p.WorkflowCloseStatusCompleted
-	updatedInfo1.NextEventID = int64(6)
-	updatedInfo1.LastProcessedEvent = int64(2)
-	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
-	s.NoError(err3)
-	runID1, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
-	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
+	currentInfo := copyWorkflowExecutionInfo(state.ExecutionInfo)
+	currentState := copyReplicationState(state.ReplicationState)
 
 	resetExecutionInfo := &p.WorkflowExecutionInfo{
 		DomainID:             domainID,
@@ -3782,8 +3792,9 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
 	}
-
-	err = s.ResetMutableState(workflowExecutionCurrent.GetRunId(), resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+	err = s.ResetMutableState(
+		currentRunID, currentState.LastWriteVersion, currentInfo.State,
+		resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NoError(err)
 
@@ -3803,13 +3814,20 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"),
 	}
-	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent2, int64(3), int64(2), nil)
+	err = s.ContinueAsNewExecutionWithReplication(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent2, int64(3), int64(2), nil, replicationState, replicationState)
 	s.NoError(err)
 
 	runID2, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionCurrent2.GetRunId(), runID2)
 
-	err = s.ResetMutableState(workflowExecutionCurrent2.GetRunId(), resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent2)
+	s.NoError(err)
+	currentInfo = copyWorkflowExecutionInfo(state.ExecutionInfo)
+	currentState = copyReplicationState(state.ReplicationState)
+
+	err = s.ResetMutableState(
+		workflowExecutionCurrent2.GetRunId(), currentState.LastWriteVersion, currentInfo.State,
+		resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NoError(err)
 
@@ -3828,9 +3846,17 @@ func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0"),
 	}
-	task, err := s.CreateWorkflowExecution(domainID, workflowExecutionReset, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	version := int64(1234)
+	nextEventID := int64(3)
+	replicationState := &p.ReplicationState{
+		StartVersion:     version,
+		CurrentVersion:   version,
+		LastWriteVersion: version,
+		LastWriteEventID: nextEventID - 1,
+	}
+	resp, err := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecutionReset, "taskList", "wType", 20, 13, nextEventID, 0, 2, replicationState, nil)
 	s.NoError(err)
-	s.NotNil(task, "Expected non empty task identifier.")
+	s.NotNil(resp)
 
 	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
 	s.NoError(err)
@@ -3845,19 +3871,20 @@ func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"),
 	}
-	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent, int64(3), int64(2), nil)
+	err = s.ContinueAsNewExecutionWithReplication(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent, int64(3), int64(2), nil, replicationState, replicationState)
 	s.NoError(err)
 
 	runID1, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
 	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent)
 	s.NoError(err)
-	updatedInfo1 := copyWorkflowExecutionInfo(state.ExecutionInfo)
-	updatedInfo1.State = p.WorkflowStateCompleted
-	updatedInfo1.CloseStatus = p.WorkflowCloseStatusCompleted
-	updatedInfo1.NextEventID = int64(6)
-	updatedInfo1.LastProcessedEvent = int64(2)
-	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
+	currentInfo := copyWorkflowExecutionInfo(state.ExecutionInfo)
+	currentState := copyReplicationState(state.ReplicationState)
+	currentInfo.State = p.WorkflowStateCompleted
+	currentInfo.CloseStatus = p.WorkflowCloseStatusCompleted
+	currentInfo.NextEventID = int64(6)
+	currentInfo.LastProcessedEvent = int64(2)
+	err3 := s.UpdateWorkflowExecutionAndFinish(currentInfo, int64(3))
 	s.NoError(err3)
 	runID1, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionCurrent.GetRunId(), runID1)
@@ -3894,7 +3921,23 @@ func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
 	}
 
 	wrongPrevRunID := uuid.New()
-	err = s.ResetMutableState(wrongPrevRunID, resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+	err = s.ResetMutableState(
+		wrongPrevRunID, currentState.LastWriteVersion, currentInfo.State,
+		resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
+	s.NotNil(err)
+
+	wrongLastWriteVersion := currentState.LastWriteVersion + 1
+	err = s.ResetMutableState(
+		workflowExecutionCurrent.GetRunId(), wrongLastWriteVersion, currentInfo.State,
+		resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
+		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
+	s.NotNil(err)
+
+	wrongState := currentInfo.State + 1
+	err = s.ResetMutableState(
+		workflowExecutionCurrent.GetRunId(), currentState.LastWriteVersion, wrongState,
+		resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NotNil(err)
 

@@ -60,6 +60,8 @@ var keys = map[Key]string{
 	EnableReadFromArchival:              "system.enableReadFromArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
+	MinRetentionDays:                    "system.minRetentionDays",
+	EnableBatcher:                       "worker.enableBatcher",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -193,6 +195,7 @@ var keys = map[Key]string{
 	WorkerArchiverConcurrency:                       "worker.ArchiverConcurrency",
 	WorkerArchivalsPerIteration:                     "worker.ArchivalsPerIteration",
 	WorkerDeterministicConstructionCheckProbability: "worker.DeterministicConstructionCheckProbability",
+	WorkerBlobIntegrityCheckProbability:             "worker.BlobIntegrityCheckProbability",
 	WorkerTimeLimitPerArchivalIteration:             "worker.TimeLimitPerArchivalIteration",
 	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
 	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
@@ -240,6 +243,8 @@ const (
 	EnableDomainNotActiveAutoForwarding
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
+	// MinRetentionDays is the minimal allowed retention days for domain
+	MinRetentionDays
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
@@ -501,12 +506,16 @@ const (
 	WorkerArchivalsPerIteration
 	// WorkerDeterministicConstructionCheckProbability controls the probability of running a deterministic construction check for any given archival
 	WorkerDeterministicConstructionCheckProbability
+	// WorkerBlobIntegrityCheckProbability controls the probability of running an integrity check for any given archival
+	WorkerBlobIntegrityCheckProbability
 	// WorkerTimeLimitPerArchivalIteration controls the time limit of each iteration of archival workflow
 	WorkerTimeLimitPerArchivalIteration
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS
 	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
 	ScannerPersistenceMaxQPS
+	// EnableBatcher decides whether start batcher in our worker
+	EnableBatcher
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

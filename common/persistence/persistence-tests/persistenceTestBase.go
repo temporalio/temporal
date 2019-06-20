@@ -481,7 +481,17 @@ func (s *TestBase) GetCurrentWorkflowRunID(domainID, workflowID string) (string,
 
 // ContinueAsNewExecution is a utility method to create workflow executions
 func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, condition int64,
-	newExecution workflow.WorkflowExecution, nextEventID, decisionScheduleID int64, prevResetPoints *workflow.ResetPoints) error {
+	newExecution workflow.WorkflowExecution, nextEventID, decisionScheduleID int64,
+	prevResetPoints *workflow.ResetPoints) error {
+	return s.ContinueAsNewExecutionWithReplication(
+		updatedInfo, condition, newExecution, nextEventID, decisionScheduleID, prevResetPoints, nil, nil,
+	)
+}
+
+// ContinueAsNewExecutionWithReplication is a utility method to create workflow executions
+func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.WorkflowExecutionInfo, condition int64,
+	newExecution workflow.WorkflowExecution, nextEventID, decisionScheduleID int64,
+	prevResetPoints *workflow.ResetPoints, beforeState *p.ReplicationState, afterState *p.ReplicationState) error {
 	newdecisionTask := &p.DecisionTask{
 		TaskID:     s.GetNextSequenceNumber(),
 		DomainID:   updatedInfo.DomainID,
@@ -521,8 +531,10 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *p.WorkflowExecutionInfo, 
 			CreateWorkflowMode:          p.CreateWorkflowModeContinueAsNew,
 			PreviousRunID:               updatedInfo.RunID,
 			PreviousAutoResetPoints:     prevResetPoints,
+			ReplicationState:            afterState,
 		},
-		Encoding: pickRandomEncoding(),
+		ReplicationState: beforeState,
+		Encoding:         pickRandomEncoding(),
 	})
 	return err
 }
@@ -840,11 +852,14 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 }
 
 // ResetMutableState is  utility method to reset mutable state
-func (s *TestBase) ResetMutableState(prevRunID string, info *p.WorkflowExecutionInfo, replicationState *p.ReplicationState, nextEventID int64,
+func (s *TestBase) ResetMutableState(prevRunID string, prevLastWriteVersion int64, prevState int,
+	info *p.WorkflowExecutionInfo, replicationState *p.ReplicationState, nextEventID int64,
 	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string) error {
 	return s.ExecutionManager.ResetMutableState(&p.ResetMutableStateRequest{
 		PrevRunID:                 prevRunID,
+		PrevLastWriteVersion:      prevLastWriteVersion,
+		PrevState:                 prevState,
 		ExecutionInfo:             info,
 		ReplicationState:          replicationState,
 		Condition:                 nextEventID,

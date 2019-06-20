@@ -167,7 +167,9 @@ func (p *indexProcessor) messageProcessLoop(workerWG *sync.WaitGroup, workerID i
 				p.logger.Info("Worker for index processor shutting down.")
 				return // channel closed
 			}
+			sw := p.metricsClient.StartTimer(metrics.IndexProcessorScope, metrics.IndexProcessorProcessMsgLatency)
 			err := p.process(msg)
+			sw.Stop()
 			if err != nil {
 				msg.Nack()
 			}

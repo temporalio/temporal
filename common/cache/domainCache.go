@@ -49,9 +49,6 @@ const (
 	DomainCacheRefreshInterval = 10 * time.Second
 	domainCacheRefreshPageSize = 100
 
-	domainCacheLocked   int32 = 0
-	domainCacheReleased int32 = 1
-
 	domainCacheInitialized int32 = 0
 	domainCacheStarted     int32 = 1
 	domainCacheStopped     int32 = 2
@@ -118,7 +115,13 @@ type (
 )
 
 // NewDomainCache creates a new instance of cache for holding onto domain information to reduce the load on persistence
-func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, metricsClient metrics.Client, logger log.Logger) DomainCache {
+func NewDomainCache(
+	metadataMgr persistence.MetadataManager,
+	clusterMetadata cluster.Metadata,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) DomainCache {
+
 	cache := &domainCache{
 		status:           domainCacheInitialized,
 		shutdownChan:     make(chan struct{}),
@@ -149,12 +152,15 @@ func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
 }
 
-// NewDomainCacheEntryWithReplicationForTest returns an entry with test data
-func NewDomainCacheEntryWithReplicationForTest(info *persistence.DomainInfo,
+// NewGlobalDomainCacheEntryForTest returns an entry with test data
+func NewGlobalDomainCacheEntryForTest(
+	info *persistence.DomainInfo,
 	config *persistence.DomainConfig,
 	repConfig *persistence.DomainReplicationConfig,
 	failoverVersion int64,
-	clusterMetadata cluster.Metadata) *DomainCacheEntry {
+	clusterMetadata cluster.Metadata,
+) *DomainCacheEntry {
+
 	return &DomainCacheEntry{
 		info:              info,
 		config:            config,
@@ -165,11 +171,44 @@ func NewDomainCacheEntryWithReplicationForTest(info *persistence.DomainInfo,
 	}
 }
 
-// NewDomainCacheEntryForTest returns an entry with domainInfo
-func NewDomainCacheEntryForTest(info *persistence.DomainInfo, config *persistence.DomainConfig) *DomainCacheEntry {
+// NewLocalDomainCacheEntryForTest returns an entry with test data
+func NewLocalDomainCacheEntryForTest(
+	info *persistence.DomainInfo,
+	config *persistence.DomainConfig,
+	targetCluster string,
+	clusterMetadata cluster.Metadata,
+) *DomainCacheEntry {
+
 	return &DomainCacheEntry{
-		info:   info,
-		config: config,
+		info:           info,
+		config:         config,
+		isGlobalDomain: false,
+		replicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: targetCluster,
+			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: targetCluster}},
+		},
+		failoverVersion: common.EmptyVersion,
+		clusterMetadata: clusterMetadata,
+	}
+}
+
+// NewDomainCacheEntryForTest returns an entry with test data
+func NewDomainCacheEntryForTest(
+	info *persistence.DomainInfo,
+	config *persistence.DomainConfig,
+	isGlobalDomain bool,
+	repConfig *persistence.DomainReplicationConfig,
+	failoverVersion int64,
+	clusterMetadata cluster.Metadata,
+) *DomainCacheEntry {
+
+	return &DomainCacheEntry{
+		info:              info,
+		config:            config,
+		isGlobalDomain:    isGlobalDomain,
+		replicationConfig: repConfig,
+		failoverVersion:   failoverVersion,
+		clusterMetadata:   clusterMetadata,
 	}
 }
 

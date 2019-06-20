@@ -2282,7 +2282,7 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 	executionInfo := request.ExecutionInfo
 	replicationState := request.ReplicationState
 
-	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+	batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 		executionInfo.RunID,
 		executionInfo.RunID,
 		executionInfo.CreateRequestID,
@@ -2300,18 +2300,24 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 		request.PrevRunID,
+		request.PrevLastWriteVersion,
+		request.PrevState,
 	)
 
 	d.updateMutableState(batch, executionInfo, replicationState, request.VersionHistories, cqlNowTimestamp, true, request.Condition)
 
-	d.resetActivityInfos(batch, request.InsertActivityInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition)
+	if err := d.resetActivityInfos(batch, request.InsertActivityInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, true, request.Condition); err != nil {
+		return err
+	}
 
 	d.resetTimerInfos(batch, request.InsertTimerInfos, executionInfo.DomainID, executionInfo.WorkflowID,
 		executionInfo.RunID, true, request.Condition)
 
-	d.resetChildExecutionInfos(batch, request.InsertChildExecutionInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition)
+	if err := d.resetChildExecutionInfos(batch, request.InsertChildExecutionInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, true, request.Condition); err != nil {
+		return err
+	}
 
 	d.resetRequestCancelInfos(batch, request.InsertRequestCancelInfos, executionInfo.DomainID, executionInfo.WorkflowID,
 		executionInfo.RunID, true, request.Condition)
@@ -2323,6 +2329,15 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		executionInfo.RunID, true, request.Condition)
 
 	d.resetBufferedEvents(batch, executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition)
+
+	d.createTransferTasks(batch, request.InsertTransferTasks,
+		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID)
+
+	d.createReplicationTasks(batch, request.InsertReplicationTasks,
+		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID)
+
+	d.createTimerTasks(batch, request.InsertTimerTasks,
+		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
 
 	// Verifies that the RangeID has not changed
 	batch.Query(templateUpdateLeaseQuery,

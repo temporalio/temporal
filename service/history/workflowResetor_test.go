@@ -181,7 +181,9 @@ func (s *resetorSuite) TearDownTest() {
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
-	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
+	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+	)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
@@ -873,7 +875,9 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*p.ActivityInfo)
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
-	testDomainEntry := cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1})
+	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+	)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
@@ -1445,7 +1449,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", beforeResetVersion).Return("standby")
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", afterResetVersion).Return("active")
 
-	testDomainEntry := cache.NewDomainCacheEntryWithReplicationForTest(
+	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: validDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
@@ -2168,7 +2172,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", beforeResetVersion).Return("active")
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", afterResetVersion).Return("standby")
 
-	testDomainEntry := cache.NewDomainCacheEntryWithReplicationForTest(
+	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: validDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
@@ -2774,7 +2778,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", beforeResetVersion).Return("standby")
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", afterResetVersion).Return("active")
 
-	testDomainEntry := cache.NewDomainCacheEntryWithReplicationForTest(
+	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: validDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
@@ -3480,7 +3484,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", beforeResetVersion).Return("standby")
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", afterResetVersion).Return("active")
 
-	testDomainEntry := cache.NewDomainCacheEntryWithReplicationForTest(
+	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: validDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{

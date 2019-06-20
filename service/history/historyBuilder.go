@@ -183,9 +183,11 @@ func (b *historyBuilder) AddTimeoutWorkflowEvent() *workflow.HistoryEvent {
 }
 
 func (b *historyBuilder) AddWorkflowExecutionTerminatedEvent(
-	request *workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent {
-	event := b.newWorkflowExecutionTerminatedEvent(request)
-
+	reason string,
+	details []byte,
+	identity string,
+) *workflow.HistoryEvent {
+	event := b.newWorkflowExecutionTerminatedEvent(reason, details, identity)
 	return b.addEventToHistory(event)
 }
 
@@ -677,12 +679,12 @@ func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
 }
 
 func (b *historyBuilder) newWorkflowExecutionTerminatedEvent(
-	request *workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent {
+	reason string, details []byte, identity string) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(workflow.EventTypeWorkflowExecutionTerminated)
 	attributes := &workflow.WorkflowExecutionTerminatedEventAttributes{}
-	attributes.Reason = common.StringPtr(common.StringDefault(request.Reason))
-	attributes.Details = request.Details
-	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
+	attributes.Reason = common.StringPtr(reason)
+	attributes.Details = details
+	attributes.Identity = common.StringPtr(identity)
 	historyEvent.WorkflowExecutionTerminatedEventAttributes = attributes
 
 	return historyEvent

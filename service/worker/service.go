@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/service/worker/batcher"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
@@ -64,7 +66,9 @@ type (
 		ArchiverConfig  *archiver.Config
 		IndexerCfg      *indexer.Config
 		ScannerCfg      *scanner.Config
+		BatcherCfg      *batcher.Config
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
+		EnableBatcher   dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -103,6 +107,7 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			ArchiverConcurrency:                       dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
 			ArchivalsPerIteration:                     dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
 			DeterministicConstructionCheckProbability: dc.GetFloat64Property(dynamicconfig.WorkerDeterministicConstructionCheckProbability, 0.002),
+			BlobIntegrityCheckProbability:             dc.GetFloat64Property(dynamicconfig.WorkerBlobIntegrityCheckProbability, 0.002),
 			TimeLimitPerArchivalIteration:             dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
 		},
 		IndexerCfg: &indexer.Config{
@@ -118,6 +123,11 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			Persistence:       &params.PersistenceConfig,
 			ClusterMetadata:   params.ClusterMetadata,
 		},
+		BatcherCfg: &batcher.Config{
+			AdminOperationToken: dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
+			ClusterMetadata:     params.ClusterMetadata,
+		},
+		EnableBatcher:   dc.GetBoolProperty(dynamicconfig.EnableBatcher, false),
 		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 	}
 }
@@ -137,6 +147,7 @@ func (s *Service) Start() {
 	replicatorEnabled := base.GetClusterMetadata().IsGlobalDomainEnabled()
 	archiverEnabled := base.GetClusterMetadata().ArchivalConfig().ConfiguredForArchival()
 	scannerEnabled := s.config.ScannerCfg.Persistence.DefaultStoreType() == config.StoreTypeSQL
+	batcherEnabled := s.config.EnableBatcher()
 
 	if replicatorEnabled || archiverEnabled || scannerEnabled {
 		pConfig := s.params.PersistenceConfig
@@ -155,6 +166,9 @@ func (s *Service) Start() {
 		if scannerEnabled {
 			s.startScanner(base)
 		}
+		if batcherEnabled {
+			s.startBatcher(base)
+		}
 	}
 
 	s.logger.Info("service started", tag.ComponentWorker)
@@ -171,6 +185,20 @@ func (s *Service) Stop() {
 	s.params.Logger.Info("service stopped", tag.ComponentWorker)
 }
 
+func (s *Service) startBatcher(base service.Service) {
+	params := &batcher.BootstrapParams{
+		Config:        *s.config.BatcherCfg,
+		ServiceClient: s.params.PublicClient,
+		MetricsClient: s.metricsClient,
+		Logger:        s.logger,
+		TallyScope:    s.params.MetricScope,
+	}
+	batcher := batcher.New(params)
+	if err := batcher.Start(); err != nil {
+		s.logger.Fatal("error starting batcher", tag.Error(err))
+	}
+}
+
 func (s *Service) startScanner(base service.Service) {
 	params := &scanner.BootstrapParams{
 		Config:        *s.config.ScannerCfg,
@@ -181,7 +209,7 @@ func (s *Service) startScanner(base service.Service) {
 	}
 	scanner := scanner.New(params)
 	if err := scanner.Start(); err != nil {
-		s.logger.Fatal("error starting scanner:%v", tag.Error(err))
+		s.logger.Fatal("error starting scanner", tag.Error(err))
 	}
 }
 
@@ -269,7 +297,7 @@ func (s *Service) ensureSystemDomainExists(pFactory persistencefactory.Factory, 
 		s.logger.Fatal("error creating metadataMgr proxy", tag.Error(err))
 	}
 	defer metadataProxy.Close()
-	_, err = metadataProxy.GetDomain(&persistence.GetDomainRequest{Name: common.SystemDomainName})
+	_, err = metadataProxy.GetDomain(&persistence.GetDomainRequest{Name: common.SystemLocalDomainName})
 	switch err.(type) {
 	case nil:
 		return
@@ -290,7 +318,7 @@ func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clus
 	_, err = metadataV2.CreateDomain(&persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
 			ID:          common.SystemDomainID,
-			Name:        common.SystemDomainName,
+			Name:        common.SystemLocalDomainName,
 			Description: "Cadence internal system domain",
 		},
 		Config: &persistence.DomainConfig{

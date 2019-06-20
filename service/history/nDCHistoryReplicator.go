@@ -123,7 +123,7 @@ func (r *nDCHistoryReplicator) ApplyEvents(
 		return err
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		task.domainID,
 		task.execution,
@@ -732,7 +732,7 @@ func (r *nDCHistoryReplicator) getWorkflowContextMutableState(
 ) (workflowExecutionContext, mutableState, releaseWorkflowExecutionFunc, error) {
 
 	// we need to check the current workflow execution
-	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		domainID,
 		shared.WorkflowExecution{

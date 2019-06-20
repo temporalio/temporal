@@ -254,7 +254,7 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 }
 
 func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistence.TimerTaskInfo) (retError error) {
-	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+	context, release, err0 := t.cache.getOrCreateWorkflowExecutionForBackground(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
 		return err0
 	}
@@ -319,7 +319,7 @@ Update_History_Loop:
 
 func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persistence.TimerTaskInfo) (retError error) {
 
-	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
+	context, release, err0 := t.cache.getOrCreateWorkflowExecutionForBackground(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
 	if err0 != nil {
 		return err0
 	}
@@ -480,7 +480,7 @@ Update_History_Loop:
 
 func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence.TimerTaskInfo) (retError error) {
 
-	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+	context, release, err0 := t.cache.getOrCreateWorkflowExecutionForBackground(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
 		return err0
 	}
@@ -552,7 +552,7 @@ Update_History_Loop:
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(task *persistence.TimerTaskInfo) (retError error) {
 
-	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+	context, release, err0 := t.cache.getOrCreateWorkflowExecutionForBackground(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
 		return err0
 	}
@@ -594,7 +594,7 @@ Update_History_Loop:
 func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persistence.TimerTaskInfo) error {
 
 	processFn := func() error {
-		context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+		context, release, err0 := t.cache.getOrCreateWorkflowExecutionForBackground(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 		defer release(nil)
 		if err0 != nil {
 			return err0
@@ -680,7 +680,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persiste
 func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence.TimerTaskInfo) (retError error) {
 
 	domainID, workflowExecution := t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task)
-	context, release, err0 := t.cache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := t.cache.getOrCreateWorkflowExecutionForBackground(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}

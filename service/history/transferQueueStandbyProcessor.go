@@ -459,7 +459,7 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStarted(transfe
 
 func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo,
 	action func(mutableState) error, postAction func() error) (retError error) {
-	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(transferTask))
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(transferTask))
 	if err != nil {
 		return err
 	}

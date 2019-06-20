@@ -113,6 +113,7 @@ var (
 	ComponentIndexerESProcessor       = component("indexer-es-processor")
 	ComponentESVisibilityManager      = component("es-visibility-manager")
 	ComponentArchiver                 = component("archiver")
+	ComponentBatcher                  = component("batcher")
 	ComponentWorker                   = component("worker")
 	ComponentServiceResolver          = component("service-resolver")
 )

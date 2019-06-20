@@ -24,6 +24,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -42,8 +43,9 @@ import (
 )
 
 const (
-	numOfRetry   = 50
-	waitTimeInMs = 400
+	numOfRetry        = 50
+	waitTimeInMs      = 400
+	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )
 
 type elasticsearchIntegrationSuite struct {
@@ -237,6 +239,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	we3, err := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
 
+	time.Sleep(waitForESToSettle)
+
 	// query 1 workflow with search attr
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
 	var openExecution *workflow.WorkflowExecutionInfo
@@ -331,6 +335,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 		s.Nil(err)
 	}
 
+	time.Sleep(waitForESToSettle)
+
 	var listResp *workflow.ListWorkflowExecutionsResponse
 	var nextPageToken []byte
 
@@ -350,6 +356,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
+	s.NotNil(listResp)
 	s.True(len(listResp.GetNextPageToken()) != 0)
 
 	// the last request
@@ -366,6 +373,139 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 	s.NoError(err)
 }
 
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
+	id := "es-integration-list-workflow-order-by-test"
+	wt := "es-integration-list-workflow-order-by-test-type"
+	tl := "es-integration-list-workflow-order-by-test-tasklist"
+	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	for i := 0; i < defaultTestValueOfESIndexMaxResultWindow+1; i++ { // start 6
+		startRequest.RequestId = common.StringPtr(uuid.New())
+		startRequest.WorkflowId = common.StringPtr(id + strconv.Itoa(i))
+
+		if i < defaultTestValueOfESIndexMaxResultWindow-1 { // 4 workflow has search attr
+			intVal, _ := json.Marshal(i)
+			doubleVal, _ := json.Marshal(float64(i))
+			strVal, _ := json.Marshal(strconv.Itoa(i))
+			timeVal, _ := json.Marshal(time.Now())
+			searchAttr := &workflow.SearchAttributes{
+				IndexedFields: map[string][]byte{
+					definition.CustomIntField:      intVal,
+					definition.CustomDoubleField:   doubleVal,
+					definition.CustomKeywordField:  strVal,
+					definition.CustomDatetimeField: timeVal,
+				},
+			}
+			startRequest.SearchAttributes = searchAttr
+		} else {
+			startRequest.SearchAttributes = &workflow.SearchAttributes{}
+		}
+
+		_, err := s.engine.StartWorkflowExecution(createContext(), startRequest)
+		s.Nil(err)
+	}
+
+	time.Sleep(waitForESToSettle)
+
+	desc := "desc"
+	asc := "asc"
+	queryTemplate := `WorkflowType = "%s" order by %s %s`
+	pageSize := int32(defaultTestValueOfESIndexMaxResultWindow)
+
+	// order by CloseTime asc
+	query1 := fmt.Sprintf(queryTemplate, wt, definition.CloseTime, asc)
+	var openExecutions []*workflow.WorkflowExecutionInfo
+	listRequest := &workflow.ListWorkflowExecutionsRequest{
+		Domain:   common.StringPtr(s.domainName),
+		PageSize: common.Int32Ptr(pageSize),
+		Query:    common.StringPtr(query1),
+	}
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		if int32(len(resp.GetExecutions())) == listRequest.GetPageSize() {
+			openExecutions = resp.GetExecutions()
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.NotNil(openExecutions)
+	for i := int32(1); i < pageSize; i++ {
+		s.True(openExecutions[i-1].GetCloseTime() <= openExecutions[i].GetCloseTime())
+	}
+
+	// greatest effort to reduce duplicate code
+	testHelper := func(query, searchAttrKey string, prevVal, currVal interface{}) {
+		listRequest.Query = common.StringPtr(query)
+		listRequest.NextPageToken = []byte{}
+		resp, err := s.engine.ListWorkflowExecutions(createContext(), listRequest)
+		s.Nil(err)
+		openExecutions = resp.GetExecutions()
+		dec := json.NewDecoder(bytes.NewReader(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey]))
+		dec.UseNumber()
+		err = dec.Decode(&prevVal)
+		s.Nil(err)
+		for i := int32(1); i < pageSize; i++ {
+			indexedFields := openExecutions[i].GetSearchAttributes().GetIndexedFields()
+			searchAttrBytes, ok := indexedFields[searchAttrKey]
+			if !ok { // last one doesn't have search attr
+				s.Equal(pageSize-1, i)
+				break
+			}
+			dec := json.NewDecoder(bytes.NewReader(searchAttrBytes))
+			dec.UseNumber()
+			err = dec.Decode(&currVal)
+			s.Nil(err)
+			var v1, v2 interface{}
+			switch searchAttrKey {
+			case definition.CustomIntField:
+				v1, _ = prevVal.(json.Number).Int64()
+				v2, _ = currVal.(json.Number).Int64()
+				s.True(v1.(int64) >= v2.(int64))
+			case definition.CustomDoubleField:
+				v1, _ = prevVal.(json.Number).Float64()
+				v2, _ = currVal.(json.Number).Float64()
+				s.True(v1.(float64) >= v2.(float64))
+			case definition.CustomKeywordField:
+				s.True(prevVal.(string) >= currVal.(string))
+			case definition.CustomDatetimeField:
+				v1, _ = time.Parse(time.RFC3339, prevVal.(string))
+				v2, _ = time.Parse(time.RFC3339, currVal.(string))
+				s.True(v1.(time.Time).After(v2.(time.Time)))
+			}
+			prevVal = currVal
+		}
+		listRequest.NextPageToken = resp.GetNextPageToken()
+		resp, err = s.engine.ListWorkflowExecutions(createContext(), listRequest) // last page
+		s.Nil(err)
+		s.Equal(1, len(resp.GetExecutions()))
+	}
+
+	// order by CustomIntField desc
+	field := definition.CustomIntField
+	query := fmt.Sprintf(queryTemplate, wt, field, desc)
+	var int1, int2 int
+	testHelper(query, field, int1, int2)
+
+	// order by CustomDoubleField desc
+	field = definition.CustomDoubleField
+	query = fmt.Sprintf(queryTemplate, wt, field, desc)
+	var double1, double2 float64
+	testHelper(query, field, double1, double2)
+
+	// order by CustomKeywordField desc
+	field = definition.CustomKeywordField
+	query = fmt.Sprintf(queryTemplate, wt, field, desc)
+	var s1, s2 string
+	testHelper(query, field, s1, s2)
+
+	// order by CustomDatetimeField desc
+	field = definition.CustomDatetimeField
+	query = fmt.Sprintf(queryTemplate, wt, field, desc)
+	var t1, t2 time.Time
+	testHelper(query, field, t1, t2)
+}
+
 func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
 	startRequest *workflow.StartWorkflowExecutionRequest, wid, wType string, isScan bool) {
 
@@ -376,6 +516,8 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		_, err := s.engine.StartWorkflowExecution(createContext(), startRequest)
 		s.Nil(err)
 	}
+
+	time.Sleep(waitForESToSettle)
 
 	var openExecutions []*workflow.WorkflowExecutionInfo
 	var nextPageToken []byte
@@ -399,7 +541,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		s.Nil(err)
 		if len(resp.GetExecutions()) == pageSize {
 			openExecutions = resp.GetExecutions()
-			nextPageToken = resp.NextPageToken
+			nextPageToken = resp.GetNextPageToken()
 			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
@@ -424,7 +566,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		if len(resp.GetExecutions()) == numOfWorkflows-pageSize {
 			inIf = true
 			openExecutions = resp.GetExecutions()
-			nextPageToken = resp.NextPageToken
+			nextPageToken = resp.GetNextPageToken()
 			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)

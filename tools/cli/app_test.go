@@ -474,6 +474,17 @@ func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowType() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestCountWorkflow() {
+	resp := &shared.CountWorkflowExecutionsResponse{}
+	s.clientFrontendClient.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "count"})
+	s.Nil(err)
+
+	s.clientFrontendClient.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
+	err = s.app.Run([]string{"", "--do", domainName, "workflow", "count", "-q", "'CloseTime = missing'"})
+	s.Nil(err)
+}
+
 var describeTaskListResponse = &shared.DescribeTaskListResponse{
 	Pollers: []*shared.PollerInfo{
 		{

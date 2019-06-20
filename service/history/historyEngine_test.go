@@ -4807,7 +4807,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 }
 
 func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
-	context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	if err != nil {
 		return nil
 	}

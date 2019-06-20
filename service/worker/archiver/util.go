@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence"
+	"go.uber.org/cadence/activity"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -39,9 +41,9 @@ func MaxArchivalIterationTimeout() time.Duration {
 	return workflowStartToCloseTimeout / 2
 }
 
-func hashArchiveRequest(archiveRequest ArchiveRequest) uint64 {
+func hash(i interface{}) uint64 {
 	var b bytes.Buffer
-	gob.NewEncoder(&b).Encode(archiveRequest)
+	gob.NewEncoder(&b).Encode(i)
 	return farm.Fingerprint64(b.Bytes())
 }
 
@@ -76,6 +78,13 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
 		tag.ArchivalBucket(request.BucketName),
 	)
+}
+
+func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) log.Logger {
+	return logger.WithTags(
+		tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+		tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
+		tag.Attempt(activityInfo.Attempt))
 }
 
 func contextExpired(ctx context.Context) bool {
@@ -114,9 +123,33 @@ func historyMutated(historyBlob *HistoryBlob, request *ArchiveRequest) bool {
 func validateArchivalRequest(request *ArchiveRequest) error {
 	if len(request.BucketName) == 0 {
 		// this should not be able to occur, if domain enables archival bucket should always be set
-		return cadence.NewCustomError(errEmptyBucket)
+		return cadence.NewCustomError(errInvalidRequest, errEmptyBucket)
 	}
 	return nil
+}
+
+func getUploadHistoryActivityResponse(progress uploadProgress, err error) (*uploadResult, error) {
+	if err == nil {
+		return nil, nil
+	}
+
+	fatalError := map[string]bool{
+		errGetDomainByID:  true,
+		errInvalidRequest: true,
+	}
+	errReason := err.Error()
+	if _, ok := fatalError[errReason]; ok {
+		return nil, err
+	}
+
+	errorWithDetails := errReason
+	if details := errorDetails(err); details != "" {
+		errorWithDetails = fmt.Sprintf("%v: %v", errReason, details)
+	}
+	return &uploadResult{
+		BlobsToDelete:    progress.UploadedBlobs,
+		ErrorWithDetails: errorWithDetails,
+	}, nil
 }
 
 func errorDetails(err error) string {

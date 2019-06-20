@@ -14,6 +14,9 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_ci"
+    retry:
+      automatic:
+        limit: 1
     plugins:
       - docker-compose#v3.0.0:
           run: integration-test-cassandra
@@ -24,6 +27,9 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_ci EVENTSV2=true"
+    retry:
+      automatic:
+        limit: 1
     plugins:
       - docker-compose#v3.0.0:
           run: integration-test-cassandra
@@ -34,6 +40,9 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_xdc_ci"
+    retry:
+      automatic:
+        limit: 1
     plugins:
       - docker-compose#v3.0.0:
           run: integration-test-xdc-cassandra
@@ -44,6 +53,9 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_ci"
+    retry:
+      automatic:
+        limit: 1
     plugins:
       - docker-compose#v3.0.0:
           run: integration-test-mysql
@@ -54,6 +66,9 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_ci EVENTSV2=true"
+    retry:
+      automatic:
+        limit: 1
     plugins:
       - docker-compose#v3.0.0:
           run: integration-test-mysql
@@ -64,9 +79,25 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_xdc_ci"
+    retry:
+      automatic:
+        limit: 1
     plugins:
       - docker-compose#v3.0.0:
           run: integration-test-xdc-mysql
           config: docker/buildkite/docker-compose.yml
 
   - wait
+
+  - label: ":docker: build and push master"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "scripts/buildkite/docker-push.sh"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-login#v2.0.1:
+          username: ubercadence
+          password-env: DOCKER_LOGIN_PASSWORD

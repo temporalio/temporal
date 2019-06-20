@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	es "github.com/uber/cadence/common/elasticsearch"
@@ -63,6 +64,11 @@ type (
 		config        *Config
 		logger        log.Logger
 		metricsClient metrics.Client
+	}
+
+	kafkaMessageWithMetrics struct { // value of esProcessorImpl.mapToKafkaMsg
+		message        messaging.Message
+		swFromAddToAck *tally.Stopwatch // metric from message add to process, to message ack/nack
 	}
 )
 
@@ -115,7 +121,9 @@ func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafka
 		kafkaMsg.Ack()
 		return nil
 	}
-	_, isDup, _ := p.mapToKafkaMsg.PutOrDo(key, kafkaMsg, actionWhenFoundDuplicates)
+	sw := p.metricsClient.StartTimer(metrics.ESProcessorScope, metrics.ESProcessorProcessMsgLatency)
+	mapVal := newKafkaMessageWithMetrics(kafkaMsg, &sw)
+	_, isDup, _ := p.mapToKafkaMsg.PutOrDo(key, mapVal, actionWhenFoundDuplicates)
 	if isDup {
 		return
 	}
@@ -177,7 +185,7 @@ func (p *esProcessorImpl) ackKafkaMsgHelper(key string, nack bool) {
 	if !ok {
 		return // duplicate kafka message
 	}
-	kafkaMsg, ok := msg.(messaging.Message)
+	kafkaMsg, ok := msg.(*kafkaMessageWithMetrics)
 	if !ok { // must be bug in code and bad deployment
 		p.logger.Fatal("Message is not kafka message.", tag.ESKey(key))
 	}
@@ -187,6 +195,7 @@ func (p *esProcessorImpl) ackKafkaMsgHelper(key string, nack bool) {
 	} else {
 		kafkaMsg.Ack()
 	}
+
 	p.mapToKafkaMsg.Remove(key)
 }
 
@@ -278,4 +287,25 @@ func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
 		errMsg = resp.Error.Reason
 	}
 	return errMsg
+}
+
+func newKafkaMessageWithMetrics(kafkaMsg messaging.Message, stopwatch *tally.Stopwatch) *kafkaMessageWithMetrics {
+	return &kafkaMessageWithMetrics{
+		message:        kafkaMsg,
+		swFromAddToAck: stopwatch,
+	}
+}
+
+func (km *kafkaMessageWithMetrics) Ack() {
+	km.message.Ack()
+	if km.swFromAddToAck != nil {
+		km.swFromAddToAck.Stop()
+	}
+}
+
+func (km *kafkaMessageWithMetrics) Nack() {
+	km.message.Nack()
+	if km.swFromAddToAck != nil {
+		km.swFromAddToAck.Stop()
+	}
 }

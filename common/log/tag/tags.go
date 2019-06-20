@@ -716,3 +716,8 @@ func ArchivalDeterministicConstructionCheckFailReason(deterministicConstructionC
 func ArchivalNonDeterministicBlobKey(nondeterministicBlobKey string) Tag {
 	return newStringTag("archival-non-deterministic-blob-key", nondeterministicBlobKey)
 }
+
+// ArchivalBlobIntegrityCheckFailReason returns tag for ArchivalBlobIntegrityCheckFailReason
+func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) Tag {
+	return newStringTag("archival-blob-integrity-check-fail-reason", blobIntegrityCheckFailReason)
+}

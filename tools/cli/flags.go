@@ -388,6 +388,15 @@ func getFlagsForListAll() []cli.Flag {
 	}
 }
 
+func getFlagsForCount() []cli.Flag {
+	return []cli.Flag{
+		cli.StringFlag{
+			Name:  FlagListQueryWithAlias,
+			Usage: "Optional SQL like query. e.g count all open workflows 'CloseTime = missing'; 'WorkflowType=\"wtype\" and CloseTime > 0'",
+		},
+	}
+}
+
 func getFlagsForQuery() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{

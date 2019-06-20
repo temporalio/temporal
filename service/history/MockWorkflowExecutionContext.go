@@ -263,12 +263,12 @@ func (_m *mockWorkflowExecutionContext) replicateWorkflowExecution(_a0 *h.Replic
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 mutableState) (mutableState, error) {
-	ret := _m.Called(_a0, _a1)
+func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 int64, _a2 int, _a3 []persistence.Task, _a4 []persistence.Task, _a5 []persistence.Task, _a6 mutableState) (mutableState, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 
 	var r0 mutableState
-	if rf, ok := ret.Get(0).(func(string, mutableState) mutableState); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task, mutableState) mutableState); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(mutableState)
@@ -276,8 +276,8 @@ func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 mutabl
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(string, mutableState) error); ok {
-		r1 = rf(_a0, _a1)
+	if rf, ok := ret.Get(1).(func(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task, mutableState) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 	} else {
 		r1 = ret.Error(1)
 	}

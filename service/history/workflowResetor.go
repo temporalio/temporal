@@ -347,11 +347,13 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 
 	if currMutableState.IsWorkflowExecutionRunning() {
 		terminateCurr = true
-		currMutableState.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
-			Reason:   common.StringPtr(reason),
-			Details:  nil,
-			Identity: common.StringPtr(identityHistoryService),
-		})
+		if _, retError = currMutableState.AddWorkflowExecutionTerminatedEvent(
+			reason,
+			nil,
+			identityHistoryService,
+		); retError != nil {
+			return
+		}
 		closeTask, cleanupTask, retError = w.eng.getWorkflowHistoryCleanupTasks(
 			currMutableState.GetExecutionInfo().DomainID,
 			currMutableState.GetExecutionInfo().WorkflowID,
@@ -446,7 +448,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 				WorkflowId: common.StringPtr(newMutableState.GetExecutionInfo().WorkflowID),
 				RunId:      common.StringPtr(continueRunID),
 			}
-			continueContext, continueRelease, err := w.eng.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, newMutableState.GetExecutionInfo().DomainID, continueExe)
+			continueContext, continueRelease, err := w.eng.historyCache.getOrCreateWorkflowExecution(ctx, newMutableState.GetExecutionInfo().DomainID, continueExe)
 			if err != nil {
 				return err
 			}
@@ -713,7 +715,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		RunId:      common.StringPtr(resetAttr.GetBaseRunId()),
 	}
 
-	baseContext, baseRelease, baseErr := w.eng.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, baseExecution)
+	baseContext, baseRelease, baseErr := w.eng.historyCache.getOrCreateWorkflowExecution(ctx, domainID, baseExecution)
 	if baseErr != nil {
 		return baseErr
 	}
@@ -737,7 +739,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 			RunId:      common.StringPtr(currentRunID),
 		}
 		var currErr error
-		currContext, currRelease, currErr = w.eng.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, currExecution)
+		currContext, currRelease, currErr = w.eng.historyCache.getOrCreateWorkflowExecution(ctx, domainID, currExecution)
 		if currErr != nil {
 			return currErr
 		}

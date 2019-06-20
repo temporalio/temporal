@@ -80,6 +80,7 @@ docker run -e CASSANDRA_CONSISTENCY=Quorum \            -- Default cassandra con
     -e NUM_HISTORY_SHARDS=1024  \                       -- Number of history shards
     -e SERVICES=history,matching \                      -- Spinup only the provided services
     -e LOG_LEVEL=debug,info \                           -- Logging level
+    -e DYNAMIC_CONFIG_FILE_PATH=config/foo.yaml         -- Dynamic config file to be watched
     ubercadence/server:<tag>
 ```
 

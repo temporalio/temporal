@@ -691,7 +691,7 @@ func (d *domainHandlerImpl) validateClusterName(clusterName string) error {
 }
 
 func (d *domainHandlerImpl) validateRetentionPeriod(retentionDays int32) error {
-	if retentionDays <= 0 {
+	if retentionDays < int32(d.config.MinRetentionDays()) {
 		return errInvalidRetentionPeriod
 	}
 	return nil

@@ -265,7 +265,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID)}
 
-	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	}
 
 	// get workflow timeout
-	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
@@ -366,7 +366,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 		RunId:      common.StringPtr(task.RunID),
 	}
 
-	context, release, err := t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
 	if err != nil {
 		return err
 	}
@@ -464,7 +464,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persiste
 
 	var context workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
-	context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err = t.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
 	if err != nil {
 		return err
 	}
@@ -582,7 +582,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 
 	var context workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
-	context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err = t.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
 	if err != nil {
 		return err
 	}
@@ -711,7 +711,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 
 	var context workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
-	context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err = t.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
 	if err != nil {
 		return err
 	}
@@ -846,7 +846,7 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	}
 
 	// get workflow timeout
-	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
@@ -899,7 +899,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 		tag.WorkflowRunID(execution.GetRunId()),
 	)
 	// get workflow timeout
-	currContext, currRelease, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	currContext, currRelease, err := t.cache.getOrCreateWorkflowExecutionForBackground(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
@@ -968,7 +968,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 			RunId:      common.StringPtr(resetPt.GetRunId()),
 		}
 		var baseRelease func(err error)
-		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecution(task.DomainID, baseExecution)
+		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecutionForBackground(task.DomainID, baseExecution)
 		if err != nil {
 			return err
 		}

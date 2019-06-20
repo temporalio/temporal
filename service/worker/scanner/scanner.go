@@ -125,12 +125,12 @@ func (s *Scanner) Start() error {
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
 	go s.startWorkflowWithRetry()
-	worker := worker.New(s.context.sdkClient, common.SystemDomainName, tlScannerTaskListName, workerOpts)
+	worker := worker.New(s.context.sdkClient, common.SystemLocalDomainName, tlScannerTaskListName, workerOpts)
 	return worker.Start()
 }
 
 func (s *Scanner) startWorkflowWithRetry() error {
-	client := cclient.NewClient(s.context.sdkClient, common.SystemDomainName, &cclient.Options{})
+	client := cclient.NewClient(s.context.sdkClient, common.SystemLocalDomainName, &cclient.Options{})
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)

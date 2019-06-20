@@ -986,7 +986,6 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidPageToken()
 	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest([]byte{3, 4, 5, 1}), s.testDomainID, metrics.NoopScope(metrics.Frontend))
 	s.Nil(resp)
 	s.Error(err)
-	s.Equal(errInvalidNextArchivalPageToken, err)
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidBlobKey() {
@@ -1072,94 +1071,6 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.NotNil(resp)
 	s.NotNil(resp.History)
 	s.True(resp.GetArchived())
-	expectedNextPageToken := &getHistoryContinuationTokenArchival{
-		BlobstorePageToken:   2,
-		CloseFailoverVersion: 10,
-	}
-	expectedSerializedNextPageToken, err := serializeHistoryTokenArchival(expectedNextPageToken)
-	s.NoError(err)
-	s.Equal(expectedSerializedNextPageToken, resp.NextPageToken)
-}
-
-func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_SecondPageIndexNotUsed() {
-	config := s.newConfig()
-	mMetadataManager := &mocks.MetadataManager{}
-	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
-	clusterMetadata := &mocks.ClusterMetadata{}
-	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
-	mBlobstore := &mocks.BlobstoreClient{}
-	unwrappedBlob := &archiver.HistoryBlob{
-		Header: &archiver.HistoryBlobHeader{
-			CurrentPageToken: common.IntPtr(common.FirstBlobPageToken + 1),
-			NextPageToken:    common.IntPtr(common.FirstBlobPageToken + 2),
-			IsLast:           common.BoolPtr(false),
-		},
-		Body: &shared.History{},
-	}
-	bytes, err := json.Marshal(unwrappedBlob)
-	s.NoError(err)
-	historyBlob, err := blob.Wrap(blob.NewBlob(bytes, map[string]string{}), blob.JSONEncoded())
-	s.NoError(err)
-	historyKey, _ := archiver.NewHistoryBlobKey(s.testDomainID, testWorkflowID, testRunID, 10, common.FirstBlobPageToken+1)
-	mBlobstore.On("Download", mock.Anything, mock.Anything, historyKey).Return(historyBlob, nil)
-	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
-	wh.metricsClient = wh.Service.GetMetricsClient()
-	wh.startWG.Done()
-	pageToken, err := serializeHistoryTokenArchival(&getHistoryContinuationTokenArchival{
-		BlobstorePageToken:   common.FirstBlobPageToken + 1,
-		CloseFailoverVersion: 10,
-	})
-	s.NoError(err)
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(pageToken), s.testDomainID, metrics.NoopScope(metrics.Frontend))
-	s.NoError(err)
-	s.NotNil(resp)
-	s.NotNil(resp.History)
-	s.True(resp.GetArchived())
-	expectedNextPageToken := &getHistoryContinuationTokenArchival{
-		BlobstorePageToken:   common.FirstBlobPageToken + 2,
-		CloseFailoverVersion: 10,
-	}
-	expectedSerializedNextPageToken, err := serializeHistoryTokenArchival(expectedNextPageToken)
-	s.NoError(err)
-	s.Equal(expectedSerializedNextPageToken, resp.NextPageToken)
-}
-
-func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetLastPage() {
-	config := s.newConfig()
-	mMetadataManager := &mocks.MetadataManager{}
-	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
-	clusterMetadata := &mocks.ClusterMetadata{}
-	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
-	mBlobstore := &mocks.BlobstoreClient{}
-	unwrappedBlob := &archiver.HistoryBlob{
-		Header: &archiver.HistoryBlobHeader{
-			CurrentPageToken: common.IntPtr(5),
-			NextPageToken:    common.IntPtr(common.LastBlobNextPageToken),
-			IsLast:           common.BoolPtr(true),
-		},
-		Body: &shared.History{},
-	}
-	bytes, err := json.Marshal(unwrappedBlob)
-	s.NoError(err)
-	historyBlob, err := blob.Wrap(blob.NewBlob(bytes, map[string]string{}), blob.JSONEncoded())
-	s.NoError(err)
-	historyKey, _ := archiver.NewHistoryBlobKey(s.testDomainID, testWorkflowID, testRunID, 10, 5)
-	mBlobstore.On("Download", mock.Anything, mock.Anything, historyKey).Return(historyBlob, nil)
-	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
-	wh.metricsClient = wh.Service.GetMetricsClient()
-	wh.startWG.Done()
-	pageToken, err := serializeHistoryTokenArchival(&getHistoryContinuationTokenArchival{
-		BlobstorePageToken:   5,
-		CloseFailoverVersion: 10,
-	})
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(pageToken), s.testDomainID, metrics.NoopScope(metrics.Frontend))
-	s.NoError(err)
-	s.NotNil(resp)
-	s.NotNil(resp.History)
-	s.True(resp.GetArchived())
-	s.Nil(resp.NextPageToken)
 }
 
 func (s *workflowHandlerSuite) TestGetHistory() {
@@ -1292,7 +1203,7 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), numHistoryShards, false, false)
+	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), numHistoryShards, false)
 }
 
 func bucketMetadataResponse(owner string, retentionDays int) *blobstore.BucketMetadataResponse {

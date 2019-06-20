@@ -116,7 +116,9 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryForTest(&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{}), nil)
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
+		&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{}, "", nil,
+	), nil)
 	s.mockEventsCache = &MockEventsCache{}
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything).Return()
@@ -1742,7 +1744,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 }
 
 func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
-	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	if err != nil {
 		return nil
 	}

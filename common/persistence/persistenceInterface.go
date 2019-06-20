@@ -371,20 +371,29 @@ type (
 
 	// InternalResetMutableStateRequest is used to reset workflow execution state  for Persistence Interface
 	InternalResetMutableStateRequest struct {
-		PrevRunID        string
+		// previous workflow information
+		PrevRunID            string
+		PrevLastWriteVersion int64
+		PrevState            int
+
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
 		VersionHistories *DataBlob
 		Condition        int64
 		RangeID          int64
 
-		// Mutable state
+		// mutable state pending info
 		InsertActivityInfos       []*InternalActivityInfo
 		InsertTimerInfos          []*TimerInfo
 		InsertChildExecutionInfos []*InternalChildExecutionInfo
 		InsertRequestCancelInfos  []*RequestCancelInfo
 		InsertSignalInfos         []*SignalInfo
 		InsertSignalRequestedIDs  []string
+
+		// replication/ transfer / timer task
+		InsertReplicationTasks []Task
+		InsertTransferTasks    []Task
+		InsertTimerTasks       []Task
 	}
 
 	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state  for Persistence Interface

@@ -614,18 +614,27 @@ func (m *executionManagerImpl) ResetMutableState(request *ResetMutableStateReque
 	}
 
 	newRequest := &InternalResetMutableStateRequest{
-		PrevRunID:                 request.PrevRunID,
-		ExecutionInfo:             executionInfo,
-		ReplicationState:          request.ReplicationState,
-		VersionHistories:          versionHistories,
-		Condition:                 request.Condition,
-		RangeID:                   request.RangeID,
+		PrevRunID:            request.PrevRunID,
+		PrevLastWriteVersion: request.PrevLastWriteVersion,
+		PrevState:            request.PrevState,
+		ExecutionInfo:        executionInfo,
+		ReplicationState:     request.ReplicationState,
+		VersionHistories:     versionHistories,
+		Condition:            request.Condition,
+		RangeID:              request.RangeID,
+
+		// mutable state pending info
 		InsertActivityInfos:       insertActivityInfos,
 		InsertTimerInfos:          request.InsertTimerInfos,
 		InsertChildExecutionInfos: insertChildExecutionInfos,
 		InsertRequestCancelInfos:  request.InsertRequestCancelInfos,
 		InsertSignalInfos:         request.InsertSignalInfos,
 		InsertSignalRequestedIDs:  request.InsertSignalRequestedIDs,
+
+		// replication/ transfer / timer task
+		InsertReplicationTasks: request.InsertReplicationTasks,
+		InsertTransferTasks:    request.InsertTransferTasks,
+		InsertTimerTasks:       request.InsertTimerTasks,
 	}
 	return m.persistence.ResetMutableState(newRequest)
 }

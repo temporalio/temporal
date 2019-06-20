@@ -143,15 +143,14 @@ func (s *server) startService() common.Daemon {
 	}
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
-		params.MetricsClient,
 		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
-		archivalStatus,
+		archivalStatus(),
 		s.cfg.Archival.DefaultBucket,
-		enableReadFromArchival,
+		enableReadFromArchival(),
 	)
 	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
 	params.ESConfig = &s.cfg.ElasticSearch

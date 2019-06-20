@@ -40,7 +40,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/clock"
@@ -78,6 +77,7 @@ type (
 		versionChecker           *versionChecker
 		domainHandler            *domainHandlerImpl
 		visibilityQueryValidator *common.VisibilityQueryValidator
+		historyBlobDownloader    archiver.HistoryBlobDownloader
 		service.Service
 	}
 
@@ -91,11 +91,6 @@ type (
 		EventStoreVersion int32
 		BranchToken       []byte
 		ReplicationInfo   map[string]*gen.ReplicationInfo
-	}
-
-	getHistoryContinuationTokenArchival struct {
-		BlobstorePageToken   int
-		CloseFailoverVersion int64
 	}
 
 	domainGetter interface {
@@ -126,11 +121,10 @@ var (
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
-	errInvalidRetentionPeriod                     = &gen.BadRequestError{Message: "Retention period is not set to a positive number on request."}
+	errInvalidRetentionPeriod                     = &gen.BadRequestError{Message: "A valid retention period is not set on request."}
 
 	// err for archival
-	errDomainHasNeverBeenEnabledForArchival = &gen.BadRequestError{Message: "Attempted to fetch history from archival, but domain has never been enabled for archival."}
-	errInvalidNextArchivalPageToken         = &gen.BadRequestError{Message: "Invalid NextPageToken for archival."}
+	errHistoryHasPassedRetentionPeriod = &gen.BadRequestError{Message: "Requested workflow history has passed retention period."}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -164,6 +158,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		historyV2Mgr:    historyV2Mgr,
 		visibilityMgr:   visibilityMgr,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		metricsClient:   sVice.GetMetricsClient(),
 		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
 		rateLimiter:     tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
 		blobstoreClient: blobstoreClient,
@@ -177,6 +172,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 		),
 		visibilityQueryValidator: common.NewQueryValidator(config.ValidSearchAttributes),
+		historyBlobDownloader:    archiver.NewHistoryBlobDownloader(blobstoreClient),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -198,7 +194,6 @@ func (wh *WorkflowHandler) Start() error {
 	wh.matchingRawClient = wh.GetClientBean().GetMatchingClient()
 	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
-	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
 	return nil
 }
@@ -2219,6 +2214,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 		return nil, wh.error(&gen.BadRequestError{Message: "LatestTime in StartTimeFilter is required"}, scope)
 	}
 
+	if listRequest.StartTimeFilter.GetEarliestTime() > listRequest.StartTimeFilter.GetLatestTime() {
+		return nil, wh.error(&gen.BadRequestError{Message: "EarliestTime in StartTimeFilter should not be larger than LatestTime"}, scope)
+	}
+
 	if listRequest.ExecutionFilter != nil && listRequest.TypeFilter != nil {
 		return nil, wh.error(&gen.BadRequestError{
 			Message: "Only one of ExecutionFilter or TypeFilter is allowed"}, scope)
@@ -2320,6 +2319,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 
 	if listRequest.StartTimeFilter.LatestTime == nil {
 		return nil, wh.error(&gen.BadRequestError{Message: "LatestTime in StartTimeFilter is required"}, scope)
+	}
+
+	if listRequest.StartTimeFilter.GetEarliestTime() > listRequest.StartTimeFilter.GetLatestTime() {
+		return nil, wh.error(&gen.BadRequestError{Message: "EarliestTime in StartTimeFilter should not be larger than LatestTime"}, scope)
 	}
 
 	filterCount := 0
@@ -3155,21 +3158,6 @@ func serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
 	return bytes, err
 }
 
-func deserializeHistoryTokenArchival(bytes []byte) (*getHistoryContinuationTokenArchival, error) {
-	token := &getHistoryContinuationTokenArchival{}
-	err := json.Unmarshal(bytes, token)
-	return token, err
-}
-
-func serializeHistoryTokenArchival(token *getHistoryContinuationTokenArchival) ([]byte, error) {
-	if token == nil {
-		return nil, nil
-	}
-
-	bytes, err := json.Marshal(token)
-	return bytes, err
-}
-
 func createServiceBusyError() *gen.ServiceBusyError {
 	err := &gen.ServiceBusyError{}
 	err.Message = "Too many outstanding requests to the cadence service"
@@ -3212,62 +3200,22 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	}
 	archivalBucket := entry.GetConfig().ArchivalBucket
 	if archivalBucket == "" {
-		return nil, wh.error(errDomainHasNeverBeenEnabledForArchival, scope)
+		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
 	}
-	var token *getHistoryContinuationTokenArchival
-	if request.NextPageToken != nil {
-		token, err = deserializeHistoryTokenArchival(request.NextPageToken)
-		if err != nil {
-			return nil, wh.error(errInvalidNextArchivalPageToken, scope)
-		}
-	} else {
-		indexKey, err := archiver.NewHistoryIndexBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId())
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-		indexTags, err := wh.blobstoreClient.GetTags(ctx, archivalBucket, indexKey)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-		highestVersion, err := archiver.GetHighestVersion(indexTags)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-		token = &getHistoryContinuationTokenArchival{
-			BlobstorePageToken:   common.FirstBlobPageToken,
-			CloseFailoverVersion: *highestVersion,
-		}
+	downloadReq := &archiver.DownloadBlobRequest{
+		NextPageToken:  request.NextPageToken,
+		ArchivalBucket: archivalBucket,
+		DomainID:       domainID,
+		WorkflowID:     request.GetExecution().GetWorkflowId(),
+		RunID:          request.GetExecution().GetRunId(),
 	}
-	key, err := archiver.NewHistoryBlobKey(domainID, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), token.CloseFailoverVersion, token.BlobstorePageToken)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-	b, err := wh.blobstoreClient.Download(ctx, archivalBucket, key)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-	unwrappedBlob, wrappingLayers, err := blob.Unwrap(b)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-	historyBlob := &archiver.HistoryBlob{}
-	switch *wrappingLayers.EncodingFormat {
-	case blob.JSONEncoding:
-		if err := json.Unmarshal(unwrappedBlob.Body, historyBlob); err != nil {
-			return nil, wh.error(err, scope)
-		}
-	}
-	token.BlobstorePageToken = *historyBlob.Header.NextPageToken
-	if *historyBlob.Header.IsLast {
-		token = nil
-	}
-	nextToken, err := serializeHistoryTokenArchival(token)
+	resp, err := wh.historyBlobDownloader.DownloadBlob(ctx, downloadReq)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 	return &gen.GetWorkflowExecutionHistoryResponse{
-		History:       historyBlob.Body,
-		NextPageToken: nextToken,
+		History:       resp.HistoryBlob.Body,
+		NextPageToken: resp.NextPageToken,
 		Archived:      common.BoolPtr(true),
 	}, nil
 }

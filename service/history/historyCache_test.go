@@ -116,11 +116,11 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		RunId:      common.StringPtr(uuid.New()),
 	}
 	mockMS1 := &mockMutableState{}
-	context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, execution1)
+	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution1)
 	s.Nil(err)
 	context.(*workflowExecutionContextImpl).msBuilder = mockMS1
 	release(nil)
-	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, execution1)
+	context, release, err = s.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution1)
 	s.Nil(err)
 	s.Equal(mockMS1, context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
@@ -129,7 +129,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
 	}
-	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, execution2)
+	context, release, err = s.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution2)
 	s.Nil(err)
 	s.NotEqual(mockMS1, context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
@@ -144,7 +144,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
-	context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err)
 
 	we2 := workflow.WorkflowExecution{
@@ -153,18 +153,18 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	}
 
 	// Cache is full because context is pinned, should get an error now
-	_, _, err2 := s.cache.getOrCreateWorkflowExecution(domainID, we2)
+	_, _, err2 := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we2)
 	s.NotNil(err2)
 
 	// Now release the context, this should unpin it.
 	release(err2)
 
-	_, release2, err3 := s.cache.getOrCreateWorkflowExecution(domainID, we2)
+	_, release2, err3 := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we2)
 	s.Nil(err3)
 	release2(err3)
 
 	// Old context should be evicted.
-	newContext, release, err4 := s.cache.getOrCreateWorkflowExecution(domainID, we)
+	newContext, release, err4 := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err4)
 	s.False(context == newContext)
 	release(err4)
@@ -179,7 +179,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
-	context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake msBuilder
@@ -188,14 +188,14 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 
 	// since last time, the release function receive a nil error
 	// the ms builder will not be cleared
-	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err = s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err)
 	s.NotNil(context.(*workflowExecutionContextImpl).msBuilder)
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
 	// the ms builder will be cleared
-	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err = s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err)
 	s.Nil(context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
@@ -215,7 +215,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	stopChan := make(chan struct{})
 	testFn := func() {
 		<-stopChan
-		context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, we)
+		context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 		s.Nil(err)
 		// since each time the builder is reset to nil
 		s.Nil(context.(*workflowExecutionContextImpl).msBuilder)
@@ -233,7 +233,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	close(stopChan)
 	waitGroup.Wait()
 
-	context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake msBuilder

@@ -26,11 +26,9 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
@@ -61,7 +59,7 @@ func (s *archiverSuite) SetupSuite() {
 
 func (s *archiverSuite) SetupTest() {
 	archiverTestMetrics = &mmocks.Client{}
-	archiverTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(tally.NewStopwatch(time.Now(), &nopStopwatchRecorder{}))
+	archiverTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NopStopwatch())
 	archiverTestLogger = &log.MockLogger{}
 	archiverTestLogger.On("WithTags", mock.Anything).Return(archiverTestLogger)
 }
@@ -78,8 +76,12 @@ func (s *archiverSuite) TestHandleRequest_UploadFails_NonRetryableError() {
 	archiverTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(cadence.NewCustomError(errGetDomainByID))
-	env.OnActivity(deleteBlobActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	blobsToDelete := []string{"some random blob key"}
+	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(&uploadResult{
+		BlobsToDelete:    blobsToDelete,
+		ErrorWithDetails: errUploadBlob,
+	}, nil)
+	env.OnActivity(deleteBlobActivityFnName, mock.Anything, mock.Anything, blobsToDelete).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
@@ -94,9 +96,27 @@ func (s *archiverSuite) TestHandleRequest_UploadFails_ExpireRetryTimeout() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
 	archiverTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
+	uploadedBlobs := []string{"test key 1", "test key 2"}
+	progress := uploadProgress{UploadedBlobs: uploadedBlobs}
+	timeoutErr := workflow.NewTimeoutError(shared.TimeoutTypeStartToClose, progress)
+
 	env := s.NewTestWorkflowEnvironment()
-	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(workflow.NewTimeoutError(shared.TimeoutTypeStartToClose))
-	env.OnActivity(deleteBlobActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil, timeoutErr)
+	env.OnActivity(deleteBlobActivityFnName, mock.Anything, mock.Anything, uploadedBlobs).Return(nil)
+	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
+
+	env.AssertExpectations(s.T())
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+}
+
+func (s *archiverSuite) TestHandleRequest_UploadSuccess() {
+	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
+	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
+
+	env := s.NewTestWorkflowEnvironment()
+	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil, nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
@@ -112,7 +132,7 @@ func (s *archiverSuite) TestHandleRequest_LocalDeleteFails_NonRetryableError() {
 	archiverTestLogger.On("Warn", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil, nil)
 	var deleteSucceed bool
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		if !deleteSucceed {
@@ -133,7 +153,7 @@ func (s *archiverSuite) TestHandleRequest_LocalDeleteFailsThenSucceeds() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil, nil)
 	firstRun := true
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		if firstRun {
@@ -160,7 +180,7 @@ func (s *archiverSuite) TestRunArchiver() {
 	archiverTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverStoppedCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil, nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(startAndFinishArchiverWorkflow, concurrency, numRequests)
 
@@ -200,5 +220,5 @@ func randomArchiveRequest() (ArchiveRequest, uint64) {
 		WorkflowID: fmt.Sprintf("%v", rand.Intn(1000)),
 		RunID:      fmt.Sprintf("%v", rand.Intn(1000)),
 	}
-	return ar, hashArchiveRequest(ar)
+	return ar, hash(ar)
 }

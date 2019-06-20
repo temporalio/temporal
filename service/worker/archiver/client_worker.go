@@ -53,16 +53,20 @@ type (
 
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
-		PublicClient      workflowserviceclient.Interface
-		MetricsClient     metrics.Client
-		Logger            log.Logger
-		ClusterMetadata   cluster.Metadata
-		HistoryManager    persistence.HistoryManager
-		HistoryV2Manager  persistence.HistoryV2Manager
-		Blobstore         blobstore.Client
-		DomainCache       cache.DomainCache
-		Config            *Config
-		HistoryBlobReader HistoryBlobReader // this is only set in testing code
+		PublicClient     workflowserviceclient.Interface
+		MetricsClient    metrics.Client
+		Logger           log.Logger
+		ClusterMetadata  cluster.Metadata
+		HistoryManager   persistence.HistoryManager
+		HistoryV2Manager persistence.HistoryV2Manager
+		Blobstore        blobstore.Client
+		DomainCache      cache.DomainCache
+		Config           *Config
+
+		// the following are only set in testing code
+		HistoryBlobReader     HistoryBlobReader
+		HistorySizeEstimator  SizeEstimator
+		HistoryBlobDownloader HistoryBlobDownloader
 	}
 
 	// Config for ClientWorker
@@ -73,6 +77,7 @@ type (
 		ArchiverConcurrency                       dynamicconfig.IntPropertyFn
 		ArchivalsPerIteration                     dynamicconfig.IntPropertyFn
 		DeterministicConstructionCheckProbability dynamicconfig.FloatPropertyFn
+		BlobIntegrityCheckProbability             dynamicconfig.FloatPropertyFn
 		TimeLimitPerArchivalIteration             dynamicconfig.DurationPropertyFn
 	}
 
@@ -106,7 +111,7 @@ func init() {
 
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
-	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemDomainName))
+	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemLocalDomainName))
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
@@ -114,7 +119,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	return &clientWorker{
-		worker:      worker.New(container.PublicClient, common.SystemDomainName, decisionTaskList, wo),
+		worker:      worker.New(container.PublicClient, common.SystemLocalDomainName, decisionTaskList, wo),
 		domainCache: container.DomainCache,
 	}
 }

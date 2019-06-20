@@ -278,7 +278,14 @@ func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationStat
 	return e.replicationState
 }
 
-func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.ResetMutableStateRequest {
+func (e *mutableStateBuilder) ResetSnapshot(
+	prevRunID string,
+	prevLastWriteVersion int64,
+	prevState int,
+	replicationTasks []persistence.Task,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+) *persistence.ResetMutableStateRequest {
 	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
 
 	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
@@ -313,6 +320,8 @@ func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.Reset
 
 	return &persistence.ResetMutableStateRequest{
 		PrevRunID:                 prevRunID,
+		PrevLastWriteVersion:      prevLastWriteVersion,
+		PrevState:                 prevState,
 		ExecutionInfo:             e.executionInfo,
 		ReplicationState:          e.replicationState,
 		InsertActivityInfos:       insertActivities,
@@ -321,6 +330,9 @@ func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.Reset
 		InsertRequestCancelInfos:  insertRequestCancels,
 		InsertSignalInfos:         insertSignals,
 		InsertSignalRequestedIDs:  insertSignalRequested,
+		InsertReplicationTasks:    replicationTasks,
+		InsertTransferTasks:       transferTasks,
+		InsertTimerTasks:          timerTasks,
 	}
 }
 
@@ -556,7 +568,9 @@ func checkAndClearTimerFiredEvent(
 	if timerFiredIdx == -1 {
 		return events, nil
 	}
-	return append(events[:timerFiredIdx], events[timerFiredIdx+1:]...), events[timerFiredIdx]
+
+	timerEvent := events[timerFiredIdx]
+	return append(events[:timerFiredIdx], events[timerFiredIdx+1:]...), timerEvent
 }
 
 func convertUpdateActivityInfos(inputs map[*persistence.ActivityInfo]struct{}) []*persistence.ActivityInfo {
@@ -2975,7 +2989,7 @@ func (e *mutableStateBuilder) AddRecordMarkerEvent(
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
-	request *workflow.TerminateWorkflowExecutionRequest,
+	reason string, details []byte, identity string,
 ) (*workflow.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTerminated
@@ -2983,7 +2997,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionTerminatedEvent(request)
+	event := e.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity)
 	if err := e.ReplicateWorkflowExecutionTerminatedEvent(event.GetEventId(), event); err != nil {
 		return nil, err
 	}
@@ -3130,6 +3144,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 func rolloverAutoResetPointsWithExpiringTime(
 	resetPoints *workflow.ResetPoints,
 	prevRunID string,
+	nowNano int64,
 	domainRetentionDays int32,
 ) *workflow.ResetPoints {
 
@@ -3137,7 +3152,7 @@ func rolloverAutoResetPointsWithExpiringTime(
 		return resetPoints
 	}
 	newPoints := make([]*workflow.ResetPointInfo, 0, len(resetPoints.Points))
-	expiringTimeNano := time.Now().Add(time.Duration(domainRetentionDays) * time.Hour * 24).UnixNano()
+	expiringTimeNano := nowNano + int64(time.Duration(domainRetentionDays)*time.Hour*24)
 	for _, rp := range resetPoints.Points {
 		if rp.GetRunId() == prevRunID {
 			rp.ExpiringTimeNano = common.Int64Ptr(expiringTimeNano)
@@ -3227,7 +3242,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		CronSchedule:            startedAttributes.GetCronSchedule(),
 		EventStoreVersion:       newStateBuilder.GetEventStoreVersion(),
 		BranchToken:             newStateBuilder.GetCurrentBranch(),
-		PreviousAutoResetPoints: rolloverAutoResetPointsWithExpiringTime(startedAttributes.GetPrevAutoResetPoints(), prevRunID, domainRetentionDays),
+		PreviousAutoResetPoints: rolloverAutoResetPointsWithExpiringTime(startedAttributes.GetPrevAutoResetPoints(), prevRunID, continueAsNewEvent.GetTimestamp(), domainRetentionDays),
 	}
 
 	if continueAsNew.HasRetryPolicy {

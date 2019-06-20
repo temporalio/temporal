@@ -811,21 +811,31 @@ type (
 
 	// ResetMutableStateRequest is used to reset workflow execution state for a single run
 	ResetMutableStateRequest struct {
-		PrevRunID        string
+		// previous workflow information
+		PrevRunID            string
+		PrevLastWriteVersion int64
+		PrevState            int
+
 		ExecutionInfo    *WorkflowExecutionInfo
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 		Condition        int64
 		RangeID          int64
 
-		// Mutable state
+		// mutable state pending info
 		InsertActivityInfos       []*ActivityInfo
 		InsertTimerInfos          []*TimerInfo
 		InsertChildExecutionInfos []*ChildExecutionInfo
 		InsertRequestCancelInfos  []*RequestCancelInfo
 		InsertSignalInfos         []*SignalInfo
 		InsertSignalRequestedIDs  []string
-		Encoding                  common.EncodingType // optional binary encoding type
+
+		// replication/ transfer / timer task
+		InsertReplicationTasks []Task
+		InsertTransferTasks    []Task
+		InsertTimerTasks       []Task
+
+		Encoding common.EncodingType // optional binary encoding type
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run

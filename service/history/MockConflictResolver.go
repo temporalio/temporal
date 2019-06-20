@@ -33,12 +33,12 @@ type mockConflictResolver struct {
 var _ conflictResolver = (*mockConflictResolver)(nil)
 
 // reset is mock implementation for reset of conflictResolver
-func (_m *mockConflictResolver) reset(prevRunID string, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo) (mutableState, error) {
-	ret := _m.Called(prevRunID, requestID, replayEventID, info)
+func (_m *mockConflictResolver) reset(_a0 string, _a1 int64, _a2 int, _a3 string, _a4 int64, _a5 *persistence.WorkflowExecutionInfo) (mutableState, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
 
 	var r0 mutableState
-	if rf, ok := ret.Get(0).(func(string, string, int64, *persistence.WorkflowExecutionInfo) mutableState); ok {
-		r0 = rf(prevRunID, requestID, replayEventID, info)
+	if rf, ok := ret.Get(0).(func(string, int64, int, string, int64, *persistence.WorkflowExecutionInfo) mutableState); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(mutableState)

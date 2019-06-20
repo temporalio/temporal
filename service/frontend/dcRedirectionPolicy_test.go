@@ -120,7 +120,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	logger, err := loggerimpl.NewDevelopment()
 	s.Nil(err)
 
-	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false, false)
+	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
