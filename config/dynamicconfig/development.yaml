@@ -39,3 +39,5 @@
 # enable this only for localhost development
 frontend.enableClientVersionCheck:
   - value: true
+system.minRetentionDays:
+  - value: 0
