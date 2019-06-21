@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -292,6 +293,89 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	}).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 	s.mockEventsCache.On("getEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&workflow.HistoryEvent{}, nil).Once()
+
+	// Start timer Processor.
+	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
+		waitCh <- struct{}{}
+	}).Once()
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
+		waitCh <- struct{}{}
+	}).Once() // for lookAheadTask
+	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
+	<-waitCh
+	<-waitCh
+
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil) // for lookAheadTask
+	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
+		cluster.TestCurrentClusterName,
+		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),
+		[]persistence.Task{&persistence.WorkflowTimeoutTask{
+			VisibilityTimestamp: timerTask.VisibilityTimestamp,
+		}})
+
+	<-waitCh
+	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
+}
+
+func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
+	domainID := testDomainActiveID
+	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
+		RunId: common.StringPtr(validRunID)}
+	taskList := "task-workflow-times-out"
+	schedule := "@every 30s"
+
+	builder := newMutableStateBuilderWithEventV2(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger, we.GetRunId())
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything).Return().Once()
+	startRequest := &workflow.StartWorkflowExecutionRequest{
+		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr("wType")},
+		TaskList:                            common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		CronSchedule:                        &schedule,
+	}
+	builder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		StartRequest: startRequest,
+	})
+
+	di := addDecisionTaskScheduledEvent(builder)
+	addDecisionTaskStartedEvent(builder, di.ScheduleID, taskList, uuid.New())
+
+	waitCh := make(chan struct{})
+
+	mockTS := &mockTimeSource{currTime: time.Now()}
+
+	taskID := int64(100)
+	timerTask := &persistence.TimerTaskInfo{
+		DomainID:            domainID,
+		WorkflowID:          "wid",
+		RunID:               validRunID,
+		TaskID:              taskID,
+		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		VisibilityTimestamp: mockTS.Now(),
+		EventID:             di.ScheduleID}
+	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
+
+	ms := createMutableState(builder)
+	wfResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(2)
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Run(func(arguments mock.Arguments) {
+		// Done.
+		waitCh <- struct{}{}
+	}).Once()
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Times(2)
+	startedEvent := &workflow.HistoryEvent{
+		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(0),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(0),
+		},
+	}
+	s.mockEventsCache.On("getEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(startedEvent, nil).Times(3)
 
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}

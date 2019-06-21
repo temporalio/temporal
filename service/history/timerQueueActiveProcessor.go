@@ -741,6 +741,7 @@ Update_History_Loop:
 			TaskList:                            startAttributes.TaskList,
 			RetryPolicy:                         startAttributes.RetryPolicy,
 			Input:                               startAttributes.Input,
+			Header:                              startAttributes.Header,
 			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
 			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
