@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -98,6 +99,7 @@ type (
 		eventsCache    eventsCache
 		shard          ShardContext
 		config         *Config
+		timeSource     clock.TimeSource
 		logger         log.Logger
 	}
 )
@@ -139,6 +141,7 @@ func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCac
 		eventsCache:    eventsCache,
 		shard:          shard,
 		config:         shard.GetConfig(),
+		timeSource:     shard.GetTimeSource(),
 		logger:         logger,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
@@ -779,7 +782,7 @@ func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
 }
 
 func (e *mutableStateBuilder) CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent {
-	return e.CreateNewHistoryEventWithTimestamp(eventType, time.Now().UnixNano())
+	return e.CreateNewHistoryEventWithTimestamp(eventType, e.timeSource.Now().UnixNano())
 }
 
 func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(
@@ -946,7 +949,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Dur
 		return backoff.NoBackoff
 	}
 
-	return getBackoffInterval(info.Attempt, info.MaximumAttempts, info.InitialInterval, info.MaximumInterval, info.BackoffCoefficient, time.Now(), info.ExpirationTime, errReason, info.NonRetriableErrors)
+	return getBackoffInterval(info.Attempt, info.MaximumAttempts, info.InitialInterval, info.MaximumInterval, info.BackoffCoefficient, e.timeSource.Now(), info.ExpirationTime, errReason, info.NonRetriableErrors)
 }
 
 func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
@@ -954,7 +957,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
 	if len(info.CronSchedule) == 0 {
 		return backoff.NoBackoff
 	}
-	return backoff.GetBackoffForNextSchedule(info.CronSchedule, time.Now())
+	return backoff.GetBackoffForNextSchedule(info.CronSchedule, e.timeSource.Now())
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.
@@ -1052,7 +1055,7 @@ func (e *mutableStateBuilder) UpdateActivityProgress(
 ) {
 	ai.Version = e.GetCurrentVersion()
 	ai.Details = request.Details
-	ai.LastHeartBeatUpdatedTime = time.Now()
+	ai.LastHeartBeatUpdatedTime = e.timeSource.Now()
 	e.updateActivityInfos[ai] = struct{}{}
 	e.syncActivityTasks[ai.ScheduleID] = struct{}{}
 }
@@ -1258,7 +1261,7 @@ func (e *mutableStateBuilder) FailDecision(incrementAttempt bool) {
 	}
 	if incrementAttempt {
 		failDecisionInfo.Attempt = e.executionInfo.DecisionAttempt + 1
-		failDecisionInfo.ScheduledTimestamp = time.Now().UnixNano()
+		failDecisionInfo.ScheduledTimestamp = e.timeSource.Now().UnixNano()
 	}
 	e.UpdateDecision(failDecisionInfo)
 }
@@ -1387,7 +1390,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		if attributes.RetryPolicy != nil && attributes.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
 			// has retry policy and expiration time.
 			expirationSeconds := attributes.RetryPolicy.GetExpirationIntervalInSeconds() + req.GetFirstDecisionTaskBackoffSeconds()
-			expirationTime := time.Now().Add(time.Second * time.Duration(expirationSeconds))
+			expirationTime := e.timeSource.Now().Add(time.Second * time.Duration(expirationSeconds))
 			req.ExpirationTimestamp = common.Int64Ptr(expirationTime.UnixNano())
 		}
 	}
@@ -1552,7 +1555,7 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, er
 	var newDecisionEvent *workflow.HistoryEvent
 	scheduleID := e.GetNextEventID() // we will generate the schedule event later for repeatedly failing decisions
 	// Avoid creating new history events when decisions are continuously failing
-	scheduleTime := time.Now().UnixNano()
+	scheduleTime := e.timeSource.Now().UnixNano()
 	if e.executionInfo.DecisionAttempt == 0 {
 		newDecisionEvent = e.hBuilder.AddDecisionTaskScheduledEvent(taskList, startToCloseTimeoutSeconds,
 			e.executionInfo.DecisionAttempt)
@@ -1593,7 +1596,7 @@ func (e *mutableStateBuilder) ReplicateTransientDecisionTaskScheduled() (*decisi
 		DecisionTimeout:    e.GetExecutionInfo().DecisionTimeoutValue,
 		TaskList:           e.GetExecutionInfo().TaskList,
 		Attempt:            e.GetExecutionInfo().DecisionAttempt,
-		ScheduledTimestamp: time.Now().UnixNano(),
+		ScheduledTimestamp: e.timeSource.Now().UnixNano(),
 		StartedTimestamp:   0,
 	}
 
@@ -1651,7 +1654,7 @@ func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(
 	scheduleID := di.ScheduleID
 	startedID := scheduleID + 1
 	tasklist := request.TaskList.GetName()
-	timestamp := time.Now().UnixNano()
+	timestamp := e.timeSource.Now().UnixNano()
 	// First check to see if new events came since transient decision was scheduled
 	if di.Attempt > 0 && di.ScheduleID != e.GetNextEventID() {
 		// Also create a new DecisionTaskScheduledEvent since new events came in when it was scheduled
@@ -1780,7 +1783,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		BinaryChecksum:           common.StringPtr(binChecksum),
 		RunId:                    common.StringPtr(exeInfo.RunID),
 		FirstDecisionCompletedId: common.Int64Ptr(event.GetEventId()),
-		CreatedTimeNano:          common.Int64Ptr(time.Now().UnixNano()),
+		CreatedTimeNano:          common.Int64Ptr(e.timeSource.Now().UnixNano()),
 		Resettable:               common.BoolPtr(resettable),
 	}
 	currResetPoints = append(currResetPoints, info)
@@ -2116,7 +2119,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	ai.Version = e.GetCurrentVersion()
 	ai.StartedID = common.TransientEventID
 	ai.RequestID = requestID
-	ai.StartedTime = time.Now()
+	ai.StartedTime = e.timeSource.Now()
 	ai.LastHeartBeatUpdatedTime = ai.StartedTime
 	ai.StartedIdentity = identity
 	if err := e.UpdateActivity(ai); err != nil {
@@ -3185,14 +3188,14 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNew.Attempt = 0
 		if startedAttributes.RetryPolicy != nil && continueAsNew.ExpirationSeconds > 0 {
 			expirationInSeconds := startedAttributes.RetryPolicy.GetExpirationIntervalInSeconds() + continueAsNewAttributes.GetBackoffStartIntervalInSeconds()
-			continueAsNew.ExpirationTime = time.Now().Add(time.Second * time.Duration(expirationInSeconds))
+			continueAsNew.ExpirationTime = e.timeSource.Now().Add(time.Second * time.Duration(expirationInSeconds))
 		}
 	}
 
 	// timeout includes workflow_timeout + backoff_interval
 	timeoutInSeconds := continueAsNewAttributes.GetExecutionStartToCloseTimeoutSeconds() + continueAsNewAttributes.GetBackoffStartIntervalInSeconds()
 	timeoutDuration := time.Duration(timeoutInSeconds) * time.Second
-	startedTime := time.Now()
+	startedTime := e.timeSource.Now()
 	timeoutDeadline := startedTime.Add(timeoutDuration)
 	if !continueAsNew.ExpirationTime.IsZero() && timeoutDeadline.After(continueAsNew.ExpirationTime) {
 		// expire before timeout
@@ -3231,7 +3234,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), startedEvent.GetEventId())
 		}
 		backoffTimer := &persistence.WorkflowBackoffTimerTask{
-			VisibilityTimestamp: time.Now().Add(time.Second * time.Duration(continueAsNewAttributes.GetBackoffStartIntervalInSeconds())),
+			VisibilityTimestamp: e.timeSource.Now().Add(time.Second * time.Duration(continueAsNewAttributes.GetBackoffStartIntervalInSeconds())),
 		}
 		if continueAsNewAttributes.GetInitiator() == workflow.ContinueAsNewInitiatorRetryPolicy {
 			backoffTimer.TimeoutType = persistence.WorkflowBackoffTimeoutTypeRetry
@@ -3604,7 +3607,7 @@ func (e *mutableStateBuilder) CreateActivityRetryTimer(
 	failureReason string,
 ) persistence.Task {
 
-	retryTask := prepareActivityNextRetry(e.GetCurrentVersion(), ai, failureReason)
+	retryTask := prepareActivityNextRetryWithTime(e.GetCurrentVersion(), ai, failureReason, e.timeSource.Now())
 	if retryTask != nil {
 		e.updateActivityInfos[ai] = struct{}{}
 		e.syncActivityTasks[ai.ScheduleID] = struct{}{}

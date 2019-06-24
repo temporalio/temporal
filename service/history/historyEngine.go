@@ -60,6 +60,7 @@ type (
 	historyEngineImpl struct {
 		currentClusterName   string
 		shard                ShardContext
+		timeSource           clock.TimeSource
 		decisionHandler      decisionHandler
 		historyMgr           persistence.HistoryManager
 		historyV2Mgr         persistence.HistoryV2Manager
@@ -162,6 +163,7 @@ func NewEngineWithShardContext(
 	historyEngImpl := &historyEngineImpl{
 		currentClusterName:   currentClusterName,
 		shard:                shard,
+		timeSource:           shard.GetTimeSource(),
 		historyMgr:           historyManager,
 		historyV2Mgr:         historyV2Manager,
 		executionManager:     executionManager,
@@ -469,7 +471,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	retError = context.createWorkflowExecution(
-		msBuilder, e.currentClusterName, createReplicationTask, time.Now(),
+		msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
 		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
@@ -501,7 +503,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return
 			}
 			retError = context.createWorkflowExecution(
-				msBuilder, e.currentClusterName, createReplicationTask, time.Now(),
+				msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
 				transferTasks, replicationTasks, timerTasks,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
@@ -1576,7 +1578,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevLastWriteVersion = prevMutableState.GetLastWriteVersion()
 	}
 	retError = context.createWorkflowExecution(
-		msBuilder, e.currentClusterName, createReplicationTask, time.Now(),
+		msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
 		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)

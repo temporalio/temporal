@@ -27,8 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common/clock"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -39,6 +37,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
@@ -121,6 +120,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
@@ -139,6 +139,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
+		timeSource:         s.mockShard.timeSource,
 	}
 	s.historyReplicator = newHistoryReplicator(s.mockShard, clock.NewEventTimeSource(), engine, historyCache, s.mockShard.domainCache, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger)
 	s.mockWorkflowResetor = &mockWorkflowResetor{}

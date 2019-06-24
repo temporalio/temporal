@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -67,6 +68,7 @@ func (s *mutableStateSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache,

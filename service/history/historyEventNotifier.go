@@ -27,6 +27,7 @@ import (
 	"github.com/pborman/uuid"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/metrics"
@@ -38,7 +39,8 @@ const (
 
 type (
 	historyEventNotifierImpl struct {
-		metrics metrics.Client
+		timeSource clock.TimeSource
+		metrics    metrics.Client
 		// internal status indicator
 		status int32
 		// stop signal channel
@@ -73,7 +75,7 @@ func newHistoryEventNotification(domainID string, workflowExecution *gen.Workflo
 	}
 }
 
-func newHistoryEventNotifier(metrics metrics.Client, workflowIDToShardID func(string) int) *historyEventNotifierImpl {
+func newHistoryEventNotifier(timeSource clock.TimeSource, metrics metrics.Client, workflowIDToShardID func(string) int) *historyEventNotifierImpl {
 	hashFn := func(key interface{}) uint32 {
 		notification, ok := key.(historyEventNotification)
 		if !ok {
@@ -82,6 +84,7 @@ func newHistoryEventNotifier(metrics metrics.Client, workflowIDToShardID func(st
 		return uint32(workflowIDToShardID(notification.id.WorkflowID))
 	}
 	return &historyEventNotifierImpl{
+		timeSource: timeSource,
 		metrics:    metrics,
 		status:     common.DaemonStatusInitialized,
 		closeChan:  make(chan bool),
@@ -171,7 +174,7 @@ func (notifier *historyEventNotifierImpl) dispatchHistoryEventNotification(event
 
 func (notifier *historyEventNotifierImpl) enqueueHistoryEventNotification(event *historyEventNotification) {
 	// set the timestamp just before enqueuing the event
-	event.timestamp = time.Now()
+	event.timestamp = notifier.timeSource.Now()
 	select {
 	case notifier.eventsChan <- event:
 	default:

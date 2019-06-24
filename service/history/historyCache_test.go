@@ -32,6 +32,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
@@ -95,6 +96,7 @@ func (s *historyCacheSuite) SetupTest() {
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.cache = newHistoryCache(s.mockShard)
 

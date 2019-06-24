@@ -22,6 +22,7 @@ package service
 
 import (
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/membership"
@@ -49,6 +50,8 @@ type (
 		GetMetricsClient() metrics.Client
 
 		GetClientBean() client.Bean
+
+		GetTimeSource() clock.TimeSource
 
 		GetDispatcher() *yarpc.Dispatcher
 

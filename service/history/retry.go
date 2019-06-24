@@ -31,11 +31,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-func prepareActivityNextRetry(version int64, a *persistence.ActivityInfo, errReason string) persistence.Task {
-	return prepareActivityNextRetryWithNowTime(version, a, errReason, time.Now())
-}
-
-func prepareActivityNextRetryWithNowTime(version int64, a *persistence.ActivityInfo, errReason string, now time.Time) persistence.Task {
+func prepareActivityNextRetryWithTime(version int64, a *persistence.ActivityInfo, errReason string, now time.Time) persistence.Task {
 	if !a.HasRetryPolicy || a.CancelRequested {
 		return nil
 	}

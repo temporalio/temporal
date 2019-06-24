@@ -78,7 +78,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		currentClusterName,
 	)
 
-	timerGate := NewLocalTimerGate()
+	timerGate := NewLocalTimerGate(shard.GetTimeSource())
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		historyService:     historyService,
@@ -114,7 +114,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		// should use current cluster's time when doing domain failover
 		return shard.GetCurrentTime(currentClusterName)
 	}
-	failoverStartTime := time.Now()
+	failoverStartTime := shard.GetTimeSource().Now()
 	failoverUUID := uuid.New()
 
 	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
@@ -153,7 +153,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		logger,
 	)
 
-	timerGate := NewLocalTimerGate()
+	timerGate := NewLocalTimerGate(shard.GetTimeSource())
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		historyService:     historyService,

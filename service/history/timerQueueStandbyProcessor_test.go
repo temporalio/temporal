@@ -128,6 +128,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		standbyClusterCurrentTime: make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	shardContext.eventsCache = newEventsCache(shardContext)
 	s.mockShard = shardContext

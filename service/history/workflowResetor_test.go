@@ -27,11 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
-	"go.uber.org/cadence/.gen/go/shared"
-
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -41,6 +38,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -50,6 +48,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/service/worker/archiver"
+	"go.uber.org/cadence/.gen/go/shared"
 )
 
 type (
@@ -143,6 +142,7 @@ func (s *resetorSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: map[string]time.Time{},
+		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	historyCache := newHistoryCache(mockShard)
@@ -4188,12 +4188,14 @@ func (s *resetorSuite) TestApplyReset() {
 }
 
 func TestFindAutoResetPoint(t *testing.T) {
+	timeSource := clock.NewRealTimeSource()
+
 	// case 1: nil
-	_, pt := FindAutoResetPoint(nil, nil)
+	_, pt := FindAutoResetPoint(timeSource, nil, nil)
 	assert.Nil(t, pt)
 
 	// case 2: empty
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{}, &workflow.ResetPoints{})
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{}, &workflow.ResetPoints{})
 	assert.Nil(t, pt)
 
 	pt0 := &workflow.ResetPointInfo{
@@ -4224,7 +4226,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	}
 
 	// case 3: two intersection
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"abc": {},
 			"def": {},
@@ -4237,7 +4239,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Equal(t, pt.String(), pt0.String())
 
 	// case 4: one intersection
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none":    {},
 			"def":     {},
@@ -4251,7 +4253,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Equal(t, pt.String(), pt1.String())
 
 	// case 4: no intersection
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none1": {},
 			"none2": {},
@@ -4264,7 +4266,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Nil(t, pt)
 
 	// case 5: not resettable
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none1": {},
 			"ghi":   {},
@@ -4277,7 +4279,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Nil(t, pt)
 
 	// case 6: one intersection of expired
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none":    {},
 			"expired": {},
@@ -4289,8 +4291,8 @@ func TestFindAutoResetPoint(t *testing.T) {
 	})
 	assert.Nil(t, pt)
 
-	// case 7: one intersection of not expred
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	// case 7: one intersection of not expired
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none":       {},
 			"notExpired": {},

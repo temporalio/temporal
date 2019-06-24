@@ -150,6 +150,7 @@ type (
 		executionManager  persistence.ExecutionManager
 		logger            log.Logger
 		metricsClient     metrics.Client
+		timeSource        clock.TimeSource
 
 		locker                locks.Mutex
 		msBuilder             mutableState
@@ -186,6 +187,7 @@ func newWorkflowExecutionContext(
 		executionManager:  executionManager,
 		logger:            lg,
 		metricsClient:     shard.GetMetricsClient(),
+		timeSource:        shard.GetTimeSource(),
 		locker:            locks.NewMutex(),
 	}
 }
@@ -389,7 +391,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	prevRunVersion int64,
 ) (retError error) {
 
-	now := time.Now()
+	now := c.timeSource.Now()
 	currTransferTasks := []persistence.Task{}
 	currTimerTasks := []persistence.Task{}
 	if closeTask != nil {
@@ -633,7 +635,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(
 		if err != nil {
 			return err
 		}
-		_, pt := FindAutoResetPoint(&domainEntry.GetConfig().BadBinaries, c.msBuilder.GetExecutionInfo().AutoResetPoints)
+		_, pt := FindAutoResetPoint(c.timeSource, &domainEntry.GetConfig().BadBinaries, c.msBuilder.GetExecutionInfo().AutoResetPoints)
 		if pt != nil {
 			transferTasks = append(transferTasks, &persistence.ResetWorkflowTask{})
 			c.logger.Info("Auto-Reset task is scheduled",
@@ -646,7 +648,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(
 		}
 	}
 
-	now := time.Now()
+	now := c.timeSource.Now()
 	return c.update(
 		transferTasks,
 		timerTasks,
@@ -952,7 +954,7 @@ func (c *workflowExecutionContextImpl) update(
 
 	// Update went through so update the condition for new updates
 	c.updateCondition = c.msBuilder.GetNextEventID()
-	c.msBuilder.GetExecutionInfo().LastUpdatedTimestamp = time.Now()
+	c.msBuilder.GetExecutionInfo().LastUpdatedTimestamp = c.timeSource.Now()
 
 	// for any change in the workflow, send a event
 	c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(

@@ -23,12 +23,12 @@ package history
 import (
 	ctx "context"
 	"fmt"
-	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -53,6 +53,7 @@ type (
 		currentClusterName string
 		config             *Config
 		shard              ShardContext
+		timeSource         clock.TimeSource
 		historyEngine      *historyEngineImpl
 		domainCache        cache.DomainCache
 		historyCache       *historyCache
@@ -70,6 +71,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		currentClusterName: historyEngine.currentClusterName,
 		config:             historyEngine.config,
 		shard:              historyEngine.shard,
+		timeSource:         historyEngine.shard.GetTimeSource(),
 		historyEngine:      historyEngine,
 		domainCache:        historyEngine.shard.GetDomainCache(),
 		historyCache:       historyEngine.historyCache,
@@ -114,7 +116,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 				return nil, &workflow.InternalServiceError{Message: "Failed to load start event."}
 			}
 			executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-			if req.GetIsFirstDecision() && executionTimestamp.After(time.Now()) {
+			if req.GetIsFirstDecision() && executionTimestamp.After(handler.timeSource.Now()) {
 				postActions.timerTasks = append(postActions.timerTasks, &persistence.WorkflowBackoffTimerTask{
 					VisibilityTimestamp: executionTimestamp,
 					TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,

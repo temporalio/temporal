@@ -24,6 +24,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -37,6 +39,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -123,6 +126,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockEventsCache = &MockEventsCache{}
 
 	historyEventNotifier := newHistoryEventNotifier(
+		clock.NewRealTimeSource(),
 		s.mockMetricClient,
 		func(workflowID string) int {
 			return len(workflowID)
@@ -143,6 +147,7 @@ func (s *engineSuite) SetupTest() {
 		config:                    s.config,
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.eventsCache = newEventsCache(mockShard)
 	mockShard.eventsCache = s.eventsCache
@@ -1510,6 +1515,14 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("####")
+			fmt.Println(string(debug.Stack()))
+			fmt.Println("####")
+		}
+	}()
+
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),

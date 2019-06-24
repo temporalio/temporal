@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -132,6 +133,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timerMaxReadLevelMap:      make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	shardContext.eventsCache = newEventsCache(shardContext)
 	s.mockShard = shardContext

@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -107,6 +108,7 @@ func (s *stateBuilderSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		eventsCache:               s.mockEventsCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockMutableState = &mockMutableState{}
 	s.mockMutableState.On("GetReplicationState").Return(&persistence.ReplicationState{})

@@ -29,6 +29,7 @@ import (
 	"github.com/uber-go/tally"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/metrics"
 )
@@ -55,6 +56,7 @@ func (s *historyEventNotifierSuite) TearDownSuite() {
 
 func (s *historyEventNotifierSuite) SetupTest() {
 	s.historyEventNotifier = newHistoryEventNotifier(
+		clock.NewRealTimeSource(),
 		metrics.NewClient(tally.NoopScope, metrics.History),
 		func(workflowID string) int {
 			return len(workflowID)

@@ -106,6 +106,7 @@ type (
 		logger           log.Logger
 		throttledLogger  log.Logger
 		metricsClient    metrics.Client
+		timeSource       clock.TimeSource
 
 		sync.RWMutex
 		lastUpdated               time.Time
@@ -1054,7 +1055,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(domainEntry *cache.DomainCache
 }
 
 func (s *shardContextImpl) GetTimeSource() clock.TimeSource {
-	return clock.NewRealTimeSource()
+	return s.timeSource
 }
 
 func (s *shardContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
@@ -1162,6 +1163,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		closeCh:                   closeCh,
 		metricsClient:             shardItem.metricsClient,
 		config:                    shardItem.config,
+		timeSource:                shardItem.service.GetTimeSource(),
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
 		timerMaxReadLevelMap:      timerMaxReadLevelMap, // use ack to init read level
 	}

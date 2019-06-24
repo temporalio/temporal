@@ -23,7 +23,6 @@ package history
 import (
 	ctx "context"
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	h "github.com/uber/cadence/.gen/go/history"
@@ -151,7 +150,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
 	}
-	failoverStartTime := time.Now()
+	failoverStartTime := shard.GetTimeSource().Now()
 	updateTransferAckLevel := func(ackLevel int64) error {
 		return shard.UpdateTransferFailoverLevel(
 			failoverUUID,
@@ -795,7 +794,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 				},
 				InitiatedId: common.Int64Ptr(initiatedEventID),
 			},
-			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
+			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), t.timeSource.Now())),
 		}
 
 		var startResponse *workflow.StartWorkflowExecutionResponse
@@ -949,7 +948,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 	}
 	logger = logger.WithTags(tag.WorkflowDomainName(domainEntry.GetInfo().Name))
 
-	reason, resetPt := FindAutoResetPoint(&domainEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
+	reason, resetPt := FindAutoResetPoint(t.timeSource, &domainEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
 	if resetPt == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil

@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
@@ -98,6 +99,7 @@ func (s *conflictResolverV2Suite) SetupTest() {
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		eventsCache:               s.mockEventsCache,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),

@@ -22,6 +22,7 @@ package service
 
 import (
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -41,6 +42,7 @@ type (
 		messagingClient   messaging.Client
 		kafkaClient       messaging.Client
 		clientBean        client.Bean
+		timeSource        clock.TimeSource
 		membershipMonitor membership.Monitor
 
 		metrics metrics.Client
@@ -74,6 +76,7 @@ func NewTestService(clusterMetadata cluster.Metadata, messagingClient messaging.
 		messagingClient: messagingClient,
 		metrics:         metrics,
 		clientBean:      clientBean,
+		timeSource:      clock.NewRealTimeSource(),
 		logger:          logger,
 	}
 }
@@ -107,6 +110,11 @@ func (s *serviceTestBase) GetMetricsClient() metrics.Client {
 // GetClientBean returns the client bean used by service
 func (s *serviceTestBase) GetClientBean() client.Bean {
 	return s.clientBean
+}
+
+// GetMetricsClient returns the metric client for service
+func (s *serviceTestBase) GetTimeSource() clock.TimeSource {
+	return s.timeSource
 }
 
 // GetDispatcher returns the dispatcher used by service

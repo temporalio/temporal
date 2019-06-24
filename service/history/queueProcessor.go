@@ -57,6 +57,7 @@ type (
 	queueProcessorBase struct {
 		clusterName   string
 		shard         ShardContext
+		timeSource    clock.TimeSource
 		options       *QueueProcessorOptions
 		processor     processor
 		logger        log.Logger
@@ -93,6 +94,7 @@ func newQueueProcessorBase(clusterName string, shard ShardContext, options *Queu
 	p := &queueProcessorBase{
 		clusterName:             clusterName,
 		shard:                   shard,
+		timeSource:              shard.GetTimeSource(),
 		options:                 options,
 		processor:               processor,
 		rateLimiter:             tokenbucket.NewDynamicTokenBucket(options.MaxPollRPS, clock.NewRealTimeSource()),
@@ -188,7 +190,7 @@ processorPumpLoop:
 				p.options.MaxPollInterval(),
 				p.options.MaxPollIntervalJitterCoefficient(),
 			))
-			if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(time.Now()) {
+			if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(p.timeSource.Now()) {
 				p.processBatch(tasksCh)
 			}
 		case <-updateAckTimer.C:
@@ -216,7 +218,7 @@ func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 		return
 	}
 
-	p.lastPollTime = time.Now()
+	p.lastPollTime = p.timeSource.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()
 
 	if err != nil {
@@ -276,7 +278,7 @@ func (p *queueProcessorBase) processTaskAndAck(notificationChan <-chan struct{},
 	var scope int
 	var shouldProcessTask bool
 	var err error
-	startTime := time.Now()
+	startTime := p.timeSource.Now()
 	logger := p.initializeLoggerForTask(task)
 	attempt := 0
 	incAttempt := func() {
@@ -343,7 +345,7 @@ func (p *queueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, t
 	default:
 	}
 
-	startTime := time.Now()
+	startTime := p.timeSource.Now()
 	scope, err := p.processor.process(task, shouldProcessTask)
 	if shouldProcessTask {
 		p.metricsClient.IncCounter(scope, metrics.TaskRequests)
@@ -377,7 +379,7 @@ func (p *queueProcessorBase) handleTaskError(scope int, startTime time.Time,
 
 	// this is a transient error
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+		if p.timeSource.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
 			p.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
 			return nil
 		}
