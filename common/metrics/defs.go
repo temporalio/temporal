@@ -20,6 +20,8 @@
 
 package metrics
 
+import "github.com/uber-go/tally"
+
 // types used/defined by the package
 type (
 	// MetricName is the name of the metric
@@ -30,8 +32,9 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		metricType MetricType // metric type
-		metricName MetricName // metric name
+		metricType MetricType    // metric type
+		metricName MetricName    // metric name
+		buckets    tally.Buckets // buckets if we are emitting histograms
 	}
 
 	// scopeDefinition holds the tag definitions for a scope

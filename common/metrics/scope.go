@@ -74,6 +74,16 @@ func (m *metricsScope) RecordTimer(id int, d time.Duration) {
 	}
 }
 
+func (m *metricsScope) RecordHistogramDuration(id int, value time.Duration) {
+	name := string(m.defs[id].metricName)
+	m.scope.Histogram(name, m.getBuckets(id)).RecordDuration(value)
+}
+
+func (m *metricsScope) RecordHistogramValue(id int, value float64) {
+	name := string(m.defs[id].metricName)
+	m.scope.Histogram(name, m.getBuckets(id)).RecordValue(value)
+}
+
 func (m *metricsScope) Tagged(tags ...Tag) Scope {
 	domainTagged := false
 	tagMap := make(map[string]string, len(tags))
@@ -84,6 +94,13 @@ func (m *metricsScope) Tagged(tags ...Tag) Scope {
 		tagMap[tag.Key()] = tag.Value()
 	}
 	return newMetricsScope(m.scope.Tagged(tagMap), m.defs, domainTagged)
+}
+
+func (m *metricsScope) getBuckets(id int) tally.Buckets {
+	if m.defs[id].buckets != nil {
+		return m.defs[id].buckets
+	}
+	return tally.DefaultBuckets
 }
 
 func isDomainTagged(tag Tag) bool {
