@@ -114,6 +114,11 @@ func (task *UpdateTask) Run() error {
 
 func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) error {
 
+	if len(updates) == 0 {
+		log.Printf("found zero updates from current version %v", currVer)
+		return nil
+	}
+
 	for _, cs := range updates {
 
 		err := task.execCQLStmts(cs.version, cs.cqlStmts)
@@ -167,9 +172,6 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	verDirs, err := readSchemaDir(config.SchemaDir, currVer, config.TargetVersion)
 	if err != nil {
 		return nil, fmt.Errorf("error listing schema dir:%v", err.Error())
-	}
-	if len(verDirs) == 0 {
-		return nil, fmt.Errorf("no schema dirs in version range [%v-%v]", currVer, config.TargetVersion)
 	}
 
 	var result []changeSet
@@ -283,9 +285,14 @@ func readManifest(dirPath string) (*manifest, error) {
 }
 
 // readSchemaDir returns a sorted list of subdir names that hold
-// the schema changes for versions in the range [startVer - endVer]
+// the schema changes for versions in the range startVer < ver <= endVer
+// when endVer is empty this method returns all subdir names that are greater than startVer
 // this method has an assumption that the subdirs containing the
 // schema changes will be of the form vx.x, where x.x is the version
+// returns error when
+//  - startVer <= endVer
+//  - endVer is empty and no subdirs have version >= startVer
+//  - endVer is non-empty and subdir with version == endVer is not found
 func readSchemaDir(dir string, startVer string, endVer string) ([]string, error) {
 
 	subdirs, err := ioutil.ReadDir(dir)
@@ -293,10 +300,15 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 		return nil, err
 	}
 
-	var endFound bool
-	var result []string
-
 	hasEndVer := len(endVer) > 0
+
+	if hasEndVer && cmpVersion(startVer, endVer) >= 0 {
+		return nil, fmt.Errorf("startVer (%v) must be less than endVer (%v)", startVer, endVer)
+	}
+
+	var endFound bool
+	var highestVer string
+	var result []string
 
 	for _, dir := range subdirs {
 
@@ -312,6 +324,12 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 
 		ver := dirToVersion(dirname)
 
+		if len(highestVer) == 0 {
+			highestVer = ver
+		} else if cmpVersion(ver, highestVer) > 0 {
+			highestVer = ver
+		}
+
 		highcmp := 0
 		lowcmp := cmpVersion(ver, startVer)
 		if hasEndVer {
@@ -326,8 +344,18 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 		result = append(result, dirname)
 	}
 
-	if !endFound {
+	// when endVer is specified, atleast one result MUST be found since startVer < endVer
+	if hasEndVer && !endFound {
 		return nil, fmt.Errorf("version dir not found for target version %v", endVer)
+	}
+
+	// when endVer is empty and no result is found, then the highest version
+	// found must be equal to startVer, else return error
+	if !hasEndVer && len(result) == 0 {
+		if len(highestVer) == 0 || cmpVersion(startVer, highestVer) != 0 {
+			return nil, fmt.Errorf("no subdirs found with version >= %v", startVer)
+		}
+		return result, nil
 	}
 
 	sort.Sort(byVersion(result))
