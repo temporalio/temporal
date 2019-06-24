@@ -179,14 +179,14 @@ func (s *UtilSuite) TestGetUploadResponse() {
 	testErrReason := "some random reason"
 	testCustomErr := cadence.NewCustomError(testErrReason, testErrDetails)
 	testCases := []struct {
-		progress          uploadProgress
+		uploadedBlobs     []string
 		inputErr          error
 		expectedResult    *uploadResult
 		expectedOutputErr error
 	}{
 		{
-			progress: uploadProgress{UploadedBlobs: []string{"key 1", "key 2"}},
-			inputErr: testCustomErr,
+			uploadedBlobs: []string{"key 1", "key 2"},
+			inputErr:      testCustomErr,
 			expectedResult: &uploadResult{
 				BlobsToDelete:    []string{"key 1", "key 2"},
 				ErrorWithDetails: fmt.Sprintf("%v: %v", testErrReason, testErrDetails),
@@ -194,8 +194,8 @@ func (s *UtilSuite) TestGetUploadResponse() {
 			expectedOutputErr: nil,
 		},
 		{
-			progress: uploadProgress{UploadedBlobs: []string{"key 1"}},
-			inputErr: errContextTimeout,
+			uploadedBlobs: []string{"key 1"},
+			inputErr:      errContextTimeout,
 			expectedResult: &uploadResult{
 				BlobsToDelete:    []string{"key 1"},
 				ErrorWithDetails: errContextTimeout.Error(),
@@ -203,20 +203,20 @@ func (s *UtilSuite) TestGetUploadResponse() {
 			expectedOutputErr: nil,
 		},
 		{
-			progress:          uploadProgress{UploadedBlobs: []string{"key 1"}},
+			uploadedBlobs:     []string{"key 1"},
 			inputErr:          errors.New(errGetDomainByID),
 			expectedResult:    nil,
 			expectedOutputErr: errors.New(errGetDomainByID),
 		},
 		{
-			progress:          uploadProgress{UploadedBlobs: []string{"key 1"}},
+			uploadedBlobs:     []string{"key 1"},
 			inputErr:          errors.New(errInvalidRequest),
 			expectedResult:    nil,
 			expectedOutputErr: errors.New(errInvalidRequest),
 		},
 		{
-			progress: uploadProgress{UploadedBlobs: []string{"key 1"}},
-			inputErr: errors.New(testErrReason),
+			uploadedBlobs: []string{"key 1"},
+			inputErr:      errors.New(testErrReason),
 			expectedResult: &uploadResult{
 				BlobsToDelete:    []string{"key 1"},
 				ErrorWithDetails: testErrReason,
@@ -226,7 +226,7 @@ func (s *UtilSuite) TestGetUploadResponse() {
 	}
 
 	for _, tc := range testCases {
-		actualResult, actualOutputErr := getUploadHistoryActivityResponse(tc.progress, tc.inputErr)
+		actualResult, actualOutputErr := getUploadHistoryActivityResponse(tc.uploadedBlobs, tc.inputErr)
 		s.Equal(tc.expectedResult, actualResult)
 		s.Equal(tc.expectedOutputErr, actualOutputErr)
 	}
