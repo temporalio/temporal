@@ -124,7 +124,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
 	return NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr,
-		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, s.mockBlobstoreClient)
+		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, s.mockBlobstoreClient, nil, nil)
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandlerHelper() *WorkflowHandler {
@@ -472,7 +472,7 @@ func (s *workflowHandlerSuite) getWorkflowHandlerWithParams(mService cs.Service,
 	mMetadataManager persistence.MetadataManager, blobStore *mocks.BlobstoreClient) *WorkflowHandler {
 	s.mockBlobstoreClient = blobStore
 	return NewWorkflowHandler(mService, config, mMetadataManager, s.mockHistoryMgr, s.mockHistoryV2Mgr,
-		s.mockVisibilityMgr, s.mockProducer, blobStore)
+		s.mockVisibilityMgr, s.mockProducer, blobStore, nil, nil)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_BucketNotExists() {

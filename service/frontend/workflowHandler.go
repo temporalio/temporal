@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
@@ -78,6 +79,8 @@ type (
 		domainHandler            *domainHandlerImpl
 		visibilityQueryValidator *common.VisibilityQueryValidator
 		historyBlobDownloader    archiver.HistoryBlobDownloader
+		historyArchivers         map[string]carchiver.HistoryArchiver
+		visibilityArchivers      map[string]carchiver.VisibilityArchiver
 		service.Service
 	}
 
@@ -149,7 +152,8 @@ var (
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
-	blobstoreClient blobstore.Client) *WorkflowHandler {
+	blobstoreClient blobstore.Client, historyArchivers map[string]carchiver.HistoryArchiver,
+	visibilityArchivers map[string]carchiver.VisibilityArchiver) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		config:          config,
@@ -173,6 +177,8 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		),
 		visibilityQueryValidator: common.NewQueryValidator(config.ValidSearchAttributes),
 		historyBlobDownloader:    archiver.NewHistoryBlobDownloader(blobstoreClient),
+		historyArchivers:         historyArchivers,
+		visibilityArchivers:      visibilityArchivers,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
