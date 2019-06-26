@@ -149,7 +149,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	activeClusterName := "some random active cluster"
+	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(activeClusterName),

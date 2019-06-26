@@ -358,30 +358,6 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 	}, domains)
 }
 
-func (s *domainHandlerCommonSuite) TestValidateRetentionPeriod() {
-	testCases := []struct {
-		retentionPeriod int32
-		expectedErr     error
-	}{
-		{
-			retentionPeriod: 10,
-			expectedErr:     nil,
-		},
-		{
-			retentionPeriod: 0,
-			expectedErr:     errInvalidRetentionPeriod,
-		},
-		{
-			retentionPeriod: -3,
-			expectedErr:     errInvalidRetentionPeriod,
-		},
-	}
-	for _, tc := range testCases {
-		actualErr := s.handler.validateRetentionPeriod(tc.retentionPeriod)
-		s.Equal(tc.expectedErr, actualErr)
-	}
-}
-
 func (s *domainHandlerCommonSuite) TestRegisterDomain_InvalidRetentionPeriod() {
 	registerRequest := &workflow.RegisterDomainRequest{
 		Name:                                   common.StringPtr("random domain name"),
