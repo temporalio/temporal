@@ -27,25 +27,23 @@ import (
 
 type (
 	mutableStateSessionUpdates struct {
-		executionInfo                    *persistence.WorkflowExecutionInfo
-		newEventsBuilder                 *historyBuilder
-		updateActivityInfos              []*persistence.ActivityInfo
-		deleteActivityInfos              []int64
-		syncActivityTasks                []persistence.Task
-		updateTimerInfos                 []*persistence.TimerInfo
-		deleteTimerInfos                 []string
-		updateChildExecutionInfos        []*persistence.ChildExecutionInfo
-		deleteChildExecutionInfo         *int64
-		updateCancelExecutionInfos       []*persistence.RequestCancelInfo
-		deleteCancelExecutionInfo        *int64
-		updateSignalInfos                []*persistence.SignalInfo
-		deleteSignalInfo                 *int64
-		updateSignalRequestedIDs         []string
-		deleteSignalRequestedID          string
-		continueAsNew                    *persistence.CreateWorkflowExecutionRequest
-		newBufferedEvents                []*workflow.HistoryEvent
-		clearBufferedEvents              bool
-		newBufferedReplicationEventsInfo *persistence.BufferedReplicationTask
-		deleteBufferedReplicationEvent   *int64
+		executionInfo              *persistence.WorkflowExecutionInfo
+		newEventsBuilder           *historyBuilder
+		updateActivityInfos        []*persistence.ActivityInfo
+		deleteActivityInfos        []int64
+		syncActivityTasks          []persistence.Task
+		updateTimerInfos           []*persistence.TimerInfo
+		deleteTimerInfos           []string
+		updateChildExecutionInfos  []*persistence.ChildExecutionInfo
+		deleteChildExecutionInfo   *int64
+		updateCancelExecutionInfos []*persistence.RequestCancelInfo
+		deleteCancelExecutionInfo  *int64
+		updateSignalInfos          []*persistence.SignalInfo
+		deleteSignalInfo           *int64
+		updateSignalRequestedIDs   []string
+		deleteSignalRequestedID    string
+		continueAsNew              *persistence.CreateWorkflowExecutionRequest
+		newBufferedEvents          []*workflow.HistoryEvent
+		clearBufferedEvents        bool
 	}
 )

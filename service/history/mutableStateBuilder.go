@@ -82,10 +82,6 @@ type (
 		updateBufferedEvents []*workflow.HistoryEvent // buffered history events that needs to be persisted
 		clearBufferedEvents  bool                     // delete buffered events from persistence
 
-		bufferedReplicationTasks       map[int64]*persistence.BufferedReplicationTask // Storage for out of order events
-		updateBufferedReplicationTasks *persistence.BufferedReplicationTask
-		deleteBufferedReplicationEvent *int64
-
 		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
 		replicationState *persistence.ReplicationState
 		continueAsNew    *persistence.CreateWorkflowExecutionRequest
@@ -185,7 +181,6 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 	state.ExecutionInfo = e.executionInfo
 	state.ReplicationState = e.replicationState
 	state.BufferedEvents = e.bufferedEvents
-	state.BufferedReplicationTasks = e.bufferedReplicationTasks
 	return state
 }
 
@@ -201,7 +196,6 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 
 	e.replicationState = state.ReplicationState
 	e.bufferedEvents = state.BufferedEvents
-	e.bufferedReplicationTasks = state.BufferedReplicationTasks
 	for _, ai := range state.ActivityInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
 	}
@@ -454,26 +448,24 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	}
 
 	updates := &mutableStateSessionUpdates{
-		executionInfo:                    e.executionInfo,
-		newEventsBuilder:                 e.hBuilder,
-		updateActivityInfos:              convertUpdateActivityInfos(e.updateActivityInfos),
-		deleteActivityInfos:              convertDeleteActivityInfos(e.deleteActivityInfos),
-		syncActivityTasks:                convertSyncActivityInfos(e.pendingActivityInfoIDs, e.syncActivityTasks),
-		updateTimerInfos:                 convertUpdateTimerInfos(e.updateTimerInfos),
-		deleteTimerInfos:                 convertDeleteTimerInfos(e.deleteTimerInfos),
-		updateChildExecutionInfos:        convertUpdateChildExecutionInfos(e.updateChildExecutionInfos),
-		deleteChildExecutionInfo:         e.deleteChildExecutionInfo,
-		updateCancelExecutionInfos:       convertUpdateRequestCancelInfos(e.updateRequestCancelInfos),
-		deleteCancelExecutionInfo:        e.deleteRequestCancelInfo,
-		updateSignalInfos:                convertUpdateSignalInfos(e.updateSignalInfos),
-		deleteSignalInfo:                 e.deleteSignalInfo,
-		updateSignalRequestedIDs:         convertSignalRequestedIDs(e.updateSignalRequestedIDs),
-		deleteSignalRequestedID:          e.deleteSignalRequestedID,
-		continueAsNew:                    e.continueAsNew,
-		newBufferedEvents:                e.updateBufferedEvents,
-		clearBufferedEvents:              e.clearBufferedEvents,
-		newBufferedReplicationEventsInfo: e.updateBufferedReplicationTasks,
-		deleteBufferedReplicationEvent:   e.deleteBufferedReplicationEvent,
+		executionInfo:              e.executionInfo,
+		newEventsBuilder:           e.hBuilder,
+		updateActivityInfos:        convertUpdateActivityInfos(e.updateActivityInfos),
+		deleteActivityInfos:        convertDeleteActivityInfos(e.deleteActivityInfos),
+		syncActivityTasks:          convertSyncActivityInfos(e.pendingActivityInfoIDs, e.syncActivityTasks),
+		updateTimerInfos:           convertUpdateTimerInfos(e.updateTimerInfos),
+		deleteTimerInfos:           convertDeleteTimerInfos(e.deleteTimerInfos),
+		updateChildExecutionInfos:  convertUpdateChildExecutionInfos(e.updateChildExecutionInfos),
+		deleteChildExecutionInfo:   e.deleteChildExecutionInfo,
+		updateCancelExecutionInfos: convertUpdateRequestCancelInfos(e.updateRequestCancelInfos),
+		deleteCancelExecutionInfo:  e.deleteRequestCancelInfo,
+		updateSignalInfos:          convertUpdateSignalInfos(e.updateSignalInfos),
+		deleteSignalInfo:           e.deleteSignalInfo,
+		updateSignalRequestedIDs:   convertSignalRequestedIDs(e.updateSignalRequestedIDs),
+		deleteSignalRequestedID:    e.deleteSignalRequestedID,
+		continueAsNew:              e.continueAsNew,
+		newBufferedEvents:          e.updateBufferedEvents,
+		clearBufferedEvents:        e.clearBufferedEvents,
 	}
 
 	// Clear all updates to prepare for the next session
@@ -500,21 +492,10 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	if len(e.bufferedEvents) > e.config.MaximumBufferedEventsBatch() {
 		return nil, ErrBufferedEventsLimitExceeded
 	}
-	e.updateBufferedReplicationTasks = nil
-	e.deleteBufferedReplicationEvent = nil
 
 	e.hasBufferedEventsInPersistence = len(e.bufferedEvents) > 0
 
 	return updates, nil
-}
-
-func (e *mutableStateBuilder) GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask {
-	return e.bufferedReplicationTasks
-}
-
-func (e *mutableStateBuilder) DeleteBufferedReplicationTask(firstEventID int64) {
-	delete(e.bufferedReplicationTasks, firstEventID)
-	e.deleteBufferedReplicationEvent = common.Int64Ptr(firstEventID)
 }
 
 func (e *mutableStateBuilder) checkAndClearTimerFiredEvent(timerID string) *workflow.HistoryEvent {
@@ -1204,14 +1185,6 @@ func (e *mutableStateBuilder) HasBufferedEvents() bool {
 		if event.GetEventId() == common.BufferedEventID {
 			return true
 		}
-	}
-
-	return false
-}
-
-func (e *mutableStateBuilder) HasBufferedReplicationTasks() bool {
-	if len(e.bufferedReplicationTasks) > 0 || e.updateBufferedReplicationTasks != nil {
-		return true
 	}
 
 	return false

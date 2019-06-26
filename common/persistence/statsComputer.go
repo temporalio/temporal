@@ -64,13 +64,6 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 		bufferedEventsSize += len(be.Data)
 	}
 
-	bufferedReplicationTasksCount := 0
-	bufferedReplicationTasksSize := 0
-	for _, brt := range req.State.BufferedReplicationTasks {
-		bufferedReplicationTasksCount++
-		bufferedReplicationTasksSize += computeBufferedReplicationTasksSize(brt)
-	}
-
 	requestCancelInfoCount := len(req.State.RequestCancelInfos)
 
 	totalSize := executionInfoSize
@@ -79,24 +72,21 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 	totalSize += childExecutionInfoSize
 	totalSize += signalInfoSize
 	totalSize += bufferedEventsSize
-	totalSize += bufferedReplicationTasksSize
 
 	return &MutableStateStats{
-		MutableStateSize:              totalSize,
-		ExecutionInfoSize:             executionInfoSize,
-		ActivityInfoSize:              activityInfoSize,
-		TimerInfoSize:                 timerInfoSize,
-		ChildInfoSize:                 childExecutionInfoSize,
-		SignalInfoSize:                signalInfoSize,
-		BufferedEventsSize:            bufferedEventsSize,
-		BufferedReplicationTasksSize:  bufferedReplicationTasksSize,
-		ActivityInfoCount:             activityInfoCount,
-		TimerInfoCount:                timerInfoCount,
-		ChildInfoCount:                childExecutionInfoCount,
-		SignalInfoCount:               signalInfoCount,
-		BufferedEventsCount:           bufferedEventsCount,
-		BufferedReplicationTasksCount: bufferedReplicationTasksCount,
-		RequestCancelInfoCount:        requestCancelInfoCount,
+		MutableStateSize:       totalSize,
+		ExecutionInfoSize:      executionInfoSize,
+		ActivityInfoSize:       activityInfoSize,
+		TimerInfoSize:          timerInfoSize,
+		ChildInfoSize:          childExecutionInfoSize,
+		SignalInfoSize:         signalInfoSize,
+		BufferedEventsSize:     bufferedEventsSize,
+		ActivityInfoCount:      activityInfoCount,
+		TimerInfoCount:         timerInfoCount,
+		ChildInfoCount:         childExecutionInfoCount,
+		SignalInfoCount:        signalInfoCount,
+		BufferedEventsCount:    bufferedEventsCount,
+		RequestCancelInfoCount: requestCancelInfoCount,
 	}
 }
 
@@ -136,11 +126,6 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 		bufferedEventsSize = len(req.NewBufferedEvents.Data)
 	}
 
-	bufferedReplicationTasksSize := 0
-	if req.NewBufferedReplicationTask != nil {
-		bufferedReplicationTasksSize = computeBufferedReplicationTasksSize(req.NewBufferedReplicationTask)
-	}
-
 	requestCancelInfoCount := len(req.UpsertRequestCancelInfos)
 
 	deleteActivityInfoCount := len(req.DeleteActivityInfos)
@@ -168,7 +153,6 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 	totalSize += childExecutionInfoSize
 	totalSize += signalInfoSize
 	totalSize += bufferedEventsSize
-	totalSize += bufferedReplicationTasksSize
 
 	return &MutableStateUpdateSessionStats{
 		MutableStateSize:             totalSize,
@@ -178,7 +162,6 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 		ChildInfoSize:                childExecutionInfoSize,
 		SignalInfoSize:               signalInfoSize,
 		BufferedEventsSize:           bufferedEventsSize,
-		BufferedReplicationTasksSize: bufferedReplicationTasksSize,
 		ActivityInfoCount:            activityInfoCount,
 		TimerInfoCount:               timerInfoCount,
 		ChildInfoCount:               childExecutionInfoCount,
@@ -235,22 +218,6 @@ func computeSignalInfoSize(si *SignalInfo) int {
 	size := len(si.SignalName)
 	size += len(si.Input)
 	size += len(si.Control)
-
-	return size
-}
-
-func computeBufferedReplicationTasksSize(task *InternalBufferedReplicationTask) int {
-	size := 0
-
-	if task != nil {
-		if task.History != nil {
-			size += len(task.History.Data)
-		}
-
-		if task.NewRunHistory != nil {
-			size += len(task.NewRunHistory.Data)
-		}
-	}
 
 	return size
 }

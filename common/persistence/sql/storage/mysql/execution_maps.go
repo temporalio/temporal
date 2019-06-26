@@ -309,64 +309,6 @@ func (mdb *DB) DeleteFromSignalInfoMaps(filter *sqldb.SignalInfoMapsFilter) (sql
 	return mdb.conn.Exec(deleteSignalInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
 }
 
-var (
-	bufferedReplicationTasksMapColumns = []string{
-		"version",
-		"next_event_id",
-		"history",
-		"history_encoding",
-		"new_run_history",
-		"new_run_history_encoding",
-		"event_store_version",
-		"new_run_event_store_version",
-	}
-	bufferedReplicationTasksNoNewRunHistoryMapColumns = []string{
-		"version",
-		"next_event_id",
-		"history",
-		"history_encoding",
-		"event_store_version",
-		"new_run_event_store_version",
-	}
-	bufferedReplicationTasksTableName = "buffered_replication_task_maps"
-	bufferedReplicationTasksKey       = "first_event_id"
-
-	deleteBufferedReplicationTasksMapQry                  = makeDeleteMapQry(bufferedReplicationTasksTableName)
-	setKeyInBufferedReplicationTasksMapQry                = makeSetKeyInMapQry(bufferedReplicationTasksTableName, bufferedReplicationTasksMapColumns, bufferedReplicationTasksKey)
-	setKeyInBufferedReplicationTasksNoNewRunHistoryMapQry = makeSetKeyInMapQry(bufferedReplicationTasksTableName, bufferedReplicationTasksNoNewRunHistoryMapColumns, bufferedReplicationTasksKey)
-	deleteKeyInBufferedReplicationTasksMapQry             = makeDeleteKeyInMapQry(bufferedReplicationTasksTableName, bufferedReplicationTasksKey)
-	getBufferedReplicationTasksMapQry                     = makeGetMapQryTemplate(bufferedReplicationTasksTableName, bufferedReplicationTasksMapColumns, bufferedReplicationTasksKey)
-)
-
-// ReplaceIntoBufferedReplicationTasks replaces one or more rows in buffered_replication_task_maps table
-func (mdb *DB) ReplaceIntoBufferedReplicationTasks(row *sqldb.BufferedReplicationTaskMapsRow) (sql.Result, error) {
-	if row.NewRunHistory != nil {
-		return mdb.conn.NamedExec(setKeyInBufferedReplicationTasksMapQry, row)
-	}
-	return mdb.conn.NamedExec(setKeyInBufferedReplicationTasksNoNewRunHistoryMapQry, row)
-}
-
-// SelectFromBufferedReplicationTasks reads one or more rows from buffered_replication_tasks table
-func (mdb *DB) SelectFromBufferedReplicationTasks(filter *sqldb.BufferedReplicationTaskMapsFilter) ([]sqldb.BufferedReplicationTaskMapsRow, error) {
-	var rows []sqldb.BufferedReplicationTaskMapsRow
-	err := mdb.conn.Select(&rows, getBufferedReplicationTasksMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
-	for i := 0; i < len(rows); i++ {
-		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
-		rows[i].WorkflowID = filter.WorkflowID
-		rows[i].RunID = filter.RunID
-	}
-	return rows, err
-}
-
-// DeleteFromBufferedReplicationTasks deletes one or more rows from buffered_replication_tasks table
-func (mdb *DB) DeleteFromBufferedReplicationTasks(filter *sqldb.BufferedReplicationTaskMapsFilter) (sql.Result, error) {
-	if filter.FirstEventID != nil {
-		return mdb.conn.Exec(deleteKeyInBufferedReplicationTasksMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.FirstEventID)
-	}
-	return mdb.conn.Exec(deleteBufferedReplicationTasksMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
-}
-
 const (
 	deleteAllSignalsRequestedSetQry = `DELETE FROM signals_requested_sets
 WHERE

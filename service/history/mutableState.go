@@ -98,7 +98,6 @@ type (
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
 		DeleteActivity(int64) error
-		DeleteBufferedReplicationTask(int64)
 		DeleteDecision()
 		DeletePendingChildExecution(int64)
 		DeletePendingRequestCancel(int64)
@@ -110,7 +109,6 @@ type (
 		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
 		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, bool)
-		GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
@@ -143,7 +141,6 @@ type (
 		GetUserTimer(string) (bool, *persistence.TimerInfo)
 		GetWorkflowType() *workflow.WorkflowType
 		HasBufferedEvents() bool
-		HasBufferedReplicationTasks() bool
 		HasInFlightDecisionTask() bool
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool

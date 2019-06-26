@@ -296,24 +296,6 @@ const (
 		`control: ?` +
 		`}`
 
-	templateBufferedReplicationTaskInfoType = `{` +
-		`first_event_id: ?, ` +
-		`next_event_id: ?, ` +
-		`version: ?, ` +
-		`event_store_version: ?, ` +
-		`new_run_event_store_version: ?, ` +
-		`history: ` + templateSerializedEventBatch + `, ` +
-		`new_run_history: ` + templateSerializedEventBatch + ` ` +
-		`}`
-
-	templateBufferedReplicationTaskInfoNoNewRunHistoryType = `{` +
-		`first_event_id: ?, ` +
-		`next_event_id: ?, ` +
-		`version: ?, ` +
-		`event_store_version: ?, ` +
-		`history: ` + templateSerializedEventBatch + ` ` +
-		`}`
-
 	templateSerializedEventBatch = `{` +
 		`encoding_type: ?, ` +
 		`version: ?, ` +
@@ -663,50 +645,6 @@ workflow_state = ? ` +
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
 		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateUpdateBufferedReplicationTasksQuery = `UPDATE executions ` +
-		`SET buffered_replication_tasks_map[ ? ] =` + templateBufferedReplicationTaskInfoType + ` ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateUpdateBufferedReplicationTasksNoNewRunHistoryQuery = `UPDATE executions ` +
-		`SET buffered_replication_tasks_map[ ? ] =` + templateBufferedReplicationTaskInfoNoNewRunHistoryType + ` ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateDeleteBufferedReplicationTaskQuery = `DELETE buffered_replication_tasks_map[ ? ] ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateClearBufferedReplicationTaskQuery = `UPDATE executions ` +
-		`SET buffered_replication_tasks_map = {} ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1580,14 +1518,6 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.BufferedEvents = bufferedEventsBlobs
 
-	bufferedReplicationTasks := make(map[int64]*p.InternalBufferedReplicationTask)
-	bufferedRTMap := result["buffered_replication_tasks_map"].(map[int64]map[string]interface{})
-	for k, v := range bufferedRTMap {
-		info := createBufferedReplicationTaskInfo(v)
-		bufferedReplicationTasks[k] = info
-	}
-	state.BufferedReplicationTasks = bufferedReplicationTasks
-
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }
 
@@ -1806,9 +1736,6 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	d.updateBufferedEvents(batch, request.NewBufferedEvents, request.ClearBufferedEvents,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	d.updateBufferedReplicationTasks(batch, request.NewBufferedReplicationTask, request.DeleteBufferedReplicationTask,
 		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	if request.ContinueAsNew != nil {
@@ -3306,15 +3233,6 @@ func (d *cassandraPersistence) resetBufferedEvents(batch *gocql.Batch, domainID,
 		rowTypeExecutionTaskID,
 		condition)
 
-	batch.Query(templateClearBufferedReplicationTaskQuery,
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID,
-		condition)
 }
 
 func (d *cassandraPersistence) resetActivityInfos(batch *gocql.Batch, activityInfos []*p.InternalActivityInfo, domainID,
@@ -3622,68 +3540,6 @@ func (d *cassandraPersistence) updateBufferedEvents(batch *gocql.Batch, newBuffe
 		newEventValues := []map[string]interface{}{values}
 		batch.Query(templateAppendBufferedEventsQuery,
 			newEventValues,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) updateBufferedReplicationTasks(batch *gocql.Batch, newBufferedReplicationTask *p.InternalBufferedReplicationTask,
-	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	if newBufferedReplicationTask != nil {
-		if newBufferedReplicationTask.NewRunHistory != nil {
-			batch.Query(templateUpdateBufferedReplicationTasksQuery,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.NextEventID,
-				newBufferedReplicationTask.Version,
-				newBufferedReplicationTask.EventStoreVersion,
-				newBufferedReplicationTask.NewRunEventStoreVersion,
-				newBufferedReplicationTask.History.Encoding,
-				int64(0),
-				newBufferedReplicationTask.History.Data,
-				newBufferedReplicationTask.NewRunHistory.Encoding,
-				int64(0),
-				newBufferedReplicationTask.NewRunHistory.Data,
-				d.shardID,
-				rowTypeExecution,
-				domainID,
-				workflowID,
-				runID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				condition)
-		} else {
-			batch.Query(templateUpdateBufferedReplicationTasksNoNewRunHistoryQuery,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.NextEventID,
-				newBufferedReplicationTask.Version,
-				newBufferedReplicationTask.EventStoreVersion,
-				newBufferedReplicationTask.History.Encoding,
-				int64(0),
-				newBufferedReplicationTask.History.Data,
-				d.shardID,
-				rowTypeExecution,
-				domainID,
-				workflowID,
-				runID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				condition)
-		}
-	}
-
-	// deleteInfo is the FirstEventID for the history batch being deleted
-	if deleteInfo != nil {
-		batch.Query(templateDeleteBufferedReplicationTaskQuery,
-			*deleteInfo,
 			d.shardID,
 			rowTypeExecution,
 			domainID,
@@ -4149,35 +4005,6 @@ func createSignalInfo(result map[string]interface{}) *p.SignalInfo {
 			info.Input = v.([]byte)
 		case "control":
 			info.Control = v.([]byte)
-		}
-	}
-
-	return info
-}
-
-func createBufferedReplicationTaskInfo(result map[string]interface{}) *p.InternalBufferedReplicationTask {
-	info := &p.InternalBufferedReplicationTask{
-		History:       &p.DataBlob{},
-		NewRunHistory: &p.DataBlob{},
-	}
-	for k, v := range result {
-		switch k {
-		case "first_event_id":
-			info.FirstEventID = v.(int64)
-		case "next_event_id":
-			info.NextEventID = v.(int64)
-		case "version":
-			info.Version = v.(int64)
-		case "event_store_version":
-			info.EventStoreVersion = int32(v.(int))
-		case "new_run_event_store_version":
-			info.NewRunEventStoreVersion = int32(v.(int))
-		case "history":
-			h := v.(map[string]interface{})
-			info.History = createHistoryEventBatchBlob(h)
-		case "new_run_history":
-			h := v.(map[string]interface{})
-			info.NewRunHistory = createHistoryEventBatchBlob(h)
 		}
 	}
 

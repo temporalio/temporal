@@ -1381,14 +1381,12 @@ const (
 	ChildInfoSize
 	SignalInfoSize
 	BufferedEventsSize
-	BufferedReplicationTasksSize
 	ActivityInfoCount
 	TimerInfoCount
 	ChildInfoCount
 	SignalInfoCount
 	RequestCancelInfoCount
 	BufferedEventsCount
-	BufferedReplicationTasksCount
 	DeleteActivityInfoCount
 	DeleteTimerInfoCount
 	DeleteChildInfoCount
@@ -1638,14 +1636,12 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ChildInfoSize:                                {metricName: "child_info_size", metricType: Timer},
 		SignalInfoSize:                               {metricName: "signal_info", metricType: Timer},
 		BufferedEventsSize:                           {metricName: "buffered_events_size", metricType: Timer},
-		BufferedReplicationTasksSize:                 {metricName: "buffered_replication_tasks_size", metricType: Timer},
 		ActivityInfoCount:                            {metricName: "activity_info_count", metricType: Timer},
 		TimerInfoCount:                               {metricName: "timer_info_count", metricType: Timer},
 		ChildInfoCount:                               {metricName: "child_info_count", metricType: Timer},
 		SignalInfoCount:                              {metricName: "signal_info_count", metricType: Timer},
 		RequestCancelInfoCount:                       {metricName: "request_cancel_info_count", metricType: Timer},
 		BufferedEventsCount:                          {metricName: "buffered_events_count", metricType: Timer},
-		BufferedReplicationTasksCount:                {metricName: "buffered_replication_tasks_count", metricType: Timer},
 		DeleteActivityInfoCount:                      {metricName: "delete_activity_info", metricType: Timer},
 		DeleteTimerInfoCount:                         {metricName: "delete_timer_info", metricType: Timer},
 		DeleteChildInfoCount:                         {metricName: "delete_child_info", metricType: Timer},

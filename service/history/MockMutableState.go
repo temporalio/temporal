@@ -1225,11 +1225,6 @@ func (_m *mockMutableState) DeleteActivity(_a0 int64) error {
 	return r0
 }
 
-// DeleteBufferedReplicationTask provides a mock function with given fields: _a0
-func (_m *mockMutableState) DeleteBufferedReplicationTask(_a0 int64) {
-	_m.Called(_a0)
-}
-
 // DeleteDecision provides a mock function with given fields:
 func (_m *mockMutableState) DeleteDecision() {
 	_m.Called()
@@ -1346,22 +1341,6 @@ func (_m *mockMutableState) GetActivityScheduledEvent(_a0 int64) (*shared.Histor
 	}
 
 	return r0, r1
-}
-
-// GetAllBufferedReplicationTasks provides a mock function with given fields:
-func (_m *mockMutableState) GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask {
-	ret := _m.Called()
-
-	var r0 map[int64]*persistence.BufferedReplicationTask
-	if rf, ok := ret.Get(0).(func() map[int64]*persistence.BufferedReplicationTask); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[int64]*persistence.BufferedReplicationTask)
-		}
-	}
-
-	return r0
 }
 
 // GetAllRequestCancels provides a mock function with given fields:
@@ -1910,20 +1889,6 @@ func (_m *mockMutableState) GetWorkflowType() *shared.WorkflowType {
 
 // HasBufferedEvents provides a mock function with given fields:
 func (_m *mockMutableState) HasBufferedEvents() bool {
-	ret := _m.Called()
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// HasBufferedReplicationTasks provides a mock function with given fields:
-func (_m *mockMutableState) HasBufferedReplicationTasks() bool {
 	ret := _m.Called()
 
 	var r0 bool

@@ -379,20 +379,6 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 
 	{
 		var err error
-		state.BufferedReplicationTasks, err = getBufferedReplicationTasks(m.db,
-			m.shardID,
-			domainID,
-			wfID,
-			runID)
-		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get buffered replication tasks. Error: %v", err),
-			}
-		}
-	}
-
-	{
-		var err error
 		state.SignalRequestedIDs, err = getSignalsRequested(m.db,
 			m.shardID,
 			domainID,
@@ -520,18 +506,6 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx sqldb.Tx, request *p.
 
 	if err := updateBufferedEvents(tx, request.NewBufferedEvents, request.ClearBufferedEvents, shardID, domainID,
 		workflowID, runID, request.Condition, request.RangeID); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err),
-		}
-	}
-
-	if err := updateBufferedReplicationTasks(tx,
-		request.NewBufferedReplicationTask,
-		request.DeleteBufferedReplicationTask,
-		shardID,
-		domainID,
-		workflowID,
-		runID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err),
 		}
@@ -1040,16 +1014,6 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx sqldb.Tx, request *p.Intern
 		runID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear signal info map. Error: %v", err),
-		}
-	}
-
-	if err := deleteBufferedReplicationTasksMap(tx,
-		m.shardID,
-		domainID,
-		info.WorkflowID,
-		runID); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear buffered replications tasks map. Error: %v", err),
 		}
 	}
 
