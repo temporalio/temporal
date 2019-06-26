@@ -91,59 +91,59 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 }
 
 func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkflowExecutionRequest) *MutableStateUpdateSessionStats {
-	executionInfoSize := computeExecutionInfoSize(req.ExecutionInfo)
+	executionInfoSize := computeExecutionInfoSize(req.UpdateWorkflowMutation.ExecutionInfo)
 
 	activityInfoCount := 0
 	activityInfoSize := 0
-	for _, ai := range req.UpsertActivityInfos {
+	for _, ai := range req.UpdateWorkflowMutation.UpsertActivityInfos {
 		activityInfoCount++
 		activityInfoSize += computeActivityInfoSize(ai)
 	}
 
 	timerInfoCount := 0
 	timerInfoSize := 0
-	for _, ti := range req.UpserTimerInfos {
+	for _, ti := range req.UpdateWorkflowMutation.UpserTimerInfos {
 		timerInfoCount++
 		timerInfoSize += computeTimerInfoSize(ti)
 	}
 
 	childExecutionInfoCount := 0
 	childExecutionInfoSize := 0
-	for _, ci := range req.UpsertChildExecutionInfos {
+	for _, ci := range req.UpdateWorkflowMutation.UpsertChildExecutionInfos {
 		childExecutionInfoCount++
 		childExecutionInfoSize += computeChildInfoSize(ci)
 	}
 
 	signalInfoCount := 0
 	signalInfoSize := 0
-	for _, si := range req.UpsertSignalInfos {
+	for _, si := range req.UpdateWorkflowMutation.UpsertSignalInfos {
 		signalInfoCount++
 		signalInfoSize += computeSignalInfoSize(si)
 	}
 
 	bufferedEventsSize := 0
-	if req.NewBufferedEvents != nil {
-		bufferedEventsSize = len(req.NewBufferedEvents.Data)
+	if req.UpdateWorkflowMutation.NewBufferedEvents != nil {
+		bufferedEventsSize = len(req.UpdateWorkflowMutation.NewBufferedEvents.Data)
 	}
 
-	requestCancelInfoCount := len(req.UpsertRequestCancelInfos)
+	requestCancelInfoCount := len(req.UpdateWorkflowMutation.UpsertRequestCancelInfos)
 
-	deleteActivityInfoCount := len(req.DeleteActivityInfos)
+	deleteActivityInfoCount := len(req.UpdateWorkflowMutation.DeleteActivityInfos)
 
-	deleteTimerInfoCount := len(req.DeleteTimerInfos)
+	deleteTimerInfoCount := len(req.UpdateWorkflowMutation.DeleteTimerInfos)
 
 	deleteChildInfoCount := 0
-	if req.DeleteChildExecutionInfo != nil {
+	if req.UpdateWorkflowMutation.DeleteChildExecutionInfo != nil {
 		deleteChildInfoCount = 1
 	}
 
 	deleteSignalInfoCount := 0
-	if req.DeleteSignalInfo != nil {
+	if req.UpdateWorkflowMutation.DeleteSignalInfo != nil {
 		deleteSignalInfoCount = 1
 	}
 
 	deleteRequestCancelInfoCount := 0
-	if req.DeleteRequestCancelInfo != nil {
+	if req.UpdateWorkflowMutation.DeleteRequestCancelInfo != nil {
 		deleteRequestCancelInfoCount = 1
 	}
 

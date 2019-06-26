@@ -182,15 +182,17 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	}
 
 	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       []p.Task{newdecisionTask},
-		TimerTasks:          nil,
-		Condition:           info0.NextEventID,
-		RangeID:             s.ShardInfo.RangeID,
-		UpsertActivityInfos: nil,
-		DeleteActivityInfos: nil,
-		UpserTimerInfos:     nil,
-		DeleteTimerInfos:    nil,
+		RangeID: s.ShardInfo.RangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:       updatedInfo,
+			TransferTasks:       []p.Task{newdecisionTask},
+			TimerTasks:          nil,
+			Condition:           info0.NextEventID,
+			UpsertActivityInfos: nil,
+			DeleteActivityInfos: nil,
+			UpserTimerInfos:     nil,
+			DeleteTimerInfos:    nil,
+		},
 		ContinueAsNew: &p.CreateWorkflowExecutionRequest{
 			RequestID:                   uuid.New(),
 			DomainID:                    updatedInfo.DomainID,

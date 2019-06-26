@@ -309,7 +309,7 @@ type (
 		LastHeartbeatTimeoutVisibility int64
 	}
 
-	// InternalChildExecutionInfo has details for pending child executions  for Persistence Interface
+	// InternalChildExecutionInfo has details for pending child executions for Persistence Interface
 	InternalChildExecutionInfo struct {
 		Version               int64
 		InitiatedID           int64
@@ -324,61 +324,32 @@ type (
 		WorkflowTypeName      string
 	}
 
-	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution  for Persistence Interface
+	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
 	InternalUpdateWorkflowExecutionRequest struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		TransferTasks    []Task
-		TimerTasks       []Task
-		ReplicationTasks []Task
-		Condition        int64
-		RangeID          int64
-		ContinueAsNew    *InternalCreateWorkflowExecutionRequest
+		RangeID int64
 
-		// Mutable state
-		UpsertActivityInfos       []*InternalActivityInfo
-		DeleteActivityInfos       []int64
-		UpserTimerInfos           []*TimerInfo
-		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*InternalChildExecutionInfo
-		DeleteChildExecutionInfo  *int64
-		UpsertRequestCancelInfos  []*RequestCancelInfo
-		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*SignalInfo
-		DeleteSignalInfo          *int64
-		UpsertSignalRequestedIDs  []string
-		DeleteSignalRequestedID   string
-		NewBufferedEvents         *DataBlob
-		ClearBufferedEvents       bool
+		UpdateWorkflowMutation InternalWorkflowMutation
+
+		ContinueAsNew *InternalCreateWorkflowExecutionRequest
 	}
 
-	// InternalResetMutableStateRequest is used to reset workflow execution state  for Persistence Interface
+	// InternalResetMutableStateRequest is used to reset workflow execution state for Persistence Interface
 	InternalResetMutableStateRequest struct {
+		RangeID int64
+
 		// previous workflow information
 		PrevRunID            string
 		PrevLastWriteVersion int64
 		PrevState            int
 
-		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		Condition        int64
-		RangeID          int64
+		// workflow to be resetted
+		ResetWorkflowSnapshot InternalWorkflowSnapshot
 
-		// mutable state pending info
-		InsertActivityInfos       []*InternalActivityInfo
-		InsertTimerInfos          []*TimerInfo
-		InsertChildExecutionInfos []*InternalChildExecutionInfo
-		InsertRequestCancelInfos  []*RequestCancelInfo
-		InsertSignalInfos         []*SignalInfo
-		InsertSignalRequestedIDs  []string
-
-		// replication/ transfer / timer task
-		InsertReplicationTasks []Task
-		InsertTransferTasks    []Task
-		InsertTimerTasks       []Task
+		// current workflow
+		CurrentWorkflowMutation *InternalWorkflowMutation
 	}
 
-	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state  for Persistence Interface
+	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
 	InternalResetWorkflowExecutionRequest struct {
 		PrevRunVersion int64
 		PrevRunState   int
@@ -399,17 +370,53 @@ type (
 		CurrTimerTasks       []Task
 
 		// For new mutable state
-		InsertExecutionInfo       *InternalWorkflowExecutionInfo
-		InsertReplicationState    *ReplicationState
-		InsertTransferTasks       []Task
-		InsertTimerTasks          []Task
-		InsertReplicationTasks    []Task
-		InsertActivityInfos       []*InternalActivityInfo
-		InsertTimerInfos          []*TimerInfo
-		InsertChildExecutionInfos []*InternalChildExecutionInfo
-		InsertRequestCancelInfos  []*RequestCancelInfo
-		InsertSignalInfos         []*SignalInfo
-		InsertSignalRequestedIDs  []string
+		NewWorkflowSnapshot InternalWorkflowSnapshot
+	}
+
+	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
+	InternalWorkflowMutation struct {
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ReplicationState *ReplicationState
+
+		UpsertActivityInfos       []*InternalActivityInfo
+		DeleteActivityInfos       []int64
+		UpserTimerInfos           []*TimerInfo
+		DeleteTimerInfos          []string
+		UpsertChildExecutionInfos []*InternalChildExecutionInfo
+		DeleteChildExecutionInfo  *int64
+		UpsertRequestCancelInfos  []*RequestCancelInfo
+		DeleteRequestCancelInfo   *int64
+		UpsertSignalInfos         []*SignalInfo
+		DeleteSignalInfo          *int64
+		UpsertSignalRequestedIDs  []string
+		DeleteSignalRequestedID   string
+		NewBufferedEvents         *DataBlob
+		ClearBufferedEvents       bool
+
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+
+		Condition int64
+	}
+
+	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
+	InternalWorkflowSnapshot struct {
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ReplicationState *ReplicationState
+
+		ActivityInfos       []*InternalActivityInfo
+		TimerInfos          []*TimerInfo
+		ChildExecutionInfos []*InternalChildExecutionInfo
+		RequestCancelInfos  []*RequestCancelInfo
+		SignalInfos         []*SignalInfo
+		SignalRequestedIDs  []string
+
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+
+		Condition int64
 	}
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface

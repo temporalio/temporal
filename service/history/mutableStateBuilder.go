@@ -294,20 +294,22 @@ func (e *mutableStateBuilder) ResetSnapshot(
 	}
 
 	return &persistence.ResetMutableStateRequest{
-		PrevRunID:                 prevRunID,
-		PrevLastWriteVersion:      prevLastWriteVersion,
-		PrevState:                 prevState,
-		ExecutionInfo:             e.executionInfo,
-		ReplicationState:          e.replicationState,
-		InsertActivityInfos:       insertActivities,
-		InsertTimerInfos:          insertTimers,
-		InsertChildExecutionInfos: insertChildExecutions,
-		InsertRequestCancelInfos:  insertRequestCancels,
-		InsertSignalInfos:         insertSignals,
-		InsertSignalRequestedIDs:  insertSignalRequested,
-		InsertReplicationTasks:    replicationTasks,
-		InsertTransferTasks:       transferTasks,
-		InsertTimerTasks:          timerTasks,
+		PrevRunID:            prevRunID,
+		PrevLastWriteVersion: prevLastWriteVersion,
+		PrevState:            prevState,
+		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
+			ExecutionInfo:       e.executionInfo,
+			ReplicationState:    e.replicationState,
+			ActivityInfos:       insertActivities,
+			TimerInfos:          insertTimers,
+			ChildExecutionInfos: insertChildExecutions,
+			RequestCancelInfos:  insertRequestCancels,
+			SignalInfos:         insertSignals,
+			SignalRequestedIDs:  insertSignalRequested,
+			ReplicationTasks:    replicationTasks,
+			TransferTasks:       transferTasks,
+			TimerTasks:          timerTasks,
+		},
 	}
 }
 

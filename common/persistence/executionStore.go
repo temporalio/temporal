@@ -269,24 +269,10 @@ func (m *executionManagerImpl) DeserializeActivityInfos(infos map[int64]*Interna
 }
 
 func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
-	executionInfo, err := m.SerializeExecutionInfo(request.ExecutionInfo, request.Encoding)
+
+	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&request.UpdateWorkflowMutation, request.Encoding)
 	if err != nil {
 		return nil, err
-	}
-	upsertActivityInfos, err := m.SerializeUpsertActivityInfos(request.UpsertActivityInfos, request.Encoding)
-	if err != nil {
-		return nil, err
-	}
-	upsertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(request.UpsertChildExecutionInfos, request.Encoding)
-	if err != nil {
-		return nil, err
-	}
-	var newBufferedEvents *DataBlob
-	if request.NewBufferedEvents != nil {
-		newBufferedEvents, err = m.serializer.SerializeBatchEvents(request.NewBufferedEvents, request.Encoding)
-		if err != nil {
-			return nil, err
-		}
 	}
 	continueAsNew, err := m.SerializeCreateWorkflowExecutionRequest(request.ContinueAsNew)
 	if err != nil {
@@ -294,29 +280,9 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	}
 
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
-		ExecutionInfo:             executionInfo,
-		UpsertActivityInfos:       upsertActivityInfos,
-		UpsertChildExecutionInfos: upsertChildExecutionInfos,
-		NewBufferedEvents:         newBufferedEvents,
-
-		ReplicationState:         request.ReplicationState,
-		TransferTasks:            request.TransferTasks,
-		TimerTasks:               request.TimerTasks,
-		ReplicationTasks:         request.ReplicationTasks,
-		Condition:                request.Condition,
-		RangeID:                  request.RangeID,
-		ContinueAsNew:            continueAsNew,
-		DeleteActivityInfos:      request.DeleteActivityInfos,
-		UpserTimerInfos:          request.UpserTimerInfos,
-		DeleteTimerInfos:         request.DeleteTimerInfos,
-		DeleteChildExecutionInfo: request.DeleteChildExecutionInfo,
-		UpsertRequestCancelInfos: request.UpsertRequestCancelInfos,
-		DeleteRequestCancelInfo:  request.DeleteRequestCancelInfo,
-		UpsertSignalInfos:        request.UpsertSignalInfos,
-		DeleteSignalInfo:         request.DeleteSignalInfo,
-		UpsertSignalRequestedIDs: request.UpsertSignalRequestedIDs,
-		DeleteSignalRequestedID:  request.DeleteSignalRequestedID,
-		ClearBufferedEvents:      request.ClearBufferedEvents,
+		RangeID:                request.RangeID,
+		UpdateWorkflowMutation: *serializedWorkflowMutation,
+		ContinueAsNew:          continueAsNew,
 	}
 	msuss := m.statsComputer.computeMutableStateUpdateStats(newRequest)
 	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
@@ -475,40 +441,29 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 }
 
 func (m *executionManagerImpl) ResetMutableState(request *ResetMutableStateRequest) error {
-	executionInfo, err := m.SerializeExecutionInfo(request.ExecutionInfo, request.Encoding)
+
+	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot, request.Encoding)
 	if err != nil {
 		return err
 	}
-	insertActivityInfos, err := m.SerializeUpsertActivityInfos(request.InsertActivityInfos, request.Encoding)
-	if err != nil {
-		return err
-	}
-	insertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(request.InsertChildExecutionInfos, request.Encoding)
-	if err != nil {
-		return err
+	var serializedCurrentWorkflowMutation *InternalWorkflowMutation
+	if request.CurrentWorkflowMutation != nil {
+		serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation, request.Encoding)
+		if err != nil {
+			return err
+		}
 	}
 
 	newRequest := &InternalResetMutableStateRequest{
+		RangeID: request.RangeID,
+
 		PrevRunID:            request.PrevRunID,
 		PrevLastWriteVersion: request.PrevLastWriteVersion,
 		PrevState:            request.PrevState,
-		ExecutionInfo:        executionInfo,
-		ReplicationState:     request.ReplicationState,
-		Condition:            request.Condition,
-		RangeID:              request.RangeID,
 
-		// mutable state pending info
-		InsertActivityInfos:       insertActivityInfos,
-		InsertTimerInfos:          request.InsertTimerInfos,
-		InsertChildExecutionInfos: insertChildExecutionInfos,
-		InsertRequestCancelInfos:  request.InsertRequestCancelInfos,
-		InsertSignalInfos:         request.InsertSignalInfos,
-		InsertSignalRequestedIDs:  request.InsertSignalRequestedIDs,
+		ResetWorkflowSnapshot: *serializedResetWorkflowSnapshot,
 
-		// replication/ transfer / timer task
-		InsertReplicationTasks: request.InsertReplicationTasks,
-		InsertTransferTasks:    request.InsertTransferTasks,
-		InsertTimerTasks:       request.InsertTimerTasks,
+		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
 	}
 	return m.persistence.ResetMutableState(newRequest)
 }
@@ -520,15 +475,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExec
 		return err
 	}
 
-	executionInfo, err := m.SerializeExecutionInfo(request.InsertExecutionInfo, request.Encoding)
-	if err != nil {
-		return err
-	}
-	insertActivityInfos, err := m.SerializeUpsertActivityInfos(request.InsertActivityInfos, request.Encoding)
-	if err != nil {
-		return err
-	}
-	insertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(request.InsertChildExecutionInfos, request.Encoding)
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, request.Encoding)
 	if err != nil {
 		return err
 	}
@@ -550,17 +497,7 @@ func (m *executionManagerImpl) ResetWorkflowExecution(request *ResetWorkflowExec
 		CurrTimerTasks:       request.CurrTimerTasks,
 		CurrTransferTasks:    request.CurrTransferTasks,
 
-		InsertExecutionInfo:       executionInfo,
-		InsertReplicationState:    request.InsertReplicationState,
-		InsertTimerTasks:          request.InsertTimerTasks,
-		InsertTransferTasks:       request.InsertTransferTasks,
-		InsertReplicationTasks:    request.InsertReplicationTasks,
-		InsertActivityInfos:       insertActivityInfos,
-		InsertTimerInfos:          request.InsertTimerInfos,
-		InsertChildExecutionInfos: insertChildExecutionInfos,
-		InsertRequestCancelInfos:  request.InsertRequestCancelInfos,
-		InsertSignalInfos:         request.InsertSignalInfos,
-		InsertSignalRequestedIDs:  request.InsertSignalRequestedIDs,
+		NewWorkflowSnapshot: *serializedNewWorkflowSnapshot,
 	}
 	return m.persistence.ResetWorkflowExecution(newRequest)
 }
@@ -627,6 +564,87 @@ func (m *executionManagerImpl) SerializeCreateWorkflowExecutionRequest(request *
 		CronSchedule:                request.CronSchedule,
 		ExpirationSeconds:           request.ExpirationSeconds,
 		SearchAttributes:            request.SearchAttributes,
+	}, nil
+}
+
+func (m *executionManagerImpl) SerializeWorkflowMutation(input *WorkflowMutation, encoding common.EncodingType) (*InternalWorkflowMutation, error) {
+	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo, encoding)
+	if err != nil {
+		return nil, err
+	}
+	serializedUpsertActivityInfos, err := m.SerializeUpsertActivityInfos(input.UpsertActivityInfos, encoding)
+	if err != nil {
+		return nil, err
+	}
+	serializedUpsertChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.UpsertChildExecutionInfos, encoding)
+	if err != nil {
+		return nil, err
+	}
+	var serializedNewBufferedEvents *DataBlob
+	if input.NewBufferedEvents != nil {
+		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, encoding)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &InternalWorkflowMutation{
+		ExecutionInfo:    serializedExecutionInfo,
+		ReplicationState: input.ReplicationState,
+
+		UpsertActivityInfos:       serializedUpsertActivityInfos,
+		DeleteActivityInfos:       input.DeleteActivityInfos,
+		UpserTimerInfos:           input.UpserTimerInfos,
+		DeleteTimerInfos:          input.DeleteTimerInfos,
+		UpsertChildExecutionInfos: serializedUpsertChildExecutionInfos,
+		DeleteChildExecutionInfo:  input.DeleteChildExecutionInfo,
+		UpsertRequestCancelInfos:  input.UpsertRequestCancelInfos,
+		DeleteRequestCancelInfo:   input.DeleteRequestCancelInfo,
+		UpsertSignalInfos:         input.UpsertSignalInfos,
+		DeleteSignalInfo:          input.DeleteSignalInfo,
+		UpsertSignalRequestedIDs:  input.UpsertSignalRequestedIDs,
+		DeleteSignalRequestedID:   input.DeleteSignalRequestedID,
+		NewBufferedEvents:         serializedNewBufferedEvents,
+		ClearBufferedEvents:       input.ClearBufferedEvents,
+
+		TransferTasks:    input.TransferTasks,
+		ReplicationTasks: input.ReplicationTasks,
+		TimerTasks:       input.TimerTasks,
+
+		Condition: input.Condition,
+	}, nil
+}
+
+func (m *executionManagerImpl) SerializeWorkflowSnapshot(input *WorkflowSnapshot, encoding common.EncodingType) (*InternalWorkflowSnapshot, error) {
+	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo, encoding)
+	if err != nil {
+		return nil, err
+	}
+	serializedActivityInfos, err := m.SerializeUpsertActivityInfos(input.ActivityInfos, encoding)
+	if err != nil {
+		return nil, err
+	}
+	serializedChildExecutionInfos, err := m.SerializeUpsertChildExecutionInfos(input.ChildExecutionInfos, encoding)
+	if err != nil {
+		return nil, err
+	}
+
+	return &InternalWorkflowSnapshot{
+		ExecutionInfo:    serializedExecutionInfo,
+		ReplicationState: input.ReplicationState,
+
+		ActivityInfos:       serializedActivityInfos,
+		TimerInfos:          input.TimerInfos,
+		ChildExecutionInfos: serializedChildExecutionInfos,
+		RequestCancelInfos:  input.RequestCancelInfos,
+		SignalInfos:         input.SignalInfos,
+		SignalRequestedIDs:  input.SignalRequestedIDs,
+
+		TransferTasks:    input.TransferTasks,
+		ReplicationTasks: input.ReplicationTasks,
+		TimerTasks:       input.TimerTasks,
+
+		Condition: input.Condition,
 	}, nil
 }
 

@@ -203,9 +203,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	updatedInfo.State = p.WorkflowStateRunning
 	updatedInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo: updatedInfo,
-		Condition:     nextEventID,
-		RangeID:       s.ShardInfo.RangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo: updatedInfo,
+			Condition:     nextEventID,
+		},
+		RangeID: s.ShardInfo.RangeID,
 	})
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -218,9 +220,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	for _, closeStatus := range closeStatuses {
 		updatedInfo.CloseStatus = closeStatus
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-			ExecutionInfo: updatedInfo,
-			Condition:     nextEventID,
-			RangeID:       s.ShardInfo.RangeID,
+			UpdateWorkflowMutation: p.WorkflowMutation{
+				ExecutionInfo: updatedInfo,
+				Condition:     nextEventID,
+			},
+			RangeID: s.ShardInfo.RangeID,
 		})
 		s.IsType(&gen.InternalServiceError{}, err)
 	}
@@ -229,18 +233,22 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	updatedInfo.State = p.WorkflowStateCompleted
 	updatedInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo: updatedInfo,
-		Condition:     nextEventID,
-		RangeID:       s.ShardInfo.RangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo: updatedInfo,
+			Condition:     nextEventID,
+		},
+		RangeID: s.ShardInfo.RangeID,
 	})
 	s.IsType(&gen.InternalServiceError{}, err)
 
 	for _, closeStatus := range closeStatuses {
 		updatedInfo.CloseStatus = closeStatus
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-			ExecutionInfo: updatedInfo,
-			Condition:     nextEventID,
-			RangeID:       s.ShardInfo.RangeID,
+			UpdateWorkflowMutation: p.WorkflowMutation{
+				ExecutionInfo: updatedInfo,
+				Condition:     nextEventID,
+			},
+			RangeID: s.ShardInfo.RangeID,
 		})
 		s.Nil(err)
 		info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -376,16 +384,18 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		LastWriteEventID: updatedInfo.NextEventID - 1,
 	}
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       nil,
-		TimerTasks:          nil,
-		Condition:           nextEventID,
-		RangeID:             s.ShardInfo.RangeID,
-		UpsertActivityInfos: nil,
-		DeleteActivityInfos: nil,
-		UpserTimerInfos:     nil,
-		DeleteTimerInfos:    nil,
-		ReplicationState:    updateReplicationState,
+		RangeID: s.ShardInfo.RangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:       updatedInfo,
+			TransferTasks:       nil,
+			TimerTasks:          nil,
+			Condition:           nextEventID,
+			UpsertActivityInfos: nil,
+			DeleteActivityInfos: nil,
+			UpserTimerInfos:     nil,
+			DeleteTimerInfos:    nil,
+			ReplicationState:    updateReplicationState,
+		},
 	})
 	s.NoError(err)
 
