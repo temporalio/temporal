@@ -142,7 +142,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	cadenceParams := &CadenceParams{
 		ClusterMetadata:     clusterMetadata,
 		PersistenceConfig:   pConfig,
-		DispatcherProvider:  client.NewIPYarpcDispatcherProvider(),
+		DispatcherProvider:  client.NewDNSYarpcDispatcherProvider(logger, 0),
 		MessagingClient:     messagingClient,
 		MetadataMgr:         testBase.MetadataProxy,
 		MetadataMgrV2:       testBase.MetadataManagerV2,

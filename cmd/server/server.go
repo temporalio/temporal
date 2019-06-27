@@ -24,12 +24,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/uber/cadence/common/cluster"
-
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/blobstore/s3store"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
@@ -152,7 +151,13 @@ func (s *server) startService() common.Daemon {
 		s.cfg.Archival.DefaultBucket,
 		enableReadFromArchival(),
 	)
-	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
+
+	if s.cfg.PublicClient.HostPort != "" {
+		params.DispatcherProvider = client.NewDNSYarpcDispatcherProvider(params.Logger, s.cfg.PublicClient.RefreshInterval)
+	} else {
+		log.Fatalf("need to provide an endpoint config for PublicClient")
+	}
+
 	params.ESConfig = &s.cfg.ElasticSearch
 	params.ESConfig.Enable = dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)() // force override with dynamic config
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {

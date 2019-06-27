@@ -75,12 +75,12 @@ clusterMetadata:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:7933"
+      rpcAddress: "localhost:7933"
     standby:
       enabled: true
       initialFailoverVersion: 0
       rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:8933"
+      rpcAddress: "localhost:8933"
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
@@ -125,4 +125,4 @@ archival:
       - "custom-bucket-2"
 
 publicClient:
-  hostPort: "127.0.0.1:7933"
+  hostPort: "localhost:7933"

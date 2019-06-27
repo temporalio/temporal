@@ -87,7 +87,7 @@ clustersInfo:
   clusterAddress:
     active:
       rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:7933"
+      rpcAddress: "localhost:7933"
 
 dcRedirectionPolicy:
   policy: "noop"
@@ -126,4 +126,4 @@ elasticsearch:
     visibility: cadence-visibility-dev
 
 publicClient:
-  hostPort: "127.0.0.1:7933"
+  hostPort: "localhost:7933"
