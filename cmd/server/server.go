@@ -133,13 +133,6 @@ func (s *server) startService() common.Daemon {
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 
 	clusterMetadata := s.cfg.ClusterMetadata
-	// TODO remove when ClustersInfo is fully deprecated
-	if len(s.cfg.ClustersInfo.CurrentClusterName) != 0 && len(s.cfg.ClusterMetadata.CurrentClusterName) != 0 {
-		log.Fatalf("cannot config both clustersInfo and clusterMetadata")
-	}
-	if len(s.cfg.ClustersInfo.CurrentClusterName) != 0 {
-		clusterMetadata = s.cfg.ClustersInfo.ToClusterMetadata()
-	}
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
 		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),

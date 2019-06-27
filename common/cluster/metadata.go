@@ -69,8 +69,6 @@ type (
 		clusterInfo map[string]config.ClusterInformation
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
-		// clusterToAddress contains the cluster name to corresponding frontend client
-		clusterToAddress map[string]config.Address
 
 		// archivalConfig is cluster's archival config
 		archivalConfig *ArchivalConfig
