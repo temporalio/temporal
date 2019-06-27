@@ -24,15 +24,23 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/uber/cadence/common"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
-func updateSignalsRequested(tx sqldb.Tx,
+func updateSignalsRequested(
+	tx sqldb.Tx,
 	signalRequestedIDs []string,
 	deleteSignalRequestID string,
 	shardID int,
-	domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if len(signalRequestedIDs) > 0 {
 		rows := make([]sqldb.SignalsRequestedSetsRow, len(signalRequestedIDs))
 		for i, v := range signalRequestedIDs {
@@ -68,11 +76,14 @@ func updateSignalsRequested(tx sqldb.Tx,
 	return nil
 }
 
-func getSignalsRequested(db sqldb.Interface,
+func getSignalsRequested(
+	db sqldb.Interface,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) (map[string]struct{}, error) {
+	runID sqldb.UUID,
+) (map[string]struct{}, error) {
+
 	rows, err := db.SelectFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -91,7 +102,14 @@ func getSignalsRequested(db sqldb.Interface,
 	return ret, nil
 }
 
-func deleteSignalsRequestedSet(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func deleteSignalsRequestedSet(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if _, err := tx.DeleteFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -100,6 +118,82 @@ func deleteSignalsRequestedSet(tx sqldb.Tx, shardID int, domainID sqldb.UUID, wo
 	}); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to delete signals requested set. Error: %v", err),
+		}
+	}
+	return nil
+}
+
+func updateBufferedEvents(
+	tx sqldb.Tx,
+	batch *p.DataBlob,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
+	if batch == nil {
+		return nil
+	}
+	row := sqldb.BufferedEventsRow{
+		ShardID:      shardID,
+		DomainID:     domainID,
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		Data:         batch.Data,
+		DataEncoding: string(batch.Encoding),
+	}
+
+	if _, err := tx.InsertIntoBufferedEvents([]sqldb.BufferedEventsRow{row}); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err),
+		}
+	}
+	return nil
+}
+
+func getBufferedEvents(
+	db sqldb.Interface,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) ([]*p.DataBlob, error) {
+
+	rows, err := db.SelectFromBufferedEvents(&sqldb.BufferedEventsFilter{
+		ShardID:    shardID,
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      runID,
+	})
+	if err != nil && err != sql.ErrNoRows {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err),
+		}
+	}
+	var result []*p.DataBlob
+	for _, row := range rows {
+		result = append(result, p.NewDataBlob(row.Data, common.EncodingType(row.DataEncoding)))
+	}
+	return result, nil
+}
+
+func deleteBufferedEvents(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
+	if _, err := tx.DeleteFromBufferedEvents(&sqldb.BufferedEventsFilter{
+		ShardID:    shardID,
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      runID,
+	}); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("updateBufferedEvents delete operation failed. Error: %v", err),
 		}
 	}
 	return nil
