@@ -1445,15 +1445,15 @@ func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, bool) {
 }
 
 // GetContinueAsNew provides a mock function with given fields:
-func (_m *mockMutableState) GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest {
+func (_m *mockMutableState) GetContinueAsNew() *persistence.WorkflowSnapshot {
 	ret := _m.Called()
 
-	var r0 *persistence.CreateWorkflowExecutionRequest
-	if rf, ok := ret.Get(0).(func() *persistence.CreateWorkflowExecutionRequest); ok {
+	var r0 *persistence.WorkflowSnapshot
+	if rf, ok := ret.Get(0).(func() *persistence.WorkflowSnapshot); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.CreateWorkflowExecutionRequest)
+			r0 = ret.Get(0).(*persistence.WorkflowSnapshot)
 		}
 	}
 

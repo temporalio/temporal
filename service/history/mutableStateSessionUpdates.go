@@ -42,7 +42,7 @@ type (
 		deleteSignalInfo           *int64
 		updateSignalRequestedIDs   []string
 		deleteSignalRequestedID    string
-		continueAsNew              *persistence.CreateWorkflowExecutionRequest
+		continueAsNew              *persistence.WorkflowSnapshot
 		newBufferedEvents          []*workflow.HistoryEvent
 		clearBufferedEvents        bool
 	}

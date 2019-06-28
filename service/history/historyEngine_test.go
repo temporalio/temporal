@@ -24,8 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"runtime/debug"
+	"sync"
 	"testing"
 	"time"
 
@@ -293,6 +292,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	).Once()
 
 	// test long poll on next event ID change
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(1)
 	asycWorkflowUpdate := func(delay time.Duration) {
 		taskToken, _ := json.Marshal(&common.TaskToken{
 			WorkflowID: *execution.WorkflowId,
@@ -327,6 +328,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 			},
 		})
 		s.Nil(err)
+		waitGroup.Done()
 		// right now the next event ID is 5
 	}
 
@@ -350,6 +352,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.True(time.Now().After(start.Add(time.Second * 1)))
 	s.Nil(err)
 	s.Equal(int64(5), *response.NextEventId)
+	waitGroup.Wait()
 }
 
 func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
@@ -1515,14 +1518,6 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("####")
-			fmt.Println(string(debug.Stack()))
-			fmt.Println("####")
-		}
-	}()
-
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),

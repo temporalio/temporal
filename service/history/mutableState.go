@@ -113,7 +113,7 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
 		GetStartEvent() (*workflow.HistoryEvent, bool)
-		GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest
+		GetContinueAsNew() *persistence.WorkflowSnapshot
 		GetCurrentBranch() []byte
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo

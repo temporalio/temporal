@@ -71,34 +71,39 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	}
 
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            workflowExecution,
-		TaskList:             "taskList",
-		WorkflowTypeName:     "wType",
-		WorkflowTimeout:      20,
-		DecisionTimeoutValue: 13,
-		ExecutionContext:     nil,
-		State:                p.WorkflowStateRunning,
-		CloseStatus:          p.WorkflowCloseStatusNone,
-		NextEventID:          3,
-		LastProcessedEvent:   0,
-		RangeID:              s.ShardInfo.RangeID,
-		TransferTasks: []p.Task{
-			&p.DecisionTask{
-				TaskID:              s.GetNextSequenceNumber(),
-				DomainID:            domainID,
-				TaskList:            "taskList",
-				ScheduleID:          2,
-				VisibilityTimestamp: time.Now(),
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             domainID,
+				WorkflowID:           workflowExecution.GetWorkflowId(),
+				RunID:                workflowExecution.GetRunId(),
+				TaskList:             "taskList",
+				WorkflowTypeName:     "wType",
+				WorkflowTimeout:      20,
+				DecisionTimeoutValue: 13,
+				ExecutionContext:     nil,
+				State:                p.WorkflowStateRunning,
+				CloseStatus:          p.WorkflowCloseStatusNone,
+				NextEventID:          3,
+				LastProcessedEvent:   0,
+				DecisionScheduleID:   2,
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
+				EventStoreVersion:    p.EventStoreVersionV2,
+				BranchToken:          []byte("branchToken1"),
 			},
+			TransferTasks: []p.Task{
+				&p.DecisionTask{
+					TaskID:              s.GetNextSequenceNumber(),
+					DomainID:            domainID,
+					TaskList:            "taskList",
+					ScheduleID:          2,
+					VisibilityTimestamp: time.Now(),
+				},
+			},
+			TimerTasks: nil,
 		},
-		TimerTasks:                  nil,
-		DecisionScheduleID:          2,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionStartToCloseTimeout: 1,
-		EventStoreVersion:           p.EventStoreVersionV2,
-		BranchToken:                 []byte("branchToken1"),
+		RangeID: s.ShardInfo.RangeID,
 	})
 
 	s.NoError(err0)
@@ -182,7 +187,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	}
 
 	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		RangeID: s.ShardInfo.RangeID,
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:       updatedInfo,
 			TransferTasks:       []p.Task{newdecisionTask},
@@ -193,30 +197,31 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 			UpserTimerInfos:     nil,
 			DeleteTimerInfos:    nil,
 		},
-		ContinueAsNew: &p.CreateWorkflowExecutionRequest{
-			RequestID:                   uuid.New(),
-			DomainID:                    updatedInfo.DomainID,
-			Execution:                   newWorkflowExecution,
-			TaskList:                    updatedInfo.TaskList,
-			WorkflowTypeName:            updatedInfo.WorkflowTypeName,
-			WorkflowTimeout:             updatedInfo.WorkflowTimeout,
-			DecisionTimeoutValue:        updatedInfo.DecisionTimeoutValue,
-			ExecutionContext:            nil,
-			State:                       p.WorkflowStateRunning,
-			CloseStatus:                 p.WorkflowCloseStatusNone,
-			NextEventID:                 info0.NextEventID,
-			LastProcessedEvent:          common.EmptyEventID,
-			RangeID:                     s.ShardInfo.RangeID,
-			TransferTasks:               nil,
-			TimerTasks:                  nil,
-			DecisionScheduleID:          int64(2),
-			DecisionStartedID:           common.EmptyEventID,
-			DecisionStartToCloseTimeout: 1,
-			CreateWorkflowMode:          p.CreateWorkflowModeContinueAsNew,
-			PreviousRunID:               updatedInfo.RunID,
-			EventStoreVersion:           p.EventStoreVersionV2,
-			BranchToken:                 []byte("branchToken1"),
+		NewWorkflowSnapshot: &p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             updatedInfo.DomainID,
+				WorkflowID:           newWorkflowExecution.GetWorkflowId(),
+				RunID:                newWorkflowExecution.GetRunId(),
+				TaskList:             updatedInfo.TaskList,
+				WorkflowTypeName:     updatedInfo.WorkflowTypeName,
+				WorkflowTimeout:      updatedInfo.WorkflowTimeout,
+				DecisionTimeoutValue: updatedInfo.DecisionTimeoutValue,
+				ExecutionContext:     nil,
+				State:                p.WorkflowStateRunning,
+				CloseStatus:          p.WorkflowCloseStatusNone,
+				NextEventID:          info0.NextEventID,
+				LastProcessedEvent:   common.EmptyEventID,
+				DecisionScheduleID:   int64(2),
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
+				EventStoreVersion:    p.EventStoreVersionV2,
+				BranchToken:          []byte("branchToken1"),
+			},
+			TransferTasks: nil,
+			TimerTasks:    nil,
 		},
+		RangeID:  s.ShardInfo.RangeID,
 		Encoding: pickRandomEncoding(),
 	})
 
@@ -494,27 +499,32 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 		ScheduleID: decisionScheduleID,
 	})
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:                   uuid.New(),
-		DomainID:                    domainID,
-		Execution:                   workflowExecution,
-		TaskList:                    taskList,
-		WorkflowTypeName:            wType,
-		WorkflowTimeout:             wTimeout,
-		DecisionTimeoutValue:        decisionTimeout,
-		State:                       p.WorkflowStateRunning,
-		CloseStatus:                 p.WorkflowCloseStatusNone,
-		NextEventID:                 nextEventID,
-		LastProcessedEvent:          lastProcessedEventID,
-		RangeID:                     s.ShardInfo.RangeID,
-		TimerTasks:                  timerTasks,
-		TransferTasks:               transferTasks,
-		ReplicationTasks:            replicationTasks,
-		DecisionScheduleID:          decisionScheduleID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionStartToCloseTimeout: 1,
-		ReplicationState:            state,
-		EventStoreVersion:           p.EventStoreVersionV2,
-		BranchToken:                 brToken,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             domainID,
+				WorkflowID:           workflowExecution.GetWorkflowId(),
+				RunID:                workflowExecution.GetRunId(),
+				TaskList:             taskList,
+				WorkflowTypeName:     wType,
+				WorkflowTimeout:      wTimeout,
+				DecisionTimeoutValue: decisionTimeout,
+				State:                p.WorkflowStateRunning,
+				CloseStatus:          p.WorkflowCloseStatusNone,
+				NextEventID:          nextEventID,
+				LastProcessedEvent:   lastProcessedEventID,
+				DecisionScheduleID:   decisionScheduleID,
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
+				EventStoreVersion:    p.EventStoreVersionV2,
+				BranchToken:          brToken,
+			},
+			ReplicationState: state,
+			TimerTasks:       timerTasks,
+			TransferTasks:    transferTasks,
+			ReplicationTasks: replicationTasks,
+		},
+		RangeID: s.ShardInfo.RangeID,
 	})
 
 	return response, err
@@ -1116,6 +1126,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		RunId:      common.StringPtr(newRunID),
 	}
 	insertInfo := copyWorkflowExecutionInfo(info0)
+	insertInfo.State = p.WorkflowStateRunning
+	insertInfo.CloseStatus = p.WorkflowCloseStatusNone
 	insertInfo.RunID = newRunID
 	insertInfo.NextEventID = int64(50)
 	insertInfo.LastProcessedEvent = int64(20)

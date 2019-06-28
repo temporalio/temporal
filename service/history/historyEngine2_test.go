@@ -24,8 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"runtime/debug"
 	"testing"
 
 	"github.com/pborman/uuid"
@@ -1493,14 +1491,6 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("#####")
-			fmt.Println(string(debug.Stack()))
-			fmt.Println("#####")
-		}
-	}()
-
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")

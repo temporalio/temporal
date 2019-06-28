@@ -596,8 +596,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_Ca
 				NewBufferedEvents:         nil,
 				ClearBufferedEvents:       false,
 			},
-			ContinueAsNew: nil,
-			Encoding:      common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
+			NewWorkflowSnapshot: nil,
+			Encoding:            common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
 		}, input)
 		return true
 	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()

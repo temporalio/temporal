@@ -2101,8 +2101,8 @@ func (s *shardContextWrapper) CreateWorkflowExecution(
 
 	resp, err := s.ShardContext.CreateWorkflowExecution(request)
 	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
-		if len(request.ReplicationTasks) > 0 {
+		s.txProcessor.NotifyNewTask(s.currentClusterName, request.NewWorkflowSnapshot.TransferTasks)
+		if len(request.NewWorkflowSnapshot.ReplicationTasks) > 0 {
 			s.replicatorProcessor.notifyNewTask()
 		}
 	}

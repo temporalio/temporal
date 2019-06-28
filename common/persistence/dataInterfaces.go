@@ -659,52 +659,14 @@ type (
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
 	CreateWorkflowExecutionRequest struct {
-		RequestID                   string
-		DomainID                    string
-		Execution                   workflow.WorkflowExecution
-		ParentDomainID              string
-		ParentExecution             workflow.WorkflowExecution
-		InitiatedID                 int64
-		TaskList                    string
-		WorkflowTypeName            string
-		WorkflowTimeout             int32
-		DecisionTimeoutValue        int32
-		ExecutionContext            []byte
-		LastEventTaskID             int64
-		NextEventID                 int64
-		LastProcessedEvent          int64
-		SignalCount                 int32
-		HistorySize                 int64
-		TransferTasks               []Task
-		ReplicationTasks            []Task
-		TimerTasks                  []Task
-		RangeID                     int64
-		DecisionVersion             int64
-		DecisionScheduleID          int64
-		DecisionStartedID           int64
-		DecisionStartToCloseTimeout int32
-		State                       int
-		CloseStatus                 int
-		CreateWorkflowMode          int
-		PreviousRunID               string
-		PreviousLastWriteVersion    int64
-		ReplicationState            *ReplicationState
-		Attempt                     int32
-		HasRetryPolicy              bool
-		InitialInterval             int32
-		BackoffCoefficient          float64
-		MaximumInterval             int32
-		ExpirationTime              time.Time
-		MaximumAttempts             int32
-		NonRetriableErrors          []string
-		PreviousAutoResetPoints     *workflow.ResetPoints
-		// 2 means using eventsV2, empty/0/1 means using events(V1)
-		EventStoreVersion int32
-		// for eventsV2: branchToken from historyPersistence
-		BranchToken       []byte
-		CronSchedule      string
-		ExpirationSeconds int32
-		SearchAttributes  map[string][]byte
+		RangeID int64
+
+		CreateWorkflowMode int
+
+		PreviousRunID            string
+		PreviousLastWriteVersion int64
+
+		NewWorkflowSnapshot WorkflowSnapshot
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -744,7 +706,7 @@ type (
 
 		UpdateWorkflowMutation WorkflowMutation
 
-		ContinueAsNew *CreateWorkflowExecutionRequest
+		NewWorkflowSnapshot *WorkflowSnapshot
 
 		Encoding common.EncodingType // optional binary encoding type
 	}

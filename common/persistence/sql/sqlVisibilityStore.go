@@ -71,6 +71,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalR
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
 	})
+
 	return err
 }
 

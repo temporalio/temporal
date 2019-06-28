@@ -38,7 +38,7 @@ type thriftRWType interface {
 }
 
 func validateProto(p string) error {
-	if p != common.EncodingTypeThriftRW {
+	if common.EncodingType(p) != common.EncodingTypeThriftRW {
 		return fmt.Errorf("invalid encoding type: %v", p)
 	}
 	return nil

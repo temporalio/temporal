@@ -284,59 +284,59 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 	setTaskInfo(msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
 
 	createRequest := &persistence.CreateWorkflowExecutionRequest{
-		RequestID: executionInfo.CreateRequestID,
-		DomainID:  executionInfo.DomainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: &executionInfo.WorkflowID,
-			RunId:      &executionInfo.RunID,
-		},
-
-		// parent execution
-		ParentDomainID: executionInfo.ParentDomainID,
-		ParentExecution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(executionInfo.ParentWorkflowID),
-			RunId:      common.StringPtr(executionInfo.ParentRunID),
-		},
-		InitiatedID: executionInfo.InitiatedID,
-
-		TaskList:                    executionInfo.TaskList,
-		WorkflowTypeName:            executionInfo.WorkflowTypeName,
-		WorkflowTimeout:             executionInfo.WorkflowTimeout,
-		DecisionTimeoutValue:        executionInfo.DecisionTimeoutValue,
-		ExecutionContext:            nil,
-		LastEventTaskID:             executionInfo.LastEventTaskID,
-		NextEventID:                 executionInfo.NextEventID,
-		LastProcessedEvent:          common.EmptyEventID,
-		HistorySize:                 executionInfo.HistorySize,
-		TransferTasks:               transferTasks,
-		ReplicationTasks:            replicationTasks,
-		TimerTasks:                  timerTasks,
-		DecisionVersion:             executionInfo.DecisionVersion,
-		DecisionScheduleID:          executionInfo.DecisionScheduleID,
-		DecisionStartedID:           executionInfo.DecisionStartedID,
-		DecisionStartToCloseTimeout: executionInfo.DecisionTimeout,
-		State:                       executionInfo.State,
-		CloseStatus:                 executionInfo.CloseStatus,
-		EventStoreVersion:           executionInfo.EventStoreVersion,
-		BranchToken:                 executionInfo.BranchToken,
-		CronSchedule:                executionInfo.CronSchedule,
-		ReplicationState:            replicationState,
-		SearchAttributes:            executionInfo.SearchAttributes,
-
-		// retry policy
-		HasRetryPolicy:     executionInfo.HasRetryPolicy,
-		BackoffCoefficient: executionInfo.BackoffCoefficient,
-		ExpirationSeconds:  executionInfo.ExpirationSeconds,
-		InitialInterval:    executionInfo.InitialInterval,
-		MaximumAttempts:    executionInfo.MaximumAttempts,
-		MaximumInterval:    executionInfo.MaximumInterval,
-		NonRetriableErrors: executionInfo.NonRetriableErrors,
-		ExpirationTime:     executionInfo.ExpirationTime,
-
 		// workflow create mode & prev run ID & version
 		CreateWorkflowMode:       createMode,
 		PreviousRunID:            prevRunID,
 		PreviousLastWriteVersion: prevLastWriteVersion,
+
+		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
+			ExecutionInfo: &persistence.WorkflowExecutionInfo{
+				CreateRequestID: executionInfo.CreateRequestID,
+				DomainID:        executionInfo.DomainID,
+				WorkflowID:      executionInfo.WorkflowID,
+				RunID:           executionInfo.RunID,
+
+				// parent execution
+				ParentDomainID:   executionInfo.ParentDomainID,
+				ParentWorkflowID: executionInfo.ParentWorkflowID,
+				ParentRunID:      executionInfo.ParentRunID,
+				InitiatedID:      executionInfo.InitiatedID,
+
+				TaskList:             executionInfo.TaskList,
+				WorkflowTypeName:     executionInfo.WorkflowTypeName,
+				WorkflowTimeout:      executionInfo.WorkflowTimeout,
+				DecisionTimeoutValue: executionInfo.DecisionTimeoutValue,
+				ExecutionContext:     nil,
+				LastEventTaskID:      executionInfo.LastEventTaskID,
+				NextEventID:          executionInfo.NextEventID,
+				LastProcessedEvent:   common.EmptyEventID,
+				HistorySize:          executionInfo.HistorySize,
+				DecisionVersion:      executionInfo.DecisionVersion,
+				DecisionScheduleID:   executionInfo.DecisionScheduleID,
+				DecisionStartedID:    executionInfo.DecisionStartedID,
+				DecisionTimeout:      executionInfo.DecisionTimeout,
+				State:                executionInfo.State,
+				CloseStatus:          executionInfo.CloseStatus,
+				EventStoreVersion:    executionInfo.EventStoreVersion,
+				BranchToken:          executionInfo.BranchToken,
+				CronSchedule:         executionInfo.CronSchedule,
+				SearchAttributes:     executionInfo.SearchAttributes,
+
+				// retry policy
+				HasRetryPolicy:     executionInfo.HasRetryPolicy,
+				BackoffCoefficient: executionInfo.BackoffCoefficient,
+				ExpirationSeconds:  executionInfo.ExpirationSeconds,
+				InitialInterval:    executionInfo.InitialInterval,
+				MaximumAttempts:    executionInfo.MaximumAttempts,
+				MaximumInterval:    executionInfo.MaximumInterval,
+				NonRetriableErrors: executionInfo.NonRetriableErrors,
+				ExpirationTime:     executionInfo.ExpirationTime,
+			},
+			ReplicationState: replicationState,
+			TransferTasks:    transferTasks,
+			ReplicationTasks: replicationTasks,
+			TimerTasks:       timerTasks,
+		},
 	}
 
 	_, err := c.shard.CreateWorkflowExecution(createRequest)
@@ -906,7 +906,6 @@ func (c *workflowExecutionContextImpl) update(
 
 	} // end of update history events for active builder
 
-	continueAsNew := updates.continueAsNew
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// clear stickness
 		c.msBuilder.ClearStickyness()
@@ -945,7 +944,7 @@ func (c *workflowExecutionContextImpl) update(
 			NewBufferedEvents:         updates.newBufferedEvents,
 			ClearBufferedEvents:       updates.clearBufferedEvents,
 		},
-		ContinueAsNew: continueAsNew,
+		NewWorkflowSnapshot: updates.continueAsNew,
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:
