@@ -22,10 +22,10 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"time"
 
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -33,103 +33,147 @@ import (
 
 var epochStartTime = time.Unix(0, 0)
 
-func (c *taskListManagerImpl) deliverBufferTasksForPoll() {
-deliverBufferTasksLoop:
+type (
+	taskReader struct {
+		taskBuffer chan *persistence.TaskInfo // tasks loaded from persistence
+		notifyC    chan struct{}              // Used as signal to notify pump of new tasks
+		tlMgr      *taskListManagerImpl
+		// The cancel objects are to cancel the ratelimiter Wait in dispatchBufferedTasks. The ideal
+		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
+		// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
+		// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
+		// so the cancel can be called directly on shutdown.
+		cancelCtx  context.Context
+		cancelFunc context.CancelFunc
+		// separate shutdownC needed for dispatchTasks go routine to allow
+		// getTasksPump to be stopped without stopping dispatchTasks in unit tests
+		dispatcherShutdownC chan struct{}
+	}
+)
+
+func newTaskReader(tlMgr *taskListManagerImpl) *taskReader {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &taskReader{
+		tlMgr:               tlMgr,
+		cancelCtx:           ctx,
+		cancelFunc:          cancel,
+		notifyC:             make(chan struct{}, 1),
+		dispatcherShutdownC: make(chan struct{}),
+		// we always dequeue the head of the buffer and try to dispatch it to a poller
+		// so allocate one less than desired target buffer size
+		taskBuffer: make(chan *persistence.TaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+	}
+}
+
+func (tr *taskReader) Start() {
+	tr.Signal()
+	go tr.dispatchBufferedTasks()
+	go tr.getTasksPump()
+}
+
+func (tr *taskReader) Stop() {
+	tr.cancelFunc()
+	close(tr.dispatcherShutdownC)
+}
+
+func (tr *taskReader) Signal() {
+	var event struct{}
+	select {
+	case tr.notifyC <- event:
+	default: // channel already has an event, don't block
+	}
+}
+
+func (tr *taskReader) dispatchBufferedTasks() {
+dispatchLoop:
 	for {
-		err := c.rateLimiter.Wait(c.cancelCtx)
-		if err != nil {
-			if err == context.Canceled {
-				c.logger.Info("Tasklist manager context is cancelled, shutting down")
-				break deliverBufferTasksLoop
-			}
-			c.logger.Debug(fmt.Sprintf(
-				"Unable to add buffer task, rate limit failed, domainId: %s, tasklist: %s, error: %s",
-				c.taskListID.domainID, c.taskListID.taskListName, err.Error()),
-			)
-			c.domainScope().IncCounter(metrics.BufferThrottleCounter)
-			// This is to prevent busy looping when throttling is set to 0
-			runtime.Gosched()
-			continue
-		}
 		select {
-		case task, ok := <-c.taskBuffer:
+		case taskInfo, ok := <-tr.taskBuffer:
 			if !ok { // Task list getTasks pump is shutdown
-				break deliverBufferTasksLoop
+				break dispatchLoop
 			}
-			select {
-			case c.tasksForPoll <- &getTaskResult{task: task}:
-			case <-c.deliverBufferShutdownCh:
-				break deliverBufferTasksLoop
+			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, false)
+			for {
+				err := tr.tlMgr.DispatchTask(tr.cancelCtx, task)
+				if err == nil {
+					break
+				}
+				if err == context.Canceled {
+					tr.tlMgr.logger.Info("Tasklist manager context is cancelled, shutting down")
+					break dispatchLoop
+				}
+				// this should never happen unless there is a bug - don't drop the task
+				tr.scope().IncCounter(metrics.BufferThrottleCounter)
+				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
+				runtime.Gosched()
 			}
-		case <-c.deliverBufferShutdownCh:
-			break deliverBufferTasksLoop
+		case <-tr.dispatcherShutdownC:
+			break dispatchLoop
 		}
 	}
 }
 
-func (c *taskListManagerImpl) getTasksPump() {
-	defer close(c.taskBuffer)
-	c.startWG.Wait()
+func (tr *taskReader) getTasksPump() {
+	tr.tlMgr.startWG.Wait()
+	defer close(tr.taskBuffer)
 
-	go c.deliverBufferTasksForPoll()
-	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval())
-	checkIdleTaskListTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
+	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
+	checkIdleTaskListTimer := time.NewTimer(tr.tlMgr.config.IdleTasklistCheckInterval())
 	lastTimeWriteTask := time.Time{}
 getTasksPumpLoop:
 	for {
 		select {
-		case <-c.shutdownCh:
+		case <-tr.tlMgr.shutdownCh:
 			break getTasksPumpLoop
-		case <-c.notifyCh:
+		case <-tr.notifyC:
 			{
 				lastTimeWriteTask = time.Now()
 
-				tasks, readLevel, isReadBatchDone, err := c.getTaskBatch()
+				tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
 				if err != nil {
-					c.signalNewTask() // re-enqueue the event
+					tr.Signal() // re-enqueue the event
 					// TODO: Should we ever stop retrying on db errors?
 					continue getTasksPumpLoop
 				}
 
 				if len(tasks) == 0 {
-					c.taskAckManager.setReadLevel(readLevel)
+					tr.tlMgr.taskAckManager.setReadLevel(readLevel)
 					if !isReadBatchDone {
-						c.signalNewTask()
+						tr.Signal()
 					}
 					continue getTasksPumpLoop
 				}
 
-				if !c.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskListTimer) {
+				if !tr.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskListTimer) {
 					break getTasksPumpLoop
 				}
 				// There maybe more tasks. We yield now, but signal pump to check again later.
-				c.signalNewTask()
+				tr.Signal()
 			}
 		case <-updateAckTimer.C:
 			{
-				err := c.persistAckLevel()
-				//var err error
+				err := tr.persistAckLevel()
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						// This indicates the task list may have moved to another host.
-						c.Stop()
+						tr.tlMgr.Stop()
 					} else {
-						c.logger.Error("Persistent store operation failure",
+						tr.logger().Error("Persistent store operation failure",
 							tag.StoreOperationUpdateTaskList,
 							tag.Error(err))
 					}
 					// keep going as saving ack is not critical
 				}
-				c.signalNewTask() // periodically signal pump to check persistence for tasks
-				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval())
+				tr.Signal() // periodically signal pump to check persistence for tasks
+				updateAckTimer = time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 			}
 		case <-checkIdleTaskListTimer.C:
 			{
-				if c.isIdle(lastTimeWriteTask) {
-					c.handleIdleTimeout()
+				if tr.isIdle(lastTimeWriteTask) {
+					tr.handleIdleTimeout()
 					break getTasksPumpLoop
 				}
-				checkIdleTaskListTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
+				checkIdleTaskListTimer = time.NewTimer(tr.tlMgr.config.IdleTasklistCheckInterval())
 			}
 		}
 	}
@@ -138,9 +182,9 @@ getTasksPumpLoop:
 	checkIdleTaskListTimer.Stop()
 }
 
-func (c *taskListManagerImpl) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistence.TaskInfo, error) {
-	response, err := c.executeWithRetry(func() (interface{}, error) {
-		return c.db.GetTasks(readLevel, maxReadLevel, c.config.GetTasksBatchSize())
+func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistence.TaskInfo, error) {
+	response, err := tr.tlMgr.executeWithRetry(func() (interface{}, error) {
+		return tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
 	})
 	if err != nil {
 		return nil, err
@@ -151,18 +195,18 @@ func (c *taskListManagerImpl) getTaskBatchWithRange(readLevel int64, maxReadLeve
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, int64, bool, error) {
+func (tr *taskReader) getTaskBatch() ([]*persistence.TaskInfo, int64, bool, error) {
 	var tasks []*persistence.TaskInfo
-	readLevel := c.taskAckManager.getReadLevel()
-	maxReadLevel := c.taskWriter.GetMaxReadLevel()
+	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
+	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 
 	// counter i is used to break and let caller check whether tasklist is still alive and need resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
-		upper := readLevel + c.config.RangeSize
+		upper := readLevel + tr.tlMgr.config.RangeSize
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
-		tasks, err := c.getTaskBatchWithRange(readLevel, upper)
+		tasks, err := tr.getTaskBatchWithRange(readLevel, upper)
 		if err != nil {
 			return nil, readLevel, true, err
 		}
@@ -175,49 +219,65 @@ func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, int64, bo
 	return tasks, readLevel, readLevel == maxReadLevel, nil // caller will update readLevel when no task grabbed
 }
 
-func (c *taskListManagerImpl) isTaskExpired(t *persistence.TaskInfo, now time.Time) bool {
+func (tr *taskReader) isTaskExpired(t *persistence.TaskInfo, now time.Time) bool {
 	return t.Expiry.After(epochStartTime) && time.Now().After(t.Expiry)
 }
 
-func (c *taskListManagerImpl) isIdle(lastWriteTime time.Time) bool {
-	return !c.isTaskAddedRecently(lastWriteTime) && len(c.GetAllPollerInfo()) == 0
+func (tr *taskReader) isIdle(lastWriteTime time.Time) bool {
+	return !tr.isTaskAddedRecently(lastWriteTime) && len(tr.tlMgr.GetAllPollerInfo()) == 0
 }
 
-func (c *taskListManagerImpl) handleIdleTimeout() {
-	c.persistAckLevel()
-	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
-	c.Stop()
+func (tr *taskReader) handleIdleTimeout() {
+	tr.persistAckLevel()
+	tr.tlMgr.taskGC.RunNow(tr.tlMgr.taskAckManager.getAckLevel())
+	tr.tlMgr.Stop()
 }
 
-func (c *taskListManagerImpl) addTasksToBuffer(
+func (tr *taskReader) addTasksToBuffer(
 	tasks []*persistence.TaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
 	now := time.Now()
 	for _, t := range tasks {
-		if c.isTaskExpired(t, now) {
-			c.domainScope().IncCounter(metrics.ExpiredTasksCounter)
+		if tr.isTaskExpired(t, now) {
+			tr.scope().IncCounter(metrics.ExpiredTasksCounter)
 			continue
 		}
-		if !c.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {
+		if !tr.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {
 			return false // we are shutting down the task list
 		}
 	}
 	return true
 }
 
-func (c *taskListManagerImpl) addSingleTaskToBuffer(
+func (tr *taskReader) addSingleTaskToBuffer(
 	task *persistence.TaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
-	c.taskAckManager.addTask(task.TaskID)
+	tr.tlMgr.taskAckManager.addTask(task.TaskID)
 	for {
 		select {
-		case c.taskBuffer <- task:
+		case tr.taskBuffer <- task:
 			return true
 		case <-idleTimer.C:
-			if c.isIdle(lastWriteTime) {
-				c.handleIdleTimeout()
+			if tr.isIdle(lastWriteTime) {
+				tr.handleIdleTimeout()
 				return false
 			}
-		case <-c.shutdownCh:
+		case <-tr.tlMgr.shutdownCh:
 			return false
 		}
 	}
+}
+
+func (tr *taskReader) persistAckLevel() error {
+	return tr.tlMgr.db.UpdateState(tr.tlMgr.taskAckManager.getAckLevel())
+}
+
+func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
+	return time.Now().Sub(lastAddTime) <= tr.tlMgr.config.MaxTasklistIdleTime()
+}
+
+func (tr *taskReader) logger() log.Logger {
+	return tr.tlMgr.logger
+}
+
+func (tr *taskReader) scope() metrics.Scope {
+	return tr.tlMgr.domainScope()
 }

@@ -99,6 +99,11 @@ func (rl *rateLimiter) Reserve() *rate.Reservation {
 	return limiter.Reserve()
 }
 
+func (rl *rateLimiter) Allow() bool {
+	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	return limiter.Allow()
+}
+
 // Limit returns the current rate per second limit for this ratelimiter
 func (rl *rateLimiter) Limit() float64 {
 	if rl.maxDispatchPerSecond != nil {

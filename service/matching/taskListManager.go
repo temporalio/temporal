@@ -23,14 +23,11 @@ package matching
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	h "github.com/uber/cadence/.gen/go/history"
-	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -42,110 +39,61 @@ import (
 )
 
 const (
-	done time.Duration = -1
-
 	// Time budget for empty task to propagate through the function stack and be returned to
 	// pollForActivityTask or pollForDecisionTask handler.
 	returnEmptyTaskTimeBudget time.Duration = time.Second
 )
 
-// NOTE: Is this good enough for stress tests?
-const (
-	_defaultTaskDispatchRPS    = 100000.0
-	_defaultTaskDispatchRPSTTL = 60 * time.Second
-)
-
-var errAddTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
-
 type (
+	addTaskParams struct {
+		execution *s.WorkflowExecution
+		taskInfo  *persistence.TaskInfo
+	}
+
 	taskListManager interface {
 		Start() error
 		Stop()
-		AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error)
-		GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
-		SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
+		// AddTask adds a task to the task list. This method will first attempt a synchronous
+		// match with a poller. When that fails, task will be written to database and later
+		// asynchronously matched with a poller
+		AddTask(ctx context.Context, params addTaskParams) (syncMatch bool, err error)
+		// GetTask blocks waiting for a task Returns error when context deadline is exceeded
+		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
+		// from this task list to pollers
+		GetTask(ctx context.Context, maxDispatchPerSecond *float64) (*internalTask, error)
+		// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+		// up the task, this method will return error. Task will not be persisted to db
+		DispatchTask(ctx context.Context, task *internalTask) error
+		// DispatchQueryTask dispatches a query task to a poller. When there are no pollers
+		// to pick up the task, this method will return error. Task will not be persisted to
+		// db and no ratelimits are applied for this call
+		DispatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*s.PollerInfo
+		// DescribeTaskList returns information about the target tasklist
 		DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse
 		String() string
 	}
 
-	taskListConfig struct {
-		EnableSyncMatch func() bool
-		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval func() time.Duration
-		RangeSize                  int64
-		GetTasksBatchSize          func() int
-		UpdateAckInterval          func() time.Duration
-		IdleTasklistCheckInterval  func() time.Duration
-		MaxTasklistIdleTime        func() time.Duration
-		MinTaskThrottlingBurstSize func() int
-		MaxTaskDeleteBatchSize     func() int
-		// taskWriter configuration
-		OutstandingTaskAppendsThreshold func() int
-		MaxTaskBatchSize                func() int
-	}
-
-	// Contains information needed for current task transition from queue to Workflow execution history.
-	taskContext struct {
-		tlMgr             *taskListManagerImpl
-		info              *persistence.TaskInfo
-		syncResponseCh    chan<- *syncMatchResponse
-		workflowExecution s.WorkflowExecution
-		queryTaskInfo     *queryTaskInfo
-		backlogCountHint  int64
-		domainName        string
-	}
-
-	queryTaskInfo struct {
-		taskID       string
-		queryRequest *m.QueryWorkflowRequest
-	}
-
 	// Single task list in memory state
 	taskListManagerImpl struct {
-		domainCache      cache.DomainCache
 		taskListID       *taskListID
+		taskListKind     int // sticky taskList has different process in persistence
+		config           *taskListConfig
+		db               *taskListDB
+		engine           *matchingEngineImpl
+		taskWriter       *taskWriter
+		taskReader       *taskReader // reads tasks from db and async matches it with poller
+		taskGC           *taskGC
+		taskAckManager   ackManager   // tracks ackLevel for delivered messages
+		matcher          *TaskMatcher // for matching a task producer with a poller
+		domainCache      cache.DomainCache
 		logger           log.Logger
 		metricsClient    metrics.Client
 		domainNameValue  atomic.Value
 		domainScopeValue atomic.Value // domain tagged metric scope
-		engine           *matchingEngineImpl
-		config           *taskListConfig
-
 		// pollerHistory stores poller which poll from this tasklist in last few minutes
 		pollerHistory *pollerHistory
-
-		taskWriter *taskWriter
-		taskBuffer chan *persistence.TaskInfo // tasks loaded from persistence
-		// tasksForPoll is used to deliver tasks to pollers.
-		// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
-		// only if there is waiting poll that consumes from it. Tasks in taskBuffer will blocking-add to
-		// this channel
-		tasksForPoll chan *getTaskResult
-		// queryTasksForPoll is used for delivering query tasks to pollers.
-		// It must be unbuffered as query tasks are always Sync Matched.  We use a separate channel for query tasks because
-		// unlike activity/decision tasks, query tasks are enabled for dispatch on both active and standby clusters
-		queryTasksForPoll chan *getTaskResult
-		notifyCh          chan struct{} // Used as signal to notify pump of new tasks
-		// Note: We need two shutdown channels so we can stop task pump independently of the deliverBuffer
-		// loop in getTasksPump in unit tests
-		shutdownCh              chan struct{}  // Delivers stop to the pump that populates taskBuffer
-		deliverBufferShutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
-		startWG                 sync.WaitGroup // ensures that background processes do not start until setup is ready
-		stopped                 int32
-		// The cancel objects are to cancel the ratelimiter Wait in deliverBufferTasksLoop. The ideal
-		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
-		// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
-		// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
-		// so the cancel can be called directly on shutdown.
-		cancelCtx  context.Context
-		cancelFunc context.CancelFunc
-
-		db             *taskListDB
-		taskAckManager ackManager // tracks ackLevel for delivered messages
-		taskGC         *taskGC
-
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
 		// particular tasklist.  PollerID generated by frontend is used as the key and
 		// CancelFunc is the value.  This is used to cancel the context to unblock any
@@ -153,130 +101,61 @@ type (
 		// prevent tasks being dispatched to zombie pollers.
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
-		// Rate limiter for task dispatch
-		rateLimiter *rateLimiter
 
-		taskListKind int // sticky taskList has different process in persistence
-	}
-
-	// getTaskResult contains task info and optional channel to notify createTask caller
-	// that task is successfully started and returned to a poller
-	getTaskResult struct {
-		task      *persistence.TaskInfo
-		C         chan *syncMatchResponse
-		queryTask *queryTaskInfo
-		syncMatch bool
-	}
-
-	// syncMatchResponse result of sync match delivered to a createTask caller
-	syncMatchResponse struct {
-		response *persistence.CreateTasksResponse
-		err      error
+		shutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
+		startWG    sync.WaitGroup // ensures that background processes do not start until setup is ready
+		stopped    int32
 	}
 )
 
-func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainCache) (*taskListConfig, error) {
-	domainEntry, err := domainCache.GetDomainByID(id.domainID)
-	if err != nil {
-		return nil, err
-	}
+const (
+	// maxSyncMatchWaitTime is the max amount of time that we are willing to wait for a sync match to happen
+	maxSyncMatchWaitTime = 200 * time.Millisecond
+)
 
-	domain := domainEntry.GetInfo().Name
-	taskListName := id.taskListName
-	taskType := id.taskType
-	return &taskListConfig{
-		RangeSize: config.RangeSize,
-		GetTasksBatchSize: func() int {
-			return config.GetTasksBatchSize(domain, taskListName, taskType)
-		},
-		UpdateAckInterval: func() time.Duration {
-			return config.UpdateAckInterval(domain, taskListName, taskType)
-		},
-		IdleTasklistCheckInterval: func() time.Duration {
-			return config.IdleTasklistCheckInterval(domain, taskListName, taskType)
-		},
-		MaxTasklistIdleTime: func() time.Duration {
-			return config.MaxTasklistIdleTime(domain, taskListName, taskType)
-		},
-		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(domain, taskListName, taskType)
-		},
-		EnableSyncMatch: func() bool {
-			return config.EnableSyncMatch(domain, taskListName, taskType)
-		},
-		LongPollExpirationInterval: func() time.Duration {
-			return config.LongPollExpirationInterval(domain, taskListName, taskType)
-		},
-		MaxTaskDeleteBatchSize: func() int {
-			return config.MaxTaskDeleteBatchSize(domain, taskListName, taskType)
-		},
-		OutstandingTaskAppendsThreshold: func() int {
-			return config.OutstandingTaskAppendsThreshold(domain, taskListName, taskType)
-		},
-		MaxTaskBatchSize: func() int {
-			return config.MaxTaskBatchSize(domain, taskListName, taskType)
-		},
-	}, nil
-}
+var _ taskListManager = (*taskListManagerImpl)(nil)
 
 func newTaskListManager(
-	e *matchingEngineImpl, taskList *taskListID, taskListKind *s.TaskListKind, config *Config,
+	e *matchingEngineImpl,
+	taskList *taskListID,
+	taskListKind *s.TaskListKind,
+	config *Config,
 ) (taskListManager, error) {
-	dPtr := _defaultTaskDispatchRPS
+
 	taskListConfig, err := newTaskListConfig(taskList, config, e.domainCache)
 	if err != nil {
 		return nil, err
 	}
-	rl := newRateLimiter(
-		&dPtr, _defaultTaskDispatchRPSTTL, taskListConfig.MinTaskThrottlingBurstSize(),
-	)
-	return newTaskListManagerWithRateLimiter(
-		e, taskList, taskListKind, e.domainCache, taskListConfig, rl,
-	), nil
-}
 
-func newTaskListManagerWithRateLimiter(
-	e *matchingEngineImpl, taskList *taskListID, taskListKind *s.TaskListKind,
-	domainCache cache.DomainCache, config *taskListConfig, rl *rateLimiter,
-) taskListManager {
-	// To perform one db operation if there are no pollers
-	taskBufferSize := config.GetTasksBatchSize() - 1
-	ctx, cancel := context.WithCancel(context.Background())
 	if taskListKind == nil {
 		taskListKind = common.TaskListKindPtr(s.TaskListKindNormal)
 	}
 
 	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.taskListName, taskList.taskType, int(*taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
-		domainCache:             domainCache,
-		metricsClient:           e.metricsClient,
-		engine:                  e,
-		taskBuffer:              make(chan *persistence.TaskInfo, taskBufferSize),
-		notifyCh:                make(chan struct{}, 1),
-		shutdownCh:              make(chan struct{}),
-		deliverBufferShutdownCh: make(chan struct{}),
-		cancelCtx:               ctx,
-		cancelFunc:              cancel,
-		taskListID:              taskList,
+		domainCache:   e.domainCache,
+		metricsClient: e.metricsClient,
+		engine:        e,
+		shutdownCh:    make(chan struct{}),
+		taskListID:    taskList,
 		logger: e.logger.WithTags(tag.WorkflowTaskListName(taskList.taskListName),
 			tag.WorkflowTaskListType(taskList.taskType)),
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
-		taskGC:              newTaskGC(db, config),
-		tasksForPoll:        make(chan *getTaskResult),
-		queryTasksForPoll:   make(chan *getTaskResult),
-		config:              config,
+		taskGC:              newTaskGC(db, taskListConfig),
+		config:              taskListConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
-		rateLimiter:         rl,
 		taskListKind:        int(*taskListKind),
 	}
 	tlMgr.domainNameValue.Store("")
 	tlMgr.domainScopeValue.Store(e.metricsClient.Scope(metrics.MatchingTaskListMgrScope, metrics.DomainUnknownTag()))
 	tlMgr.tryInitDomainNameAndScope()
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
+	tlMgr.taskReader = newTaskReader(tlMgr)
+	tlMgr.matcher = newTaskMatcher(taskListConfig, tlMgr.domainScope)
 	tlMgr.startWG.Add(1)
-	return tlMgr
+	return tlMgr, nil
 }
 
 // Starts reading pump for the given task list.
@@ -293,8 +172,7 @@ func (c *taskListManagerImpl) Start() error {
 
 	c.taskAckManager.setAckLevel(state.ackLevel)
 	c.taskWriter.Start(c.rangeIDToTaskIDBlock(state.rangeID))
-	c.signalNewTask()
-	go c.getTasksPump()
+	c.taskReader.Start()
 
 	return nil
 }
@@ -304,130 +182,91 @@ func (c *taskListManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&c.stopped, 0, 1) {
 		return
 	}
-	close(c.deliverBufferShutdownCh)
-	c.cancelFunc()
 	close(c.shutdownCh)
 	c.taskWriter.Stop()
+	c.taskReader.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
 	c.engine.removeTaskListManager(c.taskListID)
 	c.logger.Info("", tag.LifeCycleStopped)
 }
 
-func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error) {
+// AddTask adds a task to the task list. This method will first attempt a synchronous
+// match with a poller. When there are no pollers or if ratelimit is exceeded, task will
+// be written to database and later asynchronously matched with a poller
+func (c *taskListManagerImpl) AddTask(ctx context.Context, params addTaskParams) (bool, error) {
 	c.startWG.Wait()
-	_, err = c.executeWithRetry(func() (interface{}, error) {
+	var syncMatch bool
+	_, err := c.executeWithRetry(func() (interface{}, error) {
 
-		domainEntry, err := c.domainCache.GetDomainByID(taskInfo.DomainID)
+		domainEntry, err := c.domainCache.GetDomainByID(params.taskInfo.DomainID)
 		if err != nil {
 			return nil, err
 		}
+
 		if domainEntry.GetDomainNotActiveErr() != nil {
-			// domain not active, do not do sync match
-			r, err := c.taskWriter.appendTask(execution, taskInfo)
+			r, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
 			syncMatch = false
 			return r, err
 		}
 
-		r, err := c.trySyncMatch(taskInfo)
-		if (err != nil && err != errAddTasklistThrottled) || r != nil {
-			syncMatch = true
-			return r, err
+		syncMatch, err = c.trySyncMatch(ctx, params)
+		if syncMatch {
+			return &persistence.CreateTasksResponse{}, err
 		}
-		r, err = c.taskWriter.appendTask(execution, taskInfo)
+
+		r, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
 		syncMatch = false
 		return r, err
 	})
 	if err == nil {
-		c.signalNewTask()
+		c.taskReader.Signal()
 	}
 	return syncMatch, err
 }
 
-func (c *taskListManagerImpl) SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error {
-	c.startWG.Wait()
-
-	domainID := queryTask.queryRequest.GetDomainUUID()
-	we := queryTask.queryRequest.QueryRequest.Execution
-	taskInfo := &persistence.TaskInfo{
-		DomainID:   domainID,
-		RunID:      we.GetRunId(),
-		WorkflowID: we.GetWorkflowId(),
-	}
-
-	request := &getTaskResult{task: taskInfo, C: make(chan *syncMatchResponse, 1), queryTask: queryTask}
-	select {
-	case c.queryTasksForPoll <- request:
-		<-request.C
-		return nil
-	case <-ctx.Done():
-		return &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
-	}
+// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+// up the task or if rate limit is exceeded, this method will return error. Task
+// *will not* be persisted to db
+func (c *taskListManagerImpl) DispatchTask(ctx context.Context, task *internalTask) error {
+	return c.matcher.MustOffer(ctx, task)
 }
 
-// Loads a task from DB or from sync match and wraps it in a task context
-func (c *taskListManagerImpl) GetTaskContext(
+// DispatchQueryTask dispatches a query task to a poller. When there are no pollers
+// to pick up the task, this method will return error. Task will not be persisted to
+// db and no ratelimits will be applied for this call
+func (c *taskListManagerImpl) DispatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error {
+	c.startWG.Wait()
+	task := newInternalQueryTask(queryTask, c.completeTask)
+	_, err := c.matcher.Offer(ctx, task)
+	if err == context.DeadlineExceeded {
+		return &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
+	}
+	return err
+}
+
+// GetTask blocks waiting for a task.
+// Returns error when context deadline is exceeded
+// maxDispatchPerSecond is the max rate at which tasks are allowed
+// to be dispatched from this task list to pollers
+func (c *taskListManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
-) (*taskContext, error) {
-	result, err := c.getTask(ctx, maxDispatchPerSecond)
+) (*internalTask, error) {
+	task, err := c.getTask(ctx, maxDispatchPerSecond)
 	if err != nil {
 		return nil, err
 	}
-	task := result.task
-	workflowExecution := s.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
-	}
-
-	tCtx := &taskContext{
-		info:              task,
-		workflowExecution: workflowExecution,
-		tlMgr:             c,
-		syncResponseCh:    result.C,         // nil if task is loaded from persistence
-		queryTaskInfo:     result.queryTask, // non-nil for query task
-		backlogCountHint:  c.taskAckManager.getBacklogCountHint(),
-		domainName:        c.domainName(),
-	}
-	return tCtx, nil
+	task.domainName = c.domainName()
+	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
+	return task, nil
 }
 
-func (c *taskListManagerImpl) persistAckLevel() error {
-	return c.db.UpdateState(c.taskAckManager.getAckLevel())
-}
-
-func (c *taskListManagerImpl) getAckLevel() (ackLevel int64) {
-	return c.taskAckManager.getAckLevel()
-}
-
-func (c *taskListManagerImpl) getTaskListKind() int {
-	// there is no need to lock here,
-	// since c.taskListKind is assigned when taskListManager been created and never changed.
-	return c.taskListKind
-}
-
-// completeTaskPoll should be called after task poll is done even if append has failed.
-// There is no correspondent initiateTaskPoll as append is initiated in getTasksPump
-func (c *taskListManagerImpl) completeTaskPoll(taskID int64) int64 {
-	ackLevel := c.taskAckManager.completeTask(taskID)
-	c.taskGC.Run(ackLevel)
-	return ackLevel
-}
-
-// Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
-func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond *float64) (*getTaskResult, error) {
-	childCtxTimeout := c.config.LongPollExpirationInterval()
-	if deadline, ok := ctx.Deadline(); ok {
-		// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
-		// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
-		// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
-		// returned to the handler before a context timeout error is generated.
-		shortenedCtxTimeout := deadline.Sub(time.Now()) - returnEmptyTaskTimeBudget
-		if shortenedCtxTimeout < childCtxTimeout {
-			childCtxTimeout = shortenedCtxTimeout
-		}
-	}
-	// ChildCtx timeout will be the shorter of longPollExpirationInterval and shortened parent context timeout.
-	childCtx, cancel := context.WithTimeout(ctx, childCtxTimeout)
+func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond *float64) (*internalTask, error) {
+	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
+	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
+	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
+	// returned to the handler before a context timeout error is generated.
+	childCtx, cancel := c.newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	pollerID, ok := ctx.Value(pollerIDKey).(string)
@@ -449,14 +288,9 @@ func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond 
 		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
 	}
 
-	var tasksForPoll chan *getTaskResult
 	domainEntry, err := c.domainCache.GetDomainByID(c.taskListID.domainID)
 	if err != nil {
 		return nil, err
-	}
-	if domainEntry.GetDomainNotActiveErr() == nil {
-		// domain active
-		tasksForPoll = c.tasksForPoll
 	}
 
 	// the desired global rate limit for the task list comes from the
@@ -464,25 +298,18 @@ func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond 
 	// one rateLimiter for this entire task list and as we get polls,
 	// we update the ratelimiter rps if it has changed from the last
 	// value. Last poller wins if different pollers provide different values
-	c.rateLimiter.UpdateMaxDispatch(maxDispatchPerSecond)
+	c.matcher.UpdateRatelimit(maxDispatchPerSecond)
 
-	select {
-	case result := <-tasksForPoll:
-		if result.syncMatch {
-			c.domainScope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		}
-		c.domainScope().IncCounter(metrics.PollSuccessCounter)
-		return result, nil
-	case result := <-c.queryTasksForPoll:
-		if result.syncMatch {
-			c.domainScope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		}
-		c.domainScope().IncCounter(metrics.PollSuccessCounter)
-		return result, nil
-	case <-childCtx.Done():
-		c.domainScope().IncCounter(metrics.PollTimeoutCounter)
-		return nil, ErrNoTasks
+	if domainEntry.GetDomainNotActiveErr() != nil {
+		return c.matcher.PollForQuery(childCtx)
 	}
+
+	return c.matcher.Poll(childCtx)
+}
+
+// GetAllPollerInfo returns all pollers that polled from this tasklist in last few minutes
+func (c *taskListManagerImpl) GetAllPollerInfo() []*s.PollerInfo {
+	return c.pollerHistory.getAllPollerInfo()
 }
 
 func (c *taskListManagerImpl) CancelPoller(pollerID string) {
@@ -493,6 +320,89 @@ func (c *taskListManagerImpl) CancelPoller(pollerID string) {
 	if ok && cancel != nil {
 		cancel()
 	}
+}
+
+// DescribeTaskList returns information about the target tasklist, right now this API returns the
+// pollers which polled this tasklist in last few minutes and status of tasklist's ackManager
+// (readLevel, ackLevel, backlogCountHint and taskIDBlock).
+func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse {
+	response := &s.DescribeTaskListResponse{Pollers: c.GetAllPollerInfo()}
+	if !includeTaskListStatus {
+		return response
+	}
+
+	taskIDBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
+	response.TaskListStatus = &s.TaskListStatus{
+		ReadLevel:        common.Int64Ptr(c.taskAckManager.getReadLevel()),
+		AckLevel:         common.Int64Ptr(c.taskAckManager.getAckLevel()),
+		BacklogCountHint: common.Int64Ptr(c.taskAckManager.getBacklogCountHint()),
+		RatePerSecond:    common.Float64Ptr(c.matcher.Rate()),
+		TaskIDBlock: &s.TaskIDBlock{
+			StartID: common.Int64Ptr(taskIDBlock.start),
+			EndID:   common.Int64Ptr(taskIDBlock.end),
+		},
+	}
+
+	return response
+}
+
+func (c *taskListManagerImpl) String() string {
+	buf := new(bytes.Buffer)
+	if c.taskListID.taskType == persistence.TaskListTypeActivity {
+		buf.WriteString("Activity")
+	} else {
+		buf.WriteString("Decision")
+	}
+	rangeID := c.db.RangeID()
+	fmt.Fprintf(buf, " task list %v\n", c.taskListID.taskListName)
+	fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
+	fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
+	fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
+	fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
+
+	return buf.String()
+}
+
+// completeTask marks a task as processed. If this task was synchronously matched, a notification
+// is sent in the syncMatch response channel to be picked by addTask goroutine. If this task was
+// created by taskReader (i.e. backlog from db):
+//   - it is deleted from the database when err is nil
+//   - new task is created and current task is deleted when err is not nil
+func (c *taskListManagerImpl) completeTask(task *internalTask, err error) {
+	if task.syncResponseCh != nil {
+		// It is OK to succeed task creation as it was already completed
+		task.syncResponseCh <- err
+		return
+	}
+
+	if err != nil {
+		// failed to start the task.
+		// We cannot just remove it from persistence because then it will be lost.
+		// We handle this by writing the task back to persistence with a higher taskID.
+		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
+		// again the underlying reason for failing to start will be resolved.
+		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
+		// re-written to persistence frequently.
+		_, err = c.executeWithRetry(func() (interface{}, error) {
+			return c.taskWriter.appendTask(&task.workflowExecution, task.info)
+		})
+
+		if err != nil {
+			// OK, we also failed to write to persistence.
+			// This should only happen in very extreme cases where persistence is completely down.
+			// We still can't lose the old task so we just unload the entire task list
+			c.logger.Error("Persistent store operation failure",
+				tag.StoreOperationStopTaskList,
+				tag.Error(err),
+				tag.WorkflowTaskListName(c.taskListID.taskListName),
+				tag.WorkflowTaskListType(c.taskListID.taskType))
+			c.Stop()
+			return
+		}
+		c.taskReader.Signal()
+	}
+	ackLevel := c.taskAckManager.completeTask(task.info.TaskID)
+	c.taskGC.Run(ackLevel)
 }
 
 func (c *taskListManagerImpl) renewLeaseWithRetry() (taskListState, error) {
@@ -531,82 +441,14 @@ func (c *taskListManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock,
 	return c.rangeIDToTaskIDBlock(state.rangeID), nil
 }
 
-func (c *taskListManagerImpl) String() string {
-	buf := new(bytes.Buffer)
-	if c.taskListID.taskType == persistence.TaskListTypeActivity {
-		buf.WriteString("Activity")
-	} else {
-		buf.WriteString("Decision")
-	}
-	rangeID := c.db.RangeID()
-	fmt.Fprintf(buf, " task list %v\n", c.taskListID.taskListName)
-	fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
-	fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
-
-	return buf.String()
+func (c *taskListManagerImpl) getAckLevel() (ackLevel int64) {
+	return c.taskAckManager.getAckLevel()
 }
 
-// getAllPollerInfo return poller which poll from this tasklist in last few minutes
-func (c *taskListManagerImpl) GetAllPollerInfo() []*s.PollerInfo {
-	return c.pollerHistory.getAllPollerInfo()
-}
-
-// DescribeTaskList returns information about the target tasklist, right now this API returns the
-// pollers which polled this tasklist in last few minutes and status of tasklist's ackManager
-// (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse {
-	response := &s.DescribeTaskListResponse{Pollers: c.GetAllPollerInfo()}
-	if !includeTaskListStatus {
-		return response
-	}
-
-	taskIDBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
-	response.TaskListStatus = &s.TaskListStatus{
-		ReadLevel:        common.Int64Ptr(c.taskAckManager.getReadLevel()),
-		AckLevel:         common.Int64Ptr(c.taskAckManager.getAckLevel()),
-		BacklogCountHint: common.Int64Ptr(c.taskAckManager.getBacklogCountHint()),
-		RatePerSecond:    common.Float64Ptr(c.rateLimiter.Limit()),
-		TaskIDBlock: &s.TaskIDBlock{
-			StartID: common.Int64Ptr(taskIDBlock.start),
-			EndID:   common.Int64Ptr(taskIDBlock.end),
-		},
-	}
-
-	return response
-}
-
-// Tries to match task to a poller that is already waiting on getTask.
-// When this method returns non nil response without error it is guaranteed that the task is started
-// and sent to a poller. So it not necessary to persist it.
-// Returns (nil, nil) if there is no waiting poller which indicates that task has to be persisted.
-func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
-	if !c.config.EnableSyncMatch() {
-		return nil, nil
-	}
-	// Request from the point of view of Add(Activity|Decision)Task operation.
-	// But it is getTask result from the point of view of a poll operation.
-	request := &getTaskResult{task: task, C: make(chan *syncMatchResponse, 1), syncMatch: true}
-
-	rsv := c.rateLimiter.Reserve()
-	// If we have to wait too long for reservation, better to store in task buffer and handle later.
-	if !rsv.OK() || rsv.Delay() > time.Second {
-		if rsv.OK() { // if we were indeed given a reservation, return it before we bail out
-			rsv.Cancel()
-		}
-		c.domainScope().IncCounter(metrics.SyncThrottleCounter)
-		return nil, errAddTasklistThrottled
-	}
-	time.Sleep(rsv.Delay())
-	select {
-	case c.tasksForPoll <- request: // poller goroutine picked up the task
-		r := <-request.C
-		return r.response, r.err
-	default: // no poller waiting for tasks
-		rsv.Cancel()
-		return nil, nil
-	}
+func (c *taskListManagerImpl) getTaskListKind() int {
+	// there is no need to lock here,
+	// since c.taskListKind is assigned when taskListManager been created and never changed.
+	return c.taskListKind
 }
 
 // Retry operation on transient error. On rangeID update by another process calls c.Stop().
@@ -635,97 +477,42 @@ func (c *taskListManagerImpl) executeWithRetry(
 	return
 }
 
-func (c *taskListManagerImpl) signalNewTask() {
-	var event struct{}
+func (c *taskListManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
+	childCtx, cancel := c.newChildContext(ctx, maxSyncMatchWaitTime, time.Second)
+	matched, err := c.matcher.Offer(childCtx, newInternalTask(params.taskInfo, c.completeTask, true))
+	cancel()
+	return matched, err
+}
+
+// newChildContext creates a child context with desired timeout.
+// if tailroom is non-zero, then child context timeout will be
+// the minOf(parentCtx.Deadline()-tailroom, timeout). Use this
+// method to create child context when childContext cannot use
+// all of parent's deadline but instead there is a need to leave
+// some time for parent to do some post-work
+func (c *taskListManagerImpl) newChildContext(
+	parent context.Context,
+	timeout time.Duration,
+	tailroom time.Duration,
+) (context.Context, context.CancelFunc) {
 	select {
-	case c.notifyCh <- event:
-	default: // channel already has an event, don't block
+	case <-parent.Done():
+		return parent, func() {}
+	default:
 	}
-}
-
-func (c *taskContext) RecordDecisionTaskStartedWithRetry(ctx context.Context,
-	request *h.RecordDecisionTaskStartedRequest) (resp *h.RecordDecisionTaskStartedResponse, err error) {
-	op := func() error {
-		var err error
-		resp, err = c.tlMgr.engine.historyService.RecordDecisionTaskStarted(ctx, request)
-		return err
+	deadline, ok := parent.Deadline()
+	if !ok {
+		return context.WithTimeout(parent, timeout)
 	}
-	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *s.EntityNotExistsError, *h.EventAlreadyStartedError:
-			return false
-		}
-		return true
-	})
-	return
-}
-
-func (c *taskContext) RecordActivityTaskStartedWithRetry(ctx context.Context,
-	request *h.RecordActivityTaskStartedRequest) (resp *h.RecordActivityTaskStartedResponse, err error) {
-	op := func() error {
-		var err error
-		resp, err = c.tlMgr.engine.historyService.RecordActivityTaskStarted(ctx, request)
-		return err
+	remaining := deadline.Sub(time.Now()) - tailroom
+	if remaining < timeout {
+		timeout = time.Duration(common.MaxInt64(0, int64(remaining)))
 	}
-	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *s.EntityNotExistsError, *h.EventAlreadyStartedError:
-			return false
-		}
-		return true
-	})
-	return
-}
-
-// If poll received task from addTask directly the addTask goroutine is notified about start task result.
-// If poll received task from persistence then task is deleted from it if no error was reported.
-func (c *taskContext) completeTask(err error) {
-	tlMgr := c.tlMgr
-	tlMgr.logger.Debug(fmt.Sprintf("completeTask task taskList=%v, taskID=%v, err=%v",
-		tlMgr.taskListID.taskListName, c.info.TaskID, err))
-	if c.syncResponseCh != nil {
-		// It is OK to succeed task creation as it was already completed
-		c.syncResponseCh <- &syncMatchResponse{
-			response: &persistence.CreateTasksResponse{}, err: err}
-		return
-	}
-
-	if err != nil {
-		// failed to start the task.
-		// We cannot just remove it from persistence because then it will be lost.
-		// We handle this by writing the task back to persistence with a higher taskID.
-		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
-		// again the underlying reason for failing to start will be resolved.
-		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
-		// re-written to persistence frequently.
-		_, err = tlMgr.executeWithRetry(func() (interface{}, error) {
-			return tlMgr.taskWriter.appendTask(&c.workflowExecution, c.info)
-		})
-
-		if err != nil {
-			// OK, we also failed to write to persistence.
-			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task so we just unload the entire task list
-			tlMgr.logger.Error("Persistent store operation failure",
-				tag.StoreOperationStopTaskList,
-				tag.Error(err),
-				tag.WorkflowTaskListName(tlMgr.taskListID.taskListName),
-				tag.WorkflowTaskListType(tlMgr.taskListID.taskType))
-			tlMgr.Stop()
-			return
-		}
-		tlMgr.signalNewTask()
-	}
-
-	tlMgr.completeTaskPoll(c.info.TaskID)
+	return context.WithTimeout(parent, timeout)
 }
 
 func createServiceBusyError(msg string) *s.ServiceBusyError {
 	return &s.ServiceBusyError{Message: msg}
-}
-
-func (c *taskListManagerImpl) isTaskAddedRecently(lastAddTime time.Time) bool {
-	return time.Now().Sub(lastAddTime) <= c.config.MaxTasklistIdleTime()
 }
 
 func (c *taskListManagerImpl) domainScope() metrics.Scope {

@@ -129,7 +129,7 @@ func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivity
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	syncMatch, err := h.engine.AddActivityTask(addRequest)
+	syncMatch, err := h.engine.AddActivityTask(ctx, addRequest)
 	if syncMatch {
 		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
 	}
@@ -149,7 +149,7 @@ func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecision
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	syncMatch, err := h.engine.AddDecisionTask(addRequest)
+	syncMatch, err := h.engine.AddDecisionTask(ctx, addRequest)
 	if syncMatch {
 		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
 	}

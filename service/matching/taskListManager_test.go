@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"context"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -44,9 +46,15 @@ const _minBurst = 10000
 
 func TestDeliverBufferTasks(t *testing.T) {
 	tests := []func(tlm *taskListManagerImpl){
-		func(tlm *taskListManagerImpl) { close(tlm.taskBuffer) },
-		func(tlm *taskListManagerImpl) { close(tlm.deliverBufferShutdownCh) },
-		func(tlm *taskListManagerImpl) { tlm.cancelFunc() },
+		func(tlm *taskListManagerImpl) { close(tlm.taskReader.taskBuffer) },
+		func(tlm *taskListManagerImpl) { close(tlm.taskReader.dispatcherShutdownC) },
+		func(tlm *taskListManagerImpl) {
+			rps := 0.1
+			tlm.matcher.UpdateRatelimit(&rps)
+			tlm.taskReader.taskBuffer <- &persistence.TaskInfo{}
+			tlm.matcher.ratelimit(context.Background()) // consume the token
+			tlm.taskReader.cancelFunc()
+		},
 	}
 	for _, test := range tests {
 		tlm := createTestTaskListManager()
@@ -54,25 +62,25 @@ func TestDeliverBufferTasks(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tlm.deliverBufferTasksForPoll()
+			tlm.taskReader.dispatchBufferedTasks()
 		}()
 		test(tlm)
-		// deliverBufferTasksForPoll should stop after invocation of the test function
+		// dispatchBufferedTasks should stop after invocation of the test function
 		wg.Wait()
 	}
 }
 
 func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	tlm := createTestTaskListManager()
-	tlm.taskBuffer <- &persistence.TaskInfo{}
+	tlm.taskReader.taskBuffer <- &persistence.TaskInfo{}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		tlm.deliverBufferTasksForPoll()
+		tlm.taskReader.dispatchBufferedTasks()
 		wg.Done()
 	}()
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	close(tlm.deliverBufferShutdownCh)
+	tlm.taskReader.cancelFunc()
 	wg.Wait()
 }
 
@@ -111,10 +119,10 @@ func createTestTaskListManagerWithConfig(cfg *Config) *taskListManagerImpl {
 
 func TestIsTaskAddedRecently(t *testing.T) {
 	tlm := createTestTaskListManager()
-	require.True(t, tlm.isTaskAddedRecently(time.Now()))
-	require.False(t, tlm.isTaskAddedRecently(time.Now().Add(-tlm.config.MaxTasklistIdleTime())))
-	require.True(t, tlm.isTaskAddedRecently(time.Now().Add(1*time.Second)))
-	require.False(t, tlm.isTaskAddedRecently(time.Time{}))
+	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now()))
+	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(-tlm.config.MaxTasklistIdleTime())))
+	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().Add(1*time.Second)))
+	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Time{}))
 }
 
 func TestDescribeTaskList(t *testing.T) {
@@ -177,7 +185,8 @@ func TestDescribeTaskList(t *testing.T) {
 func tlMgrStartWithoutNotifyEvent(tlm *taskListManagerImpl) {
 	// mimic tlm.Start() but avoid calling notifyEvent
 	tlm.startWG.Done()
-	go tlm.getTasksPump()
+	go tlm.taskReader.dispatchBufferedTasks()
+	go tlm.taskReader.getTasksPump()
 }
 
 func TestCheckIdleTaskList(t *testing.T) {
@@ -204,7 +213,7 @@ func TestCheckIdleTaskList(t *testing.T) {
 	tlm = createTestTaskListManagerWithConfig(cfg)
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
-	tlm.signalNewTask()
+	tlm.taskReader.Signal()
 	time.Sleep(20 * time.Millisecond)
 	require.Equal(t, int32(0), tlm.stopped)
 	tlm.Stop()
