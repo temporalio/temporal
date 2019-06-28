@@ -747,7 +747,8 @@ func createTransferTasks(
 
 		case p.TransferTaskTypeCloseExecution,
 			p.TransferTaskTypeRecordWorkflowStarted,
-			p.TransferTaskTypeResetWorkflow:
+			p.TransferTaskTypeResetWorkflow,
+			p.TransferTaskTypeUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:

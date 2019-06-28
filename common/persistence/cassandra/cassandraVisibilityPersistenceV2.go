@@ -114,6 +114,11 @@ func (v *cassandraVisibilityPersistenceV2) RecordWorkflowExecutionClosed(
 	return v.persistence.RecordWorkflowExecutionClosed(request)
 }
 
+func (v *cassandraVisibilityPersistenceV2) UpsertWorkflowExecution(
+	request *p.InternalUpsertWorkflowExecutionRequest) error {
+	return v.persistence.UpsertWorkflowExecution(request)
+}
+
 func (v *cassandraVisibilityPersistenceV2) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	return v.persistence.ListOpenWorkflowExecutions(request)

@@ -827,7 +827,8 @@ func (e *mutableStateBuilder) shouldBufferEvent(eventType workflow.EventType) bo
 		workflow.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
 		workflow.EventTypeMarkerRecorded,
 		workflow.EventTypeStartChildWorkflowExecutionInitiated,
-		workflow.EventTypeSignalExternalWorkflowExecutionInitiated:
+		workflow.EventTypeSignalExternalWorkflowExecutionInitiated,
+		workflow.EventTypeUpsertWorkflowSearchAttributes:
 		// do not buffer event if event is directly generated from a corresponding decision
 
 		// sanity check there is no decision on the fly
@@ -2658,6 +2659,39 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 	e.pendingSignalInfoIDs[initiatedEventID] = si
 	e.updateSignalInfos[si] = struct{}{}
 	return si, nil
+}
+
+func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
+	decisionCompletedEventID int64,
+	request *workflow.UpsertWorkflowSearchAttributesDecisionAttributes,
+) (*workflow.HistoryEvent, error) {
+
+	opTag := tag.WorkflowActionUpsertWorkflowSearchAttributes
+	if err := e.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+
+	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(decisionCompletedEventID, request)
+	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
+	return event, nil
+}
+
+func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
+	event *workflow.HistoryEvent) {
+	upsertSearchAttr := event.UpsertWorkflowSearchAttributesEventAttributes.GetSearchAttributes().GetIndexedFields()
+	currentSearchAttr := e.GetExecutionInfo().SearchAttributes
+
+	e.executionInfo.SearchAttributes = mergeMapOfByteArray(currentSearchAttr, upsertSearchAttr)
+}
+
+func mergeMapOfByteArray(current, upsert map[string][]byte) map[string][]byte {
+	if current == nil {
+		current = make(map[string][]byte)
+	}
+	for k, v := range upsert {
+		current[k] = v
+	}
+	return current
 }
 
 func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(

@@ -84,6 +84,7 @@ type (
 		AddTimerCanceledEvent(int64, *workflow.CancelTimerDecisionAttributes, string) (*workflow.HistoryEvent, error)
 		AddTimerFiredEvent(int64, string) (*workflow.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo, error)
+		AddUpsertWorkflowSearchAttributesEvent(int64, *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input []byte, identity string) (*workflow.HistoryEvent, error)
@@ -182,6 +183,7 @@ type (
 		ReplicateTimerFiredEvent(*workflow.HistoryEvent) error
 		ReplicateTimerStartedEvent(*workflow.HistoryEvent) (*persistence.TimerInfo, error)
 		ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error)
+		ReplicateUpsertWorkflowSearchAttributesEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent) error

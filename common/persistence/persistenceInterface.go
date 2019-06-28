@@ -127,6 +127,7 @@ type (
 		GetName() string
 		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
+		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -563,6 +564,20 @@ type (
 		Status             workflow.WorkflowExecutionCloseStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
+	}
+
+	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
+	InternalUpsertWorkflowExecutionRequest struct {
+		DomainUUID         string
+		WorkflowID         string
+		RunID              string
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		WorkflowTimeout    int64
+		TaskID             int64
+		Memo               *DataBlob
+		SearchAttributes   map[string][]byte
 	}
 
 	// InternalDomainConfig describes the domain configuration

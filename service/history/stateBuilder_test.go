@@ -2428,3 +2428,42 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCancelRequested
 	s.Empty(s.stateBuilder.newRunTimerTasks)
 	s.Empty(s.stateBuilder.newRunTransferTasks)
 }
+
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttributes() {
+	version := int64(1)
+	requestID := uuid.New()
+	domainID := validDomainID
+	execution := shared.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(validRunID),
+	}
+
+	now := time.Now()
+	evenType := shared.EventTypeUpsertWorkflowSearchAttributes
+	event := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(130),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: &evenType,
+		UpsertWorkflowSearchAttributesEventAttributes: &shared.UpsertWorkflowSearchAttributesEventAttributes{},
+	}
+	s.mockMutableState.On("ReplicateUpsertWorkflowSearchAttributesEvent", event).Return(nil).Once()
+	s.mockUpdateVersion(event)
+	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
+
+	s.mockMutableState.On("ClearStickyness").Once()
+	_, _, _, err := s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil, 0, 0)
+	s.Nil(err)
+
+	s.Empty(s.stateBuilder.timerTasks)
+	s.Equal(1, len(s.stateBuilder.transferTasks))
+	s.Empty(s.stateBuilder.newRunTimerTasks)
+	s.Empty(s.stateBuilder.newRunTransferTasks)
+}
+
+func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
+	eventTypes := shared.EventType_Values()
+	s.Equal(42, len(eventTypes), "If you see this error, you are adding new event type. "+
+		"Before updating the number to make this test pass, please make sure you update stateBuilderImpl.applyEvents method "+
+		"to handle the new decision type. Otherwise cross dc will not work on the new event.")
+}

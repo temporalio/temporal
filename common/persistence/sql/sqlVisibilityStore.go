@@ -103,6 +103,10 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 	return nil
 }
 
+func (s *sqlVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
+	return p.NewOperationNotSupportErrorForVis()
+}
+
 func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	return s.listWorkflowExecutions("ListOpenWorkflowExecutions", request.NextPageToken, request.EarliestStartTime, request.LatestStartTime,
 		func(readLevel *visibilityPageToken) ([]sqldb.VisibilityRow, error) {

@@ -21,14 +21,16 @@
 package history
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
+	"testing"
 )
 
 type (
@@ -60,10 +62,17 @@ func (s *decisionAttrValidatorSuite) TearDownSuite() {
 
 func (s *decisionAttrValidatorSuite) SetupTest() {
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.maxIDLengthLimit = 1000
+	config := &Config{
+		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
+		ValidSearchAttributes:             dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByDomain(100),
+		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByDomain(2 * 1024),
+		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByDomain(40 * 1024),
+	}
 	s.validator = newDecisionAttrValidator(
 		s.mockDomainCache,
-		s.maxIDLengthLimit,
+		config,
+		log.NewNoop(),
 	)
 }
 
@@ -113,6 +122,26 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 
 	attributes.Input = []byte("test input")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	s.Nil(err)
+}
+
+func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
+	domainName := "testDomain"
+	var attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes
+
+	err := s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	s.EqualError(err, "BadRequestError{Message: UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.}")
+
+	attributes = &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	s.EqualError(err, "BadRequestError{Message: SearchAttributes is not set on decision.}")
+
+	attributes.SearchAttributes = &workflow.SearchAttributes{}
+	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	s.EqualError(err, "BadRequestError{Message: IndexedFields is empty on decision.}")
+
+	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
+	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.Nil(err)
 }
 

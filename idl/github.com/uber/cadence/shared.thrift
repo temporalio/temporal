@@ -131,6 +131,7 @@ enum DecisionType {
   ContinueAsNewWorkflowExecution,
   StartChildWorkflowExecution,
   SignalExternalWorkflowExecution,
+  UpsertWorkflowSearchAttributes,
 }
 
 enum EventType {
@@ -175,6 +176,7 @@ enum EventType {
   SignalExternalWorkflowExecutionInitiated,
   SignalExternalWorkflowExecutionFailed,
   ExternalWorkflowExecutionSignaled,
+  UpsertWorkflowSearchAttributes,
 }
 
 enum DecisionTaskFailedCause {
@@ -200,6 +202,7 @@ enum DecisionTaskFailedCause {
   RESET_WORKFLOW,
   BAD_BINARY,
   SCHEDULE_ACTIVITY_DUPLICATE_ID,
+  BAD_SEARCH_ATTRIBUTES,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {
@@ -396,6 +399,10 @@ struct SignalExternalWorkflowExecutionDecisionAttributes {
   60: optional bool childWorkflowOnly
 }
 
+struct UpsertWorkflowSearchAttributesDecisionAttributes {
+  10: optional SearchAttributes searchAttributes
+}
+
 struct RecordMarkerDecisionAttributes {
   10: optional string markerName
   20: optional binary details
@@ -448,6 +455,7 @@ struct Decision {
   90:  optional ContinueAsNewWorkflowExecutionDecisionAttributes continueAsNewWorkflowExecutionDecisionAttributes
   100: optional StartChildWorkflowExecutionDecisionAttributes startChildWorkflowExecutionDecisionAttributes
   110: optional SignalExternalWorkflowExecutionDecisionAttributes signalExternalWorkflowExecutionDecisionAttributes
+  120: optional UpsertWorkflowSearchAttributesDecisionAttributes upsertWorkflowSearchAttributesDecisionAttributes
 }
 
 struct WorkflowExecutionStartedEventAttributes {
@@ -736,6 +744,11 @@ struct ExternalWorkflowExecutionSignaledEventAttributes {
   40: optional binary control
 }
 
+struct UpsertWorkflowSearchAttributesEventAttributes {
+  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  20: optional SearchAttributes searchAttributes
+}
+
 struct StartChildWorkflowExecutionInitiatedEventAttributes {
   10:  optional string domain
   20:  optional string workflowId
@@ -863,6 +876,7 @@ struct HistoryEvent {
   420: optional SignalExternalWorkflowExecutionInitiatedEventAttributes signalExternalWorkflowExecutionInitiatedEventAttributes
   430: optional SignalExternalWorkflowExecutionFailedEventAttributes signalExternalWorkflowExecutionFailedEventAttributes
   440: optional ExternalWorkflowExecutionSignaledEventAttributes externalWorkflowExecutionSignaledEventAttributes
+  450: optional UpsertWorkflowSearchAttributesEventAttributes upsertWorkflowSearchAttributesEventAttributes
 }
 
 struct History {

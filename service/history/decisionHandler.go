@@ -50,19 +50,20 @@ type (
 	}
 
 	decisionHandlerImpl struct {
-		currentClusterName string
-		config             *Config
-		shard              ShardContext
-		timeSource         clock.TimeSource
-		historyEngine      *historyEngineImpl
-		domainCache        cache.DomainCache
-		historyCache       *historyCache
-		txProcessor        transferQueueProcessor
-		timerProcessor     timerQueueProcessor
-		tokenSerializer    common.TaskTokenSerializer
-		metricsClient      metrics.Client
-		logger             log.Logger
-		throttledLogger    log.Logger
+		currentClusterName    string
+		config                *Config
+		shard                 ShardContext
+		timeSource            clock.TimeSource
+		historyEngine         *historyEngineImpl
+		domainCache           cache.DomainCache
+		historyCache          *historyCache
+		txProcessor           transferQueueProcessor
+		timerProcessor        timerQueueProcessor
+		tokenSerializer       common.TaskTokenSerializer
+		metricsClient         metrics.Client
+		logger                log.Logger
+		throttledLogger       log.Logger
+		decisionAttrValidator *decisionAttrValidator
 	}
 )
 
@@ -81,6 +82,8 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		metricsClient:      historyEngine.metricsClient,
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
+		decisionAttrValidator: newDecisionAttrValidator(historyEngine.shard.GetDomainCache(),
+			historyEngine.config, historyEngine.logger),
 	}
 }
 
@@ -377,10 +380,6 @@ Update_History_Loop:
 			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
 		} else {
 
-			decisionAttrValidator := newDecisionAttrValidator(
-				handler.domainCache,
-				handler.config.MaxIDLengthLimit(),
-			)
 			decisionBlobSizeChecker := newDecisionBlobSizeChecker(
 				handler.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name),
 				handler.config.BlobSizeLimitError(domainEntry.GetInfo().Name),
@@ -396,7 +395,7 @@ Update_History_Loop:
 				eventStoreVersion,
 				domainEntry,
 				msBuilder,
-				decisionAttrValidator,
+				handler.decisionAttrValidator,
 				decisionBlobSizeChecker,
 				handler.logger,
 				timerBuilderProvider,

@@ -138,7 +138,7 @@ func (d *cassandraPersistence) applyWorkflowMutationBatch(
 	)
 
 	// transfer / replication / timer tasks
-	if err := applyTasks(
+	return applyTasks(
 		batch,
 		shardID,
 		domainID,
@@ -147,11 +147,7 @@ func (d *cassandraPersistence) applyWorkflowMutationBatch(
 		workflowMutation.TransferTasks,
 		workflowMutation.ReplicationTasks,
 		workflowMutation.TimerTasks,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func applyWorkflowSnapshotBatchAsReset(
@@ -260,7 +256,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	)
 
 	// transfer / replication / timer tasks
-	if err := applyTasks(
+	return applyTasks(
 		batch,
 		shardID,
 		domainID,
@@ -269,11 +265,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func applyWorkflowSnapshotBatchAsNew(
@@ -372,7 +364,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	)
 
 	// transfer / replication / timer tasks
-	if err := applyTasks(
+	return applyTasks(
 		batch,
 		shardID,
 		domainID,
@@ -381,11 +373,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.TimerTasks,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func createExecution(
@@ -786,18 +774,14 @@ func applyTasks(
 		return err
 	}
 
-	if err := createTimerTasks(
+	return createTimerTasks(
 		batch,
 		timerTasks,
 		shardID,
 		domainID,
 		workflowID,
 		runID,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func createTransferTasks(
@@ -857,7 +841,8 @@ func createTransferTasks(
 
 		case p.TransferTaskTypeCloseExecution,
 			p.TransferTaskTypeRecordWorkflowStarted,
-			p.TransferTaskTypeResetWorkflow:
+			p.TransferTaskTypeResetWorkflow,
+			p.TransferTaskTypeUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:

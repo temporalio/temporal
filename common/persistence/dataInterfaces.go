@@ -101,6 +101,7 @@ const (
 	TransferTaskTypeSignalExecution
 	TransferTaskTypeRecordWorkflowStarted
 	TransferTaskTypeResetWorkflow
+	TransferTaskTypeUpsertWorkflowSearchAttributes
 )
 
 // Types of replication tasks
@@ -468,6 +469,13 @@ type (
 		TargetChildWorkflowOnly bool
 		InitiatedID             int64
 		Version                 int64
+	}
+
+	// UpsertWorkflowSearchAttributesTask identifies a transfer task for upsert search attributes
+	UpsertWorkflowSearchAttributesTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
 	}
 
 	// StartChildExecutionTask identifies a transfer task for starting child execution
@@ -1990,6 +1998,41 @@ func (u *SignalExecutionTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (u *SignalExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
+	u.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the upsert search attributes transfer task
+func (u *UpsertWorkflowSearchAttributesTask) GetType() int {
+	return TransferTaskTypeUpsertWorkflowSearchAttributes
+}
+
+// GetVersion returns the version of the upsert search attributes transfer task
+func (u *UpsertWorkflowSearchAttributesTask) GetVersion() int64 {
+	return u.Version
+}
+
+// SetVersion returns the version of the upsert search attributes transfer task
+func (u *UpsertWorkflowSearchAttributesTask) SetVersion(version int64) {
+	u.Version = version
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (u *UpsertWorkflowSearchAttributesTask) GetTaskID() int64 {
+	return u.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (u *UpsertWorkflowSearchAttributesTask) SetTaskID(id int64) {
+	u.TaskID = id
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
+func (u *UpsertWorkflowSearchAttributesTask) GetVisibilityTimestamp() time.Time {
+	return u.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (u *UpsertWorkflowSearchAttributesTask) SetVisibilityTimestamp(timestamp time.Time) {
 	u.VisibilityTimestamp = timestamp
 }
 

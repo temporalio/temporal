@@ -176,6 +176,37 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
+func (t *transferQueueProcessorBase) upsertWorkflowExecution(
+	domainID string, execution workflow.WorkflowExecution, workflowTypeName string, startTimeUnixNano,
+	executionTimeUnixNano int64, workflowTimeout int32, taskID int64, visibilityMemo *workflow.Memo,
+	searchAttributes map[string][]byte) error {
+
+	domain := defaultDomainName
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return err
+		}
+	} else {
+		domain = domainEntry.GetInfo().Name
+	}
+
+	request := &persistence.UpsertWorkflowExecutionRequest{
+		DomainUUID:         domainID,
+		Domain:             domain,
+		Execution:          execution,
+		WorkflowTypeName:   workflowTypeName,
+		StartTimestamp:     startTimeUnixNano,
+		ExecutionTimestamp: executionTimeUnixNano,
+		WorkflowTimeout:    int64(workflowTimeout),
+		TaskID:             taskID,
+		Memo:               visibilityMemo,
+		SearchAttributes:   searchAttributes,
+	}
+
+	return t.visibilityMgr.UpsertWorkflowExecution(request)
+}
+
 func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,

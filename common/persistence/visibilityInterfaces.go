@@ -64,6 +64,20 @@ type (
 		SearchAttributes   map[string][]byte
 	}
 
+	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
+	UpsertWorkflowExecutionRequest struct {
+		DomainUUID         string
+		Domain             string // not persisted, used as config filter key
+		Execution          s.WorkflowExecution
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
+		TaskID             int64 // not persisted, used as condition update version for ES
+		Memo               *s.Memo
+		SearchAttributes   map[string][]byte
+	}
+
 	// ListWorkflowExecutionsRequest is used to list executions in a domain
 	ListWorkflowExecutionsRequest struct {
 		DomainUUID        string
@@ -155,6 +169,7 @@ type (
 		GetName() string
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
+		UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)

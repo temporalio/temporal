@@ -165,6 +165,9 @@ func (handler *decisionTaskHandlerImpl) handleDecision(decision *workflow.Decisi
 	case workflow.DecisionTypeStartChildWorkflowExecution:
 		return handler.handleDecisionStartChildWorkflow(decision.StartChildWorkflowExecutionDecisionAttributes)
 
+	case workflow.DecisionTypeUpsertWorkflowSearchAttributes:
+		return handler.handleDecisionUpsertWorkflowSearchAttributes(decision.UpsertWorkflowSearchAttributesDecisionAttributes)
+
 	default:
 		return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", decision.GetDecisionType())}
 	}
@@ -835,6 +838,71 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 		InitiatedID:             wfSignalReqEvent.GetEventId(),
 	})
 	return nil
+}
+
+func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttributes(
+	attr *workflow.UpsertWorkflowSearchAttributesDecisionAttributes,
+) error {
+
+	handler.metricsClient.IncCounter(
+		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.DecisionTypeUpsertWorkflowSearchAttributesCounter,
+	)
+
+	// get domain name
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	domainID := executionInfo.DomainID
+	domainEntry, err := handler.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Unable to get domain for domainID: %v.", domainID),
+		}
+	}
+	domainName := domainEntry.GetInfo().Name
+
+	// valid search attributes for upsert
+	if err := handler.validateDecisionAttr(
+		func() error {
+			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(
+				domainName,
+				attr,
+			)
+		},
+		workflow.DecisionTaskFailedCauseBadSearchAttributes,
+	); err != nil || handler.stopProcessing {
+		return err
+	}
+
+	// blob size limit check
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
+		convertSearchAttributesToByteArray(attr.GetSearchAttributes().GetIndexedFields()),
+		"UpsertWorkflowSearchAttributesDecisionAttributes exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
+		handler.decisionTaskCompletedID, attr,
+	)
+	if err != nil {
+		return &workflow.InternalServiceError{Message: "Unable to add UpsertWorkflowSearchAttributesEvent."}
+	}
+
+	handler.transferTasks = append(handler.transferTasks, &persistence.UpsertWorkflowSearchAttributesTask{})
+
+	return nil
+}
+
+func convertSearchAttributesToByteArray(fields map[string][]byte) []byte {
+	result := make([]byte, 0)
+
+	for k, v := range fields {
+		result = append(result, []byte(k)...)
+		result = append(result, v...)
+	}
+	return result
 }
 
 func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(

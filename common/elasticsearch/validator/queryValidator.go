@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package validator
 
 import (
 	"errors"
 	"strings"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/xwb1989/sqlparser"
@@ -50,7 +51,7 @@ func (qv *VisibilityQueryValidator) ValidateListRequestForQuery(listRequest *wor
 	if err != nil {
 		return err
 	}
-	listRequest.Query = StringPtr(newQuery)
+	listRequest.Query = common.StringPtr(newQuery)
 	return nil
 }
 
@@ -62,7 +63,7 @@ func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *w
 	if err != nil {
 		return err
 	}
-	countRequest.Query = StringPtr(newQuery)
+	countRequest.Query = common.StringPtr(newQuery)
 	return nil
 }
 
@@ -72,7 +73,7 @@ func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClau
 	if len(whereClause) != 0 {
 		var sqlQuery string
 		whereClause := strings.TrimSpace(whereClause)
-		if IsJustOrderByClause(whereClause) { // just order by
+		if common.IsJustOrderByClause(whereClause) { // just order by
 			sqlQuery = "SELECT * FROM dummy " + whereClause
 		} else {
 			sqlQuery = "SELECT * FROM dummy WHERE " + whereClause
@@ -155,7 +156,7 @@ func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr) 
 		return errors.New("invalid comparison expression")
 	}
 	colNameStr := colName.Name.String()
-	if qv.IsValidSearchAttributes(colNameStr) {
+	if qv.isValidSearchAttributes(colNameStr) {
 		if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
 			comparisonExpr.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
@@ -175,7 +176,7 @@ func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr) error
 		return errors.New("invalid range expression")
 	}
 	colNameStr := colName.Name.String()
-	if qv.IsValidSearchAttributes(colNameStr) {
+	if qv.isValidSearchAttributes(colNameStr) {
 		if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
 			rangeCond.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
@@ -195,7 +196,7 @@ func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderB
 			return errors.New("invalid order by expression")
 		}
 		colNameStr := colName.Name.String()
-		if qv.IsValidSearchAttributes(colNameStr) {
+		if qv.isValidSearchAttributes(colNameStr) {
 			if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
 				orderByExpr.Expr = &sqlparser.ColName{
 					Metadata:  colName.Metadata,
@@ -210,8 +211,8 @@ func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderB
 	return nil
 }
 
-// IsValidSearchAttributes return true if key is registered
-func (qv *VisibilityQueryValidator) IsValidSearchAttributes(key string) bool {
+// isValidSearchAttributes return true if key is registered
+func (qv *VisibilityQueryValidator) isValidSearchAttributes(key string) bool {
 	validAttr := qv.validSearchAttributes()
 	_, isValidKey := validAttr[key]
 	return isValidKey

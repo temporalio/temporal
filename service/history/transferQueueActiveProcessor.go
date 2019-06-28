@@ -247,11 +247,19 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo, shouldPr
 			err = t.processRecordWorkflowStarted(task)
 		}
 		return metrics.TransferActiveTaskRecordWorkflowStartedScope, err
+
 	case persistence.TransferTaskTypeResetWorkflow:
 		if shouldProcessTask {
 			err = t.processResetWorkflow(task)
 		}
 		return metrics.TransferActiveTaskResetWorkflowScope, err
+
+	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+		if shouldProcessTask {
+			err = t.processUpsertWorkflowSearchAttributes(task)
+		}
+		return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope, err
+
 	default:
 		return metrics.TransferActiveQueueProcessorScope, errUnknownTransferTask
 	}
@@ -838,6 +846,14 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 }
 
 func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *persistence.TransferTaskInfo) (retError error) {
+	return t.processRecordWorkflowStartedOrUpsertHelper(task, true)
+}
+
+func (t *transferQueueActiveProcessorImpl) processUpsertWorkflowSearchAttributes(task *persistence.TransferTaskInfo) (retError error) {
+	return t.processRecordWorkflowStartedOrUpsertHelper(task, false)
+}
+
+func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(task *persistence.TransferTaskInfo, isRecordStart bool) (retError error) {
 	var err error
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
@@ -859,11 +875,15 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 		return nil
 	}
 
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetStartVersion(), task.Version, task)
-	if err != nil {
-		return err
-	} else if !ok {
-		return nil
+	// verify task version for RecordWorkflowStarted.
+	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
+	if isRecordStart {
+		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetStartVersion(), task.Version, task)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
 	}
 
 	executionInfo := msBuilder.GetExecutionInfo()
@@ -876,13 +896,32 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *pe
 	}
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getVisibilityMemo(startEvent)
-	searchAttr := executionInfo.SearchAttributes
+	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(),
+
+	if isRecordStart {
+		return t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(),
+			workflowTimeout, task.GetTaskID(), visibilityMemo, searchAttr)
+	}
+	return t.upsertWorkflowExecution(task.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(),
 		workflowTimeout, task.GetTaskID(), visibilityMemo, searchAttr)
+}
+
+func copySearchAttributes(input map[string][]byte) map[string][]byte {
+	if input == nil {
+		return nil
+	}
+
+	result := make(map[string][]byte)
+	for k, v := range input {
+		val := make([]byte, len(v))
+		copy(val, v)
+		result[k] = val
+	}
+	return result
 }
 
 func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistence.TransferTaskInfo) (retError error) {
