@@ -1140,14 +1140,10 @@ func updateActivityInfos(
 ) error {
 
 	for _, a := range activityInfos {
-		encoding := common.EncodingTypeUnknown
-		if a.ScheduledEvent != nil {
-			encoding = common.EncodingType(a.ScheduledEvent.GetEncoding())
-		}
-		scheduledEventData, _ := p.FromDataBlob(a.ScheduledEvent)
-		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
-		if a.ScheduledEvent != nil && a.StartedEvent != nil && a.StartedEvent.Encoding != a.ScheduledEvent.Encoding {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+		scheduledEventData, scheduleEncoding := p.FromDataBlob(a.ScheduledEvent)
+		startedEventData, startEncoding := p.FromDataBlob(a.StartedEvent)
+		if a.StartedEvent != nil && scheduleEncoding != startEncoding {
+			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", scheduleEncoding, startEncoding))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
@@ -1181,7 +1177,7 @@ func updateActivityInfos(
 			a.ExpirationTime,
 			a.MaximumAttempts,
 			a.NonRetriableErrors,
-			encoding,
+			scheduleEncoding,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -1333,19 +1329,17 @@ func updateChildExecutionInfos(
 ) error {
 
 	for _, c := range childExecutionInfos {
-		initiatedEventData, encoding := p.FromDataBlob(c.InitiatedEvent)
-
-		var startedEventData []byte
-		if c.StartedEvent != nil {
-			startedEventData = c.StartedEvent.Data
-			if string(c.StartedEvent.GetEncoding()) != encoding {
-				return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", encoding, c.StartedEvent.GetEncoding()))
-			}
+		initiatedEventData, initiatedEncoding := p.FromDataBlob(c.InitiatedEvent)
+		startedEventData, startEncoding := p.FromDataBlob(c.StartedEvent)
+		if c.StartedEvent != nil && initiatedEncoding != startEncoding {
+			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", initiatedEncoding, startEncoding))
 		}
+
 		startedRunID := emptyRunID
 		if c.StartedRunID != "" {
 			startedRunID = c.StartedRunID
 		}
+
 		batch.Query(templateUpdateChildExecutionInfoQuery,
 			c.InitiatedID,
 			c.Version,
@@ -1357,7 +1351,7 @@ func updateChildExecutionInfos(
 			startedRunID,
 			startedEventData,
 			c.CreateRequestID,
-			encoding,
+			initiatedEncoding,
 			c.DomainName,
 			c.WorkflowTypeName,
 			shardID,
@@ -2143,14 +2137,14 @@ func resetActivityInfoMap(
 
 	aMap := make(map[int64]map[string]interface{})
 	for _, a := range activityInfos {
-		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+		scheduledEventData, scheduleEncoding := p.FromDataBlob(a.ScheduledEvent)
+		startedEventData, startEncoding := p.FromDataBlob(a.StartedEvent)
+		if a.StartedEvent != nil && scheduleEncoding != startEncoding {
+			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", scheduleEncoding, startEncoding))
 		}
-		scheduledEventData, encoding := p.FromDataBlob(a.ScheduledEvent)
-		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
 		aInfo := make(map[string]interface{})
 		aInfo["version"] = a.Version
-		aInfo["event_data_encoding"] = encoding
+		aInfo["event_data_encoding"] = scheduleEncoding
 		aInfo["schedule_id"] = a.ScheduleID
 		aInfo["scheduled_event_batch_id"] = a.ScheduledEventBatchID
 		aInfo["scheduled_event"] = scheduledEventData
@@ -2212,22 +2206,19 @@ func resetChildExecutionInfoMap(
 	cMap := make(map[int64]map[string]interface{})
 	for _, c := range childExecutionInfos {
 		cInfo := make(map[string]interface{})
-		startedEvent := c.StartedEvent
-		if startedEvent != nil {
-			if startedEvent.Encoding != c.InitiatedEvent.Encoding {
-				return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, startedEvent.Encoding))
-			}
-			cInfo["started_event"] = startedEvent.Data
-		} else {
-			cInfo["started_event"] = []byte{}
+		initiatedEventData, initiatedEncoding := p.FromDataBlob(c.InitiatedEvent)
+		startedEventData, startEncoding := p.FromDataBlob(c.StartedEvent)
+		if c.StartedEvent != nil && initiatedEncoding != startEncoding {
+			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", initiatedEncoding, startEncoding))
 		}
-		cInfo["event_data_encoding"] = c.InitiatedEvent.Encoding
 		cInfo["version"] = c.Version
+		cInfo["event_data_encoding"] = initiatedEncoding
 		cInfo["initiated_id"] = c.InitiatedID
 		cInfo["initiated_event_batch_id"] = c.InitiatedEventBatchID
-		cInfo["initiated_event"] = c.InitiatedEvent.Data
-		cInfo["create_request_id"] = c.CreateRequestID
+		cInfo["initiated_event"] = initiatedEventData
 		cInfo["started_id"] = c.StartedID
+		cInfo["started_event"] = startedEventData
+		cInfo["create_request_id"] = c.CreateRequestID
 		cInfo["started_workflow_id"] = c.StartedWorkflowID
 		startedRunID := emptyRunID
 		if c.StartedRunID != "" {

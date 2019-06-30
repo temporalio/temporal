@@ -45,11 +45,18 @@ func updateActivityInfos(
 	if len(activityInfos) > 0 {
 		rows := make([]sqldb.ActivityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
+			scheduledEvent, scheduledEncoding := persistence.FromDataBlob(v.ScheduledEvent)
+			startEvent, startEncoding := persistence.FromDataBlob(v.StartedEvent)
+
 			info := &sqlblobs.ActivityInfo{
-				ScheduledEventBatchID:         &v.ScheduledEventBatchID,
 				Version:                       &v.Version,
+				ScheduledEventBatchID:         &v.ScheduledEventBatchID,
+				ScheduledEvent:                scheduledEvent,
+				ScheduledEventEncoding:        common.StringPtr(scheduledEncoding),
 				ScheduledTimeNanos:            common.Int64Ptr(v.ScheduledTime.UnixNano()),
 				StartedID:                     &v.StartedID,
+				StartedEvent:                  startEvent,
+				StartedEventEncoding:          common.StringPtr(startEncoding),
 				StartedTimeNanos:              common.Int64Ptr(v.StartedTime.UnixNano()),
 				ActivityID:                    &v.ActivityID,
 				RequestID:                     &v.RequestID,
@@ -70,14 +77,6 @@ func updateActivityInfos(
 				RetryExpirationTimeNanos:      common.Int64Ptr(v.ExpirationTime.UnixNano()),
 				RetryMaximumAttempts:          &v.MaximumAttempts,
 				RetryNonRetryableErrors:       v.NonRetriableErrors,
-			}
-			if v.StartedEvent != nil {
-				info.StartedEvent = v.StartedEvent.Data
-				info.StartedEventEncoding = common.StringPtr(string(v.StartedEvent.Encoding))
-			}
-			if v.ScheduledEvent != nil {
-				info.ScheduledEvent = v.ScheduledEvent.Data
-				info.ScheduledEventEncoding = common.StringPtr(string(v.ScheduledEvent.Encoding))
 			}
 			blob, err := activityInfoToBlob(info)
 			if err != nil {
@@ -360,22 +359,22 @@ func updateChildExecutionInfos(
 	if len(childExecutionInfos) > 0 {
 		rows := make([]sqldb.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
-			initEvent, initEncoding := persistence.FromDataBlob(v.InitiatedEvent)
+			initiateEvent, initiateEncoding := persistence.FromDataBlob(v.InitiatedEvent)
+			startEvent, startEncoding := persistence.FromDataBlob(v.StartedEvent)
+
 			info := &sqlblobs.ChildExecutionInfo{
-				InitiatedEventBatchID:  &v.InitiatedEventBatchID,
 				Version:                &v.Version,
+				InitiatedEventBatchID:  &v.InitiatedEventBatchID,
+				InitiatedEvent:         initiateEvent,
+				InitiatedEventEncoding: &initiateEncoding,
+				StartedEvent:           startEvent,
+				StartedEventEncoding:   &startEncoding,
 				StartedID:              &v.StartedID,
 				StartedWorkflowID:      &v.StartedWorkflowID,
 				StartedRunID:           sqldb.MustParseUUID(v.StartedRunID),
-				InitiatedEvent:         initEvent,
-				InitiatedEventEncoding: &initEncoding,
 				CreateRequestID:        &v.CreateRequestID,
 				DomainName:             &v.DomainName,
 				WorkflowTypeName:       &v.WorkflowTypeName,
-			}
-			if v.StartedEvent != nil {
-				info.StartedEvent = v.StartedEvent.Data
-				info.StartedEventEncoding = common.StringPtr(string(v.StartedEvent.Encoding))
 			}
 			blob, err := childExecutionInfoToBlob(info)
 			if err != nil {
