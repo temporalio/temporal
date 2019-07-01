@@ -510,31 +510,28 @@ func (m *executionManagerImpl) ResetWorkflowExecution(
 	request *ResetWorkflowExecutionRequest,
 ) error {
 
-	currExecution, err := m.SerializeExecutionInfo(request.CurrExecutionInfo, request.Encoding)
-	if err != nil {
-		return err
-	}
 	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, request.Encoding)
 	if err != nil {
 		return err
 	}
+	var serializedUpdateWorkflowSnapshot *InternalWorkflowMutation
+	if request.CurrentWorkflowMutation != nil {
+		serializedUpdateWorkflowSnapshot, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation, request.Encoding)
+		if err != nil {
+			return err
+		}
+	}
 
 	newRequest := &InternalResetWorkflowExecutionRequest{
-		PrevRunVersion: request.PrevRunVersion,
-		PrevRunState:   request.PrevRunState,
-
-		Condition: request.Condition,
-		RangeID:   request.RangeID,
+		RangeID: request.RangeID,
 
 		BaseRunID:          request.BaseRunID,
 		BaseRunNextEventID: request.BaseRunNextEventID,
 
-		UpdateCurr:           request.UpdateCurr,
-		CurrExecutionInfo:    currExecution,
-		CurrReplicationState: request.CurrReplicationState,
-		CurrReplicationTasks: request.CurrReplicationTasks,
-		CurrTimerTasks:       request.CurrTimerTasks,
-		CurrTransferTasks:    request.CurrTransferTasks,
+		CurrentRunID:          request.CurrentRunID,
+		CurrentRunNextEventID: request.CurrentRunNextEventID,
+
+		CurrentWorkflowMutation: serializedUpdateWorkflowSnapshot,
 
 		NewWorkflowSnapshot: *serializedNewWorkflowSnapshot,
 	}

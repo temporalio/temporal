@@ -105,13 +105,12 @@ type (
 			closeTask persistence.Task,
 			cleanupTask persistence.Task,
 			newMutableState mutableState,
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			currReplicationTasks []persistence.Task,
-			insertReplicationTasks []persistence.Task,
+			newTransferTasks []persistence.Task,
+			newTimerTasks []persistence.Task,
+			currentReplicationTasks []persistence.Task,
+			newReplicationTasks []persistence.Task,
 			baseRunID string,
-			forkRunNextEventID int64,
-			prevRunVersion int64,
+			baseRunNextEventID int64,
 		) (retError error)
 		scheduleNewDecision(
 			transferTasks []persistence.Task,
@@ -380,15 +379,15 @@ func (c *workflowExecutionContextImpl) resetMutableState(
 func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	currMutableState mutableState,
 	updateCurr bool,
-	closeTask, cleanupTask persistence.Task,
+	closeTask persistence.Task,
+	cleanupTask persistence.Task,
 	newMutableState mutableState,
 	newTransferTasks []persistence.Task,
 	newTimerTasks []persistence.Task,
 	currReplicationTasks []persistence.Task,
-	insertReplicationTasks []persistence.Task,
+	newReplicationTasks []persistence.Task,
 	baseRunID string,
 	baseRunNextEventID int64,
-	prevRunVersion int64,
 ) (retError error) {
 
 	now := c.timeSource.Now()
@@ -463,26 +462,14 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		}
 	}
 
-	// NOTE: workflow_state in current record is either completed(2) or running(1), there is no 0(created)
-	prevRunState := persistence.WorkflowStateCompleted
-	if updateCurr {
-		prevRunState = persistence.WorkflowStateRunning
-	}
 	resetWFReq := &persistence.ResetWorkflowExecutionRequest{
-		PrevRunVersion: prevRunVersion,
-		PrevRunState:   prevRunState,
-
-		Condition:  c.updateCondition,
-		UpdateCurr: updateCurr,
-
 		BaseRunID:          baseRunID,
 		BaseRunNextEventID: baseRunNextEventID,
 
-		CurrExecutionInfo:    currMutableState.GetExecutionInfo(),
-		CurrReplicationState: currMutableState.GetReplicationState(),
-		CurrReplicationTasks: currReplicationTasks,
-		CurrTransferTasks:    currTransferTasks,
-		CurrTimerTasks:       currTimerTasks,
+		CurrentRunID:          currMutableState.GetExecutionInfo().RunID,
+		CurrentRunNextEventID: currMutableState.GetExecutionInfo().NextEventID,
+
+		CurrentWorkflowMutation: nil,
 
 		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
 			ExecutionInfo:    newMutableState.GetExecutionInfo(),
@@ -496,9 +483,37 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			SignalRequestedIDs:  snapshotRequest.ResetWorkflowSnapshot.SignalRequestedIDs,
 
 			TransferTasks:    newTransferTasks,
-			ReplicationTasks: insertReplicationTasks,
+			ReplicationTasks: newReplicationTasks,
 			TimerTasks:       newTimerTasks,
 		},
+	}
+
+	if updateCurr {
+		resetWFReq.CurrentWorkflowMutation = &persistence.WorkflowMutation{
+			ExecutionInfo:    currMutableState.GetExecutionInfo(),
+			ReplicationState: currMutableState.GetReplicationState(),
+
+			UpsertActivityInfos:       []*persistence.ActivityInfo{},
+			DeleteActivityInfos:       []int64{},
+			UpserTimerInfos:           []*persistence.TimerInfo{},
+			DeleteTimerInfos:          []string{},
+			UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+			DeleteChildExecutionInfo:  nil,
+			UpsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
+			DeleteRequestCancelInfo:   nil,
+			UpsertSignalInfos:         []*persistence.SignalInfo{},
+			DeleteSignalInfo:          nil,
+			UpsertSignalRequestedIDs:  []string{},
+			DeleteSignalRequestedID:   "",
+			NewBufferedEvents:         []*workflow.HistoryEvent{},
+			ClearBufferedEvents:       false,
+
+			TransferTasks:    currTransferTasks,
+			ReplicationTasks: currReplicationTasks,
+			TimerTasks:       currTimerTasks,
+
+			Condition: c.updateCondition,
+		}
 	}
 
 	return c.shard.ResetWorkflowExecution(resetWFReq)

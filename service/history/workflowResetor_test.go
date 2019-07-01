@@ -798,20 +798,20 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
-	s.True(resetReq.CurrExecutionInfo.LastEventTaskID > 0)
-	resetReq.CurrExecutionInfo.LastEventTaskID = 0
+	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
+	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
-	s.Equal(true, resetReq.UpdateCurr)
+	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = p.WorkflowStateCompleted
 	compareCurrExeInfo.CloseStatus = p.WorkflowCloseStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.HistorySize = 100
 	compareCurrExeInfo.CompletionEventBatchID = 1
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(1, len(resetReq.CurrTransferTasks))
-	s.Equal(1, len(resetReq.CurrTimerTasks))
-	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrTransferTasks[0].GetType())
-	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrTimerTasks[0].GetType())
+	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
+	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
@@ -2098,22 +2098,21 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
-	s.True(resetReq.CurrExecutionInfo.LastEventTaskID > 0)
-	resetReq.CurrExecutionInfo.LastEventTaskID = 0
+	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
+	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
-	s.Equal(true, resetReq.UpdateCurr)
-	s.Equal(p.WorkflowStateRunning, resetReq.PrevRunState)
+	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = p.WorkflowStateCompleted
 	compareCurrExeInfo.CloseStatus = p.WorkflowCloseStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.HistorySize = 100
 	compareCurrExeInfo.LastFirstEventID = 1
 	compareCurrExeInfo.CompletionEventBatchID = 1
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(1, len(resetReq.CurrTransferTasks))
-	s.Equal(1, len(resetReq.CurrTimerTasks))
-	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrTransferTasks[0].GetType())
-	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrTimerTasks[0].GetType())
+	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
+	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
@@ -2142,8 +2141,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
 	s.Equal(p.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
-	s.Equal(1, len(resetReq.CurrReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrReplicationTasks[0].GetType())
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.ReplicationTasks))
+	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
@@ -3423,11 +3422,9 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
 	s.Equal(true, ok)
-	s.Equal(false, resetReq.UpdateCurr)
-	s.Equal(p.WorkflowStateCompleted, resetReq.PrevRunState)
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(0, len(resetReq.CurrTransferTasks))
-	s.Equal(0, len(resetReq.CurrTimerTasks))
+	s.Equal(false, resetReq.CurrentWorkflowMutation != nil)
+	s.Equal(compareCurrExeInfo.RunID, resetReq.CurrentRunID)
+	s.Equal(compareCurrExeInfo.NextEventID, resetReq.CurrentRunNextEventID)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
@@ -4136,11 +4133,9 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
 	s.Equal(true, ok)
-	s.Equal(false, resetReq.UpdateCurr)
-	s.Equal(p.WorkflowStateCompleted, resetReq.PrevRunState)
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(0, len(resetReq.CurrTransferTasks))
-	s.Equal(0, len(resetReq.CurrTimerTasks))
+	s.Equal(false, resetReq.CurrentWorkflowMutation != nil)
+	s.Equal(compareCurrExeInfo.RunID, resetReq.CurrentRunID)
+	s.Equal(compareCurrExeInfo.NextEventID, resetReq.CurrentRunNextEventID)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)

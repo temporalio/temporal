@@ -429,8 +429,6 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
-	templateUpdateWorkflowExecutionConditionSuffix = ` IF next_event_id = ?`
-
 	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
 		`SET execution = ` + templateWorkflowExecutionType + `, next_event_id = ? ` +
 		`WHERE shard_id = ? ` +
@@ -439,7 +437,8 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? `
+		`and task_id = ? ` +
+		`IF next_event_id = ? `
 
 	templateUpdateWorkflowExecutionWithReplicationQuery = `UPDATE executions ` +
 		`SET execution = ` + templateWorkflowExecutionType + `, replication_state = ` + templateReplicationStateType + `, next_event_id = ? ` +
@@ -449,7 +448,8 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? `
+		`and task_id = ? ` +
+		`IF next_event_id = ? `
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
@@ -459,8 +459,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map = ?` +
@@ -480,8 +479,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetTimerInfoQuery = `UPDATE executions ` +
 		`SET timer_map = ?` +
@@ -501,8 +499,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetChildExecutionInfoQuery = `UPDATE executions ` +
 		`SET child_executions_map = ?` +
@@ -522,8 +519,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetRequestCancelInfoQuery = `UPDATE executions ` +
 		`SET request_cancel_map = ?` +
@@ -543,8 +539,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetSignalInfoQuery = `UPDATE executions ` +
 		`SET signal_map = ?` +
@@ -564,8 +559,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetSignalRequestedQuery = `UPDATE executions ` +
 		`SET signal_requested = ?` +
@@ -585,8 +579,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteBufferedEventsQuery = `UPDATE executions ` +
 		`SET buffered_events_list = [] ` +
@@ -596,8 +589,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteActivityInfoQuery = `DELETE activity_map[ ? ] ` +
 		`FROM executions ` +
@@ -607,8 +599,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteTimerInfoQuery = `DELETE timer_map[ ? ] ` +
 		`FROM executions ` +
@@ -618,8 +609,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteChildExecutionInfoQuery = `DELETE child_executions_map[ ? ] ` +
 		`FROM executions ` +
@@ -629,8 +619,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteRequestCancelInfoQuery = `DELETE request_cancel_map[ ? ] ` +
 		`FROM executions ` +
@@ -640,8 +629,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
 		`FROM executions ` +
@@ -651,8 +639,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteWorkflowExecutionMutableStateQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -673,8 +660,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateGetTransferTasksQuery = `SELECT transfer ` +
 		`FROM executions ` +
@@ -1295,7 +1281,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	shardID := d.shardID
 	executionInfo := updateWorkflow.ExecutionInfo
 
-	if err := d.applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
+	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
 		return err
 	}
 
@@ -1399,12 +1385,21 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 }
 
 func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWorkflowExecutionRequest) error {
+
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
-	currExecutionInfo := request.CurrExecutionInfo
-	currReplicationState := request.CurrReplicationState
+	shardID := d.shardID
 
+	domainID := request.NewWorkflowSnapshot.ExecutionInfo.DomainID
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+
+	baseRunID := request.BaseRunID
+	baseRunNextEventID := request.BaseRunNextEventID
+
+	currentRunID := request.CurrentRunID
+	currentRunNextEventID := request.CurrentRunNextEventID
+
+	newRunID := request.NewWorkflowSnapshot.ExecutionInfo.RunID
 	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
 	newReplicationState := request.NewWorkflowSnapshot.ReplicationState
 
@@ -1415,225 +1410,64 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		lastWriteVersion = newReplicationState.LastWriteVersion
 	}
 
-	if currReplicationState == nil {
-		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			newExecutionInfo.RunID,
-			newExecutionInfo.RunID,
-			newExecutionInfo.CreateRequestID,
-			newExecutionInfo.State,
-			newExecutionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			newExecutionInfo.State,
-			d.shardID,
-			rowTypeExecution,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			currExecutionInfo.RunID,
-		)
-	} else {
-		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
-			newExecutionInfo.RunID,
-			newExecutionInfo.RunID,
-			newExecutionInfo.CreateRequestID,
-			newExecutionInfo.State,
-			newExecutionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			newExecutionInfo.State,
-			d.shardID,
-			rowTypeExecution,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			currExecutionInfo.RunID,
-			request.PrevRunVersion,
-			request.PrevRunState,
-		)
-	}
+	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+		newRunID,
+		newRunID,
+		newExecutionInfo.CreateRequestID,
+		newExecutionInfo.State,
+		newExecutionInfo.CloseStatus,
+		startVersion,
+		lastWriteVersion,
+		lastWriteVersion,
+		newExecutionInfo.State,
+		d.shardID,
+		rowTypeExecution,
+		newExecutionInfo.DomainID,
+		newExecutionInfo.WorkflowID,
+		permanentRunID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		currentRunID,
+	)
 
 	// for forkRun, check condition without updating anything to make sure the forkRun hasn't been deleted.
 	// Without this check, it will run into race condition with deleteHistoryEvent timer task
 	// we only do it when forkRun != currentRun
-	if request.BaseRunID != currExecutionInfo.RunID {
+	if baseRunID != currentRunID {
 		batch.Query(templateCheckWorkflowExecutionQuery,
-			request.BaseRunNextEventID,
+			baseRunNextEventID,
 			d.shardID,
 			rowTypeExecution,
-			currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
+			domainID,
+			workflowID,
 			request.BaseRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			request.BaseRunNextEventID,
+			baseRunNextEventID,
 		)
 	}
 
-	if request.UpdateCurr {
-		if err := updateExecution(batch,
-			d.shardID,
-			currExecutionInfo,
-			currReplicationState,
-			cqlNowTimestamp,
-			request.Condition); err != nil {
-			return err
-		}
-		if err := createTimerTasks(batch,
-			request.CurrTimerTasks,
-			d.shardID,
-			currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
-			currExecutionInfo.RunID); err != nil {
-			return err
-		}
-		if err := createTransferTasks(batch,
-			request.CurrTransferTasks,
-			d.shardID,
-			currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
-			currExecutionInfo.RunID); err != nil {
+	if request.CurrentWorkflowMutation != nil {
+		if err := applyWorkflowMutationBatch(batch, shardID, request.CurrentWorkflowMutation); err != nil {
 			return err
 		}
 	} else {
 		// check condition without updating anything
 		batch.Query(templateCheckWorkflowExecutionQuery,
-			request.Condition,
+			currentRunNextEventID,
 			d.shardID,
 			rowTypeExecution,
-			currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
-			currExecutionInfo.RunID,
+			domainID,
+			workflowID,
+			currentRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			request.Condition,
+			currentRunNextEventID,
 		)
 	}
 
-	if len(request.NewWorkflowSnapshot.ReplicationTasks) > 0 {
-		if err := createReplicationTasks(batch,
-			request.NewWorkflowSnapshot.ReplicationTasks,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID); err != nil {
-			return err
-		}
-	}
-	if len(request.CurrReplicationTasks) > 0 {
-		if err := createReplicationTasks(batch,
-			request.CurrReplicationTasks,
-			d.shardID, currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
-			currExecutionInfo.RunID); err != nil {
-			return err
-		}
-	}
-
-	if err := createExecution(batch,
-		d.shardID,
-		newExecutionInfo,
-		newReplicationState,
-		cqlNowTimestamp); err != nil {
+	if err := applyWorkflowSnapshotBatchAsNew(batch, shardID, &request.NewWorkflowSnapshot); err != nil {
 		return err
-	}
-
-	if len(request.NewWorkflowSnapshot.ActivityInfos) > 0 {
-		if err := resetActivityInfos(batch,
-			request.NewWorkflowSnapshot.ActivityInfos,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
-			false,
-			0); err != nil {
-			return err
-		}
-	}
-
-	if len(request.NewWorkflowSnapshot.TimerInfos) > 0 {
-		resetTimerInfos(batch,
-			request.NewWorkflowSnapshot.TimerInfos,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
-			false,
-			0)
-	}
-
-	if len(request.NewWorkflowSnapshot.RequestCancelInfos) > 0 {
-		resetRequestCancelInfos(batch,
-			request.NewWorkflowSnapshot.RequestCancelInfos,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
-			false,
-			0)
-	}
-
-	if len(request.NewWorkflowSnapshot.ChildExecutionInfos) > 0 {
-		if err := resetChildExecutionInfos(batch,
-			request.NewWorkflowSnapshot.ChildExecutionInfos,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
-			false,
-			0); err != nil {
-			return err
-		}
-	}
-
-	if len(request.NewWorkflowSnapshot.SignalInfos) > 0 {
-		resetSignalInfos(batch,
-			request.NewWorkflowSnapshot.SignalInfos,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
-			false,
-			0)
-	}
-
-	if len(request.NewWorkflowSnapshot.SignalRequestedIDs) > 0 {
-		resetSignalRequested(batch,
-			request.NewWorkflowSnapshot.SignalRequestedIDs,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID,
-			false,
-			0)
-	}
-
-	if len(request.NewWorkflowSnapshot.TimerTasks) > 0 {
-		if err := createTimerTasks(batch,
-			request.NewWorkflowSnapshot.TimerTasks,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID); err != nil {
-			return err
-		}
-	}
-
-	if len(request.NewWorkflowSnapshot.TransferTasks) > 0 {
-		if err := createTransferTasks(batch,
-			request.NewWorkflowSnapshot.TransferTasks,
-			d.shardID,
-			newExecutionInfo.DomainID,
-			newExecutionInfo.WorkflowID,
-			newExecutionInfo.RunID); err != nil {
-			return err
-		}
 	}
 
 	//Verifies that the RangeID has not changed
@@ -1673,7 +1507,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, currExecutionInfo.RunID, request.Condition, request.RangeID, currExecutionInfo.RunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, currentRunID, currentRunNextEventID, request.RangeID, currentRunID)
 	}
 
 	return nil

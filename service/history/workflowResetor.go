@@ -135,7 +135,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 		currMutableState, currTerminated, currCloseTask, currCleanupTask,
 		newMutableState, newTransferTasks, newTimerTasks,
 		currReplicationTasks, newReplicationTasks, baseMutableState.GetExecutionInfo().RunID,
-		baseMutableState.GetNextEventID(), currPrevRunVersion,
+		baseMutableState.GetNextEventID(),
 	)
 
 	if retError == nil {
@@ -754,7 +754,6 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		}
 	}
 	// before changing mutable state
-	prevRunVersion := currMutableState.GetLastWriteVersion()
 	newMsBuilder, newRunTransferTasks, newRunTimerTasks, retError = w.replicateResetEvent(baseMutableState, &baseExecution, historyAfterReset, resetAttr.GetForkEventVersion())
 	if retError != nil {
 		return retError
@@ -797,7 +796,6 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		nil,
 		baseExecution.GetRunId(),
 		baseMutableState.GetNextEventID(),
-		prevRunVersion,
 	)
 	if retError != nil {
 		return retError

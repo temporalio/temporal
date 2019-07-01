@@ -797,7 +797,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 
 	err = s.ResetWorkflowExecution(3,
 		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
-		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000, replicationState0.LastWriteVersion)
+		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000)
 	s.Nil(err)
 
 	//////////////////////////////
@@ -1219,7 +1219,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 
 	err = s.ResetWorkflowExecution(3,
 		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
-		false, updatedInfo, updatedReplicationState, nil, nil, info0.RunID, -1000, replicationState0.LastWriteVersion)
+		false, updatedInfo, updatedReplicationState, nil, nil, info0.RunID, -1000)
 	s.Nil(err)
 
 	//////////////////////////////
@@ -1490,7 +1490,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 
 	err = s.ResetWorkflowExecution(3,
 		insertInfo, nil, insertActivityInfos, insertTimerInfos, nil, insertRequestCancelInfos, nil, nil, insertTransTasks, insertTimerTasks, nil,
-		false, updatedInfo, nil, nil, nil, info0.RunID, -1000, -1000)
+		false, updatedInfo, nil, nil, nil, info0.RunID, -1000)
 	s.Nil(err)
 
 	//////////////////////////////

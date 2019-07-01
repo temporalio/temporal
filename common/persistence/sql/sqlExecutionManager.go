@@ -496,218 +496,96 @@ func (m *sqlExecutionManager) ResetWorkflowExecution(
 ) error {
 
 	return m.txExecuteShardLocked("ResetWorkflowExecution", request.RangeID, func(tx sqldb.Tx) error {
-		currExecutionInfo := request.CurrExecutionInfo
-		currReplicationState := request.CurrReplicationState
-		domainID := sqldb.MustParseUUID(currExecutionInfo.DomainID)
-		workflowID := currExecutionInfo.WorkflowID
-		shardID := m.shardID
-		currRunID := sqldb.MustParseUUID(currExecutionInfo.RunID)
-
-		insertExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
-		insertReplicationState := request.NewWorkflowSnapshot.ReplicationState
-		newRunID := sqldb.MustParseUUID(insertExecutionInfo.RunID)
-
-		startVersion := common.EmptyVersion
-		lastWriteVersion := common.EmptyVersion
-		if insertReplicationState != nil {
-			startVersion = insertReplicationState.StartVersion
-			lastWriteVersion = insertReplicationState.LastWriteVersion
-		}
-
-		// 1. update current execution
-		if err := updateCurrentExecution(tx,
-			shardID,
-			domainID,
-			insertExecutionInfo.WorkflowID,
-			sqldb.MustParseUUID(insertExecutionInfo.RunID),
-			insertExecutionInfo.CreateRequestID,
-			insertExecutionInfo.State,
-			insertExecutionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-		); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed at updateCurrentExecution. Error: %v", err),
-			}
-		}
-
-		// 2. lock base run: we want to grab a read-lock for base run to prevent race condition
-		// It is only needed when base run is not current run. Because we will obtain a lock on current run anyway.
-		if request.BaseRunID != currExecutionInfo.RunID {
-			filter := &sqldb.ExecutionsFilter{ShardID: shardID, DomainID: domainID, WorkflowID: workflowID, RunID: sqldb.MustParseUUID(request.BaseRunID)}
-			_, err := tx.ReadLockExecutions(filter)
-			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed at ReadLockExecutions. Error: %v", err),
-				}
-			}
-		}
-
-		// 3. update or lock current run
-		if request.UpdateCurr {
-			if err := createTransferTasks(tx, request.CurrTransferTasks, shardID, domainID, workflowID, currRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create transfer tasks. Error: %v", err),
-				}
-			}
-			if err := createTimerTasks(tx, request.CurrTimerTasks, shardID, domainID, workflowID, currRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create timer tasks. Error: %v", err),
-				}
-			}
-
-			if err := lockAndCheckNextEventID(tx, shardID, domainID, workflowID, currRunID, request.Condition); err != nil {
-				switch err.(type) {
-				case *p.ConditionFailedError:
-					return err
-				default:
-					return &workflow.InternalServiceError{
-						Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
-					}
-				}
-			}
-
-			if err := updateExecution(tx, currExecutionInfo, currReplicationState, shardID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
-				}
-			}
-		} else {
-			// even the current run is not running, we need to lock the current run:
-			// 1). in case it is changed by conflict resolution
-			// 2). in case delete history timer kicks in if the base is current
-			if err := lockAndCheckNextEventID(tx, shardID, domainID, workflowID, currRunID, request.Condition); err != nil {
-				switch err.(type) {
-				case *p.ConditionFailedError:
-					return err
-				default:
-					return &workflow.InternalServiceError{
-						Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
-					}
-				}
-			}
-		}
-
-		if err := createReplicationTasks(tx, request.CurrReplicationTasks, shardID, domainID, workflowID, currRunID); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create replication tasks. Error: %v", err),
-			}
-		}
-
-		// 4. insert records for new run
-		if err := createReplicationTasks(tx, request.NewWorkflowSnapshot.ReplicationTasks, shardID, domainID, workflowID, newRunID); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create replication tasks. Error: %v", err),
-			}
-		}
-		if err := createExecution(tx, insertExecutionInfo, insertReplicationState, shardID); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create executions row. Erorr: %v", err),
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.ActivityInfos) > 0 {
-			if err := updateActivityInfos(tx,
-				request.NewWorkflowSnapshot.ActivityInfos,
-				nil,
-				m.shardID,
-				domainID,
-				workflowID,
-				newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to insert into activity info map. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.TimerInfos) > 0 {
-			if err := updateTimerInfos(tx,
-				request.NewWorkflowSnapshot.TimerInfos,
-				nil,
-				m.shardID,
-				domainID,
-				workflowID,
-				newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to insert into timer info map. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.RequestCancelInfos) > 0 {
-			if err := updateRequestCancelInfos(tx,
-				request.NewWorkflowSnapshot.RequestCancelInfos,
-				nil,
-				m.shardID,
-				domainID,
-				workflowID,
-				newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to insert into request cancel info map. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.ChildExecutionInfos) > 0 {
-			if err := updateChildExecutionInfos(tx,
-				request.NewWorkflowSnapshot.ChildExecutionInfos,
-				nil,
-				m.shardID,
-				domainID,
-				workflowID,
-				newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to insert into child execution info map. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.SignalInfos) > 0 {
-			if err := updateSignalInfos(tx,
-				request.NewWorkflowSnapshot.SignalInfos,
-				nil,
-				m.shardID,
-				domainID,
-				workflowID,
-				newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to insert into signal info map. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.SignalRequestedIDs) > 0 {
-			if err := updateSignalsRequested(tx,
-				request.NewWorkflowSnapshot.SignalRequestedIDs,
-				"",
-				m.shardID,
-				domainID,
-				workflowID,
-				newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to insert into signal requested ID info map. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.TimerTasks) > 0 {
-			if err := createTimerTasks(tx, request.NewWorkflowSnapshot.TimerTasks, shardID, domainID, workflowID, newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create timer tasks. Error: %v", err),
-				}
-			}
-		}
-
-		if len(request.NewWorkflowSnapshot.TransferTasks) > 0 {
-			if err := createTransferTasks(tx, request.NewWorkflowSnapshot.TransferTasks, shardID, domainID, workflowID, newRunID); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to create transfer tasks. Error: %v", err),
-				}
-			}
-		}
-
-		return nil
+		return m.resetWorkflowExecutionTx(tx, request)
 	})
+}
+
+func (m *sqlExecutionManager) resetWorkflowExecutionTx(
+	tx sqldb.Tx,
+	request *p.InternalResetWorkflowExecutionRequest,
+) error {
+
+	shardID := m.shardID
+
+	domainID := sqldb.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.DomainID)
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+
+	baseRunID := sqldb.MustParseUUID(request.BaseRunID)
+	baseRunNextEventID := request.BaseRunNextEventID
+
+	currentRunID := sqldb.MustParseUUID(request.CurrentRunID)
+	currentRunNextEventID := request.CurrentRunNextEventID
+
+	newWorkflowRunID := sqldb.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.RunID)
+	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
+	newReplicationState := request.NewWorkflowSnapshot.ReplicationState
+
+	startVersion := common.EmptyVersion
+	lastWriteVersion := common.EmptyVersion
+	if newReplicationState != nil {
+		startVersion = newReplicationState.StartVersion
+		lastWriteVersion = newReplicationState.LastWriteVersion
+	}
+
+	// 1. update current execution
+	if err := updateCurrentExecution(tx,
+		shardID,
+		domainID,
+		workflowID,
+		newWorkflowRunID,
+		newExecutionInfo.CreateRequestID,
+		newExecutionInfo.State,
+		newExecutionInfo.CloseStatus,
+		startVersion,
+		lastWriteVersion,
+	); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed at updateCurrentExecution. Error: %v", err),
+		}
+	}
+
+	// 2. lock base run: we want to grab a read-lock for base run to prevent race condition
+	// It is only needed when base run is not current run. Because we will obtain a lock on current run anyway.
+	if !bytes.Equal(baseRunID, currentRunID) {
+		if err := lockAndCheckNextEventID(tx, shardID, domainID, workflowID, baseRunID, baseRunNextEventID); err != nil {
+			switch err.(type) {
+			case *p.ConditionFailedError:
+				return err
+			default:
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
+				}
+			}
+		}
+	}
+
+	// 3. update or lock current run
+	if request.CurrentWorkflowMutation != nil {
+		if err := applyWorkflowMutationTx(tx, m.shardID, request.CurrentWorkflowMutation); err != nil {
+			return err
+		}
+	} else {
+		// even the current run is not running, we need to lock the current run:
+		// 1). in case it is changed by conflict resolution
+		// 2). in case delete history timer kicks in if the base is current
+		if err := lockAndCheckNextEventID(tx, shardID, domainID, workflowID, currentRunID, currentRunNextEventID); err != nil {
+			switch err.(type) {
+			case *p.ConditionFailedError:
+				return err
+			default:
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
+				}
+			}
+		}
+	}
+
+	// 4. create the new reset workflow
+	if err := applyWorkflowSnapshotTxAsNew(tx, m.shardID, &request.NewWorkflowSnapshot); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m *sqlExecutionManager) ResetMutableState(

@@ -919,28 +919,18 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
 	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currReplicationState *p.ReplicationState,
-	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64, prevRunVersion int64) error {
+	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64) error {
 
-	prevRunState := p.WorkflowStateCompleted
-	if updateCurr {
-		prevRunState = p.WorkflowStateRunning
-	}
+	req := &p.ResetWorkflowExecutionRequest{
+		RangeID: s.ShardInfo.RangeID,
 
-	return s.ExecutionManager.ResetWorkflowExecution(&p.ResetWorkflowExecutionRequest{
 		BaseRunID:          forkRunID,
 		BaseRunNextEventID: forkRunNextEventID,
 
-		PrevRunVersion: prevRunVersion,
-		PrevRunState:   prevRunState,
+		CurrentRunID:          currInfo.RunID,
+		CurrentRunNextEventID: condition,
 
-		Condition: condition,
-		RangeID:   s.ShardInfo.RangeID,
-
-		UpdateCurr:           updateCurr,
-		CurrExecutionInfo:    currInfo,
-		CurrReplicationState: currReplicationState,
-		CurrTransferTasks:    currTrasTasks,
-		CurrTimerTasks:       currTimerTasks,
+		CurrentWorkflowMutation: nil,
 
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo:    info,
@@ -958,7 +948,21 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 			TimerTasks:       timerTasks,
 		},
 		Encoding: pickRandomEncoding(),
-	})
+	}
+
+	if updateCurr {
+		req.CurrentWorkflowMutation = &p.WorkflowMutation{
+			ExecutionInfo:    currInfo,
+			ReplicationState: currReplicationState,
+
+			TransferTasks: currTrasTasks,
+			TimerTasks:    currTimerTasks,
+
+			Condition: condition,
+		}
+	}
+
+	return s.ExecutionManager.ResetWorkflowExecution(req)
 }
 
 // DeleteWorkflowExecution is a utility method to delete a workflow execution

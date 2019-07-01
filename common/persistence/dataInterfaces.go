@@ -739,25 +739,18 @@ type (
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
 	ResetWorkflowExecutionRequest struct {
+		RangeID int64
+
 		// for base run (we need to make sure the baseRun hasn't been deleted after forking)
 		BaseRunID          string
 		BaseRunNextEventID int64
 
 		// for current workflow record
-		PrevRunVersion int64
-		PrevRunState   int
-
-		// for shard record
-		RangeID int64
+		CurrentRunID          string
+		CurrentRunNextEventID int64
 
 		// for current mutable state
-		Condition            int64
-		UpdateCurr           bool
-		CurrExecutionInfo    *WorkflowExecutionInfo
-		CurrReplicationState *ReplicationState
-		CurrReplicationTasks []Task
-		CurrTransferTasks    []Task
-		CurrTimerTasks       []Task
+		CurrentWorkflowMutation *WorkflowMutation
 
 		// For new mutable state
 		NewWorkflowSnapshot WorkflowSnapshot
