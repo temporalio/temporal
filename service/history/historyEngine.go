@@ -831,6 +831,18 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 	}
 
+	if len(msBuilder.GetPendingChildExecutionInfos()) > 0 {
+		for _, ch := range msBuilder.GetPendingChildExecutionInfos() {
+			p := &workflow.PendingChildExecutionInfo{
+				WorkflowID:      common.StringPtr(ch.StartedWorkflowID),
+				RunID:           common.StringPtr(ch.StartedRunID),
+				WorkflowTypName: common.StringPtr(ch.WorkflowTypeName),
+				InitiatedID:     common.Int64Ptr(ch.InitiatedID),
+			}
+			result.PendingChildren = append(result.PendingChildren, p)
+		}
+	}
+
 	return result, nil
 }
 

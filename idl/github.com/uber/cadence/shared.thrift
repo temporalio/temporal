@@ -1343,10 +1343,18 @@ struct PendingActivityInfo {
   100: optional i64 (js.type = "Long") expirationTimestamp
 }
 
+struct PendingChildExecutionInfo {
+  10: optional string workflowID
+  20: optional string runID
+  30: optional string workflowTypName
+  40: optional i64 (js.type = "Long") initiatedID
+}
+
 struct DescribeWorkflowExecutionResponse {
   10: optional WorkflowExecutionConfiguration executionConfiguration
   20: optional WorkflowExecutionInfo workflowExecutionInfo
   30: optional list<PendingActivityInfo> pendingActivities
+  40: optional list<PendingChildExecutionInfo> pendingChildren
 }
 
 struct DescribeTaskListRequest {

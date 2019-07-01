@@ -1035,6 +1035,7 @@ type describeWorkflowExecutionResponse struct {
 	ExecutionConfiguration *shared.WorkflowExecutionConfiguration
 	WorkflowExecutionInfo  workflowExecutionInfo
 	PendingActivities      []*pendingActivityInfo
+	PendingChildren        []*shared.PendingChildExecutionInfo
 }
 
 // workflowExecutionInfo has same fields as shared.WorkflowExecutionInfo, but has datetime instead of raw time
@@ -1101,6 +1102,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		ExecutionConfiguration: resp.ExecutionConfiguration,
 		WorkflowExecutionInfo:  executionInfo,
 		PendingActivities:      pendingActs,
+		PendingChildren:        resp.PendingChildren,
 	}
 }
 
