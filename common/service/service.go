@@ -26,10 +26,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/clock"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cluster"
 	es "github.com/uber/cadence/common/elasticsearch"
@@ -76,6 +78,8 @@ type (
 		BlobstoreClient     blobstore.Client
 		DCRedirectionPolicy config.DCRedirectionPolicy
 		PublicClient        workflowserviceclient.Interface
+		HistoryArchivers    map[string]archiver.HistoryArchiver
+		VisibilityArchivers map[string]archiver.VisibilityArchiver
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor
@@ -96,6 +100,7 @@ type (
 		rpcFactory            common.RPCFactory
 		pprofInitializer      common.PProfInitializer
 		clientBean            client.Bean
+		timeSource            clock.TimeSource
 		numberOfHistoryShards int
 		//New logger we are in favor of
 		logger          log.Logger
@@ -124,6 +129,7 @@ func New(params *BootstrapParams) Service {
 		rpcFactory:            params.RPCFactory,
 		membershipFactory:     params.MembershipFactory,
 		pprofInitializer:      params.PProfInitializer,
+		timeSource:            clock.NewRealTimeSource(),
 		metricsScope:          params.MetricScope,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		clusterMetadata:       params.ClusterMetadata,
@@ -240,6 +246,10 @@ func (h *serviceImpl) GetMetricsClient() metrics.Client {
 
 func (h *serviceImpl) GetClientBean() client.Bean {
 	return h.clientBean
+}
+
+func (h *serviceImpl) GetTimeSource() clock.TimeSource {
+	return h.timeSource
 }
 
 func (h *serviceImpl) GetMembershipMonitor() membership.Monitor {

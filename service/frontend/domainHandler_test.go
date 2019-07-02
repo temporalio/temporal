@@ -322,9 +322,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention1),
 				EmitMetric:                             common.BoolPtr(emitMetric1),
 				ArchivalBucketName:                     common.StringPtr(""),
-				ArchivalRetentionPeriodInDays:          nil,
 				ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-				ArchivalBucketOwner:                    nil,
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfiguration: &shared.DomainReplicationConfiguration{
@@ -347,9 +345,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention2),
 				EmitMetric:                             common.BoolPtr(emitMetric2),
 				ArchivalBucketName:                     common.StringPtr(""),
-				ArchivalRetentionPeriodInDays:          nil,
 				ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-				ArchivalBucketOwner:                    nil,
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfiguration: &shared.DomainReplicationConfiguration{
@@ -360,30 +356,6 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			IsGlobalDomain:  common.BoolPtr(isGlobalDomain2),
 		},
 	}, domains)
-}
-
-func (s *domainHandlerCommonSuite) TestValidateRetentionPeriod() {
-	testCases := []struct {
-		retentionPeriod int32
-		expectedErr     error
-	}{
-		{
-			retentionPeriod: 10,
-			expectedErr:     nil,
-		},
-		{
-			retentionPeriod: 0,
-			expectedErr:     errInvalidRetentionPeriod,
-		},
-		{
-			retentionPeriod: -3,
-			expectedErr:     errInvalidRetentionPeriod,
-		},
-	}
-	for _, tc := range testCases {
-		actualErr := s.handler.validateRetentionPeriod(tc.retentionPeriod)
-		s.Equal(tc.expectedErr, actualErr)
-	}
 }
 
 func (s *domainHandlerCommonSuite) TestRegisterDomain_InvalidRetentionPeriod() {

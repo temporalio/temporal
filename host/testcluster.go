@@ -21,9 +21,10 @@
 package host
 
 import (
-	"github.com/uber/cadence/common/definition"
 	"io/ioutil"
 	"os"
+
+	"github.com/uber/cadence/common/definition"
 
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
@@ -37,7 +38,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	pes "github.com/uber/cadence/common/persistence/elasticsearch"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/zap"
@@ -141,7 +142,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	cadenceParams := &CadenceParams{
 		ClusterMetadata:     clusterMetadata,
 		PersistenceConfig:   pConfig,
-		DispatcherProvider:  client.NewIPYarpcDispatcherProvider(),
+		DispatcherProvider:  client.NewDNSYarpcDispatcherProvider(logger, 0),
 		MessagingClient:     messagingClient,
 		MetadataMgr:         testBase.MetadataProxy,
 		MetadataMgrV2:       testBase.MetadataManagerV2,
@@ -186,11 +187,7 @@ func setupBlobstore(logger log.Logger) *BlobstoreBase {
 	}
 	cfg := &filestore.Config{
 		StoreDirectory: storeDirectory,
-		DefaultBucket: filestore.BucketConfig{
-			Name:          bucketName,
-			Owner:         "test-owner",
-			RetentionDays: 10,
-		},
+		DefaultBucket:  bucketName,
 	}
 	client, err := filestore.NewClient(cfg)
 	if err != nil {

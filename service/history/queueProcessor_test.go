@@ -30,6 +30,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -97,6 +98,7 @@ func (s *queueProcessorSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	s.scope = 0

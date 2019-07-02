@@ -21,9 +21,10 @@
 package filestore
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
 )
 
 type ConfigSuite struct {
@@ -53,80 +54,30 @@ func (s *ConfigSuite) TestValidate() {
 		{
 			config: &Config{
 				StoreDirectory: "test-store-directory",
-				DefaultBucket:  BucketConfig{},
+				DefaultBucket:  "",
 			},
 			isValid: false,
 		},
 		{
 			config: &Config{
 				StoreDirectory: "test-store-directory",
-				DefaultBucket: BucketConfig{
-					Name: "test-default-bucket-name",
-				},
-			},
-			isValid: false,
-		},
-		{
-			config: &Config{
-				StoreDirectory: "test-store-directory",
-				DefaultBucket: BucketConfig{
-					Name:  "test-default-bucket-name",
-					Owner: "test-default-bucket-owner",
-				},
+				DefaultBucket:  "test-default-bucket-name",
 			},
 			isValid: true,
 		},
 		{
 			config: &Config{
 				StoreDirectory: "test-store-directory",
-				DefaultBucket: BucketConfig{
-					Name:          "test-default-bucket-name",
-					Owner:         "test-default-bucket-owner",
-					RetentionDays: -1,
-				},
+				DefaultBucket:  "test-default-bucket-name",
+				CustomBuckets:  []string{""},
 			},
 			isValid: false,
 		},
 		{
 			config: &Config{
 				StoreDirectory: "test-store-directory",
-				DefaultBucket: BucketConfig{
-					Name:          "test-default-bucket-name",
-					Owner:         "test-default-bucket-owner",
-					RetentionDays: 10,
-				},
-			},
-			isValid: true,
-		},
-		{
-			config: &Config{
-				StoreDirectory: "test-store-directory",
-				DefaultBucket: BucketConfig{
-					Name:          "test-default-bucket-name",
-					Owner:         "test-default-bucket-owner",
-					RetentionDays: 10,
-				},
-				CustomBuckets: []BucketConfig{
-					{},
-				},
-			},
-			isValid: false,
-		},
-		{
-			config: &Config{
-				StoreDirectory: "test-store-directory",
-				DefaultBucket: BucketConfig{
-					Name:          "test-default-bucket-name",
-					Owner:         "test-default-bucket-owner",
-					RetentionDays: 10,
-				},
-				CustomBuckets: []BucketConfig{
-					{
-						Name:          "test-custom-bucket-name",
-						Owner:         "test-custom-bucket-owner",
-						RetentionDays: 10,
-					},
-				},
+				DefaultBucket:  "test-default-bucket-name",
+				CustomBuckets:  []string{"test-custom-bucket-name"},
 			},
 			isValid: true,
 		},

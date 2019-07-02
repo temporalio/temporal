@@ -87,7 +87,7 @@ clustersInfo:
   clusterAddress:
     active:
       rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:7933"
+      rpcAddress: "localhost:7933"
 
 dcRedirectionPolicy:
   policy: "noop"
@@ -97,17 +97,10 @@ archival:
   enabled: false
   filestore:
     storeDirectory: "/tmp/development/blobstore/"
-    defaultBucket:
-      name: "cadence-development"
-      owner: "cadence"
-      retentionDays: 10
+    defaultBucket: "cadence-development"
     customBuckets:
-      - name: "custom-bucket-1"
-        owner: "custom-owner-1"
-        retentionDays: 10
-      - name: "custom-bucket-2"
-        owner: "custom-owner-2"
-        retentionDays: 5
+      - "custom-bucket-1"
+      - "custom-bucket-2"
 
 kafka:
   clusters:
@@ -133,4 +126,4 @@ elasticsearch:
     visibility: cadence-visibility-dev
 
 publicClient:
-  hostPort: "127.0.0.1:7933"
+  hostPort: "localhost:7933"

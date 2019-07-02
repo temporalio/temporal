@@ -128,6 +128,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		standbyClusterCurrentTime: make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	shardContext.eventsCache = newEventsCache(shardContext)
 	s.mockShard = shardContext
@@ -566,37 +567,37 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_Ca
 	// make the version match the cluster name in standby cluster, so standby cluster can do update on mutable state
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", version).Return(s.clusterName)
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
-		s.Equal(1, len(input.TimerTasks))
-		s.Equal(1, len(input.UpsertActivityInfos))
-		msBuilder.executionInfo.LastUpdatedTimestamp = input.ExecutionInfo.LastUpdatedTimestamp
+		s.Equal(1, len(input.UpdateWorkflowMutation.TimerTasks))
+		s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
+		msBuilder.executionInfo.LastUpdatedTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdatedTimestamp
 		input.RangeID = 0
-		input.ExecutionInfo.LastEventTaskID = 0
+		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 		msBuilder.executionInfo.LastEventTaskID = 0
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
-			ExecutionInfo:                 msBuilder.executionInfo,
-			ReplicationState:              msBuilder.replicationState,
-			TransferTasks:                 nil,
-			ReplicationTasks:              nil,
-			TimerTasks:                    input.TimerTasks,
-			Condition:                     msBuilder.GetNextEventID(),
-			UpsertActivityInfos:           input.UpsertActivityInfos,
-			DeleteActivityInfos:           []int64{},
-			UpserTimerInfos:               []*persistence.TimerInfo{},
-			DeleteTimerInfos:              []string{},
-			UpsertChildExecutionInfos:     []*persistence.ChildExecutionInfo{},
-			DeleteChildExecutionInfo:      nil,
-			UpsertRequestCancelInfos:      []*persistence.RequestCancelInfo{},
-			DeleteRequestCancelInfo:       nil,
-			UpsertSignalInfos:             []*persistence.SignalInfo{},
-			DeleteSignalInfo:              nil,
-			UpsertSignalRequestedIDs:      []string{},
-			DeleteSignalRequestedID:       "",
-			NewBufferedEvents:             nil,
-			ClearBufferedEvents:           false,
-			NewBufferedReplicationTask:    nil,
-			DeleteBufferedReplicationTask: nil,
-			ContinueAsNew:                 nil,
-			Encoding:                      common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
+			UpdateWorkflowMutation: persistence.WorkflowMutation{
+				ExecutionInfo:             msBuilder.executionInfo,
+				ReplicationState:          msBuilder.replicationState,
+				TransferTasks:             nil,
+				ReplicationTasks:          nil,
+				TimerTasks:                input.UpdateWorkflowMutation.TimerTasks,
+				Condition:                 msBuilder.GetNextEventID(),
+				UpsertActivityInfos:       input.UpdateWorkflowMutation.UpsertActivityInfos,
+				DeleteActivityInfos:       []int64{},
+				UpserTimerInfos:           []*persistence.TimerInfo{},
+				DeleteTimerInfos:          []string{},
+				UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+				DeleteChildExecutionInfo:  nil,
+				UpsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
+				DeleteRequestCancelInfo:   nil,
+				UpsertSignalInfos:         []*persistence.SignalInfo{},
+				DeleteSignalInfo:          nil,
+				UpsertSignalRequestedIDs:  []string{},
+				DeleteSignalRequestedID:   "",
+				NewBufferedEvents:         nil,
+				ClearBufferedEvents:       false,
+			},
+			NewWorkflowSnapshot: nil,
+			Encoding:            common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
 		}, input)
 		return true
 	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()

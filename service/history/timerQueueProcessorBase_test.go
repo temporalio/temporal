@@ -22,16 +22,18 @@ package history
 
 import (
 	"errors"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -100,6 +102,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 
@@ -115,7 +118,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 			metricsClient: metricsClient,
 		},
 		s.mockQueueAckMgr,
-		NewLocalTimerGate(),
+		NewLocalTimerGate(clock.NewRealTimeSource()),
 		dynamicconfig.GetIntPropertyFn(10),
 		dynamicconfig.GetDurationPropertyFn(0*time.Second),
 		s.logger,

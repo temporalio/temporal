@@ -274,32 +274,38 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            workflowExecution,
-		TaskList:             taskList,
-		WorkflowTypeName:     wType,
-		WorkflowTimeout:      wTimeout,
-		DecisionTimeoutValue: decisionTimeout,
-		ExecutionContext:     executionContext,
-		State:                p.WorkflowStateRunning,
-		CloseStatus:          p.WorkflowCloseStatusNone,
-		NextEventID:          nextEventID,
-		LastProcessedEvent:   lastProcessedEventID,
-		RangeID:              s.ShardInfo.RangeID,
-		TransferTasks: []p.Task{
-			&p.DecisionTask{
-				TaskID:              s.GetNextSequenceNumber(),
-				DomainID:            domainID,
-				TaskList:            taskList,
-				ScheduleID:          decisionScheduleID,
-				VisibilityTimestamp: time.Now(),
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             domainID,
+				WorkflowID:           workflowExecution.GetWorkflowId(),
+				RunID:                workflowExecution.GetRunId(),
+				TaskList:             taskList,
+				WorkflowTypeName:     wType,
+				WorkflowTimeout:      wTimeout,
+				DecisionTimeoutValue: decisionTimeout,
+				ExecutionContext:     executionContext,
+				State:                p.WorkflowStateRunning,
+				CloseStatus:          p.WorkflowCloseStatusNone,
+				LastFirstEventID:     common.FirstEventID,
+				NextEventID:          nextEventID,
+				LastProcessedEvent:   lastProcessedEventID,
+				DecisionScheduleID:   decisionScheduleID,
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
 			},
+			TransferTasks: []p.Task{
+				&p.DecisionTask{
+					TaskID:              s.GetNextSequenceNumber(),
+					DomainID:            domainID,
+					TaskList:            taskList,
+					ScheduleID:          decisionScheduleID,
+					VisibilityTimestamp: time.Now(),
+				},
+			},
+			TimerTasks: timerTasks,
 		},
-		TimerTasks:                  timerTasks,
-		DecisionScheduleID:          decisionScheduleID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionStartToCloseTimeout: 1,
+		RangeID: s.ShardInfo.RangeID,
 	})
 
 	return response, err
@@ -329,24 +335,30 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 		ScheduleID: decisionScheduleID,
 	})
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:                   uuid.New(),
-		DomainID:                    domainID,
-		Execution:                   workflowExecution,
-		TaskList:                    taskList,
-		WorkflowTypeName:            wType,
-		WorkflowTimeout:             wTimeout,
-		DecisionTimeoutValue:        decisionTimeout,
-		State:                       p.WorkflowStateRunning,
-		CloseStatus:                 p.WorkflowCloseStatusNone,
-		NextEventID:                 nextEventID,
-		LastProcessedEvent:          lastProcessedEventID,
-		RangeID:                     s.ShardInfo.RangeID,
-		TransferTasks:               transferTasks,
-		ReplicationTasks:            replicationTasks,
-		DecisionScheduleID:          decisionScheduleID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionStartToCloseTimeout: 1,
-		ReplicationState:            state,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             domainID,
+				WorkflowID:           workflowExecution.GetWorkflowId(),
+				RunID:                workflowExecution.GetRunId(),
+				TaskList:             taskList,
+				WorkflowTypeName:     wType,
+				WorkflowTimeout:      wTimeout,
+				DecisionTimeoutValue: decisionTimeout,
+				State:                p.WorkflowStateRunning,
+				CloseStatus:          p.WorkflowCloseStatusNone,
+				LastFirstEventID:     common.FirstEventID,
+				NextEventID:          nextEventID,
+				LastProcessedEvent:   lastProcessedEventID,
+				DecisionScheduleID:   decisionScheduleID,
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
+			},
+			ReplicationState: state,
+			TransferTasks:    transferTasks,
+			ReplicationTasks: replicationTasks,
+		},
+		RangeID: s.ShardInfo.RangeID,
 	})
 
 	return response, err
@@ -379,20 +391,26 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 	}
 
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:                   uuid.New(),
-		DomainID:                    domainID,
-		Execution:                   workflowExecution,
-		TaskList:                    taskList,
-		ExecutionContext:            executionContext,
-		State:                       p.WorkflowStateRunning,
-		CloseStatus:                 p.WorkflowCloseStatusNone,
-		NextEventID:                 nextEventID,
-		LastProcessedEvent:          lastProcessedEventID,
-		TransferTasks:               transferTasks,
-		RangeID:                     s.ShardInfo.RangeID,
-		DecisionScheduleID:          common.EmptyEventID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionStartToCloseTimeout: 1,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:    uuid.New(),
+				DomainID:           domainID,
+				WorkflowID:         workflowExecution.GetWorkflowId(),
+				RunID:              workflowExecution.GetRunId(),
+				TaskList:           taskList,
+				ExecutionContext:   executionContext,
+				State:              p.WorkflowStateRunning,
+				CloseStatus:        p.WorkflowCloseStatusNone,
+				LastFirstEventID:   common.FirstEventID,
+				NextEventID:        nextEventID,
+				LastProcessedEvent: lastProcessedEventID,
+				DecisionScheduleID: common.EmptyEventID,
+				DecisionStartedID:  common.EmptyEventID,
+				DecisionTimeout:    1,
+			},
+			TransferTasks: transferTasks,
+		},
+		RangeID: s.ShardInfo.RangeID,
 	})
 
 	return response, err
@@ -404,34 +422,41 @@ func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecuti
 	wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            workflowExecution,
-		ParentDomainID:       parentDomainID,
-		ParentExecution:      parentExecution,
-		InitiatedID:          initiatedID,
-		TaskList:             taskList,
-		WorkflowTypeName:     wType,
-		WorkflowTimeout:      wTimeout,
-		DecisionTimeoutValue: decisionTimeout,
-		ExecutionContext:     executionContext,
-		State:                p.WorkflowStateCreated,
-		CloseStatus:          p.WorkflowCloseStatusNone,
-		NextEventID:          nextEventID,
-		LastProcessedEvent:   lastProcessedEventID,
-		RangeID:              s.ShardInfo.RangeID,
-		TransferTasks: []p.Task{
-			&p.DecisionTask{
-				TaskID:     s.GetNextSequenceNumber(),
-				DomainID:   domainID,
-				TaskList:   taskList,
-				ScheduleID: decisionScheduleID,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             domainID,
+				WorkflowID:           workflowExecution.GetWorkflowId(),
+				RunID:                workflowExecution.GetRunId(),
+				ParentDomainID:       parentDomainID,
+				ParentWorkflowID:     parentExecution.GetWorkflowId(),
+				ParentRunID:          parentExecution.GetRunId(),
+				InitiatedID:          initiatedID,
+				TaskList:             taskList,
+				WorkflowTypeName:     wType,
+				WorkflowTimeout:      wTimeout,
+				DecisionTimeoutValue: decisionTimeout,
+				ExecutionContext:     executionContext,
+				State:                p.WorkflowStateCreated,
+				CloseStatus:          p.WorkflowCloseStatusNone,
+				LastFirstEventID:     common.FirstEventID,
+				NextEventID:          nextEventID,
+				LastProcessedEvent:   lastProcessedEventID,
+				DecisionScheduleID:   decisionScheduleID,
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
 			},
+			TransferTasks: []p.Task{
+				&p.DecisionTask{
+					TaskID:     s.GetNextSequenceNumber(),
+					DomainID:   domainID,
+					TaskList:   taskList,
+					ScheduleID: decisionScheduleID,
+				},
+			},
+			TimerTasks: timerTasks,
 		},
-		TimerTasks:                  timerTasks,
-		DecisionScheduleID:          decisionScheduleID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionStartToCloseTimeout: 1,
+		RangeID: s.ShardInfo.RangeID,
 	})
 
 	return response, err
@@ -461,7 +486,6 @@ func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution w
 	if err != nil {
 		return nil, err
 	}
-
 	return response.State, nil
 }
 
@@ -500,41 +524,44 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 	}
 
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       []p.Task{newdecisionTask},
-		TimerTasks:          nil,
-		Condition:           condition,
-		RangeID:             s.ShardInfo.RangeID,
-		UpsertActivityInfos: nil,
-		DeleteActivityInfos: nil,
-		UpserTimerInfos:     nil,
-		DeleteTimerInfos:    nil,
-		ContinueAsNew: &p.CreateWorkflowExecutionRequest{
-			RequestID:                   uuid.New(),
-			DomainID:                    updatedInfo.DomainID,
-			Execution:                   newExecution,
-			TaskList:                    updatedInfo.TaskList,
-			WorkflowTypeName:            updatedInfo.WorkflowTypeName,
-			WorkflowTimeout:             updatedInfo.WorkflowTimeout,
-			DecisionTimeoutValue:        updatedInfo.DecisionTimeoutValue,
-			ExecutionContext:            nil,
-			State:                       updatedInfo.State,
-			CloseStatus:                 updatedInfo.CloseStatus,
-			NextEventID:                 nextEventID,
-			LastProcessedEvent:          common.EmptyEventID,
-			RangeID:                     s.ShardInfo.RangeID,
-			TransferTasks:               nil,
-			TimerTasks:                  nil,
-			DecisionScheduleID:          decisionScheduleID,
-			DecisionStartedID:           common.EmptyEventID,
-			DecisionStartToCloseTimeout: 1,
-			CreateWorkflowMode:          p.CreateWorkflowModeContinueAsNew,
-			PreviousRunID:               updatedInfo.RunID,
-			PreviousAutoResetPoints:     prevResetPoints,
-			ReplicationState:            afterState,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:       updatedInfo,
+			TransferTasks:       []p.Task{newdecisionTask},
+			TimerTasks:          nil,
+			Condition:           condition,
+			UpsertActivityInfos: nil,
+			DeleteActivityInfos: nil,
+			UpserTimerInfos:     nil,
+			DeleteTimerInfos:    nil,
+			ReplicationState:    beforeState,
 		},
-		ReplicationState: beforeState,
-		Encoding:         pickRandomEncoding(),
+		NewWorkflowSnapshot: &p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:      uuid.New(),
+				DomainID:             updatedInfo.DomainID,
+				WorkflowID:           newExecution.GetWorkflowId(),
+				RunID:                newExecution.GetRunId(),
+				TaskList:             updatedInfo.TaskList,
+				WorkflowTypeName:     updatedInfo.WorkflowTypeName,
+				WorkflowTimeout:      updatedInfo.WorkflowTimeout,
+				DecisionTimeoutValue: updatedInfo.DecisionTimeoutValue,
+				ExecutionContext:     nil,
+				State:                updatedInfo.State,
+				CloseStatus:          updatedInfo.CloseStatus,
+				LastFirstEventID:     common.FirstEventID,
+				NextEventID:          nextEventID,
+				LastProcessedEvent:   common.EmptyEventID,
+				DecisionScheduleID:   decisionScheduleID,
+				DecisionStartedID:    common.EmptyEventID,
+				DecisionTimeout:      1,
+				AutoResetPoints:      prevResetPoints,
+			},
+			ReplicationState: afterState,
+			TransferTasks:    nil,
+			TimerTasks:       nil,
+		},
+		RangeID:  s.ShardInfo.RangeID,
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -556,16 +583,18 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *p.WorkflowExecu
 	transferTasks := []p.Task{}
 	transferTasks = append(transferTasks, &p.CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       transferTasks,
-		TimerTasks:          nil,
-		Condition:           condition,
-		RangeID:             s.ShardInfo.RangeID,
-		UpsertActivityInfos: nil,
-		DeleteActivityInfos: nil,
-		UpserTimerInfos:     nil,
-		DeleteTimerInfos:    nil,
-		Encoding:            pickRandomEncoding(),
+		RangeID: s.ShardInfo.RangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:       updatedInfo,
+			TransferTasks:       transferTasks,
+			TimerTasks:          nil,
+			Condition:           condition,
+			UpsertActivityInfos: nil,
+			DeleteActivityInfos: nil,
+			UpserTimerInfos:     nil,
+			DeleteTimerInfos:    nil,
+		},
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -644,11 +673,10 @@ func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *p.WorkflowExecutionI
 
 // UpdateWorklowStateAndReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *p.WorkflowExecutionInfo, versionHistories *p.VersionHistories,
-	updatedReplicationState *p.ReplicationState, newBufferedReplicationTask *p.BufferedReplicationTask,
-	deleteBufferedReplicationTask *int64, condition int64, txTasks []p.Task) error {
+	updatedReplicationState *p.ReplicationState, condition int64, txTasks []p.Task) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedReplicationState, versionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "",
-		newBufferedReplicationTask, deleteBufferedReplicationTask)
+	)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
@@ -662,7 +690,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExe
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, nil, versionHistories, decisionScheduleIDs, activityScheduleIDs, rangeID,
 		condition, timerTasks, []p.Task{}, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
 		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
-		upsertSignalRequestedIDs, deleteSignalRequestedID, nil, nil)
+		upsertSignalRequestedIDs, deleteSignalRequestedID)
 }
 
 // UpdateWorkflowExecutionWithReplication is a utility method to update workflow execution
@@ -672,8 +700,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 	deleteActivityInfos []int64, upsertTimerInfos []*p.TimerInfo, deleteTimerInfos []string,
 	upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*p.RequestCancelInfo,
 	deleteCancelInfo *int64, upsertSignalInfos []*p.SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
-	deleteSignalRequestedID string, newBufferedReplicationTask *p.BufferedReplicationTask,
-	deleteBufferedReplicationTask *int64) error {
+	deleteSignalRequestedID string) error {
 	var transferTasks []p.Task
 	var replicationTasks []p.Task
 	for _, task := range txTasks {
@@ -702,29 +729,32 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			ScheduleID: int64(activityScheduleID)})
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:                 updatedInfo,
-		ReplicationState:              updatedReplicationState,
-		TransferTasks:                 transferTasks,
-		ReplicationTasks:              replicationTasks,
-		VersionHistories:              versionHistories,
-		TimerTasks:                    timerTasks,
-		Condition:                     condition,
-		RangeID:                       rangeID,
-		UpsertActivityInfos:           upsertActivityInfos,
-		DeleteActivityInfos:           deleteActivityInfos,
-		UpserTimerInfos:               upsertTimerInfos,
-		DeleteTimerInfos:              deleteTimerInfos,
-		UpsertChildExecutionInfos:     upsertChildInfos,
-		DeleteChildExecutionInfo:      deleteChildInfo,
-		UpsertRequestCancelInfos:      upsertCancelInfos,
-		DeleteRequestCancelInfo:       deleteCancelInfo,
-		UpsertSignalInfos:             upsertSignalInfos,
-		DeleteSignalInfo:              deleteSignalInfo,
-		UpsertSignalRequestedIDs:      upsertSignalRequestedIDs,
-		DeleteSignalRequestedID:       deleteSignalRequestedID,
-		NewBufferedReplicationTask:    newBufferedReplicationTask,
-		DeleteBufferedReplicationTask: deleteBufferedReplicationTask,
-		Encoding:                      pickRandomEncoding(),
+		RangeID: rangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:    updatedInfo,
+			ReplicationState: updatedReplicationState,
+			VersionHistories: versionHistories,
+
+			UpsertActivityInfos:       upsertActivityInfos,
+			DeleteActivityInfos:       deleteActivityInfos,
+			UpserTimerInfos:           upsertTimerInfos,
+			DeleteTimerInfos:          deleteTimerInfos,
+			UpsertChildExecutionInfos: upsertChildInfos,
+			DeleteChildExecutionInfo:  deleteChildInfo,
+			UpsertRequestCancelInfos:  upsertCancelInfos,
+			DeleteRequestCancelInfo:   deleteCancelInfo,
+			UpsertSignalInfos:         upsertSignalInfos,
+			DeleteSignalInfo:          deleteSignalInfo,
+			UpsertSignalRequestedIDs:  upsertSignalRequestedIDs,
+			DeleteSignalRequestedID:   deleteSignalRequestedID,
+
+			TransferTasks:    transferTasks,
+			ReplicationTasks: replicationTasks,
+			TimerTasks:       timerTasks,
+
+			Condition: condition,
+		},
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -733,12 +763,14 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 	updatedInfo *p.WorkflowExecutionInfo, condition int64, transferTasks []p.Task, upsertActivityInfo []*p.ActivityInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       transferTasks,
-		Condition:           condition,
-		UpsertActivityInfos: upsertActivityInfo,
-		RangeID:             s.ShardInfo.RangeID,
-		Encoding:            pickRandomEncoding(),
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:       updatedInfo,
+			TransferTasks:       transferTasks,
+			Condition:           condition,
+			UpsertActivityInfos: upsertActivityInfo,
+		},
+		RangeID:  s.ShardInfo.RangeID,
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -747,12 +779,14 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 	updatedInfo *p.WorkflowExecutionInfo, condition int64, transferTasks []p.Task, childInfos []*p.ChildExecutionInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:             updatedInfo,
-		TransferTasks:             transferTasks,
-		Condition:                 condition,
-		UpsertChildExecutionInfos: childInfos,
-		RangeID:                   s.ShardInfo.RangeID,
-		Encoding:                  pickRandomEncoding(),
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:             updatedInfo,
+			TransferTasks:             transferTasks,
+			Condition:                 condition,
+			UpsertChildExecutionInfos: childInfos,
+		},
+		RangeID:  s.ShardInfo.RangeID,
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -762,12 +796,14 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 	updatedInfo *p.WorkflowExecutionInfo, condition int64, transferTasks []p.Task,
 	upsertRequestCancelInfo []*p.RequestCancelInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:            updatedInfo,
-		TransferTasks:            transferTasks,
-		Condition:                condition,
-		UpsertRequestCancelInfos: upsertRequestCancelInfo,
-		RangeID:                  s.ShardInfo.RangeID,
-		Encoding:                 pickRandomEncoding(),
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:            updatedInfo,
+			TransferTasks:            transferTasks,
+			Condition:                condition,
+			UpsertRequestCancelInfos: upsertRequestCancelInfo,
+		},
+		RangeID:  s.ShardInfo.RangeID,
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -777,12 +813,14 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 	updatedInfo *p.WorkflowExecutionInfo, condition int64, transferTasks []p.Task,
 	upsertSignalInfos []*p.SignalInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:     updatedInfo,
-		TransferTasks:     transferTasks,
-		Condition:         condition,
-		UpsertSignalInfos: upsertSignalInfos,
-		RangeID:           s.ShardInfo.RangeID,
-		Encoding:          pickRandomEncoding(),
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:     updatedInfo,
+			TransferTasks:     transferTasks,
+			Condition:         condition,
+			UpsertSignalInfos: upsertSignalInfos,
+		},
+		RangeID:  s.ShardInfo.RangeID,
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -792,12 +830,13 @@ func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 	updatedInfo *p.WorkflowExecutionInfo, rState *p.ReplicationState, condition int64,
 	bufferEvents []*workflow.HistoryEvent, clearBufferedEvents bool) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		ReplicationState:    rState,
-		NewBufferedEvents:   bufferEvents,
-		Condition:           condition,
-		ClearBufferedEvents: clearBufferedEvents,
-
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:       updatedInfo,
+			ReplicationState:    rState,
+			NewBufferedEvents:   bufferEvents,
+			Condition:           condition,
+			ClearBufferedEvents: clearBufferedEvents,
+		},
 		RangeID:  s.ShardInfo.RangeID,
 		Encoding: pickRandomEncoding(),
 	})
@@ -836,17 +875,19 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 		srIDs = append(srIDs, id)
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:             updatedMutableState.ExecutionInfo,
-		ReplicationState:          updatedMutableState.ReplicationState,
-		Condition:                 condition,
-		RangeID:                   s.ShardInfo.RangeID,
-		UpsertActivityInfos:       aInfos,
-		UpserTimerInfos:           tInfos,
-		UpsertChildExecutionInfos: cInfos,
-		UpsertRequestCancelInfos:  rcInfos,
-		UpsertSignalInfos:         sInfos,
-		UpsertSignalRequestedIDs:  srIDs,
-		Encoding:                  pickRandomEncoding(),
+		RangeID: s.ShardInfo.RangeID,
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:             updatedMutableState.ExecutionInfo,
+			ReplicationState:          updatedMutableState.ReplicationState,
+			Condition:                 condition,
+			UpsertActivityInfos:       aInfos,
+			UpserTimerInfos:           tInfos,
+			UpsertChildExecutionInfos: cInfos,
+			UpsertRequestCancelInfos:  rcInfos,
+			UpsertSignalInfos:         sInfos,
+			UpsertSignalRequestedIDs:  srIDs,
+		},
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }
@@ -857,20 +898,22 @@ func (s *TestBase) ResetMutableState(prevRunID string, prevLastWriteVersion int6
 	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string) error {
 	return s.ExecutionManager.ResetMutableState(&p.ResetMutableStateRequest{
-		PrevRunID:                 prevRunID,
-		PrevLastWriteVersion:      prevLastWriteVersion,
-		PrevState:                 prevState,
-		ExecutionInfo:             info,
-		ReplicationState:          replicationState,
-		Condition:                 nextEventID,
-		RangeID:                   s.ShardInfo.RangeID,
-		InsertActivityInfos:       activityInfos,
-		InsertTimerInfos:          timerInfos,
-		InsertChildExecutionInfos: childExecutionInfos,
-		InsertRequestCancelInfos:  requestCancelInfos,
-		InsertSignalInfos:         signalInfos,
-		InsertSignalRequestedIDs:  ids,
-		Encoding:                  pickRandomEncoding(),
+		RangeID:              s.ShardInfo.RangeID,
+		PrevRunID:            prevRunID,
+		PrevLastWriteVersion: prevLastWriteVersion,
+		PrevState:            prevState,
+		ResetWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo:       info,
+			ReplicationState:    replicationState,
+			Condition:           nextEventID,
+			ActivityInfos:       activityInfos,
+			TimerInfos:          timerInfos,
+			ChildExecutionInfos: childExecutionInfos,
+			RequestCancelInfos:  requestCancelInfos,
+			SignalInfos:         signalInfos,
+			SignalRequestedIDs:  ids,
+		},
+		Encoding: pickRandomEncoding(),
 	})
 }
 
@@ -879,42 +922,50 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
 	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currReplicationState *p.ReplicationState,
-	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64, prevRunVersion int64) error {
+	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64) error {
 
-	prevRunState := p.WorkflowStateCompleted
-	if updateCurr {
-		prevRunState = p.WorkflowStateRunning
-	}
+	req := &p.ResetWorkflowExecutionRequest{
+		RangeID: s.ShardInfo.RangeID,
 
-	return s.ExecutionManager.ResetWorkflowExecution(&p.ResetWorkflowExecutionRequest{
 		BaseRunID:          forkRunID,
 		BaseRunNextEventID: forkRunNextEventID,
 
-		PrevRunVersion: prevRunVersion,
-		PrevRunState:   prevRunState,
+		CurrentRunID:          currInfo.RunID,
+		CurrentRunNextEventID: condition,
 
-		Condition: condition,
-		RangeID:   s.ShardInfo.RangeID,
+		CurrentWorkflowMutation: nil,
 
-		UpdateCurr:           updateCurr,
-		CurrExecutionInfo:    currInfo,
-		CurrReplicationState: currReplicationState,
-		CurrTransferTasks:    currTrasTasks,
-		CurrTimerTasks:       currTimerTasks,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo:    info,
+			ReplicationState: replicationState,
 
-		InsertExecutionInfo:       info,
-		InsertReplicationState:    replicationState,
-		InsertTransferTasks:       trasTasks,
-		InsertTimerTasks:          timerTasks,
-		InsertReplicationTasks:    replTasks,
-		InsertActivityInfos:       activityInfos,
-		InsertTimerInfos:          timerInfos,
-		InsertChildExecutionInfos: childExecutionInfos,
-		InsertRequestCancelInfos:  requestCancelInfos,
-		InsertSignalInfos:         signalInfos,
-		InsertSignalRequestedIDs:  ids,
-		Encoding:                  pickRandomEncoding(),
-	})
+			ActivityInfos:       activityInfos,
+			TimerInfos:          timerInfos,
+			ChildExecutionInfos: childExecutionInfos,
+			RequestCancelInfos:  requestCancelInfos,
+			SignalInfos:         signalInfos,
+			SignalRequestedIDs:  ids,
+
+			TransferTasks:    trasTasks,
+			ReplicationTasks: replTasks,
+			TimerTasks:       timerTasks,
+		},
+		Encoding: pickRandomEncoding(),
+	}
+
+	if updateCurr {
+		req.CurrentWorkflowMutation = &p.WorkflowMutation{
+			ExecutionInfo:    currInfo,
+			ReplicationState: currReplicationState,
+
+			TransferTasks: currTrasTasks,
+			TimerTasks:    currTimerTasks,
+
+			Condition: condition,
+		}
+	}
+
+	return s.ExecutionManager.ResetWorkflowExecution(req)
 }
 
 // DeleteWorkflowExecution is a utility method to delete a workflow execution

@@ -32,9 +32,10 @@ var (
 	WorkflowActionWorkflowContinueAsNew = workflowAction("add-workflow-continue-as-new-event")
 
 	// workflow cancellation / sign
-	WorkflowActionWorkflowCancelRequested = workflowAction("add-workflow-cancel-requested-event")
-	WorkflowActionWorkflowSignaled        = workflowAction("add-workflow-signaled-event")
-	WorkflowActionWorkflowRecordMarker    = workflowAction("add-workflow-marker-record-event")
+	WorkflowActionWorkflowCancelRequested        = workflowAction("add-workflow-cancel-requested-event")
+	WorkflowActionWorkflowSignaled               = workflowAction("add-workflow-signaled-event")
+	WorkflowActionWorkflowRecordMarker           = workflowAction("add-workflow-marker-record-event")
+	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
 
 	// decision
 	WorkflowActionDecisionTaskScheduled = workflowAction("add-decisiontask-scheduled-event")

@@ -53,7 +53,9 @@ func (s *statsComputerSuite) SetupTest() {
 
 func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionRequest {
 	return &InternalUpdateWorkflowExecutionRequest{
-		ExecutionInfo: &InternalWorkflowExecutionInfo{},
+		UpdateWorkflowMutation: InternalWorkflowMutation{
+			ExecutionInfo: &InternalWorkflowExecutionInfo{},
+		},
 	}
 }
 
@@ -71,11 +73,11 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 		Name: common.StringPtr("test-tasklist"),
 	}
 
-	ms.ExecutionInfo.DomainID = domainID
-	ms.ExecutionInfo.WorkflowID = *execution.WorkflowId
-	ms.ExecutionInfo.RunID = *execution.RunId
-	ms.ExecutionInfo.WorkflowTypeName = *workflowType.Name
-	ms.ExecutionInfo.TaskList = *tasklist.Name
+	ms.UpdateWorkflowMutation.ExecutionInfo.DomainID = domainID
+	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = *execution.WorkflowId
+	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = *execution.RunId
+	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = *workflowType.Name
+	ms.UpdateWorkflowMutation.ExecutionInfo.TaskList = *tasklist.Name
 
 	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(tasklist.GetName())
 

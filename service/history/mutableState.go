@@ -84,6 +84,7 @@ type (
 		AddTimerCanceledEvent(int64, *workflow.CancelTimerDecisionAttributes, string) (*workflow.HistoryEvent, error)
 		AddTimerFiredEvent(int64, string) (*workflow.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo, error)
+		AddUpsertWorkflowSearchAttributesEvent(int64, *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input []byte, identity string) (*workflow.HistoryEvent, error)
@@ -98,7 +99,6 @@ type (
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
 		DeleteActivity(int64) error
-		DeleteBufferedReplicationTask(int64)
 		DeleteDecision()
 		DeletePendingChildExecution(int64)
 		DeletePendingRequestCancel(int64)
@@ -110,12 +110,11 @@ type (
 		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
 		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, bool)
-		GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
 		GetStartEvent() (*workflow.HistoryEvent, bool)
-		GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest
+		GetContinueAsNew() *persistence.WorkflowSnapshot
 		GetCurrentBranch() []byte
 		GetVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
@@ -145,7 +144,6 @@ type (
 		GetWorkflowType() *workflow.WorkflowType
 		GetWorkflowStateCloseStatus() (int, int)
 		HasBufferedEvents() bool
-		HasBufferedReplicationTasks() bool
 		HasInFlightDecisionTask() bool
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool
@@ -187,6 +185,7 @@ type (
 		ReplicateTimerFiredEvent(*workflow.HistoryEvent) error
 		ReplicateTimerStartedEvent(*workflow.HistoryEvent) (*persistence.TimerInfo, error)
 		ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error)
+		ReplicateUpsertWorkflowSearchAttributesEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent) error

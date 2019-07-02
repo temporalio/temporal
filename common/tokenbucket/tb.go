@@ -195,11 +195,11 @@ func (tb *tokenBucketImpl) Consume(count int, timeout time.Duration) bool {
 
 func (tb *tokenBucketImpl) reset(rps int) {
 	tb.Lock()
-	defer tb.Unlock()
 	tb.fillInterval = int64(time.Millisecond * 100)
 	tb.fillRate = (rps * 100) / millisPerSecond
 	tb.overflowRps = rps - (10 * tb.fillRate)
 	tb.nextOverflowRefillTime = 0
+	tb.Unlock()
 }
 
 func (tb *tokenBucketImpl) refill(now int64) {
@@ -312,13 +312,14 @@ func NewFullPriorityTokenBucket(numOfPriority, rps int, timeSource clock.TimeSou
 func (tb *priorityTokenBucketImpl) GetToken(priority, count int) (bool, time.Duration) {
 	now := tb.timeSource.Now().UnixNano()
 	tb.Lock()
-	defer tb.Unlock()
 	tb.refill(now)
 	nextRefillTime := time.Duration(tb.nextRefillTime - now)
 	if tb.tokens[priority] < count {
+		tb.Unlock()
 		return false, nextRefillTime
 	}
 	tb.tokens[priority] -= count
+	tb.Unlock()
 	return true, nextRefillTime
 }
 

@@ -111,7 +111,7 @@ func (v *esVisibilityStore) GetName() string {
 
 func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	v.checkProducer()
-	msg := getVisibilityMessageForOpenExecution(
+	msg := getVisibilityMessage(
 		request.DomainUUID,
 		request.WorkflowID,
 		request.RunID,
@@ -138,6 +138,23 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.CloseTimestamp,
 		request.Status,
 		request.HistoryLength,
+		request.TaskID,
+		request.Memo.Data,
+		request.Memo.GetEncoding(),
+		request.SearchAttributes,
+	)
+	return v.producer.Publish(msg)
+}
+
+func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
+	v.checkProducer()
+	msg := getVisibilityMessage(
+		request.DomainUUID,
+		request.WorkflowID,
+		request.RunID,
+		request.WorkflowTypeName,
+		request.StartTimestamp,
+		request.ExecutionTimestamp,
 		request.TaskID,
 		request.Memo.Data,
 		request.Memo.GetEncoding(),
@@ -849,7 +866,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	return record
 }
 
-func getVisibilityMessageForOpenExecution(domainID string, wid, rid string, workflowTypeName string,
+func getVisibilityMessage(domainID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
 

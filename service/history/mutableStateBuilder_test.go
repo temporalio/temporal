@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -67,6 +68,7 @@ func (s *mutableStateSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache,
@@ -190,6 +192,7 @@ func (s *mutableStateSuite) TestShouldBufferEvent() {
 		workflow.EventTypeMarkerRecorded:                                  true,
 		workflow.EventTypeStartChildWorkflowExecutionInitiated:            true,
 		workflow.EventTypeSignalExternalWorkflowExecutionInitiated:        true,
+		workflow.EventTypeUpsertWorkflowSearchAttributes:                  true,
 	}
 
 	// other events will not be assign event ID immediately
@@ -370,6 +373,21 @@ func (s *mutableStateSuite) TestTrimEvents() {
 			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
 		},
 	}, output)
+}
+
+func (s *mutableStateSuite) TestMergeMapOfByteArray() {
+	var currentMap map[string][]byte
+	var newMap map[string][]byte
+	resultMap := mergeMapOfByteArray(currentMap, newMap)
+	s.Equal(make(map[string][]byte), resultMap)
+
+	newMap = map[string][]byte{"key": []byte("val")}
+	resultMap = mergeMapOfByteArray(currentMap, newMap)
+	s.Equal(newMap, resultMap)
+
+	currentMap = map[string][]byte{"number": []byte("1")}
+	resultMap = mergeMapOfByteArray(currentMap, newMap)
+	s.Equal(2, len(resultMap))
 }
 
 func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*shared.HistoryEvent, *shared.HistoryEvent) {

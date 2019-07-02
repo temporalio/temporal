@@ -408,33 +408,6 @@ type (
 		InitiatedID *int64
 	}
 
-	// BufferedReplicationTaskMapsRow represents a row in buffered_replication_task_maps table
-	BufferedReplicationTaskMapsRow struct {
-		ShardID                 int64
-		DomainID                UUID
-		WorkflowID              string
-		RunID                   UUID
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		History                 *[]byte
-		HistoryEncoding         string
-		NewRunHistory           *[]byte
-		NewRunHistoryEncoding   string
-		EventStoreVersion       int32
-		NewRunEventStoreVersion int32
-	}
-
-	// BufferedReplicationTaskMapsFilter contains the column names within domain table that
-	// can be used to filter results through a WHERE clause
-	BufferedReplicationTaskMapsFilter struct {
-		ShardID      int64
-		DomainID     UUID
-		WorkflowID   string
-		RunID        UUID
-		FirstEventID *int64
-	}
-
 	// SignalsRequestedSetsRow represents a row in signals_requested_sets table
 	SignalsRequestedSetsRow struct {
 		ShardID    int64
@@ -646,16 +619,6 @@ type (
 		// - single row - {shardID, domainID, workflowID, runID, initiatedID}
 		// - multiple rows - {shardID, domainID, workflowID, runID}
 		DeleteFromSignalInfoMaps(filter *SignalInfoMapsFilter) (sql.Result, error)
-
-		ReplaceIntoBufferedReplicationTasks(rows *BufferedReplicationTaskMapsRow) (sql.Result, error)
-		// SelectFromSignalInfoMaps returns one or more rows form buffered_replication_tasks table
-		// Required filter params - {shardID, domainID, workflowID, runID}
-		SelectFromBufferedReplicationTasks(filter *BufferedReplicationTaskMapsFilter) ([]BufferedReplicationTaskMapsRow, error)
-		// DeleteFromBufferedReplicationTasks deletes one or more rows from buffered_replication_tasks
-		// Required filter params
-		// - single row - {shardID, domainID, workflowID, runID, firstEventID}
-		// - multiple rows - {shardID, domainID, workflowID, runID}
-		DeleteFromBufferedReplicationTasks(filter *BufferedReplicationTaskMapsFilter) (sql.Result, error)
 
 		InsertIntoSignalsRequestedSets(rows []SignalsRequestedSetsRow) (sql.Result, error)
 		// SelectFromSignalInfoMaps returns one or more rows form singals_requested_sets table

@@ -344,6 +344,14 @@ func (b *historyBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(decisi
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddUpsertWorkflowSearchAttributesEvent(
+	decisionTaskCompletedEventID int64,
+	attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) *workflow.HistoryEvent {
+	event := b.newUpsertWorkflowSearchAttributesEvent(decisionTaskCompletedEventID, attributes)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) AddSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
 	domain, workflowID, runID string, control []byte, cause workflow.SignalExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
 	event := b.newSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID,
@@ -795,6 +803,17 @@ func (b *historyBuilder) newSignalExternalWorkflowExecutionInitiatedEvent(decisi
 	attributes.Control = request.Control
 	attributes.ChildWorkflowOnly = request.ChildWorkflowOnly
 	event.SignalExternalWorkflowExecutionInitiatedEventAttributes = attributes
+
+	return event
+}
+
+func (b *historyBuilder) newUpsertWorkflowSearchAttributesEvent(decisionTaskCompletedEventID int64,
+	request *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) *workflow.HistoryEvent {
+	event := b.msBuilder.CreateNewHistoryEvent(workflow.EventTypeUpsertWorkflowSearchAttributes)
+	attributes := &workflow.UpsertWorkflowSearchAttributesEventAttributes{}
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	attributes.SearchAttributes = request.GetSearchAttributes()
+	event.UpsertWorkflowSearchAttributesEventAttributes = attributes
 
 	return event
 }

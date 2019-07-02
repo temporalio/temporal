@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -132,6 +133,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timerMaxReadLevelMap:      make(map[string]time.Time),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	shardContext.eventsCache = newEventsCache(shardContext)
 	s.mockShard = shardContext
@@ -1058,6 +1060,69 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessRecordWorkflowStartedTas
 	executionInfo := msBuilder.GetExecutionInfo()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
+		DomainUUID: executionInfo.DomainID,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+			RunId:      common.StringPtr(executionInfo.RunID),
+		},
+		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+		TaskID:           taskID,
+	}).Return(nil).Once()
+	_, err = s.transferQueueStandbyProcessor.process(transferTask, true)
+	s.Nil(err)
+}
+
+func (s *transferQueueStandbyProcessorSuite) TestProcessUpsertWorkflowSearchAttributesTask() {
+	domainID := "some random domain ID"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard, s.mockShard.GetEventsCache(), s.logger, version, execution.GetRunId())
+	event, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+	s.Nil(err)
+
+	taskID := int64(59)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), version, event.GetEventId())
+
+	msBuilder.UpdateReplicationStateVersion(version+1, false)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), di.Version, di.ScheduleID)
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		VisibilityTimestamp: time.Now(),
+		TaskID:              taskID,
+		TaskList:            taskListName,
+		TaskType:            persistence.TransferTaskTypeUpsertWorkflowSearchAttributes,
+		ScheduleID:          event.GetEventId(),
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	executionInfo := msBuilder.GetExecutionInfo()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("UpsertWorkflowExecution", &persistence.UpsertWorkflowExecutionRequest{
 		DomainUUID: executionInfo.DomainID,
 		Execution: workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(executionInfo.WorkflowID),

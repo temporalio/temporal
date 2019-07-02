@@ -253,43 +253,6 @@ func (s *ClientSuite) TestListByPrefix_Success() {
 	s.Equal([]string{"matching_1.ext", "matching_2.ext", "matching_3.ext"}, matchingFilenames)
 }
 
-func (s *ClientSuite) TestBucketMetadata_Fail_BucketNotExists() {
-	client := s.constructClient()
-	s.s3cli.On("GetBucketAclWithContext", mock.Anything, mock.MatchedBy(func(input *s3.GetBucketAclInput) bool {
-		return *input.Bucket == "bucket-not-exists"
-	})).Return(nil, awserr.New(s3.ErrCodeNoSuchBucket, "", nil))
-
-	metadata, err := client.BucketMetadata(context.Background(), "bucket-not-exists")
-	s.Equal(blobstore.ErrBucketNotExists, err)
-	s.Nil(metadata)
-}
-
-func (s *ClientSuite) TestBucketMetadata_Success() {
-	client := s.constructClient()
-	s.s3cli.On("GetBucketAclWithContext", mock.Anything, mock.Anything).Return(&s3.GetBucketAclOutput{
-		Owner: &s3.Owner{
-			DisplayName: aws.String("default-bucket-owner"),
-		},
-	}, nil)
-
-	days := int64(defaultBucketRetentionDays)
-	s.s3cli.On("GetBucketLifecycleConfigurationWithContext", mock.Anything, mock.Anything).
-		Return(&s3.GetBucketLifecycleConfigurationOutput{Rules: []*s3.LifecycleRule{
-			{
-				Status: aws.String("Enabled"),
-				Expiration: &s3.LifecycleExpiration{
-					Days: &days,
-				},
-			},
-		}}, nil)
-
-	metadata, err := client.BucketMetadata(context.Background(), defaultBucketName)
-	s.NoError(err)
-	s.NotNil(metadata)
-	s.Equal(defaultBucketRetentionDays, metadata.RetentionDays)
-	s.Equal(defaultBucketOwner, metadata.Owner)
-}
-
 func (s *ClientSuite) TestBucketExists() {
 	client := s.constructClient()
 	s.s3cli.On("HeadBucketWithContext", mock.Anything, mock.MatchedBy(func(input *s3.HeadBucketInput) bool {

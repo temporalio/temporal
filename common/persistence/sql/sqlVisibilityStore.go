@@ -71,6 +71,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalR
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
 	})
+
 	return err
 }
 
@@ -100,6 +101,10 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		return fmt.Errorf("RecordWorkflowExecutionClosed unexpected numRows (%v) updated", noRowsAffected)
 	}
 	return nil
+}
+
+func (s *sqlVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
+	return p.NewOperationNotSupportErrorForVis()
 }
 
 func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {

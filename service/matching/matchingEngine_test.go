@@ -263,7 +263,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 	}
 
-	_, err := s.matchingEngine.AddDecisionTask(&addRequest)
+	_, err := s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
 	s.NoError(err)
 
 	taskList := &workflow.TaskList{}
@@ -394,7 +394,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 				ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			}
 
-			_, err = s.matchingEngine.AddActivityTask(&addRequest)
+			_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		} else {
 			addRequest := matching.AddDecisionTaskRequest{
 				DomainUUID:                    common.StringPtr(domainID),
@@ -404,7 +404,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 				ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			}
 
-			_, err = s.matchingEngine.AddDecisionTask(&addRequest)
+			_, err = s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
 		}
 		s.NoError(err)
 	}
@@ -453,12 +453,12 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	// now attempt to add a task
 	scheduleID := int64(5)
 	addRequest.ScheduleId = &scheduleID
-	_, err = s.matchingEngine.AddActivityTask(&addRequest)
+	_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 	s.Error(err)
 
 	// test race
 	tlmImpl.taskWriter.stopped = 0
-	_, err = s.matchingEngine.AddActivityTask(&addRequest)
+	_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 	s.Error(err)
 	tlmImpl.taskWriter.stopped = 1 // reset it back to old value
 }
@@ -495,7 +495,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
 
-		_, err := s.matchingEngine.AddActivityTask(&addRequest)
+		_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		s.NoError(err)
 	}
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
@@ -598,12 +598,14 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	dispatchTTL := time.Nanosecond
 	dPtr := _defaultTaskDispatchRPS
-	tlConfig, err := newTaskListConfig(tlID, s.matchingEngine.config, s.domainCache)
+
+	mgr, err := newTaskListManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
 	s.NoError(err)
-	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, s.domainCache, tlConfig,
-		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
-	)
+
+	mgrImpl, ok := mgr.(*taskListManagerImpl)
+	s.True(ok)
+
+	mgrImpl.matcher.limiter = newRateLimiter(&dPtr, dispatchTTL, _minBurst)
 	s.matchingEngine.updateTaskList(tlID, mgr)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.NoError(mgr.Start())
@@ -637,11 +639,21 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			}
 		}, nil)
 
+	pollFunc := func(maxDispatch float64) (*workflow.PollForActivityTaskResponse, error) {
+		return s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+			DomainUUID: common.StringPtr(domainID),
+			PollRequest: &workflow.PollForActivityTaskRequest{
+				TaskList:         taskList,
+				Identity:         &identity,
+				TaskListMetadata: &workflow.TaskListMetadata{MaxTasksPerSecond: &maxDispatch},
+			},
+		})
+	}
+
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 
 		var wg sync.WaitGroup
-
 		var result *workflow.PollForActivityTaskResponse
 		var pollErr error
 		maxDispatch := _defaultTaskDispatchRPS
@@ -651,14 +663,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result, pollErr = s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
-				DomainUUID: common.StringPtr(domainID),
-				PollRequest: &workflow.PollForActivityTaskRequest{
-					TaskList:         taskList,
-					Identity:         &identity,
-					TaskListMetadata: &workflow.TaskListMetadata{MaxTasksPerSecond: &maxDispatch},
-				},
-			})
+			result, pollErr = pollFunc(maxDispatch)
 		}()
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 		addRequest := matching.AddActivityTaskRequest{
@@ -669,15 +674,30 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			TaskList:                      taskList,
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
-		_, err := s.matchingEngine.AddActivityTask(&addRequest)
+		_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		wg.Wait()
 		s.NoError(err)
 		s.NoError(pollErr)
 		s.NotNil(result)
+
 		if len(result.TaskToken) == 0 {
+			// when ratelimit is set to zero, poller is expected to return empty result
+			// reset ratelimit, poll again and make sure task is returned this time
 			s.logger.Debug(fmt.Sprintf("empty poll returned"))
-			continue
+			s.Equal(float64(0), maxDispatch)
+			maxDispatch = _defaultTaskDispatchRPS
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				result, pollErr = pollFunc(maxDispatch)
+			}()
+			wg.Wait()
+			s.NoError(err)
+			s.NoError(pollErr)
+			s.NotNil(result)
+			s.True(len(result.TaskToken) > 0)
 		}
+
 		s.EqualValues(activityID, *result.ActivityId)
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
@@ -773,12 +793,12 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchTTL := time.Nanosecond
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	dPtr := _defaultTaskDispatchRPS
-	tlConfig, err := newTaskListConfig(tlID, s.matchingEngine.config, s.domainCache)
+
+	mgr, err := newTaskListManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
 	s.NoError(err)
-	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, s.domainCache, tlConfig,
-		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
-	)
+
+	mgrImpl := mgr.(*taskListManagerImpl)
+	mgrImpl.matcher.limiter = newRateLimiter(&dPtr, dispatchTTL, _minBurst)
 	s.matchingEngine.updateTaskList(tlID, mgr)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.NoError(mgr.Start())
@@ -801,7 +821,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 				}
 
-				_, err := s.matchingEngine.AddActivityTask(&addRequest)
+				_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 				if err != nil {
 					s.logger.Info("Failure in AddActivityTask", tag.Error(err))
 					i--
@@ -940,7 +960,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 				}
 
-				_, err := s.matchingEngine.AddDecisionTask(&addRequest)
+				_, err := s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
 				if err != nil {
 					panic(err)
 				}
@@ -1094,7 +1114,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(600),
 				}
 
-				_, err := engine.AddActivityTask(&addRequest)
+				_, err := engine.AddActivityTask(context.Background(), &addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1248,7 +1268,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(600),
 				}
 
-				_, err := engine.AddDecisionTask(&addRequest)
+				_, err := engine.AddDecisionTask(context.Background(), &addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1373,14 +1393,14 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 	}
 
-	_, err := s.matchingEngine.AddActivityTask(&addRequest)
+	_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
 	ctx, err := s.matchingEngine.getTask(context.Background(), tlID, nil, tlKind)
 	s.NoError(err)
 
-	ctx.completeTask(errors.New("test error"))
+	ctx.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, nil, tlKind)
 	s.NoError(err)
@@ -1390,7 +1410,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.Equal(ctx.info.RunID, ctx2.info.RunID)
 	s.Equal(ctx.info.ScheduleID, ctx2.info.ScheduleID)
 
-	ctx2.completeTask(nil)
+	ctx2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 }
 
@@ -1422,7 +1442,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
 
-		_, err := s.matchingEngine.AddActivityTask(&addRequest)
+		_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		s.NoError(err)
 	}
 
@@ -1432,8 +1452,8 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 
 	// wait until all tasks are read by the task pump and enqeued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
-	expectedBufSize := common.MinInt(cap(tlMgr.taskBuffer), taskCount)
-	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskBuffer) == expectedBufSize }, time.Second))
+	expectedBufSize := common.MinInt(cap(tlMgr.taskReader.taskBuffer), taskCount)
+	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
 
 	// stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
@@ -1446,14 +1466,14 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
 	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
-	tasks, readLevel, isReadBatchDone, err := tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch()
 	s.Nil(err)
 	s.EqualValues(0, len(tasks))
 	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), readLevel)
 	s.True(isReadBatchDone)
 
 	tlMgr.taskAckManager.setReadLevel(0)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
 	s.Nil(err)
 	s.EqualValues(rangeSize, len(tasks))
 	s.EqualValues(rangeSize, readLevel)
@@ -1484,7 +1504,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
-	tasks, readLevel, isReadBatchDone, err = tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
 	s.Nil(err)
 	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
 	s.True(isReadBatchDone)
@@ -1504,19 +1524,20 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch_ReadBatchDone() {
 	config.RangeSize = rangeSize
 	tlMgr0, err := newTaskListManager(s.matchingEngine, tlID, &tlNormal, config)
 	s.NoError(err)
+
 	tlMgr, ok := tlMgr0.(*taskListManagerImpl)
-	s.True(ok, "taskListManger doesn't implement taskListManager interface")
+	s.True(ok)
 
 	tlMgr.taskAckManager.setReadLevel(0)
 	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
-	tasks, readLevel, isReadBatchDone, err := tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch()
 	s.Empty(tasks)
 	s.Equal(int64(rangeSize*10), readLevel)
 	s.False(isReadBatchDone)
 	s.NoError(err)
 
 	tlMgr.taskAckManager.setReadLevel(readLevel)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
 	s.Empty(tasks)
 	s.Equal(maxReadLevel, readLevel)
 	s.True(isReadBatchDone)
@@ -1566,7 +1587,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 				// simulates creating a task whose scheduledToStartTimeout is already expired
 				addRequest.ScheduleToStartTimeoutSeconds = common.Int32Ptr(-5)
 			}
-			_, err := s.matchingEngine.AddActivityTask(&addRequest)
+			_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 			s.NoError(err)
 		}
 
@@ -1576,7 +1597,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 		// wait until all tasks are loaded by into in-memory buffers by task list manager
 		// the buffer size should be one less than expected because dispatcher will dequeue the head
-		s.True(s.awaitCondition(func() bool { return len(tlMgr.taskBuffer) >= (taskCount/2 - 1) }, time.Second))
+		s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) >= (taskCount/2 - 1) }, time.Second))
 
 		maxTimeBetweenTaskDeletes = tc.maxTimeBtwnDeletes
 		s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskListInfo(tc.batchSize)

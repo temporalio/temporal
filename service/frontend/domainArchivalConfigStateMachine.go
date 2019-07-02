@@ -61,9 +61,8 @@ var (
 
 // the following errors represents bad user input
 var (
-	errDisallowedBucketMetadata = &shared.BadRequestError{Message: "Cannot set bucket owner or bucket retention (must update bucket manually)"}
-	errBucketNameUpdate         = &shared.BadRequestError{Message: "Cannot update existing bucket name"}
-	errBucketDoesNotExist       = &shared.BadRequestError{Message: "Bucket does not exist"}
+	errBucketNameUpdate   = &shared.BadRequestError{Message: "Cannot update existing bucket name"}
+	errBucketDoesNotExist = &shared.BadRequestError{Message: "Bucket does not exist"}
 )
 
 func neverEnabledState() *archivalState {

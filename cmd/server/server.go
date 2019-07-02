@@ -24,12 +24,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/uber/cadence/common/cluster"
-
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/blobstore/s3store"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
@@ -134,13 +133,6 @@ func (s *server) startService() common.Daemon {
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 
 	clusterMetadata := s.cfg.ClusterMetadata
-	// TODO remove when ClustersInfo is fully deprecated
-	if len(s.cfg.ClustersInfo.CurrentClusterName) != 0 && len(s.cfg.ClusterMetadata.CurrentClusterName) != 0 {
-		log.Fatalf("cannot config both clustersInfo and clusterMetadata")
-	}
-	if len(s.cfg.ClustersInfo.CurrentClusterName) != 0 {
-		clusterMetadata = s.cfg.ClustersInfo.ToClusterMetadata()
-	}
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
 		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
@@ -152,7 +144,13 @@ func (s *server) startService() common.Daemon {
 		s.cfg.Archival.DefaultBucket,
 		enableReadFromArchival(),
 	)
-	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
+
+	if s.cfg.PublicClient.HostPort != "" {
+		params.DispatcherProvider = client.NewDNSYarpcDispatcherProvider(params.Logger, s.cfg.PublicClient.RefreshInterval)
+	} else {
+		log.Fatalf("need to provide an endpoint config for PublicClient")
+	}
+
 	params.ESConfig = &s.cfg.ElasticSearch
 	params.ESConfig.Enable = dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)() // force override with dynamic config
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {
@@ -187,17 +185,22 @@ func (s *server) startService() common.Daemon {
 		if s.cfg.Archival.Filestore != nil && s.cfg.Archival.S3store != nil {
 			log.Fatalf("cannot config both filestore and s3store")
 		}
+		if s.cfg.Archival.Filestore == nil && s.cfg.Archival.S3store == nil {
+			log.Fatalf("cannot config archival without filestore or s3store")
+		}
 		if s.cfg.Archival.Filestore != nil {
-			params.BlobstoreClient, err = filestore.NewClient(s.cfg.Archival.Filestore)
+			filestoreClient, err := filestore.NewClient(s.cfg.Archival.Filestore)
+			if err != nil {
+				log.Fatalf("error creating file based blobstore: %v", err)
+			}
+			params.BlobstoreClient = filestoreClient
 		}
 		if s.cfg.Archival.S3store != nil {
 			s3cli, err := s3store.ClientFromConfig(s.cfg.Archival.S3store)
 			if err != nil {
-				params.BlobstoreClient = s3store.NewClient(s3cli)
+				log.Fatalf("error creating s3 blobstore: %v", err)
 			}
-		}
-		if err != nil {
-			log.Fatalf("error creating blobstore: %v", err)
+			params.BlobstoreClient = s3store.NewClient(s3cli)
 		}
 	}
 

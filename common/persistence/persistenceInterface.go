@@ -127,6 +127,7 @@ type (
 		GetName() string
 		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
+		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
@@ -151,53 +152,14 @@ type (
 
 	// InternalCreateWorkflowExecutionRequest is used to write a new workflow execution
 	InternalCreateWorkflowExecutionRequest struct {
-		RequestID                   string
-		DomainID                    string
-		Execution                   workflow.WorkflowExecution
-		ParentDomainID              string
-		ParentExecution             workflow.WorkflowExecution
-		InitiatedID                 int64
-		TaskList                    string
-		WorkflowTypeName            string
-		WorkflowTimeout             int32
-		DecisionTimeoutValue        int32
-		ExecutionContext            []byte
-		LastEventTaskID             int64
-		NextEventID                 int64
-		LastProcessedEvent          int64
-		SignalCount                 int32
-		HistorySize                 int64
-		TransferTasks               []Task
-		ReplicationTasks            []Task
-		TimerTasks                  []Task
-		RangeID                     int64
-		DecisionVersion             int64
-		DecisionScheduleID          int64
-		DecisionStartedID           int64
-		DecisionStartToCloseTimeout int32
-		State                       int
-		CloseStatus                 int
-		CreateWorkflowMode          int
-		PreviousRunID               string
-		PreviousLastWriteVersion    int64
-		ReplicationState            *ReplicationState
-		Attempt                     int32
-		HasRetryPolicy              bool
-		InitialInterval             int32
-		BackoffCoefficient          float64
-		MaximumInterval             int32
-		ExpirationTime              time.Time
-		MaximumAttempts             int32
-		NonRetriableErrors          []string
-		PreviousAutoResetPoints     *DataBlob
-		VersionHistories            *DataBlob
-		// 2 means using eventsV2, empty/0/1 means using events(V1)
-		EventStoreVersion int32
-		// for eventsV2: branchToken from historyPersistence
-		BranchToken       []byte
-		CronSchedule      string
-		ExpirationSeconds int32
-		SearchAttributes  map[string][]byte
+		RangeID int64
+
+		CreateWorkflowMode int
+
+		PreviousRunID            string
+		PreviousLastWriteVersion int64
+
+		NewWorkflowSnapshot InternalWorkflowSnapshot
 	}
 
 	// InternalWorkflowExecutionInfo describes a workflow execution for Persistence Interface
@@ -262,17 +224,17 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ActivityInfos            map[int64]*InternalActivityInfo
-		TimerInfos               map[string]*TimerInfo
-		ChildExecutionInfos      map[int64]*InternalChildExecutionInfo
-		RequestCancelInfos       map[int64]*RequestCancelInfo
-		SignalInfos              map[int64]*SignalInfo
-		SignalRequestedIDs       map[string]struct{}
-		ExecutionInfo            *InternalWorkflowExecutionInfo
-		ReplicationState         *ReplicationState
-		BufferedEvents           []*DataBlob
-		BufferedReplicationTasks map[int64]*InternalBufferedReplicationTask
-		VersionHistories         *DataBlob
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ReplicationState *ReplicationState
+		VersionHistories *DataBlob
+		ActivityInfos    map[int64]*InternalActivityInfo
+
+		TimerInfos          map[string]*TimerInfo
+		ChildExecutionInfos map[int64]*InternalChildExecutionInfo
+		RequestCancelInfos  map[int64]*RequestCancelInfo
+		SignalInfos         map[int64]*SignalInfo
+		SignalRequestedIDs  map[string]struct{}
+		BufferedEvents      []*DataBlob
 	}
 
 	// InternalActivityInfo details  for Persistence Interface
@@ -312,7 +274,7 @@ type (
 		LastHeartbeatTimeoutVisibility int64
 	}
 
-	// InternalChildExecutionInfo has details for pending child executions  for Persistence Interface
+	// InternalChildExecutionInfo has details for pending child executions for Persistence Interface
 	InternalChildExecutionInfo struct {
 		Version               int64
 		InitiatedID           int64
@@ -327,109 +289,96 @@ type (
 		WorkflowTypeName      string
 	}
 
-	// InternalBufferedReplicationTask has details to handle out of order receive of history events  for Persistence Interface
-	InternalBufferedReplicationTask struct {
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		History                 *DataBlob
-		NewRunHistory           *DataBlob
-		EventStoreVersion       int32
-		NewRunEventStoreVersion int32
-	}
-
-	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution  for Persistence Interface
+	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
 	InternalUpdateWorkflowExecutionRequest struct {
-		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		VersionHistories *DataBlob
-		TransferTasks    []Task
-		TimerTasks       []Task
-		ReplicationTasks []Task
-		Condition        int64
-		RangeID          int64
-		ContinueAsNew    *InternalCreateWorkflowExecutionRequest
+		RangeID int64
 
-		// Mutable state
-		UpsertActivityInfos           []*InternalActivityInfo
-		DeleteActivityInfos           []int64
-		UpserTimerInfos               []*TimerInfo
-		DeleteTimerInfos              []string
-		UpsertChildExecutionInfos     []*InternalChildExecutionInfo
-		DeleteChildExecutionInfo      *int64
-		UpsertRequestCancelInfos      []*RequestCancelInfo
-		DeleteRequestCancelInfo       *int64
-		UpsertSignalInfos             []*SignalInfo
-		DeleteSignalInfo              *int64
-		UpsertSignalRequestedIDs      []string
-		DeleteSignalRequestedID       string
-		NewBufferedEvents             *DataBlob
-		ClearBufferedEvents           bool
-		NewBufferedReplicationTask    *InternalBufferedReplicationTask
-		DeleteBufferedReplicationTask *int64
+		UpdateWorkflowMutation InternalWorkflowMutation
+
+		NewWorkflowSnapshot *InternalWorkflowSnapshot
 	}
 
-	// InternalResetMutableStateRequest is used to reset workflow execution state  for Persistence Interface
+	// InternalResetMutableStateRequest is used to reset workflow execution state for Persistence Interface
 	InternalResetMutableStateRequest struct {
+		RangeID int64
+
 		// previous workflow information
 		PrevRunID            string
 		PrevLastWriteVersion int64
 		PrevState            int
 
-		ExecutionInfo    *InternalWorkflowExecutionInfo
-		ReplicationState *ReplicationState
-		VersionHistories *DataBlob
-		Condition        int64
-		RangeID          int64
+		// workflow to be resetted
+		ResetWorkflowSnapshot InternalWorkflowSnapshot
 
-		// mutable state pending info
-		InsertActivityInfos       []*InternalActivityInfo
-		InsertTimerInfos          []*TimerInfo
-		InsertChildExecutionInfos []*InternalChildExecutionInfo
-		InsertRequestCancelInfos  []*RequestCancelInfo
-		InsertSignalInfos         []*SignalInfo
-		InsertSignalRequestedIDs  []string
-
-		// replication/ transfer / timer task
-		InsertReplicationTasks []Task
-		InsertTransferTasks    []Task
-		InsertTimerTasks       []Task
+		// current workflow
+		CurrentWorkflowMutation *InternalWorkflowMutation
 	}
 
-	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state  for Persistence Interface
+	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
 	InternalResetWorkflowExecutionRequest struct {
-		PrevRunVersion int64
-		PrevRunState   int
-
-		Condition int64
-		RangeID   int64
+		RangeID int64
 
 		// for base run (we need to make sure the baseRun hasn't been deleted after forking)
 		BaseRunID          string
 		BaseRunNextEventID int64
 
+		// for current workflow record
+		CurrentRunID          string
+		CurrentRunNextEventID int64
+
 		// for current mutable state
-		UpdateCurr           bool
-		CurrExecutionInfo    *InternalWorkflowExecutionInfo
-		CurrReplicationState *ReplicationState
-		CurrReplicationTasks []Task
-		CurrTransferTasks    []Task
-		CurrTimerTasks       []Task
-		CurrVersionHistories *DataBlob
+		CurrentWorkflowMutation *InternalWorkflowMutation
 
 		// For new mutable state
-		InsertExecutionInfo       *InternalWorkflowExecutionInfo
-		InsertReplicationState    *ReplicationState
-		InsertTransferTasks       []Task
-		InsertTimerTasks          []Task
-		InsertReplicationTasks    []Task
-		InsertActivityInfos       []*InternalActivityInfo
-		InsertTimerInfos          []*TimerInfo
-		InsertChildExecutionInfos []*InternalChildExecutionInfo
-		InsertRequestCancelInfos  []*RequestCancelInfo
-		InsertSignalInfos         []*SignalInfo
-		InsertSignalRequestedIDs  []string
-		InsertVersionHistories    *DataBlob
+		NewWorkflowSnapshot InternalWorkflowSnapshot
+	}
+
+	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
+	InternalWorkflowMutation struct {
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ReplicationState *ReplicationState
+		VersionHistories *DataBlob
+
+		UpsertActivityInfos       []*InternalActivityInfo
+		DeleteActivityInfos       []int64
+		UpserTimerInfos           []*TimerInfo
+		DeleteTimerInfos          []string
+		UpsertChildExecutionInfos []*InternalChildExecutionInfo
+		DeleteChildExecutionInfo  *int64
+		UpsertRequestCancelInfos  []*RequestCancelInfo
+		DeleteRequestCancelInfo   *int64
+		UpsertSignalInfos         []*SignalInfo
+		DeleteSignalInfo          *int64
+		UpsertSignalRequestedIDs  []string
+		DeleteSignalRequestedID   string
+		NewBufferedEvents         *DataBlob
+		ClearBufferedEvents       bool
+
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+
+		Condition int64
+	}
+
+	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
+	InternalWorkflowSnapshot struct {
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ReplicationState *ReplicationState
+		VersionHistories *DataBlob
+
+		ActivityInfos       []*InternalActivityInfo
+		TimerInfos          []*TimerInfo
+		ChildExecutionInfos []*InternalChildExecutionInfo
+		RequestCancelInfos  []*RequestCancelInfo
+		SignalInfos         []*SignalInfo
+		SignalRequestedIDs  []string
+
+		TransferTasks    []Task
+		TimerTasks       []Task
+		ReplicationTasks []Task
+
+		Condition int64
 	}
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
@@ -614,6 +563,20 @@ type (
 		Status             workflow.WorkflowExecutionCloseStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
+	}
+
+	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
+	InternalUpsertWorkflowExecutionRequest struct {
+		DomainUUID         string
+		WorkflowID         string
+		RunID              string
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		WorkflowTimeout    int64
+		TaskID             int64
+		Memo               *DataBlob
+		SearchAttributes   map[string][]byte
 	}
 
 	// InternalDomainConfig describes the domain configuration

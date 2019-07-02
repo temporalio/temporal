@@ -27,11 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
-	"go.uber.org/cadence/.gen/go/shared"
-
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -41,6 +38,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -50,6 +48,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/service/worker/archiver"
+	"go.uber.org/cadence/.gen/go/shared"
 )
 
 type (
@@ -143,6 +142,7 @@ func (s *resetorSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: map[string]time.Time{},
+		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	historyCache := newHistoryCache(mockShard)
@@ -798,54 +798,54 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
-	s.True(resetReq.CurrExecutionInfo.LastEventTaskID > 0)
-	resetReq.CurrExecutionInfo.LastEventTaskID = 0
+	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
+	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
-	s.Equal(true, resetReq.UpdateCurr)
+	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = p.WorkflowStateCompleted
 	compareCurrExeInfo.CloseStatus = p.WorkflowCloseStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.HistorySize = 100
 	compareCurrExeInfo.CompletionEventBatchID = 1
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(1, len(resetReq.CurrTransferTasks))
-	s.Equal(1, len(resetReq.CurrTimerTasks))
-	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrTransferTasks[0].GetType())
-	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrTimerTasks[0].GetType())
+	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
+	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 
-	s.Equal("wfType", resetReq.InsertExecutionInfo.WorkflowTypeName)
-	s.True(len(resetReq.InsertExecutionInfo.RunID) > 0)
-	s.Equal([]byte(newBranchToken), resetReq.InsertExecutionInfo.BranchToken)
+	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
+	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
+	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 	// 35 = resetEventID(29) + 6 in a batch
-	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
-	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	// one activity task, one decision task and one record workflow started task
-	s.Equal(3, len(resetReq.InsertTransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.InsertTransferTasks[2].GetType())
+	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
-	s.Equal(3, len(resetReq.InsertTimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.InsertTimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.InsertTimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.InsertTimerTasks[2].GetType())
+	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
+	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
-	s.Equal(2, len(resetReq.InsertTimerInfos))
-	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.InsertTimerInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
+	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
 
-	s.Equal(1, len(resetReq.InsertActivityInfos))
-	s.assertActivityIDs([]string{actIDNotStarted}, resetReq.InsertActivityInfos)
+	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ActivityInfos))
+	s.assertActivityIDs([]string{actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
-	s.Nil(resetReq.InsertReplicationTasks)
-	s.Nil(resetReq.InsertReplicationState)
-	s.Equal(0, len(resetReq.InsertRequestCancelInfos))
+	s.Nil(resetReq.NewWorkflowSnapshot.ReplicationTasks)
+	s.Nil(resetReq.NewWorkflowSnapshot.ReplicationState)
+	s.Equal(0, len(resetReq.NewWorkflowSnapshot.RequestCancelInfos))
 
 	// not supported feature
-	s.Nil(resetReq.InsertChildExecutionInfos)
-	s.Nil(resetReq.InsertSignalInfos)
-	s.Nil(resetReq.InsertSignalRequestedIDs)
+	s.Empty(resetReq.NewWorkflowSnapshot.ChildExecutionInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalRequestedIDs)
 }
 
 func (s *resetorSuite) assertTimerIDs(ids []string, timers []*p.TimerInfo) {
@@ -2098,52 +2098,51 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
-	s.True(resetReq.CurrExecutionInfo.LastEventTaskID > 0)
-	resetReq.CurrExecutionInfo.LastEventTaskID = 0
+	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
+	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
-	s.Equal(true, resetReq.UpdateCurr)
-	s.Equal(p.WorkflowStateRunning, resetReq.PrevRunState)
+	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = p.WorkflowStateCompleted
 	compareCurrExeInfo.CloseStatus = p.WorkflowCloseStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.HistorySize = 100
 	compareCurrExeInfo.LastFirstEventID = 1
 	compareCurrExeInfo.CompletionEventBatchID = 1
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(1, len(resetReq.CurrTransferTasks))
-	s.Equal(1, len(resetReq.CurrTimerTasks))
-	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrTransferTasks[0].GetType())
-	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrTimerTasks[0].GetType())
+	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
+	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 
-	s.Equal("wfType", resetReq.InsertExecutionInfo.WorkflowTypeName)
-	s.True(len(resetReq.InsertExecutionInfo.RunID) > 0)
-	s.Equal([]byte(newBranchToken), resetReq.InsertExecutionInfo.BranchToken)
+	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
+	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
+	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 
-	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
-	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
-	s.Equal(4, len(resetReq.InsertTransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[2].GetType())
-	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.InsertTransferTasks[3].GetType())
+	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
-	s.Equal(3, len(resetReq.InsertTimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.InsertTimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.InsertTimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.InsertTimerTasks[2].GetType())
+	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
+	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
-	s.Equal(2, len(resetReq.InsertTimerInfos))
-	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.InsertTimerInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
+	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
 
-	s.Equal(2, len(resetReq.InsertActivityInfos))
-	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.InsertActivityInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.ActivityInfos))
+	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
-	s.Equal(1, len(resetReq.InsertReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.InsertReplicationTasks[0].GetType())
-	s.Equal(1, len(resetReq.CurrReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrReplicationTasks[0].GetType())
+	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
+	s.Equal(p.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(1, len(resetReq.CurrentWorkflowMutation.ReplicationTasks))
+	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
@@ -2156,13 +2155,13 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 			Version:     beforeResetVersion,
 		},
 	}
-	s.Equal(compareRepState, resetReq.InsertReplicationState)
+	s.Equal(compareRepState, resetReq.NewWorkflowSnapshot.ReplicationState)
 
 	// not supported feature
-	s.Nil(resetReq.InsertChildExecutionInfos)
-	s.Nil(resetReq.InsertSignalInfos)
-	s.Nil(resetReq.InsertSignalRequestedIDs)
-	s.Equal(0, len(resetReq.InsertRequestCancelInfos))
+	s.Empty(resetReq.NewWorkflowSnapshot.ChildExecutionInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalRequestedIDs)
+	s.Equal(0, len(resetReq.NewWorkflowSnapshot.RequestCancelInfos))
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
@@ -3423,39 +3422,37 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
 	s.Equal(true, ok)
-	s.Equal(false, resetReq.UpdateCurr)
-	s.Equal(p.WorkflowStateCompleted, resetReq.PrevRunState)
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(0, len(resetReq.CurrTransferTasks))
-	s.Equal(0, len(resetReq.CurrTimerTasks))
+	s.Equal(false, resetReq.CurrentWorkflowMutation != nil)
+	s.Equal(compareCurrExeInfo.RunID, resetReq.CurrentRunID)
+	s.Equal(compareCurrExeInfo.NextEventID, resetReq.CurrentRunNextEventID)
 
-	s.Equal("wfType", resetReq.InsertExecutionInfo.WorkflowTypeName)
-	s.True(len(resetReq.InsertExecutionInfo.RunID) > 0)
-	s.Equal([]byte(newBranchToken), resetReq.InsertExecutionInfo.BranchToken)
+	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
+	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
+	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 
-	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
-	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
-	s.Equal(4, len(resetReq.InsertTransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[2].GetType())
-	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.InsertTransferTasks[3].GetType())
+	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
-	s.Equal(3, len(resetReq.InsertTimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.InsertTimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.InsertTimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.InsertTimerTasks[2].GetType())
+	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
+	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
-	s.Equal(2, len(resetReq.InsertTimerInfos))
-	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.InsertTimerInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
+	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
 
-	s.Equal(2, len(resetReq.InsertActivityInfos))
-	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.InsertActivityInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.ActivityInfos))
+	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
-	s.Equal(1, len(resetReq.InsertReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.InsertReplicationTasks[0].GetType())
+	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
+	s.Equal(p.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
@@ -3468,13 +3465,13 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 			Version:     beforeResetVersion,
 		},
 	}
-	s.Equal(compareRepState, resetReq.InsertReplicationState)
+	s.Equal(compareRepState, resetReq.NewWorkflowSnapshot.ReplicationState)
 
 	// not supported feature
-	s.Nil(resetReq.InsertChildExecutionInfos)
-	s.Nil(resetReq.InsertSignalInfos)
-	s.Nil(resetReq.InsertSignalRequestedIDs)
-	s.Equal(0, len(resetReq.InsertRequestCancelInfos))
+	s.Empty(resetReq.NewWorkflowSnapshot.ChildExecutionInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalRequestedIDs)
+	s.Equal(0, len(resetReq.NewWorkflowSnapshot.RequestCancelInfos))
 }
 
 func (s *resetorSuite) TestApplyReset() {
@@ -4136,35 +4133,33 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
 	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
 	s.Equal(true, ok)
-	s.Equal(false, resetReq.UpdateCurr)
-	s.Equal(p.WorkflowStateCompleted, resetReq.PrevRunState)
-	s.Equal(compareCurrExeInfo, resetReq.CurrExecutionInfo)
-	s.Equal(0, len(resetReq.CurrTransferTasks))
-	s.Equal(0, len(resetReq.CurrTimerTasks))
+	s.Equal(false, resetReq.CurrentWorkflowMutation != nil)
+	s.Equal(compareCurrExeInfo.RunID, resetReq.CurrentRunID)
+	s.Equal(compareCurrExeInfo.NextEventID, resetReq.CurrentRunNextEventID)
 
-	s.Equal("wfType", resetReq.InsertExecutionInfo.WorkflowTypeName)
-	s.True(len(resetReq.InsertExecutionInfo.RunID) > 0)
-	s.Equal([]byte(newBranchToken), resetReq.InsertExecutionInfo.BranchToken)
+	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
+	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
+	s.Equal([]byte(newBranchToken), resetReq.NewWorkflowSnapshot.ExecutionInfo.BranchToken)
 
-	s.Equal(int64(34), resetReq.InsertExecutionInfo.DecisionScheduleID)
-	s.Equal(int64(35), resetReq.InsertExecutionInfo.NextEventID)
+	s.Equal(int64(34), resetReq.NewWorkflowSnapshot.ExecutionInfo.DecisionScheduleID)
+	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
-	s.Equal(3, len(resetReq.InsertTransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.InsertTransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.InsertTransferTasks[2].GetType())
+	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
-	s.Equal(3, len(resetReq.InsertTimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.InsertTimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.InsertTimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.InsertTimerTasks[2].GetType())
+	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
+	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
-	s.Equal(2, len(resetReq.InsertTimerInfos))
-	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.InsertTimerInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
+	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
 
-	s.Equal(2, len(resetReq.InsertActivityInfos))
-	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.InsertActivityInfos)
+	s.Equal(2, len(resetReq.NewWorkflowSnapshot.ActivityInfos))
+	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
@@ -4177,23 +4172,25 @@ func (s *resetorSuite) TestApplyReset() {
 			Version:     beforeResetVersion,
 		},
 	}
-	s.Equal(compareRepState, resetReq.InsertReplicationState)
+	s.Equal(compareRepState, resetReq.NewWorkflowSnapshot.ReplicationState)
 
-	s.Equal(0, len(resetReq.InsertReplicationTasks))
+	s.Equal(0, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
 	// not supported feature
-	s.Nil(resetReq.InsertChildExecutionInfos)
-	s.Nil(resetReq.InsertSignalInfos)
-	s.Nil(resetReq.InsertSignalRequestedIDs)
-	s.Equal(0, len(resetReq.InsertRequestCancelInfos))
+	s.Empty(resetReq.NewWorkflowSnapshot.ChildExecutionInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalInfos)
+	s.Empty(resetReq.NewWorkflowSnapshot.SignalRequestedIDs)
+	s.Equal(0, len(resetReq.NewWorkflowSnapshot.RequestCancelInfos))
 }
 
 func TestFindAutoResetPoint(t *testing.T) {
+	timeSource := clock.NewRealTimeSource()
+
 	// case 1: nil
-	_, pt := FindAutoResetPoint(nil, nil)
+	_, pt := FindAutoResetPoint(timeSource, nil, nil)
 	assert.Nil(t, pt)
 
 	// case 2: empty
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{}, &workflow.ResetPoints{})
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{}, &workflow.ResetPoints{})
 	assert.Nil(t, pt)
 
 	pt0 := &workflow.ResetPointInfo{
@@ -4224,7 +4221,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	}
 
 	// case 3: two intersection
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"abc": {},
 			"def": {},
@@ -4237,7 +4234,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Equal(t, pt.String(), pt0.String())
 
 	// case 4: one intersection
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none":    {},
 			"def":     {},
@@ -4251,7 +4248,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Equal(t, pt.String(), pt1.String())
 
 	// case 4: no intersection
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none1": {},
 			"none2": {},
@@ -4264,7 +4261,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Nil(t, pt)
 
 	// case 5: not resettable
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none1": {},
 			"ghi":   {},
@@ -4277,7 +4274,7 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Nil(t, pt)
 
 	// case 6: one intersection of expired
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none":    {},
 			"expired": {},
@@ -4289,8 +4286,8 @@ func TestFindAutoResetPoint(t *testing.T) {
 	})
 	assert.Nil(t, pt)
 
-	// case 7: one intersection of not expred
-	_, pt = FindAutoResetPoint(&workflow.BadBinaries{
+	// case 7: one intersection of not expired
+	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
 		Binaries: map[string]*workflow.BadBinaryInfo{
 			"none":       {},
 			"notExpired": {},

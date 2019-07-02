@@ -133,6 +133,22 @@ func (r *replayMetricsScope) RecordTimer(timer int, d time.Duration) {
 	r.scope.RecordTimer(timer, d)
 }
 
+// RecordHistogramDuration records a duration value in a histogram
+func (r *replayMetricsScope) RecordHistogramDuration(timer int, d time.Duration) {
+	if workflow.IsReplaying(r.ctx) {
+		return
+	}
+	r.scope.RecordHistogramDuration(timer, d)
+}
+
+// RecordHistogramValue records a value in a histogram
+func (r *replayMetricsScope) RecordHistogramValue(timer int, value float64) {
+	if workflow.IsReplaying(r.ctx) {
+		return
+	}
+	r.scope.RecordHistogramValue(timer, value)
+}
+
 // UpdateGauge reports Gauge type absolute value metric
 func (r *replayMetricsScope) UpdateGauge(gauge int, value float64) {
 	if workflow.IsReplaying(r.ctx) {

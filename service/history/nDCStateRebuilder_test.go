@@ -24,17 +24,16 @@ import (
 	ctx "context"
 	"testing"
 
-	"github.com/uber/cadence/common/cluster"
-
-	"github.com/stretchr/testify/mock"
-
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -106,6 +105,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		eventsCache:               s.mockEventsCache,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 

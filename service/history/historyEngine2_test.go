@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -138,6 +139,7 @@ func (s *engine2Suite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		eventsCache:               s.mockEventsCache,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	historyCache := newHistoryCache(mockShard)
@@ -153,6 +155,7 @@ func (s *engine2Suite) SetupTest() {
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		config:             s.config,
 		archivalClient:     s.mockArchivalClient,
+		timeSource:         mockShard.timeSource,
 	}
 	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockMatchingClient, s.logger)
@@ -1198,7 +1201,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_TimeoutError() {
 		},
 	})
 	s.True(p.IsTimeoutError(err))
-	s.NotNil(resp)
+	s.Nil(resp)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {

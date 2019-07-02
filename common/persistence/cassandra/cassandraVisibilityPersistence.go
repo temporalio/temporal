@@ -324,6 +324,12 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 	return nil
 }
 
+func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
+	request *p.InternalUpsertWorkflowExecutionRequest) error {
+
+	return p.NewOperationNotSupportErrorForVis()
+}
+
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutions,

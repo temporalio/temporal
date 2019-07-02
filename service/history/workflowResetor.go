@@ -30,6 +30,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	ce "github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -54,14 +55,17 @@ type (
 
 	workflowResetorImpl struct {
 		eng        *historyEngineImpl
-		replicator *historyReplicator
+		timeSource clock.TimeSource
 	}
 )
 
 var _ workflowResetor = (*workflowResetorImpl)(nil)
 
 func newWorkflowResetor(historyEngine *historyEngineImpl) *workflowResetorImpl {
-	return &workflowResetorImpl{eng: historyEngine}
+	return &workflowResetorImpl{
+		eng:        historyEngine,
+		timeSource: historyEngine.shard.GetTimeSource(),
+	}
 }
 
 // ResetWorkflowExecution only allows resetting to decisionTaskCompleted, but exclude that batch of decisionTaskCompleted/decisionTaskFailed/decisionTaskTimeout.
@@ -131,7 +135,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 		currMutableState, currTerminated, currCloseTask, currCleanupTask,
 		newMutableState, newTransferTasks, newTimerTasks,
 		currReplicationTasks, newReplicationTasks, baseMutableState.GetExecutionInfo().RunID,
-		baseMutableState.GetNextEventID(), currPrevRunVersion,
+		baseMutableState.GetNextEventID(),
 	)
 
 	if retError == nil {
@@ -651,7 +655,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	}
 	forkEventVersion = lastBatch[len(lastBatch)-1].GetVersion()
 
-	startTime := time.Now()
+	startTime := w.timeSource.Now()
 	resetMutableState.executionInfo.RunID = newRunID
 	resetMutableState.executionInfo.StartTimestamp = startTime
 	resetMutableState.executionInfo.LastUpdatedTimestamp = startTime
@@ -750,7 +754,6 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		}
 	}
 	// before changing mutable state
-	prevRunVersion := currMutableState.GetLastWriteVersion()
 	newMsBuilder, newRunTransferTasks, newRunTimerTasks, retError = w.replicateResetEvent(baseMutableState, &baseExecution, historyAfterReset, resetAttr.GetForkEventVersion())
 	if retError != nil {
 		return retError
@@ -793,7 +796,6 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		nil,
 		baseExecution.GetRunId(),
 		baseMutableState.GetNextEventID(),
-		prevRunVersion,
 	)
 	if retError != nil {
 		return retError
@@ -918,13 +920,14 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 // FindAutoResetPoint returns the auto reset point
 func FindAutoResetPoint(
+	timeSource clock.TimeSource,
 	badBinaries *workflow.BadBinaries,
 	autoResetPoints *workflow.ResetPoints,
 ) (string, *workflow.ResetPointInfo) {
 	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
 		return "", nil
 	}
-	nowNano := time.Now().UnixNano()
+	nowNano := timeSource.Now().UnixNano()
 	for _, p := range autoResetPoints.Points {
 		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
 		if ok && p.GetResettable() {

@@ -59,10 +59,10 @@ const (
 // Data encoding types
 const (
 	EncodingTypeJSON     EncodingType = "json"
-	EncodingTypeThriftRW              = "thriftrw"
-	EncodingTypeGob                   = "gob"
-	EncodingTypeUnknown               = "unknow"
-	EncodingTypeEmpty                 = ""
+	EncodingTypeThriftRW EncodingType = "thriftrw"
+	EncodingTypeGob      EncodingType = "gob"
+	EncodingTypeUnknown  EncodingType = "unknow"
+	EncodingTypeEmpty    EncodingType = ""
 )
 
 type (

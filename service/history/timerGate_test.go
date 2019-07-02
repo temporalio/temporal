@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/clock"
 )
 
 type (
@@ -41,7 +42,7 @@ type (
 )
 
 func BenchmarkLocalTimer(b *testing.B) {
-	timer := NewLocalTimerGate()
+	timer := NewLocalTimerGate(clock.NewRealTimeSource())
 
 	for i := 0; i < b.N; i++ {
 		timer.Update(time.Now())
@@ -67,7 +68,7 @@ func (s *localTimerGateSuite) TearDownSuite() {
 }
 
 func (s *localTimerGateSuite) SetupTest() {
-	s.localTimerGate = NewLocalTimerGate()
+	s.localTimerGate = NewLocalTimerGate(clock.NewRealTimeSource())
 }
 
 func (s *localTimerGateSuite) TearDownTest() {

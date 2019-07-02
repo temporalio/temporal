@@ -23,12 +23,12 @@ package history
 import (
 	ctx "context"
 	"fmt"
-	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -50,18 +50,20 @@ type (
 	}
 
 	decisionHandlerImpl struct {
-		currentClusterName string
-		config             *Config
-		shard              ShardContext
-		historyEngine      *historyEngineImpl
-		domainCache        cache.DomainCache
-		historyCache       *historyCache
-		txProcessor        transferQueueProcessor
-		timerProcessor     timerQueueProcessor
-		tokenSerializer    common.TaskTokenSerializer
-		metricsClient      metrics.Client
-		logger             log.Logger
-		throttledLogger    log.Logger
+		currentClusterName    string
+		config                *Config
+		shard                 ShardContext
+		timeSource            clock.TimeSource
+		historyEngine         *historyEngineImpl
+		domainCache           cache.DomainCache
+		historyCache          *historyCache
+		txProcessor           transferQueueProcessor
+		timerProcessor        timerQueueProcessor
+		tokenSerializer       common.TaskTokenSerializer
+		metricsClient         metrics.Client
+		logger                log.Logger
+		throttledLogger       log.Logger
+		decisionAttrValidator *decisionAttrValidator
 	}
 )
 
@@ -70,6 +72,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		currentClusterName: historyEngine.currentClusterName,
 		config:             historyEngine.config,
 		shard:              historyEngine.shard,
+		timeSource:         historyEngine.shard.GetTimeSource(),
 		historyEngine:      historyEngine,
 		domainCache:        historyEngine.shard.GetDomainCache(),
 		historyCache:       historyEngine.historyCache,
@@ -79,6 +82,8 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		metricsClient:      historyEngine.metricsClient,
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
+		decisionAttrValidator: newDecisionAttrValidator(historyEngine.shard.GetDomainCache(),
+			historyEngine.config, historyEngine.logger),
 	}
 }
 
@@ -114,7 +119,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 				return nil, &workflow.InternalServiceError{Message: "Failed to load start event."}
 			}
 			executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-			if req.GetIsFirstDecision() && executionTimestamp.After(time.Now()) {
+			if req.GetIsFirstDecision() && executionTimestamp.After(handler.timeSource.Now()) {
 				postActions.timerTasks = append(postActions.timerTasks, &persistence.WorkflowBackoffTimerTask{
 					VisibilityTimestamp: executionTimestamp,
 					TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
@@ -375,10 +380,6 @@ Update_History_Loop:
 			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
 		} else {
 
-			decisionAttrValidator := newDecisionAttrValidator(
-				handler.domainCache,
-				handler.config.MaxIDLengthLimit(),
-			)
 			decisionBlobSizeChecker := newDecisionBlobSizeChecker(
 				handler.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name),
 				handler.config.BlobSizeLimitError(domainEntry.GetInfo().Name),
@@ -394,7 +395,7 @@ Update_History_Loop:
 				eventStoreVersion,
 				domainEntry,
 				msBuilder,
-				decisionAttrValidator,
+				handler.decisionAttrValidator,
 				decisionBlobSizeChecker,
 				handler.logger,
 				timerBuilderProvider,

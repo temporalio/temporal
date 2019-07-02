@@ -71,6 +71,7 @@ type (
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        TimerGate
+		timeSource       clock.TimeSource
 		rateLimiter      tokenbucket.TokenBucket
 		startDelay       dynamicconfig.DurationPropertyFn
 		retryPolicy      backoff.RetryPolicy
@@ -115,6 +116,7 @@ func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *h
 		metricsClient:           historyService.metricsClient,
 		timerQueueAckMgr:        timerQueueAckMgr,
 		timerGate:               timerGate,
+		timeSource:              shard.GetTimeSource(),
 		numOfWorker:             numOfWorker,
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
@@ -330,7 +332,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				t.config.TimerProcessorMaxPollInterval(),
 				t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
 			))
-			if t.lastPollTime.Add(t.config.TimerProcessorMaxPollInterval()).Before(time.Now()) {
+			if t.lastPollTime.Add(t.config.TimerProcessorMaxPollInterval()).Before(t.timeSource.Now()) {
 				lookAheadTimer, err := t.readAndFanoutTimerTasks()
 				if err != nil {
 					return err
@@ -363,7 +365,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 		return nil, nil
 	}
 
-	t.lastPollTime = time.Now()
+	t.lastPollTime = t.timeSource.Now()
 	timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
 	if err != nil {
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event
@@ -401,7 +403,7 @@ func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan stru
 	var scope int
 	var shouldProcessTask bool
 	var err error
-	startTime := time.Now()
+	startTime := t.timeSource.Now()
 	logger := t.initializeLoggerForTask(task)
 	attempt := 0
 	incAttempt := func() {
@@ -463,7 +465,7 @@ func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct
 	default:
 	}
 
-	startTime := time.Now()
+	startTime := t.timeSource.Now()
 	scope, err := t.timerProcessor.process(task, shouldProcessTask)
 	if shouldProcessTask {
 		t.metricsClient.IncCounter(scope, metrics.TaskRequests)
@@ -498,7 +500,7 @@ func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time
 
 	// this is a transient error
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+		if t.timeSource.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
 			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
 			return nil
 		}

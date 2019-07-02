@@ -34,6 +34,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
@@ -70,6 +71,8 @@ type (
 		historyEventNotifier  historyEventNotifier
 		publisher             messaging.Producer
 		rateLimiter           tokenbucket.TokenBucket
+		historyArchivers      map[string]archiver.HistoryArchiver
+		visibilityArchivers   map[string]archiver.VisibilityArchiver
 		service.Service
 	}
 )
@@ -93,7 +96,8 @@ var (
 func NewHandler(sVice service.Service, config *Config, shardManager persistence.ShardManager,
 	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	executionMgrFactory persistence.ExecutionManagerFactory, publicClient workflowserviceclient.Interface) *Handler {
+	executionMgrFactory persistence.ExecutionManagerFactory, publicClient workflowserviceclient.Interface,
+	historyArchivers map[string]archiver.HistoryArchiver, visibilityArchivers map[string]archiver.VisibilityArchiver) *Handler {
 	handler := &Handler{
 		Service:             sVice,
 		config:              config,
@@ -106,6 +110,8 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
 		rateLimiter:         tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
 		publicClient:        publicClient,
+		historyArchivers:    historyArchivers,
+		visibilityArchivers: visibilityArchivers,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -155,7 +161,7 @@ func (h *Handler) Start() error {
 	h.controller = newShardController(h.Service, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr, h.historyV2Mgr,
 		h.domainCache, h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
 	h.metricsClient = h.GetMetricsClient()
-	h.historyEventNotifier = newHistoryEventNotifier(h.GetMetricsClient(), h.config.GetShardID)
+	h.historyEventNotifier = newHistoryEventNotifier(h.Service.GetTimeSource(), h.GetMetricsClient(), h.config.GetShardID)
 	// events notifier must starts before controller
 	h.historyEventNotifier.Start()
 	h.controller.Start()
@@ -182,7 +188,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.publicClient, h.historyEventNotifier, h.publisher, h.config)
+		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.historyArchivers, h.visibilityArchivers)
 }
 
 // Health is for health check
@@ -1258,6 +1264,11 @@ func (h *Handler) convertError(err error) error {
 }
 
 func (h *Handler) updateErrorMetric(scope int, domainID, workflowID string, err error) {
+	if err == context.DeadlineExceeded || err == context.Canceled {
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
+		return
+	}
+
 	switch err := err.(type) {
 	case *hist.ShardOwnershipLostError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)

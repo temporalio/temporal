@@ -1300,7 +1300,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 				attr.GetIdentity()); err != nil {
 				return ErrWorkflowMutationSignal
 			}
-			numSignals += 1
+			numSignals++
 
 		default:
 			return ErrUnreappliableEvent

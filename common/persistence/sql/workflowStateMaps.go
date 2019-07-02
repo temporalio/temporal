@@ -32,22 +32,31 @@ import (
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 
-func updateActivityInfos(tx sqldb.Tx,
+func updateActivityInfos(
+	tx sqldb.Tx,
 	activityInfos []*persistence.InternalActivityInfo,
 	deleteInfos []int64,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) error {
+	runID sqldb.UUID,
+) error {
 
 	if len(activityInfos) > 0 {
 		rows := make([]sqldb.ActivityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
+			scheduledEvent, scheduledEncoding := persistence.FromDataBlob(v.ScheduledEvent)
+			startEvent, startEncoding := persistence.FromDataBlob(v.StartedEvent)
+
 			info := &sqlblobs.ActivityInfo{
-				ScheduledEventBatchID:         &v.ScheduledEventBatchID,
 				Version:                       &v.Version,
+				ScheduledEventBatchID:         &v.ScheduledEventBatchID,
+				ScheduledEvent:                scheduledEvent,
+				ScheduledEventEncoding:        common.StringPtr(scheduledEncoding),
 				ScheduledTimeNanos:            common.Int64Ptr(v.ScheduledTime.UnixNano()),
 				StartedID:                     &v.StartedID,
+				StartedEvent:                  startEvent,
+				StartedEventEncoding:          common.StringPtr(startEncoding),
 				StartedTimeNanos:              common.Int64Ptr(v.StartedTime.UnixNano()),
 				ActivityID:                    &v.ActivityID,
 				RequestID:                     &v.RequestID,
@@ -68,14 +77,6 @@ func updateActivityInfos(tx sqldb.Tx,
 				RetryExpirationTimeNanos:      common.Int64Ptr(v.ExpirationTime.UnixNano()),
 				RetryMaximumAttempts:          &v.MaximumAttempts,
 				RetryNonRetryableErrors:       v.NonRetriableErrors,
-			}
-			if v.StartedEvent != nil {
-				info.StartedEvent = v.StartedEvent.Data
-				info.StartedEventEncoding = common.StringPtr(string(v.StartedEvent.Encoding))
-			}
-			if v.ScheduledEvent != nil {
-				info.ScheduledEvent = v.ScheduledEvent.Data
-				info.ScheduledEventEncoding = common.StringPtr(string(v.ScheduledEvent.Encoding))
 			}
 			blob, err := activityInfoToBlob(info)
 			if err != nil {
@@ -132,11 +133,14 @@ func updateActivityInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getActivityInfoMap(db sqldb.Interface,
+func getActivityInfoMap(
+	db sqldb.Interface,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) (map[int64]*persistence.InternalActivityInfo, error) {
+	runID sqldb.UUID,
+) (map[int64]*persistence.InternalActivityInfo, error) {
+
 	rows, err := db.SelectFromActivityInfoMaps(&sqldb.ActivityInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -195,7 +199,14 @@ func getActivityInfoMap(db sqldb.Interface,
 	return ret, nil
 }
 
-func deleteActivityInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func deleteActivityInfoMap(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if _, err := tx.DeleteFromActivityInfoMaps(&sqldb.ActivityInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -209,13 +220,16 @@ func deleteActivityInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workfl
 	return nil
 }
 
-func updateTimerInfos(tx sqldb.Tx,
+func updateTimerInfos(
+	tx sqldb.Tx,
 	timerInfos []*persistence.TimerInfo,
 	deleteInfos []string,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) error {
+	runID sqldb.UUID,
+) error {
+
 	if len(timerInfos) > 0 {
 		rows := make([]sqldb.TimerInfoMapsRow, len(timerInfos))
 		for i, v := range timerInfos {
@@ -274,11 +288,14 @@ func updateTimerInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getTimerInfoMap(db sqldb.Interface,
+func getTimerInfoMap(
+	db sqldb.Interface,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) (map[string]*persistence.TimerInfo, error) {
+	runID sqldb.UUID,
+) (map[string]*persistence.TimerInfo, error) {
+
 	rows, err := db.SelectFromTimerInfoMaps(&sqldb.TimerInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -308,7 +325,14 @@ func getTimerInfoMap(db sqldb.Interface,
 	return ret, nil
 }
 
-func deleteTimerInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func deleteTimerInfoMap(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if _, err := tx.DeleteFromTimerInfoMaps(&sqldb.TimerInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -322,32 +346,35 @@ func deleteTimerInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowI
 	return nil
 }
 
-func updateChildExecutionInfos(tx sqldb.Tx,
+func updateChildExecutionInfos(
+	tx sqldb.Tx,
 	childExecutionInfos []*persistence.InternalChildExecutionInfo,
 	deleteInfos *int64,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) error {
+	runID sqldb.UUID,
+) error {
+
 	if len(childExecutionInfos) > 0 {
 		rows := make([]sqldb.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
-			initEvent, initEncoding := persistence.FromDataBlob(v.InitiatedEvent)
+			initiateEvent, initiateEncoding := persistence.FromDataBlob(v.InitiatedEvent)
+			startEvent, startEncoding := persistence.FromDataBlob(v.StartedEvent)
+
 			info := &sqlblobs.ChildExecutionInfo{
-				InitiatedEventBatchID:  &v.InitiatedEventBatchID,
 				Version:                &v.Version,
+				InitiatedEventBatchID:  &v.InitiatedEventBatchID,
+				InitiatedEvent:         initiateEvent,
+				InitiatedEventEncoding: &initiateEncoding,
+				StartedEvent:           startEvent,
+				StartedEventEncoding:   &startEncoding,
 				StartedID:              &v.StartedID,
 				StartedWorkflowID:      &v.StartedWorkflowID,
 				StartedRunID:           sqldb.MustParseUUID(v.StartedRunID),
-				InitiatedEvent:         initEvent,
-				InitiatedEventEncoding: &initEncoding,
 				CreateRequestID:        &v.CreateRequestID,
 				DomainName:             &v.DomainName,
 				WorkflowTypeName:       &v.WorkflowTypeName,
-			}
-			if v.StartedEvent != nil {
-				info.StartedEvent = v.StartedEvent.Data
-				info.StartedEventEncoding = common.StringPtr(string(v.StartedEvent.Encoding))
 			}
 			blob, err := childExecutionInfoToBlob(info)
 			if err != nil {
@@ -386,11 +413,14 @@ func updateChildExecutionInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getChildExecutionInfoMap(db sqldb.Interface,
+func getChildExecutionInfoMap(
+	db sqldb.Interface,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) (map[int64]*persistence.InternalChildExecutionInfo, error) {
+	runID sqldb.UUID,
+) (map[int64]*persistence.InternalChildExecutionInfo, error) {
+
 	rows, err := db.SelectFromChildExecutionInfoMaps(&sqldb.ChildExecutionInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -432,7 +462,14 @@ func getChildExecutionInfoMap(db sqldb.Interface,
 	return ret, nil
 }
 
-func deleteChildExecutionInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func deleteChildExecutionInfoMap(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if _, err := tx.DeleteFromChildExecutionInfoMaps(&sqldb.ChildExecutionInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -446,13 +483,16 @@ func deleteChildExecutionInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, 
 	return nil
 }
 
-func updateRequestCancelInfos(tx sqldb.Tx,
+func updateRequestCancelInfos(
+	tx sqldb.Tx,
 	requestCancelInfos []*persistence.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) error {
+	runID sqldb.UUID,
+) error {
+
 	if len(requestCancelInfos) > 0 {
 		rows := make([]sqldb.RequestCancelInfoMapsRow, len(requestCancelInfos))
 		for i, v := range requestCancelInfos {
@@ -509,11 +549,14 @@ func updateRequestCancelInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getRequestCancelInfoMap(db sqldb.Interface,
+func getRequestCancelInfoMap(
+	db sqldb.Interface,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) (map[int64]*persistence.RequestCancelInfo, error) {
+	runID sqldb.UUID,
+) (map[int64]*persistence.RequestCancelInfo, error) {
+
 	rows, err := db.SelectFromRequestCancelInfoMaps(&sqldb.RequestCancelInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -542,7 +585,14 @@ func getRequestCancelInfoMap(db sqldb.Interface,
 	return ret, nil
 }
 
-func deleteRequestCancelInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func deleteRequestCancelInfoMap(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if _, err := tx.DeleteFromRequestCancelInfoMaps(&sqldb.RequestCancelInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -556,13 +606,16 @@ func deleteRequestCancelInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, w
 	return nil
 }
 
-func updateSignalInfos(tx sqldb.Tx,
+func updateSignalInfos(
+	tx sqldb.Tx,
 	signalInfos []*persistence.SignalInfo,
 	deleteInfo *int64,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) error {
+	runID sqldb.UUID,
+) error {
+
 	if len(signalInfos) > 0 {
 		rows := make([]sqldb.SignalInfoMapsRow, len(signalInfos))
 		for i, v := range signalInfos {
@@ -622,11 +675,14 @@ func updateSignalInfos(tx sqldb.Tx,
 	return nil
 }
 
-func getSignalInfoMap(db sqldb.Interface,
+func getSignalInfoMap(
+	db sqldb.Interface,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
-	runID sqldb.UUID) (map[int64]*persistence.SignalInfo, error) {
+	runID sqldb.UUID,
+) (map[int64]*persistence.SignalInfo, error) {
+
 	rows, err := db.SelectFromSignalInfoMaps(&sqldb.SignalInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -658,7 +714,14 @@ func getSignalInfoMap(db sqldb.Interface,
 	return ret, nil
 }
 
-func deleteSignalInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func deleteSignalInfoMap(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	if _, err := tx.DeleteFromSignalInfoMaps(&sqldb.SignalInfoMapsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
@@ -667,123 +730,6 @@ func deleteSignalInfoMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflow
 	}); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to delete signal info map. Error: %v", err),
-		}
-	}
-	return nil
-}
-
-func updateBufferedReplicationTasks(tx sqldb.Tx,
-	newBufferedReplicationTask *persistence.InternalBufferedReplicationTask,
-	deleteInfo *int64,
-	shardID int,
-	domainID sqldb.UUID,
-	workflowID string,
-	runID sqldb.UUID) error {
-	if newBufferedReplicationTask != nil {
-		newRunHistoryData, newRunHistoryEncoding := persistence.FromDataBlob(newBufferedReplicationTask.NewRunHistory)
-		historyBlob := newBufferedReplicationTask.History
-		row := &sqldb.BufferedReplicationTaskMapsRow{
-			ShardID:                 int64(shardID),
-			DomainID:                domainID,
-			WorkflowID:              workflowID,
-			RunID:                   runID,
-			FirstEventID:            newBufferedReplicationTask.FirstEventID,
-			Version:                 newBufferedReplicationTask.Version,
-			NextEventID:             newBufferedReplicationTask.NextEventID,
-			EventStoreVersion:       newBufferedReplicationTask.EventStoreVersion,
-			NewRunEventStoreVersion: newBufferedReplicationTask.NewRunEventStoreVersion,
-		}
-		if historyBlob != nil {
-			row.History = &historyBlob.Data
-			row.HistoryEncoding = string(historyBlob.Encoding)
-		}
-		if newRunHistoryData != nil {
-			row.NewRunHistory = &newRunHistoryData
-			row.NewRunHistoryEncoding = newRunHistoryEncoding
-		}
-		if _, err := tx.ReplaceIntoBufferedReplicationTasks(row); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update buffered replication tasks. Failed to execute update query. Error: %v", err),
-			}
-		}
-	}
-	if deleteInfo == nil {
-		return nil
-	}
-	result, err := tx.DeleteFromBufferedReplicationTasks(&sqldb.BufferedReplicationTaskMapsFilter{
-		ShardID:      int64(shardID),
-		DomainID:     domainID,
-		WorkflowID:   workflowID,
-		RunID:        runID,
-		FirstEventID: deleteInfo,
-	})
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update buffered replication tasks. Failed to execute delete query. Error: %v", err),
-		}
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update buffered replication tasks. Failed to verify number of rows deleted. Error: %v", err),
-		}
-	}
-	if int(rowsAffected) != 1 {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update buffered replication tasks. Deleted %v rows instead of 1", rowsAffected),
-		}
-	}
-	return nil
-}
-
-func getBufferedReplicationTasks(db sqldb.Interface,
-	shardID int,
-	domainID sqldb.UUID,
-	workflowID string,
-	runID sqldb.UUID) (map[int64]*persistence.InternalBufferedReplicationTask, error) {
-	rows, err := db.SelectFromBufferedReplicationTasks(&sqldb.BufferedReplicationTaskMapsFilter{
-		ShardID:    int64(shardID),
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
-	})
-
-	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get buffered replication tasks. Error: %v", err),
-		}
-	}
-
-	ret := make(map[int64]*persistence.InternalBufferedReplicationTask)
-	for _, v := range rows {
-		task := &persistence.InternalBufferedReplicationTask{
-			Version:      v.Version,
-			FirstEventID: v.FirstEventID,
-			NextEventID:  v.NextEventID,
-		}
-		if v.History != nil {
-			task.History = persistence.NewDataBlob(*v.History, common.EncodingType(v.HistoryEncoding))
-		}
-		if v.NewRunHistory != nil {
-			task.NewRunHistory = persistence.NewDataBlob(*v.NewRunHistory,
-				common.EncodingType(v.NewRunHistoryEncoding))
-		}
-		task.EventStoreVersion = v.EventStoreVersion
-		task.NewRunEventStoreVersion = v.NewRunEventStoreVersion
-		ret[v.FirstEventID] = task
-	}
-	return ret, nil
-}
-
-func deleteBufferedReplicationTasksMap(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
-	if _, err := tx.DeleteFromBufferedReplicationTasks(&sqldb.BufferedReplicationTaskMapsFilter{
-		ShardID:    int64(shardID),
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
-	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete buffered replication tasks map. Error: %v", err),
 		}
 	}
 	return nil

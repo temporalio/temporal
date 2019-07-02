@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -145,6 +146,12 @@ type Config struct {
 	HistoryCountLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
 
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
+
+	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
+	ValidSearchAttributes             dynamicconfig.MapPropertyFn
+	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithDomainFilter
+	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithDomainFilter
+	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithDomainFilter
 }
 
 const (
@@ -234,6 +241,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		HistoryCountLimitWarn:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitWarn, 50*1024),
 
 		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 20),
+
+		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
+		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
+		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 	}
 
 	return cfg
@@ -327,7 +339,7 @@ func (s *Service) Start() {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}
 
-	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, params.PublicClient)
+	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, params.PublicClient, params.HistoryArchivers, params.VisibilityArchivers)
 	handler.RegisterHandler()
 
 	// must start base service first

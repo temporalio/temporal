@@ -296,24 +296,6 @@ const (
 		`control: ?` +
 		`}`
 
-	templateBufferedReplicationTaskInfoType = `{` +
-		`first_event_id: ?, ` +
-		`next_event_id: ?, ` +
-		`version: ?, ` +
-		`event_store_version: ?, ` +
-		`new_run_event_store_version: ?, ` +
-		`history: ` + templateSerializedEventBatch + `, ` +
-		`new_run_history: ` + templateSerializedEventBatch + ` ` +
-		`}`
-
-	templateBufferedReplicationTaskInfoNoNewRunHistoryType = `{` +
-		`first_event_id: ?, ` +
-		`next_event_id: ?, ` +
-		`version: ?, ` +
-		`event_store_version: ?, ` +
-		`history: ` + templateSerializedEventBatch + ` ` +
-		`}`
-
 	templateSerializedEventBatch = `{` +
 		`encoding_type: ?, ` +
 		`version: ?, ` +
@@ -451,8 +433,6 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
-	templateUpdateWorkflowExecutionConditionSuffix = ` IF next_event_id = ?`
-
 	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
 		`SET execution = ` + templateWorkflowExecutionType +
 		`, next_event_id = ? ` +
@@ -462,7 +442,8 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? `
+		`and task_id = ? ` +
+		`IF next_event_id = ? `
 
 	templateUpdateWorkflowExecutionWithReplicationQuery = `UPDATE executions ` +
 		`SET execution = ` + templateWorkflowExecutionType +
@@ -474,7 +455,8 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? `
+		`and task_id = ? ` +
+		`IF next_event_id = ? `
 
 	templateUpdateWorkflowExecutionWithVersionHistoriesQuery = `UPDATE executions ` +
 		`SET execution = ` + templateWorkflowExecutionType +
@@ -487,7 +469,8 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? `
+		`and task_id = ? ` +
+		`IF next_event_id = ? `
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
@@ -497,8 +480,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map = ?` +
@@ -518,8 +500,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetTimerInfoQuery = `UPDATE executions ` +
 		`SET timer_map = ?` +
@@ -539,8 +520,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetChildExecutionInfoQuery = `UPDATE executions ` +
 		`SET child_executions_map = ?` +
@@ -560,8 +540,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetRequestCancelInfoQuery = `UPDATE executions ` +
 		`SET request_cancel_map = ?` +
@@ -581,8 +560,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetSignalInfoQuery = `UPDATE executions ` +
 		`SET signal_map = ?` +
@@ -602,8 +580,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateResetSignalRequestedQuery = `UPDATE executions ` +
 		`SET signal_requested = ?` +
@@ -623,8 +600,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteBufferedEventsQuery = `UPDATE executions ` +
 		`SET buffered_events_list = [] ` +
@@ -634,8 +610,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteActivityInfoQuery = `DELETE activity_map[ ? ] ` +
 		`FROM executions ` +
@@ -645,8 +620,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteTimerInfoQuery = `DELETE timer_map[ ? ] ` +
 		`FROM executions ` +
@@ -656,8 +630,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteChildExecutionInfoQuery = `DELETE child_executions_map[ ? ] ` +
 		`FROM executions ` +
@@ -667,8 +640,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteRequestCancelInfoQuery = `DELETE request_cancel_map[ ? ] ` +
 		`FROM executions ` +
@@ -678,8 +650,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
 		`FROM executions ` +
@@ -689,52 +660,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateUpdateBufferedReplicationTasksQuery = `UPDATE executions ` +
-		`SET buffered_replication_tasks_map[ ? ] =` + templateBufferedReplicationTaskInfoType + ` ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateUpdateBufferedReplicationTasksNoNewRunHistoryQuery = `UPDATE executions ` +
-		`SET buffered_replication_tasks_map[ ? ] =` + templateBufferedReplicationTaskInfoNoNewRunHistoryType + ` ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateDeleteBufferedReplicationTaskQuery = `DELETE buffered_replication_tasks_map[ ? ] ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateClearBufferedReplicationTaskQuery = `UPDATE executions ` +
-		`SET buffered_replication_tasks_map = {} ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateDeleteWorkflowExecutionMutableStateQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -755,8 +681,7 @@ workflow_state = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and task_id = ? `
 
 	templateGetTransferTasksQuery = `SELECT transfer ` +
 		`FROM executions ` +
@@ -1121,29 +1046,50 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 	return nil
 }
 
-func (d *cassandraPersistence) CreateWorkflowExecution(request *p.InternalCreateWorkflowExecutionRequest) (
-	*p.CreateWorkflowExecutionResponse, error) {
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
+func (d *cassandraPersistence) CreateWorkflowExecution(
+	request *p.InternalCreateWorkflowExecutionRequest,
+) (*p.CreateWorkflowExecutionResponse, error) {
+
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
-	if request.CreateWorkflowMode == p.CreateWorkflowModeZombie {
+	executionInfo := request.NewWorkflowSnapshot.ExecutionInfo
+	replicationState := request.NewWorkflowSnapshot.ReplicationState
+	domainID := executionInfo.DomainID
+	workflowID := executionInfo.WorkflowID
+	runID := executionInfo.RunID
+
+	switch request.CreateWorkflowMode {
+	case p.CreateWorkflowModeZombie:
 		if err := d.assertNotCurrentExecution(
-			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId()); err != nil {
+			executionInfo.DomainID,
+			executionInfo.WorkflowID,
+			executionInfo.RunID); err != nil {
+			return nil, err
+		}
+
+	default:
+		if err := createOrUpdateCurrentExecution(batch,
+			request.CreateWorkflowMode,
+			d.shardID,
+			domainID,
+			workflowID,
+			runID,
+			executionInfo.State,
+			executionInfo.CloseStatus,
+			executionInfo.CreateRequestID,
+			replicationState,
+			request.PreviousRunID,
+			request.PreviousLastWriteVersion,
+		); err != nil {
 			return nil, err
 		}
 	}
-	if err := d.CreateWorkflowExecutionWithinBatch(request, batch, cqlNowTimestamp); err != nil {
+	if err := applyWorkflowSnapshotBatchAsNew(batch,
+		d.shardID,
+		&request.NewWorkflowSnapshot,
+	); err != nil {
 		return nil, err
 	}
-
-	d.createTransferTasks(batch, request.TransferTasks, request.DomainID, *request.Execution.WorkflowId,
-		*request.Execution.RunId)
-	d.createReplicationTasks(batch, request.ReplicationTasks, request.DomainID, *request.Execution.WorkflowId,
-		*request.Execution.RunId)
-	d.createTimerTasks(batch, request.TimerTasks, request.DomainID, *request.Execution.WorkflowId,
-		*request.Execution.RunId, cqlNowTimestamp)
 
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
@@ -1212,15 +1158,11 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *p.InternalCreate
 				if execution, ok := previous["execution"].(map[string]interface{}); ok {
 					// CreateWorkflowExecution failed because it already exists
 					executionInfo := createWorkflowExecutionInfo(execution)
-
-					lastWriteVersion := common.EmptyVersion
-					if request.ReplicationState != nil {
-						replicationState := createReplicationState(previous["replication_state"].(map[string]interface{}))
-						lastWriteVersion = replicationState.LastWriteVersion
-					}
+					replicationState := createReplicationState(previous["replication_state"].(map[string]interface{}))
+					lastWriteVersion := replicationState.LastWriteVersion
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						request.Execution.GetWorkflowId(), executionInfo.RunID, request.RangeID, strings.Join(columns, ","))
+						executionInfo.WorkflowID, executionInfo.RunID, request.RangeID, strings.Join(columns, ","))
 					return nil, &p.WorkflowExecutionAlreadyStartedError{
 						Msg:              msg,
 						StartRequestID:   executionInfo.CreateRequestID,
@@ -1231,15 +1173,15 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *p.InternalCreate
 					}
 				}
 
-				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.Execution.GetRunId() {
+				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != executionInfo.RunID {
 					// currentRunID on previous run has been changed, return to caller to handle
 					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, CurrentRunID: %v, columns: (%v)",
-						request.Execution.GetWorkflowId(), request.Execution.GetRunId(), strings.Join(columns, ","))
+						executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
 				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunID: %v, columns: (%v)",
-					request.Execution.GetWorkflowId(), request.Execution.GetRunId(), strings.Join(columns, ","))
+					executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
 				return nil, &p.ConditionFailedError{Msg: msg}
 			}
 
@@ -1266,334 +1208,6 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *p.InternalCreate
 	}
 
 	return &p.CreateWorkflowExecutionResponse{}, nil
-}
-
-func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.InternalCreateWorkflowExecutionRequest,
-	batch *gocql.Batch, cqlNowTimestamp int64) error {
-	// validate workflow state & close status
-	if err := p.ValidateCreateWorkflowStateCloseStatus(
-		request.State,
-		request.CloseStatus); err != nil {
-		return err
-	}
-
-	parentDomainID := emptyDomainID
-	parentWorkflowID := ""
-	parentRunID := emptyRunID
-	initiatedID := emptyInitiatedID
-	if request.ParentDomainID != "" {
-		parentDomainID = request.ParentDomainID
-		parentWorkflowID = request.ParentExecution.GetWorkflowId()
-		parentRunID = request.ParentExecution.GetRunId()
-		initiatedID = request.InitiatedID
-	}
-
-	startVersion := common.EmptyVersion
-	lastWriteVersion := common.EmptyVersion
-	if request.ReplicationState != nil {
-		startVersion = request.ReplicationState.StartVersion
-		lastWriteVersion = request.ReplicationState.LastWriteVersion
-	} else {
-		// this is to deal with issue that gocql cannot return null value for value inside user defined type
-		// so we cannot know whether the last write version of current workflow record is null or not
-		// since non global domain (request.ReplicationState == null) will not have workflow reset problem
-		// so the CAS on last write version is not necessary
-		if request.CreateWorkflowMode == p.CreateWorkflowModeWorkflowIDReuse {
-			request.CreateWorkflowMode = p.CreateWorkflowModeContinueAsNew
-		}
-	}
-	switch request.CreateWorkflowMode {
-	case p.CreateWorkflowModeContinueAsNew:
-		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			request.Execution.GetRunId(),
-			request.Execution.GetRunId(),
-			request.RequestID,
-			request.State,
-			request.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			request.State,
-			d.shardID,
-			rowTypeExecution,
-			request.DomainID,
-			*request.Execution.WorkflowId,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			request.PreviousRunID,
-		)
-	case p.CreateWorkflowModeWorkflowIDReuse:
-		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
-			*request.Execution.RunId,
-			*request.Execution.RunId,
-			request.RequestID,
-			request.State,
-			request.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			request.State,
-			d.shardID,
-			rowTypeExecution,
-			request.DomainID,
-			*request.Execution.WorkflowId,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			request.PreviousRunID,
-			request.PreviousLastWriteVersion,
-			p.WorkflowStateCompleted,
-		)
-	case p.CreateWorkflowModeBrandNew:
-		batch.Query(templateCreateCurrentWorkflowExecutionQuery,
-			d.shardID,
-			rowTypeExecution,
-			request.DomainID,
-			*request.Execution.WorkflowId,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			*request.Execution.RunId,
-			*request.Execution.RunId,
-			request.RequestID,
-			request.State,
-			request.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			request.State,
-		)
-	case p.CreateWorkflowModeZombie:
-		// for creation of zombie workflow, check that
-		// 1. workflow state being WorkflowStateZombie
-		// 2. workflow close status being WorkflowCloseStatusNone
-		if request.State != p.WorkflowStateZombie || request.CloseStatus != p.WorkflowCloseStatusNone {
-			return &workflow.InternalServiceError{Message: fmt.Sprintf(
-				"Cannot create zombie workflow with state: %v, close status: %v",
-				request.State,
-				request.CloseStatus,
-			)}
-		}
-	default:
-		panic(fmt.Sprintf("Unknown CreateWorkflowMode: %v", request.CreateWorkflowMode))
-	}
-
-	// TODO use updateMutableState() with useCondition=false to make code much cleaner
-	if request.ReplicationState != nil {
-		lastReplicationInfo := make(map[string]map[string]interface{})
-		for k, v := range request.ReplicationState.LastReplicationInfo {
-			lastReplicationInfo[k] = createReplicationInfoMap(v)
-		}
-
-		batch.Query(templateCreateWorkflowExecutionWithReplicationQuery,
-			d.shardID,
-			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
-			rowTypeExecution,
-			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
-			parentDomainID,
-			parentWorkflowID,
-			parentRunID,
-			initiatedID,
-			common.EmptyEventID,
-			nil,
-			"",
-			request.TaskList,
-			request.WorkflowTypeName,
-			request.WorkflowTimeout,
-			request.DecisionTimeoutValue,
-			request.ExecutionContext,
-			request.State,
-			request.CloseStatus,
-			common.FirstEventID,
-			request.LastEventTaskID,
-			request.NextEventID,
-			request.LastProcessedEvent,
-			cqlNowTimestamp,
-			cqlNowTimestamp,
-			request.RequestID,
-			request.SignalCount,
-			request.HistorySize,
-			request.DecisionVersion,
-			request.DecisionScheduleID,
-			request.DecisionStartedID,
-			"", // Decision Start Request ID
-			request.DecisionStartToCloseTimeout,
-			0,     // decision attempts
-			0,     // decision timestamp(started time)
-			0,     // decision scheduled timestamp
-			false, // cancel_requested
-			"",    // cancel_request_id
-			"",    // sticky_task_list (no sticky tasklist for new workflow execution)
-			0,     // sticky_schedule_to_start_timeout
-			"",    // client_library_version
-			"",    // client_feature_version
-			"",    // client_impl
-			request.PreviousAutoResetPoints.Data,
-			request.PreviousAutoResetPoints.GetEncoding(),
-			request.Attempt,
-			request.HasRetryPolicy,
-			request.InitialInterval,
-			request.BackoffCoefficient,
-			request.MaximumInterval,
-			request.ExpirationTime,
-			request.MaximumAttempts,
-			request.NonRetriableErrors,
-			request.EventStoreVersion,
-			request.BranchToken,
-			request.CronSchedule,
-			request.ExpirationSeconds,
-			request.SearchAttributes,
-			request.ReplicationState.CurrentVersion,
-			request.ReplicationState.StartVersion,
-			request.ReplicationState.LastWriteVersion,
-			request.ReplicationState.LastWriteEventID,
-			lastReplicationInfo,
-			request.NextEventID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	} else if request.VersionHistories != nil {
-		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(request.VersionHistories)
-		batch.Query(templateCreateWorkflowExecutionWithVersionHistoriesQuery,
-			d.shardID,
-			request.DomainID,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
-			rowTypeExecution,
-			request.DomainID,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
-			parentDomainID,
-			parentWorkflowID,
-			parentRunID,
-			initiatedID,
-			common.EmptyEventID,
-			nil,
-			"",
-			request.TaskList,
-			request.WorkflowTypeName,
-			request.WorkflowTimeout,
-			request.DecisionTimeoutValue,
-			request.ExecutionContext,
-			request.State,
-			request.CloseStatus,
-			common.FirstEventID,
-			request.LastEventTaskID,
-			request.NextEventID,
-			request.LastProcessedEvent,
-			cqlNowTimestamp,
-			cqlNowTimestamp,
-			request.RequestID,
-			request.SignalCount,
-			request.HistorySize,
-			request.DecisionVersion,
-			request.DecisionScheduleID,
-			request.DecisionStartedID,
-			"", // Decision Start Request ID
-			request.DecisionStartToCloseTimeout,
-			0,     // decision attempts
-			0,     // decision timestamp(started time)
-			0,     // decision scheduled timestamp
-			false, // cancel_requested
-			"",    // cancel_request_id
-			"",    // sticky_task_list (no sticky tasklist for new workflow execution)
-			0,     // sticky_schedule_to_start_timeout
-			"",    // client_library_version
-			"",    // client_feature_version
-			"",    // client_impl
-			request.PreviousAutoResetPoints.Data,
-			request.PreviousAutoResetPoints.GetEncoding(),
-			request.Attempt,
-			request.HasRetryPolicy,
-			request.InitialInterval,
-			request.BackoffCoefficient,
-			request.MaximumInterval,
-			request.ExpirationTime,
-			request.MaximumAttempts,
-			request.NonRetriableErrors,
-			request.EventStoreVersion,
-			request.BranchToken,
-			request.CronSchedule,
-			request.ExpirationSeconds,
-			request.SearchAttributes,
-			request.NextEventID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			versionHistoriesData,
-			versionHistoriesEncoding)
-	} else {
-		// Cross DC feature is currently disabled so we will be creating workflow executions without replication state
-		batch.Query(templateCreateWorkflowExecutionQuery,
-			d.shardID,
-			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
-			rowTypeExecution,
-			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
-			parentDomainID,
-			parentWorkflowID,
-			parentRunID,
-			initiatedID,
-			common.EmptyEventID,
-			nil,
-			"",
-			request.TaskList,
-			request.WorkflowTypeName,
-			request.WorkflowTimeout,
-			request.DecisionTimeoutValue,
-			request.ExecutionContext,
-			request.State,
-			request.CloseStatus,
-			common.FirstEventID,
-			request.LastEventTaskID,
-			request.NextEventID,
-			request.LastProcessedEvent,
-			cqlNowTimestamp,
-			cqlNowTimestamp,
-			request.RequestID,
-			request.SignalCount,
-			request.HistorySize,
-			request.DecisionVersion,
-			request.DecisionScheduleID,
-			request.DecisionStartedID,
-			"", // Decision Start Request ID
-			request.DecisionStartToCloseTimeout,
-			0,     // decision attempts
-			0,     // decision timestamp(started time)
-			0,     // decision scheduled timestamp
-			false, // cancel_requested
-			"",    // cancel_request_id
-			"",    // sticky_task_list (no sticky tasklist for new workflow execution)
-			0,     // sticky_schedule_to_start_timeout
-			"",    // client_library_version
-			"",    // client_feature_version
-			"",    // client_impl
-			request.PreviousAutoResetPoints.Data,
-			request.PreviousAutoResetPoints.GetEncoding(),
-			request.Attempt,
-			request.HasRetryPolicy,
-			request.InitialInterval,
-			request.BackoffCoefficient,
-			request.MaximumInterval,
-			request.ExpirationTime,
-			request.MaximumAttempts,
-			request.NonRetriableErrors,
-			request.EventStoreVersion,
-			request.BranchToken,
-			request.CronSchedule,
-			request.ExpirationSeconds,
-			request.SearchAttributes,
-			request.NextEventID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	}
-	return nil
 }
 
 func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecutionRequest) (
@@ -1633,6 +1247,17 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	replicationState := createReplicationState(result["replication_state"].(map[string]interface{}))
 	state.ReplicationState = replicationState
 
+	state.VersionHistories = p.NewDataBlob(
+		result["version_histories"].([]byte),
+		common.EncodingType(result["version_histories_encoding"].(string)),
+	)
+
+	if state.VersionHistories != nil && state.ReplicationState != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetWorkflowExecution operation failed. VersionHistories and ReplicationState both are set."),
+		}
+	}
+
 	activityInfos := make(map[int64]*p.InternalActivityInfo)
 	aMap := result["activity_map"].(map[int64]map[string]interface{})
 	for key, value := range aMap {
@@ -1652,7 +1277,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	childExecutionInfos := make(map[int64]*p.InternalChildExecutionInfo)
 	cMap := result["child_executions_map"].(map[int64]map[string]interface{})
 	for key, value := range cMap {
-		info := createChildExecutionInfo(value, d.logger)
+		info := createChildExecutionInfo(value)
 		childExecutionInfos[key] = info
 	}
 	state.ChildExecutionInfos = childExecutionInfos
@@ -1688,321 +1313,50 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.BufferedEvents = bufferedEventsBlobs
 
-	bufferedReplicationTasks := make(map[int64]*p.InternalBufferedReplicationTask)
-	bufferedRTMap := result["buffered_replication_tasks_map"].(map[int64]map[string]interface{})
-	for k, v := range bufferedRTMap {
-		info := createBufferedReplicationTaskInfo(v)
-		bufferedReplicationTasks[k] = info
-	}
-	state.BufferedReplicationTasks = bufferedReplicationTasks
-	state.VersionHistories = p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string)))
-	if state.VersionHistories != nil && state.ReplicationState != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetWorkflowExecution operation failed. VersionHistories and ReplicationState both are set."),
-		}
-	}
-
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }
 
-// this helper is passing dynamic number of arguments based on whether needing condition or not
-func batchQueryHelper(batch *gocql.Batch, stmt string, useCondition bool, condition int64, args ...interface{}) {
-	if useCondition {
-		stmt += templateUpdateWorkflowExecutionConditionSuffix
-		args = append(args, condition)
-	}
-	batch.Query(stmt, args...)
-}
-
-func (d *cassandraPersistence) updateMutableState(batch *gocql.Batch, executionInfo *p.InternalWorkflowExecutionInfo,
-	replicationState *p.ReplicationState, versionHistories *p.DataBlob, cqlNowTimestamp int64, useCondition bool, condition int64) {
-	if executionInfo.ParentDomainID == "" {
-		executionInfo.ParentDomainID = emptyDomainID
-	}
-	if executionInfo.ParentRunID == "" {
-		executionInfo.ParentRunID = emptyRunID
-	}
-
-	completionData, completionEncoding := p.FromDataBlob(executionInfo.CompletionEvent)
-	if replicationState != nil {
-		lastReplicationInfo := make(map[string]map[string]interface{})
-		for k, v := range replicationState.LastReplicationInfo {
-			lastReplicationInfo[k] = createReplicationInfoMap(v)
-		}
-
-		batchQueryHelper(batch, templateUpdateWorkflowExecutionWithReplicationQuery, useCondition, condition,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
-			executionInfo.ParentDomainID,
-			executionInfo.ParentWorkflowID,
-			executionInfo.ParentRunID,
-			executionInfo.InitiatedID,
-			executionInfo.CompletionEventBatchID,
-			completionData,
-			completionEncoding,
-			executionInfo.TaskList,
-			executionInfo.WorkflowTypeName,
-			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
-			executionInfo.ExecutionContext,
-			executionInfo.State,
-			executionInfo.CloseStatus,
-			executionInfo.LastFirstEventID,
-			executionInfo.LastEventTaskID,
-			executionInfo.NextEventID,
-			executionInfo.LastProcessedEvent,
-			executionInfo.StartTimestamp,
-			cqlNowTimestamp,
-			executionInfo.CreateRequestID,
-			executionInfo.SignalCount,
-			executionInfo.HistorySize,
-			executionInfo.DecisionVersion,
-			executionInfo.DecisionScheduleID,
-			executionInfo.DecisionStartedID,
-			executionInfo.DecisionRequestID,
-			executionInfo.DecisionTimeout,
-			executionInfo.DecisionAttempt,
-			executionInfo.DecisionStartedTimestamp,
-			executionInfo.DecisionScheduledTimestamp,
-			executionInfo.CancelRequested,
-			executionInfo.CancelRequestID,
-			executionInfo.StickyTaskList,
-			executionInfo.StickyScheduleToStartTimeout,
-			executionInfo.ClientLibraryVersion,
-			executionInfo.ClientFeatureVersion,
-			executionInfo.ClientImpl,
-			executionInfo.AutoResetPoints.Data,
-			executionInfo.AutoResetPoints.GetEncoding(),
-			executionInfo.Attempt,
-			executionInfo.HasRetryPolicy,
-			executionInfo.InitialInterval,
-			executionInfo.BackoffCoefficient,
-			executionInfo.MaximumInterval,
-			executionInfo.ExpirationTime,
-			executionInfo.MaximumAttempts,
-			executionInfo.NonRetriableErrors,
-			executionInfo.EventStoreVersion,
-			executionInfo.BranchToken,
-			executionInfo.CronSchedule,
-			executionInfo.ExpirationSeconds,
-			executionInfo.SearchAttributes,
-			replicationState.CurrentVersion,
-			replicationState.StartVersion,
-			replicationState.LastWriteVersion,
-			replicationState.LastWriteEventID,
-			lastReplicationInfo,
-			executionInfo.NextEventID,
-			d.shardID,
-			rowTypeExecution,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	} else if versionHistories != nil {
-		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
-		batchQueryHelper(batch, templateUpdateWorkflowExecutionWithVersionHistoriesQuery, useCondition, condition,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
-			executionInfo.ParentDomainID,
-			executionInfo.ParentWorkflowID,
-			executionInfo.ParentRunID,
-			executionInfo.InitiatedID,
-			executionInfo.CompletionEventBatchID,
-			completionData,
-			completionEncoding,
-			executionInfo.TaskList,
-			executionInfo.WorkflowTypeName,
-			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
-			executionInfo.ExecutionContext,
-			executionInfo.State,
-			executionInfo.CloseStatus,
-			executionInfo.LastFirstEventID,
-			executionInfo.LastEventTaskID,
-			executionInfo.NextEventID,
-			executionInfo.LastProcessedEvent,
-			executionInfo.StartTimestamp,
-			cqlNowTimestamp,
-			executionInfo.CreateRequestID,
-			executionInfo.SignalCount,
-			executionInfo.HistorySize,
-			executionInfo.DecisionVersion,
-			executionInfo.DecisionScheduleID,
-			executionInfo.DecisionStartedID,
-			executionInfo.DecisionRequestID,
-			executionInfo.DecisionTimeout,
-			executionInfo.DecisionAttempt,
-			executionInfo.DecisionStartedTimestamp,
-			executionInfo.DecisionScheduledTimestamp,
-			executionInfo.CancelRequested,
-			executionInfo.CancelRequestID,
-			executionInfo.StickyTaskList,
-			executionInfo.StickyScheduleToStartTimeout,
-			executionInfo.ClientLibraryVersion,
-			executionInfo.ClientFeatureVersion,
-			executionInfo.ClientImpl,
-			executionInfo.AutoResetPoints.Data,
-			executionInfo.AutoResetPoints.GetEncoding(),
-			executionInfo.Attempt,
-			executionInfo.HasRetryPolicy,
-			executionInfo.InitialInterval,
-			executionInfo.BackoffCoefficient,
-			executionInfo.MaximumInterval,
-			executionInfo.ExpirationTime,
-			executionInfo.MaximumAttempts,
-			executionInfo.NonRetriableErrors,
-			executionInfo.EventStoreVersion,
-			executionInfo.BranchToken,
-			executionInfo.CronSchedule,
-			executionInfo.ExpirationSeconds,
-			executionInfo.SearchAttributes,
-			executionInfo.NextEventID,
-			versionHistoriesData,
-			versionHistoriesEncoding,
-			d.shardID,
-			rowTypeExecution,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	} else {
-		// Updates will be called with null ReplicationState while the feature is disabled
-		batchQueryHelper(batch, templateUpdateWorkflowExecutionQuery, useCondition, condition,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
-			executionInfo.ParentDomainID,
-			executionInfo.ParentWorkflowID,
-			executionInfo.ParentRunID,
-			executionInfo.InitiatedID,
-			executionInfo.CompletionEventBatchID,
-			completionData,
-			completionEncoding,
-			executionInfo.TaskList,
-			executionInfo.WorkflowTypeName,
-			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
-			executionInfo.ExecutionContext,
-			executionInfo.State,
-			executionInfo.CloseStatus,
-			executionInfo.LastFirstEventID,
-			executionInfo.LastEventTaskID,
-			executionInfo.NextEventID,
-			executionInfo.LastProcessedEvent,
-			executionInfo.StartTimestamp,
-			cqlNowTimestamp,
-			executionInfo.CreateRequestID,
-			executionInfo.SignalCount,
-			executionInfo.HistorySize,
-			executionInfo.DecisionVersion,
-			executionInfo.DecisionScheduleID,
-			executionInfo.DecisionStartedID,
-			executionInfo.DecisionRequestID,
-			executionInfo.DecisionTimeout,
-			executionInfo.DecisionAttempt,
-			executionInfo.DecisionStartedTimestamp,
-			executionInfo.DecisionScheduledTimestamp,
-			executionInfo.CancelRequested,
-			executionInfo.CancelRequestID,
-			executionInfo.StickyTaskList,
-			executionInfo.StickyScheduleToStartTimeout,
-			executionInfo.ClientLibraryVersion,
-			executionInfo.ClientFeatureVersion,
-			executionInfo.ClientImpl,
-			executionInfo.AutoResetPoints.Data,
-			executionInfo.AutoResetPoints.GetEncoding(),
-			executionInfo.Attempt,
-			executionInfo.HasRetryPolicy,
-			executionInfo.InitialInterval,
-			executionInfo.BackoffCoefficient,
-			executionInfo.MaximumInterval,
-			executionInfo.ExpirationTime,
-			executionInfo.MaximumAttempts,
-			executionInfo.NonRetriableErrors,
-			executionInfo.EventStoreVersion,
-			executionInfo.BranchToken,
-			executionInfo.CronSchedule,
-			executionInfo.ExpirationSeconds,
-			executionInfo.SearchAttributes,
-			executionInfo.NextEventID,
-			d.shardID,
-			rowTypeExecution,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	}
-}
-
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdateWorkflowExecutionRequest) error {
+
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
-	// validate workflow state & close status
-	if err := p.ValidateUpdateWorkflowStateCloseStatus(
-		request.ExecutionInfo.State,
-		request.ExecutionInfo.CloseStatus); err != nil {
+	updateWorkflow := request.UpdateWorkflowMutation
+	shardID := d.shardID
+	executionInfo := updateWorkflow.ExecutionInfo
+
+	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
 		return err
 	}
 
-	executionInfo := request.ExecutionInfo
-	replicationState := request.ReplicationState
+	if request.NewWorkflowSnapshot != nil {
 
-	d.updateMutableState(batch, executionInfo, replicationState, request.VersionHistories, cqlNowTimestamp, true, request.Condition)
+		newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
+		newReplicationState := request.NewWorkflowSnapshot.ReplicationState
+		newDomainID := newExecutionInfo.DomainID
+		newWorkflowID := newExecutionInfo.WorkflowID
+		newRunID := newExecutionInfo.RunID
 
-	d.createTransferTasks(batch, request.TransferTasks, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID)
-
-	d.createReplicationTasks(batch, request.ReplicationTasks, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID)
-
-	d.createTimerTasks(batch, request.TimerTasks, request.ExecutionInfo.DomainID,
-		executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
-
-	err := d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfos, executionInfo.DomainID,
-		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-	if err != nil {
-		return err
-	}
-
-	d.updateTimerInfos(batch, request.UpserTimerInfos, request.DeleteTimerInfos, executionInfo.DomainID,
-		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	err = d.updateChildExecutionInfos(batch, request.UpsertChildExecutionInfos, request.DeleteChildExecutionInfo,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-	if err != nil {
-		return err
-	}
-
-	d.updateRequestCancelInfos(batch, request.UpsertRequestCancelInfos, request.DeleteRequestCancelInfo,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	d.updateSignalInfos(batch, request.UpsertSignalInfos, request.DeleteSignalInfo,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	d.updateSignalsRequested(batch, request.UpsertSignalRequestedIDs, request.DeleteSignalRequestedID,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	d.updateBufferedEvents(batch, request.NewBufferedEvents, request.ClearBufferedEvents,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	d.updateBufferedReplicationTasks(batch, request.NewBufferedReplicationTask, request.DeleteBufferedReplicationTask,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	if request.ContinueAsNew != nil {
-		startReq := request.ContinueAsNew
-		if err := d.CreateWorkflowExecutionWithinBatch(startReq, batch, cqlNowTimestamp); err != nil {
+		if err := createOrUpdateCurrentExecution(batch,
+			p.CreateWorkflowModeContinueAsNew,
+			d.shardID,
+			newDomainID,
+			newWorkflowID,
+			newRunID,
+			newExecutionInfo.State,
+			newExecutionInfo.CloseStatus,
+			newExecutionInfo.CreateRequestID,
+			newReplicationState,
+			executionInfo.RunID,
+			0, // for continue as new, this is not used
+		); err != nil {
 			return err
 		}
-		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, startReq.Execution.GetWorkflowId(),
-			startReq.Execution.GetRunId())
-		d.createTimerTasks(batch, startReq.TimerTasks, startReq.DomainID, startReq.Execution.GetWorkflowId(),
-			startReq.Execution.GetRunId(), cqlNowTimestamp)
+		if err := applyWorkflowSnapshotBatchAsNew(batch,
+			d.shardID,
+			request.NewWorkflowSnapshot,
+		); err != nil {
+			return err
+		}
 	} else {
 		switch executionInfo.State {
 		case p.WorkflowStateZombie:
@@ -2015,9 +1369,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 		case p.WorkflowStateCreated, p.WorkflowStateRunning, p.WorkflowStateCompleted:
 			startVersion := common.EmptyVersion
 			lastWriteVersion := common.EmptyVersion
-			if request.ReplicationState != nil {
-				startVersion = request.ReplicationState.StartVersion
-				lastWriteVersion = request.ReplicationState.LastWriteVersion
+			if updateWorkflow.ReplicationState != nil {
+				startVersion = updateWorkflow.ReplicationState.StartVersion
+				lastWriteVersion = updateWorkflow.ReplicationState.LastWriteVersion
 			}
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				executionInfo.RunID,
@@ -2082,155 +1436,96 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.Condition, request.RangeID, executionInfo.RunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, updateWorkflow.Condition, request.RangeID, executionInfo.RunID)
 	}
 	return nil
 }
 
 //TODO: update query with version histories
 func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWorkflowExecutionRequest) error {
+
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
-	currExecutionInfo := request.CurrExecutionInfo
-	currReplicationState := request.CurrReplicationState
+	shardID := d.shardID
 
-	insertExecutionInfo := request.InsertExecutionInfo
-	insertReplicationState := request.InsertReplicationState
+	domainID := request.NewWorkflowSnapshot.ExecutionInfo.DomainID
+	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
+
+	baseRunID := request.BaseRunID
+	baseRunNextEventID := request.BaseRunNextEventID
+
+	currentRunID := request.CurrentRunID
+	currentRunNextEventID := request.CurrentRunNextEventID
+
+	newRunID := request.NewWorkflowSnapshot.ExecutionInfo.RunID
+	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
+	newReplicationState := request.NewWorkflowSnapshot.ReplicationState
 
 	startVersion := common.EmptyVersion
 	lastWriteVersion := common.EmptyVersion
-	if insertReplicationState != nil {
-		startVersion = insertReplicationState.StartVersion
-		lastWriteVersion = insertReplicationState.LastWriteVersion
+	if newReplicationState != nil {
+		startVersion = newReplicationState.StartVersion
+		lastWriteVersion = newReplicationState.LastWriteVersion
 	}
 
-	if currReplicationState == nil {
-		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			insertExecutionInfo.RunID,
-			insertExecutionInfo.RunID,
-			insertExecutionInfo.CreateRequestID,
-			insertExecutionInfo.State,
-			insertExecutionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			insertExecutionInfo.State,
-			d.shardID,
-			rowTypeExecution,
-			insertExecutionInfo.DomainID,
-			insertExecutionInfo.WorkflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			currExecutionInfo.RunID,
-		)
-	} else {
-		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
-			insertExecutionInfo.RunID,
-			insertExecutionInfo.RunID,
-			insertExecutionInfo.CreateRequestID,
-			insertExecutionInfo.State,
-			insertExecutionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion,
-			lastWriteVersion,
-			insertExecutionInfo.State,
-			d.shardID,
-			rowTypeExecution,
-			insertExecutionInfo.DomainID,
-			insertExecutionInfo.WorkflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			currExecutionInfo.RunID,
-			request.PrevRunVersion,
-			request.PrevRunState,
-		)
-	}
+	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+		newRunID,
+		newRunID,
+		newExecutionInfo.CreateRequestID,
+		newExecutionInfo.State,
+		newExecutionInfo.CloseStatus,
+		startVersion,
+		lastWriteVersion,
+		lastWriteVersion,
+		newExecutionInfo.State,
+		d.shardID,
+		rowTypeExecution,
+		newExecutionInfo.DomainID,
+		newExecutionInfo.WorkflowID,
+		permanentRunID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		currentRunID,
+	)
 
 	// for forkRun, check condition without updating anything to make sure the forkRun hasn't been deleted.
 	// Without this check, it will run into race condition with deleteHistoryEvent timer task
 	// we only do it when forkRun != currentRun
-	if request.BaseRunID != currExecutionInfo.RunID {
+	if baseRunID != currentRunID {
 		batch.Query(templateCheckWorkflowExecutionQuery,
-			request.BaseRunNextEventID,
+			baseRunNextEventID,
 			d.shardID,
 			rowTypeExecution,
-			currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
+			domainID,
+			workflowID,
 			request.BaseRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			request.BaseRunNextEventID,
+			baseRunNextEventID,
 		)
 	}
 
-	if request.UpdateCurr {
-		d.updateMutableState(batch, currExecutionInfo, currReplicationState, request.CurrVersionHistories, cqlNowTimestamp, true, request.Condition)
-		d.createTimerTasks(batch, request.CurrTimerTasks, currExecutionInfo.DomainID, currExecutionInfo.WorkflowID, currExecutionInfo.RunID, cqlNowTimestamp)
-		d.createTransferTasks(batch, request.CurrTransferTasks, currExecutionInfo.DomainID, currExecutionInfo.WorkflowID, currExecutionInfo.RunID)
+	if request.CurrentWorkflowMutation != nil {
+		if err := applyWorkflowMutationBatch(batch, shardID, request.CurrentWorkflowMutation); err != nil {
+			return err
+		}
 	} else {
 		// check condition without updating anything
 		batch.Query(templateCheckWorkflowExecutionQuery,
-			request.Condition,
+			currentRunNextEventID,
 			d.shardID,
 			rowTypeExecution,
-			currExecutionInfo.DomainID,
-			currExecutionInfo.WorkflowID,
-			currExecutionInfo.RunID,
+			domainID,
+			workflowID,
+			currentRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			request.Condition,
+			currentRunNextEventID,
 		)
 	}
 
-	if len(request.InsertReplicationTasks) > 0 {
-		d.createReplicationTasks(batch, request.InsertReplicationTasks, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID, insertExecutionInfo.RunID)
-	}
-	if len(request.CurrReplicationTasks) > 0 {
-		d.createReplicationTasks(batch, request.CurrReplicationTasks, currExecutionInfo.DomainID, currExecutionInfo.WorkflowID, currExecutionInfo.RunID)
-	}
-
-	// we need to insert new mutableState, there is no condition to check. We use update without condition as insert
-	d.updateMutableState(batch, insertExecutionInfo, insertReplicationState, request.InsertVersionHistories, cqlNowTimestamp, false, 0)
-
-	if len(request.InsertActivityInfos) > 0 {
-		d.resetActivityInfos(batch, request.InsertActivityInfos, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID,
-			insertExecutionInfo.RunID, false, 0)
-	}
-
-	if len(request.InsertTimerInfos) > 0 {
-		d.resetTimerInfos(batch, request.InsertTimerInfos, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID,
-			insertExecutionInfo.RunID, false, 0)
-	}
-
-	if len(request.InsertRequestCancelInfos) > 0 {
-		d.resetRequestCancelInfos(batch, request.InsertRequestCancelInfos, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID,
-			insertExecutionInfo.RunID, false, 0)
-	}
-
-	if len(request.InsertChildExecutionInfos) > 0 {
-		d.resetChildExecutionInfos(batch, request.InsertChildExecutionInfos, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID,
-			insertExecutionInfo.RunID, false, 0)
-	}
-
-	if len(request.InsertSignalInfos) > 0 {
-		d.resetSignalInfos(batch, request.InsertSignalInfos, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID,
-			insertExecutionInfo.RunID, false, 0)
-	}
-
-	if len(request.InsertSignalRequestedIDs) > 0 {
-		d.resetSignalRequested(batch, request.InsertSignalRequestedIDs, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID,
-			insertExecutionInfo.RunID, false, 0)
-	}
-
-	if len(request.InsertTimerTasks) > 0 {
-		d.createTimerTasks(batch, request.InsertTimerTasks, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID, insertExecutionInfo.RunID, cqlNowTimestamp)
-	}
-
-	if len(request.InsertTransferTasks) > 0 {
-		d.createTransferTasks(batch, request.InsertTransferTasks, insertExecutionInfo.DomainID, insertExecutionInfo.WorkflowID, insertExecutionInfo.RunID)
+	if err := applyWorkflowSnapshotBatchAsNew(batch, shardID, &request.NewWorkflowSnapshot); err != nil {
+		return err
 	}
 
 	//Verifies that the RangeID has not changed
@@ -2270,7 +1565,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, currExecutionInfo.RunID, request.Condition, request.RangeID, currExecutionInfo.RunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, currentRunID, currentRunNextEventID, request.RangeID, currentRunID)
 	}
 
 	return nil
@@ -2278,9 +1573,11 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 
 func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutableStateRequest) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
-	executionInfo := request.ExecutionInfo
-	replicationState := request.ReplicationState
+
+	resetWorkflow := request.ResetWorkflowSnapshot
+	shardID := d.shardID
+	executionInfo := resetWorkflow.ExecutionInfo
+	replicationState := resetWorkflow.ReplicationState
 
 	batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 		executionInfo.RunID,
@@ -2304,40 +1601,11 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		request.PrevState,
 	)
 
-	d.updateMutableState(batch, executionInfo, replicationState, request.VersionHistories, cqlNowTimestamp, true, request.Condition)
-
-	if err := d.resetActivityInfos(batch, request.InsertActivityInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition); err != nil {
+	if err := applyWorkflowSnapshotBatchAsReset(batch,
+		shardID,
+		&resetWorkflow); err != nil {
 		return err
 	}
-
-	d.resetTimerInfos(batch, request.InsertTimerInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition)
-
-	if err := d.resetChildExecutionInfos(batch, request.InsertChildExecutionInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition); err != nil {
-		return err
-	}
-
-	d.resetRequestCancelInfos(batch, request.InsertRequestCancelInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition)
-
-	d.resetSignalInfos(batch, request.InsertSignalInfos, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition)
-
-	d.resetSignalRequested(batch, request.InsertSignalRequestedIDs, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, true, request.Condition)
-
-	d.resetBufferedEvents(batch, executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition)
-
-	d.createTransferTasks(batch, request.InsertTransferTasks,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID)
-
-	d.createReplicationTasks(batch, request.InsertReplicationTasks,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID)
-
-	d.createTimerTasks(batch, request.InsertTimerTasks,
-		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
 
 	// Verifies that the RangeID has not changed
 	batch.Query(templateUpdateLeaseQuery,
@@ -2376,7 +1644,7 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.Condition, request.RangeID, request.PrevRunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.ResetWorkflowSnapshot.Condition, request.RangeID, request.PrevRunID)
 	}
 
 	return nil
@@ -2465,6 +1733,26 @@ GetFailureReasonLoop:
 		Msg: fmt.Sprintf("Failed to reset mutable state. ShardID: %v, RangeID: %v, Condition: %v, Request Current RunID: %v, columns: (%v)",
 			d.shardID, requestRangeID, requestCondition, requestConditionalRunID, strings.Join(columns, ",")),
 	}
+}
+
+func (d *cassandraPersistence) assertNotCurrentExecution(
+	domainID string,
+	workflowID string,
+	runID string,
+) error {
+
+	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}); err != nil {
+		return err
+	} else if resp.RunID == runID {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+		}
+	}
+
+	return nil
 }
 
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
@@ -3218,1415 +2506,4 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	}
 
 	return response, nil
-}
-
-func (d *cassandraPersistence) createTransferTasks(
-	batch *gocql.Batch,
-	transferTasks []p.Task,
-	domainID, workflowID, runID string,
-) {
-	targetDomainID := domainID
-	for _, task := range transferTasks {
-		var taskList string
-		var scheduleID int64
-		targetWorkflowID := p.TransferTaskTransferTargetWorkflowID
-		targetRunID := p.TransferTaskTransferTargetRunID
-		targetChildWorkflowOnly := false
-		recordVisibility := false
-
-		switch task.GetType() {
-		case p.TransferTaskTypeActivityTask:
-			targetDomainID = task.(*p.ActivityTask).DomainID
-			taskList = task.(*p.ActivityTask).TaskList
-			scheduleID = task.(*p.ActivityTask).ScheduleID
-
-		case p.TransferTaskTypeDecisionTask:
-			targetDomainID = task.(*p.DecisionTask).DomainID
-			taskList = task.(*p.DecisionTask).TaskList
-			scheduleID = task.(*p.DecisionTask).ScheduleID
-			recordVisibility = task.(*p.DecisionTask).RecordVisibility
-
-		case p.TransferTaskTypeCancelExecution:
-			targetDomainID = task.(*p.CancelExecutionTask).TargetDomainID
-			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
-			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
-			if targetRunID == "" {
-				targetRunID = p.TransferTaskTransferTargetRunID
-			}
-			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
-
-		case p.TransferTaskTypeSignalExecution:
-			targetDomainID = task.(*p.SignalExecutionTask).TargetDomainID
-			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
-			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
-			if targetRunID == "" {
-				targetRunID = p.TransferTaskTransferTargetRunID
-			}
-			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
-
-		case p.TransferTaskTypeStartChildExecution:
-			targetDomainID = task.(*p.StartChildExecutionTask).TargetDomainID
-			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
-			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
-
-		case p.TransferTaskTypeCloseExecution,
-			p.TransferTaskTypeRecordWorkflowStarted,
-			p.TransferTaskTypeResetWorkflow:
-			// No explicit property needs to be set
-
-		default:
-			d.logger.Fatal("Unknown Transfer Task.")
-		}
-
-		batch.Query(templateCreateTransferTaskQuery,
-			d.shardID,
-			rowTypeTransferTask,
-			rowTypeTransferDomainID,
-			rowTypeTransferWorkflowID,
-			rowTypeTransferRunID,
-			domainID,
-			workflowID,
-			runID,
-			task.GetVisibilityTimestamp(),
-			task.GetTaskID(),
-			targetDomainID,
-			targetWorkflowID,
-			targetRunID,
-			targetChildWorkflowOnly,
-			taskList,
-			task.GetType(),
-			scheduleID,
-			recordVisibility,
-			task.GetVersion(),
-			defaultVisibilityTimestamp,
-			task.GetTaskID())
-	}
-}
-
-func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replicationTasks []p.Task, domainID, workflowID,
-	runID string) {
-
-	for _, task := range replicationTasks {
-		// Replication task specific information
-		firstEventID := common.EmptyEventID
-		nextEventID := common.EmptyEventID
-		version := common.EmptyVersion
-		var lastReplicationInfo map[string]map[string]interface{}
-		activityScheduleID := common.EmptyEventID
-		var eventStoreVersion, newRunEventStoreVersion int32
-		var branchToken, newRunBranchToken []byte
-		resetWorkflow := false
-
-		switch task.GetType() {
-		case p.ReplicationTaskTypeHistory:
-			histTask := task.(*p.HistoryReplicationTask)
-			eventStoreVersion = histTask.EventStoreVersion
-			newRunEventStoreVersion = histTask.NewRunEventStoreVersion
-			branchToken = histTask.BranchToken
-			newRunBranchToken = histTask.NewRunBranchToken
-			firstEventID = histTask.FirstEventID
-			nextEventID = histTask.NextEventID
-			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]map[string]interface{})
-			for k, v := range histTask.LastReplicationInfo {
-				lastReplicationInfo[k] = createReplicationInfoMap(v)
-			}
-			resetWorkflow = histTask.ResetWorkflow
-		case p.ReplicationTaskTypeSyncActivity:
-			version = task.GetVersion()
-			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			// cassandra does not like null
-			lastReplicationInfo = make(map[string]map[string]interface{})
-		default:
-			d.logger.Fatal("Unknown Replication Task.")
-		}
-
-		batch.Query(templateCreateReplicationTaskQuery,
-			d.shardID,
-			rowTypeReplicationTask,
-			rowTypeReplicationDomainID,
-			rowTypeReplicationWorkflowID,
-			rowTypeReplicationRunID,
-			domainID,
-			workflowID,
-			runID,
-			task.GetTaskID(),
-			task.GetType(),
-			firstEventID,
-			nextEventID,
-			version,
-			lastReplicationInfo,
-			activityScheduleID,
-			eventStoreVersion,
-			branchToken,
-			resetWorkflow,
-			newRunEventStoreVersion,
-			newRunBranchToken,
-			defaultVisibilityTimestamp,
-			task.GetTaskID())
-	}
-}
-
-func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks []p.Task,
-	domainID, workflowID, runID string, cqlNowTimestamp int64) {
-
-	for _, task := range timerTasks {
-		var eventID int64
-		var attempt int64
-
-		timeoutType := 0
-
-		switch t := task.(type) {
-		case *p.DecisionTimeoutTask:
-			eventID = t.EventID
-			timeoutType = t.TimeoutType
-			attempt = t.ScheduleAttempt
-		case *p.ActivityTimeoutTask:
-			eventID = t.EventID
-			timeoutType = t.TimeoutType
-			attempt = t.Attempt
-		case *p.UserTimerTask:
-			eventID = t.EventID
-		case *p.ActivityRetryTimerTask:
-			eventID = t.EventID
-			attempt = int64(t.Attempt)
-		case *p.WorkflowBackoffTimerTask:
-			eventID = t.EventID
-			timeoutType = t.TimeoutType
-		}
-
-		// Ignoring possible type cast errors.
-		ts := p.UnixNanoToDBTimestamp(task.GetVisibilityTimestamp().UnixNano())
-
-		batch.Query(templateCreateTimerTaskQuery,
-			d.shardID,
-			rowTypeTimerTask,
-			rowTypeTimerDomainID,
-			rowTypeTimerWorkflowID,
-			rowTypeTimerRunID,
-			domainID,
-			workflowID,
-			runID,
-			ts,
-			task.GetTaskID(),
-			task.GetType(),
-			timeoutType,
-			eventID,
-			attempt,
-			task.GetVersion(),
-			ts,
-			task.GetTaskID())
-	}
-}
-
-func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityInfos []*p.InternalActivityInfo,
-	deleteInfos []int64, domainID, workflowID, runID string, condition int64, rangeID int64) error {
-
-	for _, a := range activityInfos {
-		encoding := common.EncodingTypeUnknown
-		if a.ScheduledEvent != nil {
-			encoding = string(a.ScheduledEvent.GetEncoding())
-		}
-		scheduledEventData, _ := p.FromDataBlob(a.ScheduledEvent)
-		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
-		if a.ScheduledEvent != nil && a.StartedEvent != nil && a.StartedEvent.Encoding != a.ScheduledEvent.Encoding {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
-		}
-
-		batch.Query(templateUpdateActivityInfoQuery,
-			a.ScheduleID,
-			a.Version,
-			a.ScheduleID,
-			a.ScheduledEventBatchID,
-			scheduledEventData,
-			a.ScheduledTime,
-			a.StartedID,
-			startedEventData,
-			a.StartedTime,
-			a.ActivityID,
-			a.RequestID,
-			a.Details,
-			a.ScheduleToStartTimeout,
-			a.ScheduleToCloseTimeout,
-			a.StartToCloseTimeout,
-			a.HeartbeatTimeout,
-			a.CancelRequested,
-			a.CancelRequestID,
-			a.LastHeartBeatUpdatedTime,
-			a.TimerTaskStatus,
-			a.Attempt,
-			a.TaskList,
-			a.StartedIdentity,
-			a.HasRetryPolicy,
-			a.InitialInterval,
-			a.BackoffCoefficient,
-			a.MaximumInterval,
-			a.ExpirationTime,
-			a.MaximumAttempts,
-			a.NonRetriableErrors,
-			encoding,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-
-	for _, deleteInfo := range deleteInfos {
-		batch.Query(templateDeleteActivityInfoQuery,
-			deleteInfo,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-	return nil
-}
-
-func (d *cassandraPersistence) resetBufferedEvents(batch *gocql.Batch, domainID, workflowID, runID string,
-	condition int64) {
-	batch.Query(templateDeleteBufferedEventsQuery,
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID,
-		condition)
-
-	batch.Query(templateClearBufferedReplicationTaskQuery,
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID,
-		condition)
-}
-
-func (d *cassandraPersistence) resetActivityInfos(batch *gocql.Batch, activityInfos []*p.InternalActivityInfo, domainID,
-	workflowID, runID string, useCondition bool, condition int64) error {
-
-	infoMap, err := resetActivityInfoMap(activityInfos)
-	if err != nil {
-		return err
-	}
-
-	batchQueryHelper(batch, templateResetActivityInfoQuery, useCondition, condition,
-		infoMap,
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-	return nil
-}
-
-func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos []*p.TimerInfo, deleteInfos []string,
-	domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	for _, a := range timerInfos {
-		batch.Query(templateUpdateTimerInfoQuery,
-			a.TimerID,
-			a.Version,
-			a.TimerID,
-			a.StartedID,
-			a.ExpiryTime,
-			a.TaskID,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-
-	for _, t := range deleteInfos {
-		batch.Query(templateDeleteTimerInfoQuery,
-			t,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) resetTimerInfos(batch *gocql.Batch, timerInfos []*p.TimerInfo, domainID, workflowID,
-	runID string, useCondition bool, condition int64) {
-	batchQueryHelper(batch, templateResetTimerInfoQuery, useCondition, condition,
-		resetTimerInfoMap(timerInfos),
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-}
-
-func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, childExecutionInfos []*p.InternalChildExecutionInfo,
-	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) error {
-
-	for _, c := range childExecutionInfos {
-		initiatedEventData, encoding := p.FromDataBlob(c.InitiatedEvent)
-
-		var startedEventData []byte
-		if c.StartedEvent != nil {
-			startedEventData = c.StartedEvent.Data
-			if string(c.StartedEvent.GetEncoding()) != encoding {
-				return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", encoding, c.StartedEvent.GetEncoding()))
-			}
-		}
-		startedRunID := emptyRunID
-		if c.StartedRunID != "" {
-			startedRunID = c.StartedRunID
-		}
-		batch.Query(templateUpdateChildExecutionInfoQuery,
-			c.InitiatedID,
-			c.Version,
-			c.InitiatedID,
-			c.InitiatedEventBatchID,
-			initiatedEventData,
-			c.StartedID,
-			c.StartedWorkflowID,
-			startedRunID,
-			startedEventData,
-			c.CreateRequestID,
-			encoding,
-			c.DomainName,
-			c.WorkflowTypeName,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-
-	// deleteInfo is the initiatedID for ChildInfo being deleted
-	if deleteInfo != nil {
-		batch.Query(templateDeleteChildExecutionInfoQuery,
-			*deleteInfo,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-	return nil
-}
-
-func (d *cassandraPersistence) resetChildExecutionInfos(batch *gocql.Batch, childExecutionInfos []*p.InternalChildExecutionInfo,
-	domainID, workflowID, runID string, useCondition bool, condition int64) error {
-	infoMap, err := resetChildExecutionInfoMap(childExecutionInfos, d.logger)
-	if err != nil {
-		return err
-	}
-	batchQueryHelper(batch, templateResetChildExecutionInfoQuery, useCondition, condition,
-		infoMap,
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-	return nil
-}
-
-func (d *cassandraPersistence) updateRequestCancelInfos(batch *gocql.Batch, requestCancelInfos []*p.RequestCancelInfo,
-	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	for _, c := range requestCancelInfos {
-		batch.Query(templateUpdateRequestCancelInfoQuery,
-			c.InitiatedID,
-			c.Version,
-			c.InitiatedID,
-			c.CancelRequestID,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-
-	// deleteInfo is the initiatedID for RequestCancelInfo being deleted
-	if deleteInfo != nil {
-		batch.Query(templateDeleteRequestCancelInfoQuery,
-			*deleteInfo,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) resetRequestCancelInfos(batch *gocql.Batch, requestCancelInfos []*p.RequestCancelInfo,
-	domainID, workflowID, runID string, useCondition bool, condition int64) {
-	batchQueryHelper(batch, templateResetRequestCancelInfoQuery, useCondition, condition,
-		resetRequestCancelInfoMap(requestCancelInfos),
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-}
-
-func (d *cassandraPersistence) updateSignalInfos(batch *gocql.Batch, signalInfos []*p.SignalInfo,
-	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	for _, c := range signalInfos {
-		batch.Query(templateUpdateSignalInfoQuery,
-			c.InitiatedID,
-			c.Version,
-			c.InitiatedID,
-			c.SignalRequestID,
-			c.SignalName,
-			c.Input,
-			c.Control,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-
-	// deleteInfo is the initiatedID for SignalInfo being deleted
-	if deleteInfo != nil {
-		batch.Query(templateDeleteSignalInfoQuery,
-			*deleteInfo,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) resetSignalInfos(batch *gocql.Batch, signalInfos []*p.SignalInfo,
-	domainID, workflowID, runID string, useCondition bool, condition int64) {
-	batchQueryHelper(batch, templateResetSignalInfoQuery, useCondition, condition,
-		resetSignalInfoMap(signalInfos),
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-}
-
-func (d *cassandraPersistence) updateSignalsRequested(batch *gocql.Batch, signalReqIDs []string, deleteSignalReqID string,
-	domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	if len(signalReqIDs) > 0 {
-		batch.Query(templateUpdateSignalRequestedQuery,
-			signalReqIDs,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-
-	if deleteSignalReqID != "" {
-		req := []string{deleteSignalReqID} // for cassandra set binding
-		batch.Query(templateDeleteWorkflowExecutionSignalRequestedQuery,
-			req,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) resetSignalRequested(batch *gocql.Batch, signalRequested []string,
-	domainID, workflowID, runID string, useCondition bool, condition int64) {
-	batchQueryHelper(batch, templateResetSignalRequestedQuery, useCondition, condition,
-		signalRequested,
-		d.shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-}
-
-func (d *cassandraPersistence) updateBufferedEvents(batch *gocql.Batch, newBufferedEvents *p.DataBlob,
-	clearBufferedEvents bool, domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	if clearBufferedEvents {
-		batch.Query(templateDeleteBufferedEventsQuery,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	} else if newBufferedEvents != nil {
-		values := make(map[string]interface{})
-		values["encoding_type"] = newBufferedEvents.Encoding
-		values["version"] = int64(0)
-		values["data"] = newBufferedEvents.Data
-		newEventValues := []map[string]interface{}{values}
-		batch.Query(templateAppendBufferedEventsQuery,
-			newEventValues,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) updateBufferedReplicationTasks(batch *gocql.Batch, newBufferedReplicationTask *p.InternalBufferedReplicationTask,
-	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) {
-
-	if newBufferedReplicationTask != nil {
-		if newBufferedReplicationTask.NewRunHistory != nil {
-			batch.Query(templateUpdateBufferedReplicationTasksQuery,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.NextEventID,
-				newBufferedReplicationTask.Version,
-				newBufferedReplicationTask.EventStoreVersion,
-				newBufferedReplicationTask.NewRunEventStoreVersion,
-				newBufferedReplicationTask.History.Encoding,
-				int64(0),
-				newBufferedReplicationTask.History.Data,
-				newBufferedReplicationTask.NewRunHistory.Encoding,
-				int64(0),
-				newBufferedReplicationTask.NewRunHistory.Data,
-				d.shardID,
-				rowTypeExecution,
-				domainID,
-				workflowID,
-				runID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				condition)
-		} else {
-			batch.Query(templateUpdateBufferedReplicationTasksNoNewRunHistoryQuery,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.FirstEventID,
-				newBufferedReplicationTask.NextEventID,
-				newBufferedReplicationTask.Version,
-				newBufferedReplicationTask.EventStoreVersion,
-				newBufferedReplicationTask.History.Encoding,
-				int64(0),
-				newBufferedReplicationTask.History.Data,
-				d.shardID,
-				rowTypeExecution,
-				domainID,
-				workflowID,
-				runID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				condition)
-		}
-	}
-
-	// deleteInfo is the FirstEventID for the history batch being deleted
-	if deleteInfo != nil {
-		batch.Query(templateDeleteBufferedReplicationTaskQuery,
-			*deleteInfo,
-			d.shardID,
-			rowTypeExecution,
-			domainID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			condition)
-	}
-}
-
-func (d *cassandraPersistence) assertNotCurrentExecution(domainID string, workflowID string, runID string) error {
-	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-	}); err != nil {
-		return err
-	} else if resp.RunID == runID {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
-		}
-	}
-
-	return nil
-}
-
-func createShardInfo(currentCluster string, result map[string]interface{}) *p.ShardInfo {
-	info := &p.ShardInfo{}
-	for k, v := range result {
-		switch k {
-		case "shard_id":
-			info.ShardID = v.(int)
-		case "owner":
-			info.Owner = v.(string)
-		case "range_id":
-			info.RangeID = v.(int64)
-		case "stolen_since_renew":
-			info.StolenSinceRenew = v.(int)
-		case "updated_at":
-			info.UpdatedAt = v.(time.Time)
-		case "replication_ack_level":
-			info.ReplicationAckLevel = v.(int64)
-		case "transfer_ack_level":
-			info.TransferAckLevel = v.(int64)
-		case "timer_ack_level":
-			info.TimerAckLevel = v.(time.Time)
-		case "cluster_transfer_ack_level":
-			info.ClusterTransferAckLevel = v.(map[string]int64)
-		case "cluster_timer_ack_level":
-			info.ClusterTimerAckLevel = v.(map[string]time.Time)
-		case "domain_notification_version":
-			info.DomainNotificationVersion = v.(int64)
-		}
-	}
-
-	if info.ClusterTransferAckLevel == nil {
-		info.ClusterTransferAckLevel = map[string]int64{
-			currentCluster: info.TransferAckLevel,
-		}
-	}
-	if info.ClusterTimerAckLevel == nil {
-		info.ClusterTimerAckLevel = map[string]time.Time{
-			currentCluster: info.TimerAckLevel,
-		}
-	}
-
-	return info
-}
-
-func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkflowExecutionInfo {
-	info := &p.InternalWorkflowExecutionInfo{}
-	var completionEventData []byte
-	var completionEventEncoding common.EncodingType
-	var autoResetPoints []byte
-	var autoResetPointsEncoding common.EncodingType
-
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "parent_domain_id":
-			info.ParentDomainID = v.(gocql.UUID).String()
-			if info.ParentDomainID == emptyDomainID {
-				info.ParentDomainID = ""
-			}
-		case "parent_workflow_id":
-			info.ParentWorkflowID = v.(string)
-		case "parent_run_id":
-			info.ParentRunID = v.(gocql.UUID).String()
-			if info.ParentRunID == emptyRunID {
-				info.ParentRunID = ""
-			}
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "completion_event_batch_id":
-			info.CompletionEventBatchID = v.(int64)
-		case "completion_event":
-			completionEventData = v.([]byte)
-		case "completion_event_data_encoding":
-			completionEventEncoding = common.EncodingType(v.(string))
-		case "auto_reset_points":
-			autoResetPoints = v.([]byte)
-		case "auto_reset_points_encoding":
-			autoResetPointsEncoding = common.EncodingType(v.(string))
-		case "task_list":
-			info.TaskList = v.(string)
-		case "workflow_type_name":
-			info.WorkflowTypeName = v.(string)
-		case "workflow_timeout":
-			info.WorkflowTimeout = int32(v.(int))
-		case "decision_task_timeout":
-			info.DecisionTimeoutValue = int32(v.(int))
-		case "execution_context":
-			info.ExecutionContext = v.([]byte)
-		case "state":
-			info.State = v.(int)
-		case "close_status":
-			info.CloseStatus = v.(int)
-		case "last_first_event_id":
-			info.LastFirstEventID = v.(int64)
-		case "last_event_task_id":
-			info.LastEventTaskID = v.(int64)
-		case "next_event_id":
-			info.NextEventID = v.(int64)
-		case "last_processed_event":
-			info.LastProcessedEvent = v.(int64)
-		case "start_time":
-			info.StartTimestamp = v.(time.Time)
-		case "last_updated_time":
-			info.LastUpdatedTimestamp = v.(time.Time)
-		case "create_request_id":
-			info.CreateRequestID = v.(gocql.UUID).String()
-		case "signal_count":
-			info.SignalCount = int32(v.(int))
-		case "history_size":
-			info.HistorySize = v.(int64)
-		case "decision_version":
-			info.DecisionVersion = v.(int64)
-		case "decision_schedule_id":
-			info.DecisionScheduleID = v.(int64)
-		case "decision_started_id":
-			info.DecisionStartedID = v.(int64)
-		case "decision_request_id":
-			info.DecisionRequestID = v.(string)
-		case "decision_timeout":
-			info.DecisionTimeout = int32(v.(int))
-		case "decision_attempt":
-			info.DecisionAttempt = v.(int64)
-		case "decision_timestamp":
-			info.DecisionStartedTimestamp = v.(int64)
-		case "decision_scheduled_timestamp":
-			info.DecisionScheduledTimestamp = v.(int64)
-		case "cancel_requested":
-			info.CancelRequested = v.(bool)
-		case "cancel_request_id":
-			info.CancelRequestID = v.(string)
-		case "sticky_task_list":
-			info.StickyTaskList = v.(string)
-		case "sticky_schedule_to_start_timeout":
-			info.StickyScheduleToStartTimeout = int32(v.(int))
-		case "client_library_version":
-			info.ClientLibraryVersion = v.(string)
-		case "client_feature_version":
-			info.ClientFeatureVersion = v.(string)
-		case "client_impl":
-			info.ClientImpl = v.(string)
-		case "attempt":
-			info.Attempt = int32(v.(int))
-		case "has_retry_policy":
-			info.HasRetryPolicy = v.(bool)
-		case "init_interval":
-			info.InitialInterval = int32(v.(int))
-		case "backoff_coefficient":
-			info.BackoffCoefficient = v.(float64)
-		case "max_interval":
-			info.MaximumInterval = int32(v.(int))
-		case "max_attempts":
-			info.MaximumAttempts = int32(v.(int))
-		case "expiration_time":
-			info.ExpirationTime = v.(time.Time)
-		case "non_retriable_errors":
-			info.NonRetriableErrors = v.([]string)
-		case "event_store_version":
-			info.EventStoreVersion = int32(v.(int))
-		case "branch_token":
-			info.BranchToken = v.([]byte)
-		case "cron_schedule":
-			info.CronSchedule = v.(string)
-		case "expiration_seconds":
-			info.ExpirationSeconds = int32(v.(int))
-		case "search_attributes":
-			info.SearchAttributes = v.(map[string][]byte)
-		}
-	}
-	info.CompletionEvent = p.NewDataBlob(completionEventData, completionEventEncoding)
-	info.AutoResetPoints = p.NewDataBlob(autoResetPoints, autoResetPointsEncoding)
-	return info
-}
-
-func createReplicationState(result map[string]interface{}) *p.ReplicationState {
-	if len(result) == 0 {
-		return nil
-	}
-
-	info := &p.ReplicationState{}
-	for k, v := range result {
-		switch k {
-		case "current_version":
-			info.CurrentVersion = v.(int64)
-		case "start_version":
-			info.StartVersion = v.(int64)
-		case "last_write_version":
-			info.LastWriteVersion = v.(int64)
-		case "last_write_event_id":
-			info.LastWriteEventID = v.(int64)
-		case "last_replication_info":
-			info.LastReplicationInfo = make(map[string]*p.ReplicationInfo)
-			replicationInfoMap := v.(map[string]map[string]interface{})
-			for key, value := range replicationInfoMap {
-				info.LastReplicationInfo[key] = createReplicationInfo(value)
-			}
-		}
-	}
-
-	return info
-}
-
-func createTransferTaskInfo(result map[string]interface{}) *p.TransferTaskInfo {
-	info := &p.TransferTaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "visibility_ts":
-			info.VisibilityTimestamp = v.(time.Time)
-		case "task_id":
-			info.TaskID = v.(int64)
-		case "target_domain_id":
-			info.TargetDomainID = v.(gocql.UUID).String()
-		case "target_workflow_id":
-			info.TargetWorkflowID = v.(string)
-		case "target_run_id":
-			info.TargetRunID = v.(gocql.UUID).String()
-			if info.TargetRunID == p.TransferTaskTransferTargetRunID {
-				info.TargetRunID = ""
-			}
-		case "target_child_workflow_only":
-			info.TargetChildWorkflowOnly = v.(bool)
-		case "task_list":
-			info.TaskList = v.(string)
-		case "type":
-			info.TaskType = v.(int)
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "record_visibility":
-			info.RecordVisibility = v.(bool)
-		case "version":
-			info.Version = v.(int64)
-		}
-	}
-
-	return info
-}
-
-func createReplicationTaskInfo(result map[string]interface{}) *p.ReplicationTaskInfo {
-	info := &p.ReplicationTaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "task_id":
-			info.TaskID = v.(int64)
-		case "type":
-			info.TaskType = v.(int)
-		case "first_event_id":
-			info.FirstEventID = v.(int64)
-		case "next_event_id":
-			info.NextEventID = v.(int64)
-		case "version":
-			info.Version = v.(int64)
-		case "last_replication_info":
-			info.LastReplicationInfo = make(map[string]*p.ReplicationInfo)
-			replicationInfoMap := v.(map[string]map[string]interface{})
-			for key, value := range replicationInfoMap {
-				info.LastReplicationInfo[key] = createReplicationInfo(value)
-			}
-		case "scheduled_id":
-			info.ScheduledID = v.(int64)
-		case "event_store_version":
-			info.EventStoreVersion = int32(v.(int))
-		case "branch_token":
-			info.BranchToken = v.([]byte)
-		case "reset_workflow":
-			info.ResetWorkflow = v.(bool)
-		case "new_run_event_store_version":
-			info.NewRunEventStoreVersion = int32(v.(int))
-		case "new_run_branch_token":
-			info.NewRunBranchToken = v.([]byte)
-		}
-	}
-
-	return info
-}
-
-func createActivityInfo(domainID string, result map[string]interface{}) *p.InternalActivityInfo {
-	info := &p.InternalActivityInfo{}
-	var sharedEncoding common.EncodingType
-	var scheduledEventData, startedEventData []byte
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "scheduled_event_batch_id":
-			info.ScheduledEventBatchID = v.(int64)
-		case "scheduled_event":
-			scheduledEventData = v.([]byte)
-		case "scheduled_time":
-			info.ScheduledTime = v.(time.Time)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "started_event":
-			startedEventData = v.([]byte)
-		case "started_time":
-			info.StartedTime = v.(time.Time)
-		case "activity_id":
-			info.ActivityID = v.(string)
-		case "request_id":
-			info.RequestID = v.(string)
-		case "details":
-			info.Details = v.([]byte)
-		case "schedule_to_start_timeout":
-			info.ScheduleToStartTimeout = int32(v.(int))
-		case "schedule_to_close_timeout":
-			info.ScheduleToCloseTimeout = int32(v.(int))
-		case "start_to_close_timeout":
-			info.StartToCloseTimeout = int32(v.(int))
-		case "heart_beat_timeout":
-			info.HeartbeatTimeout = int32(v.(int))
-		case "cancel_requested":
-			info.CancelRequested = v.(bool)
-		case "cancel_request_id":
-			info.CancelRequestID = v.(int64)
-		case "last_hb_updated_time":
-			info.LastHeartBeatUpdatedTime = v.(time.Time)
-		case "timer_task_status":
-			info.TimerTaskStatus = int32(v.(int))
-		case "attempt":
-			info.Attempt = int32(v.(int))
-		case "task_list":
-			info.TaskList = v.(string)
-		case "started_identity":
-			info.StartedIdentity = v.(string)
-		case "has_retry_policy":
-			info.HasRetryPolicy = v.(bool)
-		case "init_interval":
-			info.InitialInterval = (int32)(v.(int))
-		case "backoff_coefficient":
-			info.BackoffCoefficient = v.(float64)
-		case "max_interval":
-			info.MaximumInterval = (int32)(v.(int))
-		case "max_attempts":
-			info.MaximumAttempts = (int32)(v.(int))
-		case "expiration_time":
-			info.ExpirationTime = v.(time.Time)
-		case "non_retriable_errors":
-			info.NonRetriableErrors = v.([]string)
-		case "event_data_encoding":
-			sharedEncoding = common.EncodingType(v.(string))
-		}
-	}
-	info.DomainID = domainID
-	info.ScheduledEvent = p.NewDataBlob(scheduledEventData, sharedEncoding)
-	info.StartedEvent = p.NewDataBlob(startedEventData, sharedEncoding)
-
-	return info
-}
-
-func createTimerInfo(result map[string]interface{}) *p.TimerInfo {
-	info := &p.TimerInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "timer_id":
-			info.TimerID = v.(string)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "expiry_time":
-			info.ExpiryTime = v.(time.Time)
-		case "task_id":
-			info.TaskID = v.(int64)
-		}
-	}
-	return info
-}
-
-func createChildExecutionInfo(result map[string]interface{}, logger log.Logger) *p.InternalChildExecutionInfo {
-	info := &p.InternalChildExecutionInfo{}
-	var encoding common.EncodingType
-	var initiatedData []byte
-	var startedData []byte
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "initiated_event_batch_id":
-			info.InitiatedEventBatchID = v.(int64)
-		case "initiated_event":
-			initiatedData = v.([]byte)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "started_workflow_id":
-			info.StartedWorkflowID = v.(string)
-		case "started_run_id":
-			info.StartedRunID = v.(gocql.UUID).String()
-		case "started_event":
-			startedData = v.([]byte)
-		case "create_request_id":
-			info.CreateRequestID = v.(gocql.UUID).String()
-		case "event_data_encoding":
-			encoding = common.EncodingType(v.(string))
-		case "domain_name":
-			info.DomainName = v.(string)
-		case "workflow_type_name":
-			info.WorkflowTypeName = v.(string)
-		}
-	}
-	info.InitiatedEvent = p.NewDataBlob(initiatedData, encoding)
-	info.StartedEvent = p.NewDataBlob(startedData, encoding)
-	return info
-}
-
-func createRequestCancelInfo(result map[string]interface{}) *p.RequestCancelInfo {
-	info := &p.RequestCancelInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "cancel_request_id":
-			info.CancelRequestID = v.(string)
-		}
-	}
-
-	return info
-}
-
-func createSignalInfo(result map[string]interface{}) *p.SignalInfo {
-	info := &p.SignalInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "signal_request_id":
-			info.SignalRequestID = v.(gocql.UUID).String()
-		case "signal_name":
-			info.SignalName = v.(string)
-		case "input":
-			info.Input = v.([]byte)
-		case "control":
-			info.Control = v.([]byte)
-		}
-	}
-
-	return info
-}
-
-func createBufferedReplicationTaskInfo(result map[string]interface{}) *p.InternalBufferedReplicationTask {
-	info := &p.InternalBufferedReplicationTask{
-		History:       &p.DataBlob{},
-		NewRunHistory: &p.DataBlob{},
-	}
-	for k, v := range result {
-		switch k {
-		case "first_event_id":
-			info.FirstEventID = v.(int64)
-		case "next_event_id":
-			info.NextEventID = v.(int64)
-		case "version":
-			info.Version = v.(int64)
-		case "event_store_version":
-			info.EventStoreVersion = int32(v.(int))
-		case "new_run_event_store_version":
-			info.NewRunEventStoreVersion = int32(v.(int))
-		case "history":
-			h := v.(map[string]interface{})
-			info.History = createHistoryEventBatchBlob(h)
-		case "new_run_history":
-			h := v.(map[string]interface{})
-			info.NewRunHistory = createHistoryEventBatchBlob(h)
-		}
-	}
-
-	return info
-}
-
-func resetActivityInfoMap(activityInfos []*p.InternalActivityInfo) (map[int64]map[string]interface{}, error) {
-
-	aMap := make(map[int64]map[string]interface{})
-	for _, a := range activityInfos {
-		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
-		}
-		scheduledEventData, encoding := p.FromDataBlob(a.ScheduledEvent)
-		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
-		aInfo := make(map[string]interface{})
-		aInfo["version"] = a.Version
-		aInfo["event_data_encoding"] = encoding
-		aInfo["schedule_id"] = a.ScheduleID
-		aInfo["scheduled_event_batch_id"] = a.ScheduledEventBatchID
-		aInfo["scheduled_event"] = scheduledEventData
-		aInfo["scheduled_time"] = a.ScheduledTime
-		aInfo["started_id"] = a.StartedID
-		aInfo["started_event"] = startedEventData
-		aInfo["started_time"] = a.StartedTime
-		aInfo["activity_id"] = a.ActivityID
-		aInfo["request_id"] = a.RequestID
-		aInfo["details"] = a.Details
-		aInfo["schedule_to_start_timeout"] = a.ScheduleToStartTimeout
-		aInfo["schedule_to_close_timeout"] = a.ScheduleToCloseTimeout
-		aInfo["start_to_close_timeout"] = a.StartToCloseTimeout
-		aInfo["heart_beat_timeout"] = a.HeartbeatTimeout
-		aInfo["cancel_requested"] = a.CancelRequested
-		aInfo["cancel_request_id"] = a.CancelRequestID
-		aInfo["last_hb_updated_time"] = a.LastHeartBeatUpdatedTime
-		aInfo["timer_task_status"] = a.TimerTaskStatus
-		aInfo["attempt"] = a.Attempt
-		aInfo["task_list"] = a.TaskList
-		aInfo["started_identity"] = a.StartedIdentity
-		aInfo["has_retry_policy"] = a.HasRetryPolicy
-		aInfo["init_interval"] = a.InitialInterval
-		aInfo["backoff_coefficient"] = a.BackoffCoefficient
-		aInfo["max_interval"] = a.MaximumInterval
-		aInfo["expiration_time"] = a.ExpirationTime
-		aInfo["max_attempts"] = a.MaximumAttempts
-		aInfo["non_retriable_errors"] = a.NonRetriableErrors
-
-		aMap[a.ScheduleID] = aInfo
-	}
-
-	return aMap, nil
-}
-
-func resetTimerInfoMap(timerInfos []*p.TimerInfo) map[string]map[string]interface{} {
-	tMap := make(map[string]map[string]interface{})
-	for _, t := range timerInfos {
-		tInfo := make(map[string]interface{})
-		tInfo["version"] = t.Version
-		tInfo["timer_id"] = t.TimerID
-		tInfo["started_id"] = t.StartedID
-		tInfo["expiry_time"] = t.ExpiryTime
-		tInfo["task_id"] = t.TaskID
-
-		tMap[t.TimerID] = tInfo
-	}
-
-	return tMap
-}
-
-func resetChildExecutionInfoMap(childExecutionInfos []*p.InternalChildExecutionInfo, logger log.Logger) (map[int64]map[string]interface{}, error) {
-	cMap := make(map[int64]map[string]interface{})
-	for _, c := range childExecutionInfos {
-		cInfo := make(map[string]interface{})
-		startedEvent := c.StartedEvent
-		if startedEvent != nil {
-			if startedEvent.Encoding != c.InitiatedEvent.Encoding {
-				return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, startedEvent.Encoding))
-			}
-			cInfo["started_event"] = startedEvent.Data
-		} else {
-			cInfo["started_event"] = []byte{}
-		}
-		cInfo["event_data_encoding"] = c.InitiatedEvent.Encoding
-		cInfo["version"] = c.Version
-		cInfo["initiated_id"] = c.InitiatedID
-		cInfo["initiated_event_batch_id"] = c.InitiatedEventBatchID
-		cInfo["initiated_event"] = c.InitiatedEvent.Data
-		cInfo["create_request_id"] = c.CreateRequestID
-		cInfo["started_id"] = c.StartedID
-		cInfo["started_workflow_id"] = c.StartedWorkflowID
-		startedRunID := emptyRunID
-		if c.StartedRunID != "" {
-			startedRunID = c.StartedRunID
-		}
-		cInfo["started_run_id"] = startedRunID
-		cInfo["domain_name"] = c.DomainName
-		cInfo["workflow_type_name"] = c.WorkflowTypeName
-
-		cMap[c.InitiatedID] = cInfo
-	}
-
-	return cMap, nil
-}
-
-func resetRequestCancelInfoMap(requestCancelInfos []*p.RequestCancelInfo) map[int64]map[string]interface{} {
-	rcMap := make(map[int64]map[string]interface{})
-	for _, rc := range requestCancelInfos {
-		rcInfo := make(map[string]interface{})
-		rcInfo["version"] = rc.Version
-		rcInfo["initiated_id"] = rc.InitiatedID
-		rcInfo["cancel_request_id"] = rc.CancelRequestID
-
-		rcMap[rc.InitiatedID] = rcInfo
-	}
-
-	return rcMap
-}
-
-func resetSignalInfoMap(signalInfos []*p.SignalInfo) map[int64]map[string]interface{} {
-	sMap := make(map[int64]map[string]interface{})
-	for _, s := range signalInfos {
-		sInfo := make(map[string]interface{})
-		sInfo["version"] = s.Version
-		sInfo["initiated_id"] = s.InitiatedID
-		sInfo["signal_request_id"] = s.SignalRequestID
-		sInfo["signal_name"] = s.SignalName
-		sInfo["input"] = s.Input
-		sInfo["control"] = s.Control
-
-		sMap[s.InitiatedID] = sInfo
-	}
-
-	return sMap
-}
-
-func createHistoryEventBatchBlob(result map[string]interface{}) *p.DataBlob {
-	eventBatch := &p.DataBlob{Encoding: common.EncodingTypeJSON}
-	for k, v := range result {
-		switch k {
-		case "encoding_type":
-			eventBatch.Encoding = common.EncodingType(v.(string))
-		case "data":
-			eventBatch.Data = v.([]byte)
-		}
-	}
-
-	return eventBatch
-}
-
-func createTaskInfo(result map[string]interface{}) *p.TaskInfo {
-	info := &p.TaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "created_time":
-			info.CreatedTime = v.(time.Time)
-		}
-	}
-
-	return info
-}
-
-func createTimerTaskInfo(result map[string]interface{}) *p.TimerTaskInfo {
-	info := &p.TimerTaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "visibility_ts":
-			info.VisibilityTimestamp = v.(time.Time)
-		case "task_id":
-			info.TaskID = v.(int64)
-		case "type":
-			info.TaskType = v.(int)
-		case "timeout_type":
-			info.TimeoutType = v.(int)
-		case "event_id":
-			info.EventID = v.(int64)
-		case "schedule_attempt":
-			info.ScheduleAttempt = v.(int64)
-		case "version":
-			info.Version = v.(int64)
-		}
-	}
-
-	return info
-}
-
-func createReplicationInfo(result map[string]interface{}) *p.ReplicationInfo {
-	info := &p.ReplicationInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "last_event_id":
-			info.LastEventID = v.(int64)
-		}
-	}
-
-	return info
-}
-
-func createReplicationInfoMap(info *p.ReplicationInfo) map[string]interface{} {
-	rInfoMap := make(map[string]interface{})
-	rInfoMap["version"] = info.Version
-	rInfoMap["last_event_id"] = info.LastEventID
-
-	return rInfoMap
-}
-
-func isTimeoutError(err error) bool {
-	if err == gocql.ErrTimeoutNoResponse {
-		return true
-	}
-	if err == gocql.ErrConnectionClosed {
-		return true
-	}
-	_, ok := err.(*gocql.RequestErrWriteTimeout)
-	return ok
-}
-
-func isThrottlingError(err error) bool {
-	if req, ok := err.(gocql.RequestError); ok {
-		// gocql does not expose the constant errOverloaded = 0x1001
-		return req.Code() == 0x1001
-	}
-	return false
 }

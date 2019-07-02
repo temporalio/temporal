@@ -166,9 +166,17 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo, shouldP
 			err = t.processRecordWorkflowStarted(task)
 		}
 		return metrics.TransferStandbyTaskRecordWorkflowStartedScope, err
+
 	case persistence.TransferTaskTypeResetWorkflow:
 		// no reset needed for standby
 		return metrics.TransferStandbyTaskResetWorkflowScope, err
+
+	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+		if shouldProcessTask {
+			err = t.processUpsertWorkflowSearchAttributes(task)
+		}
+		return metrics.TransferStandbyTaskUpsertWorkflowSearchAttributesScope, err
+
 	default:
 		return metrics.TransferStandbyQueueProcessorScope, errUnknownTransferTask
 	}
@@ -427,34 +435,55 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStarted(transferTask *persistence.TransferTaskInfo) error {
 	processTaskIfClosed := false
 
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(transferTask.WorkflowID),
-		RunId:      common.StringPtr(transferTask.RunID),
-	}
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
+		return t.processRecordWorkflowStartedOrUpsertHelper(transferTask, msBuilder, true)
+	}, standbyTaskPostActionNoOp)
+}
+
+func (t *transferQueueStandbyProcessorImpl) processUpsertWorkflowSearchAttributes(transferTask *persistence.TransferTaskInfo) error {
+	processTaskIfClosed := false
 
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
+		return t.processRecordWorkflowStartedOrUpsertHelper(transferTask, msBuilder, false)
+	}, standbyTaskPostActionNoOp)
+}
+
+func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(transferTask *persistence.TransferTaskInfo, msBuilder mutableState, isRecordStart bool) error {
+
+	// verify task version for RecordWorkflowStarted.
+	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
+	if isRecordStart {
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetStartVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
 			return nil
 		}
+	}
 
-		executionInfo := msBuilder.GetExecutionInfo()
-		workflowTimeout := executionInfo.WorkflowTimeout
-		wfTypeName := executionInfo.WorkflowTypeName
-		startTimestamp := executionInfo.StartTimestamp.UnixNano()
-		startEvent, found := msBuilder.GetStartEvent()
-		if !found {
-			return &workflow.InternalServiceError{Message: "Failed to load start event."}
-		}
-		executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-		visibilityMemo := getVisibilityMemo(startEvent)
-		searchAttr := executionInfo.SearchAttributes
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(transferTask.WorkflowID),
+		RunId:      common.StringPtr(transferTask.RunID),
+	}
+	executionInfo := msBuilder.GetExecutionInfo()
+	workflowTimeout := executionInfo.WorkflowTimeout
+	wfTypeName := executionInfo.WorkflowTypeName
+	startTimestamp := executionInfo.StartTimestamp.UnixNano()
+	startEvent, found := msBuilder.GetStartEvent()
+	if !found {
+		return &workflow.InternalServiceError{Message: "Failed to load start event."}
+	}
+	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
+	visibilityMemo := getVisibilityMemo(startEvent)
+	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 
+	if isRecordStart {
 		return t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(),
 			workflowTimeout, transferTask.GetTaskID(), visibilityMemo, searchAttr)
-	}, standbyTaskPostActionNoOp)
+	}
+	return t.upsertWorkflowExecution(transferTask.DomainID, execution, wfTypeName, startTimestamp, executionTimestamp.UnixNano(),
+		workflowTimeout, transferTask.GetTaskID(), visibilityMemo, searchAttr)
+
 }
 
 func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo,

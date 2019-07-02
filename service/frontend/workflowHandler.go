@@ -38,12 +38,13 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
@@ -60,24 +61,27 @@ var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
 type (
 	// WorkflowHandler - Thrift handler interface for workflow service
 	WorkflowHandler struct {
-		domainCache              cache.DomainCache
-		metadataMgr              persistence.MetadataManager
-		historyMgr               persistence.HistoryManager
-		historyV2Mgr             persistence.HistoryV2Manager
-		visibilityMgr            persistence.VisibilityManager
-		history                  history.Client
-		matching                 matching.Client
-		matchingRawClient        matching.Client
-		tokenSerializer          common.TaskTokenSerializer
-		metricsClient            metrics.Client
-		startWG                  sync.WaitGroup
-		rateLimiter              tokenbucket.TokenBucket
-		config                   *Config
-		blobstoreClient          blobstore.Client
-		versionChecker           *versionChecker
-		domainHandler            *domainHandlerImpl
-		visibilityQueryValidator *common.VisibilityQueryValidator
-		historyBlobDownloader    archiver.HistoryBlobDownloader
+		domainCache               cache.DomainCache
+		metadataMgr               persistence.MetadataManager
+		historyMgr                persistence.HistoryManager
+		historyV2Mgr              persistence.HistoryV2Manager
+		visibilityMgr             persistence.VisibilityManager
+		history                   history.Client
+		matching                  matching.Client
+		matchingRawClient         matching.Client
+		tokenSerializer           common.TaskTokenSerializer
+		metricsClient             metrics.Client
+		startWG                   sync.WaitGroup
+		rateLimiter               tokenbucket.TokenBucket
+		config                    *Config
+		blobstoreClient           blobstore.Client
+		versionChecker            *versionChecker
+		domainHandler             *domainHandlerImpl
+		visibilityQueryValidator  *validator.VisibilityQueryValidator
+		searchAttributesValidator *validator.SearchAttributesValidator
+		historyBlobDownloader     archiver.HistoryBlobDownloader
+		historyArchivers          map[string]carchiver.HistoryArchiver
+		visibilityArchivers       map[string]carchiver.VisibilityArchiver
 		service.Service
 	}
 
@@ -149,7 +153,8 @@ var (
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
-	blobstoreClient blobstore.Client) *WorkflowHandler {
+	blobstoreClient blobstore.Client, historyArchivers map[string]carchiver.HistoryArchiver,
+	visibilityArchivers map[string]carchiver.VisibilityArchiver) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		config:          config,
@@ -171,8 +176,12 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 			blobstoreClient,
 			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 		),
-		visibilityQueryValidator: common.NewQueryValidator(config.ValidSearchAttributes),
-		historyBlobDownloader:    archiver.NewHistoryBlobDownloader(blobstoreClient),
+		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
+		searchAttributesValidator: validator.NewSearchAttributesValidator(sVice.GetLogger(), config.ValidSearchAttributes,
+			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
+		historyBlobDownloader: archiver.NewHistoryBlobDownloader(blobstoreClient),
+		historyArchivers:      historyArchivers,
+		visibilityArchivers:   visibilityArchivers,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -1539,8 +1548,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if err := wh.validateSearchAttributes(startRequest.SearchAttributes, domainName); err != nil {
-		return nil, wh.error(&gen.BadRequestError{Message: err.Error()}, scope)
+	if err := wh.searchAttributesValidator.ValidateSearchAttributes(startRequest.SearchAttributes, domainName); err != nil {
+		return nil, wh.error(err, scope)
 	}
 
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(domainName))
@@ -1965,8 +1974,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	if err := wh.validateSearchAttributes(signalWithStartRequest.SearchAttributes, domainName); err != nil {
-		return nil, wh.error(&gen.BadRequestError{Message: err.Error()}, scope)
+	if err := wh.searchAttributesValidator.ValidateSearchAttributes(signalWithStartRequest.SearchAttributes, domainName); err != nil {
+		return nil, wh.error(err, scope)
 	}
 
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(domainName))
@@ -3241,48 +3250,6 @@ func (wh *WorkflowHandler) convertIndexedKeyToThrift(keys map[string]interface{}
 		}
 	}
 	return converted
-}
-
-func (wh *WorkflowHandler) validateSearchAttributes(input *gen.SearchAttributes, domain string) error {
-	if input == nil {
-		return nil
-	}
-
-	fields := input.GetIndexedFields()
-	lengthOfFields := len(fields)
-	if lengthOfFields > wh.config.SearchAttributesNumberOfKeysLimit(domain) {
-		wh.GetLogger().WithTags(tag.Number(int64(lengthOfFields)), tag.WorkflowDomainName(domain)).
-			Error("number of keys in search attributes exceed limit")
-		return fmt.Errorf("number of keys %d exceed limit", lengthOfFields)
-	}
-
-	totalSize := 0
-	for key, val := range fields {
-		if !wh.visibilityQueryValidator.IsValidSearchAttributes(key) {
-			wh.GetLogger().WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
-				Error("invalid search attribute")
-			return fmt.Errorf("%s is not valid search attribute", key)
-		}
-		if definition.IsSystemIndexedKey(key) {
-			wh.GetLogger().WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
-				Error("illegal update of system reserved attribute")
-			return fmt.Errorf("%s is read-only Cadence reservered attribute", key)
-		}
-		if len(val) > wh.config.SearchAttributesSizeOfValueLimit(domain) {
-			wh.GetLogger().WithTags(tag.ESKey(key), tag.Number(int64(len(val))), tag.WorkflowDomainName(domain)).
-				Error("value size of search attribute exceed limit")
-			return fmt.Errorf("size limit exceed for key %s", key)
-		}
-		totalSize += len(key) + len(val)
-	}
-
-	if totalSize > wh.config.SearchAttributesTotalSizeLimit(domain) {
-		wh.GetLogger().WithTags(tag.Number(int64(totalSize)), tag.WorkflowDomainName(domain)).
-			Error("total size of search attributes exceed limit")
-		return fmt.Errorf("total size %d exceed limit", totalSize)
-	}
-
-	return nil
 }
 
 func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, domain string) bool {

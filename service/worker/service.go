@@ -28,6 +28,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/definition"
@@ -161,7 +162,7 @@ func (s *Service) Start() {
 			s.startReplicator(base, pFactory)
 		}
 		if archiverEnabled {
-			s.startArchiver(base, pFactory)
+			s.startArchiver(base, pFactory, s.params.HistoryArchivers)
 		}
 		if scannerEnabled {
 			s.startScanner(base)
@@ -250,7 +251,7 @@ func (s *Service) startIndexer(base service.Service) {
 	}
 }
 
-func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory) {
+func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory, historyArchivers map[string]carchiver.HistoryArchiver) {
 	publicClient := s.params.PublicClient
 
 	historyManager, err := pFactory.NewHistoryManager()
@@ -283,6 +284,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 		Blobstore:        blobstoreClient,
 		DomainCache:      domainCache,
 		Config:           s.config.ArchiverConfig,
+		HistoryArchivers: historyArchivers,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {

@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -107,6 +108,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		eventsCache:               s.mockEventsCache,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -268,34 +270,36 @@ func (s *conflictResolverSuite) TestReset() {
 	// the mutable state only has the minimal information
 	// so we can test the conflict resolver
 	s.mockExecutionMgr.On("ResetMutableState", &persistence.ResetMutableStateRequest{
+		RangeID:              s.mockShard.shardInfo.RangeID,
 		PrevRunID:            prevRunID,
 		PrevLastWriteVersion: prevLastWriteVersion,
 		PrevState:            prevState,
-		ExecutionInfo:        executionInfo,
-		ReplicationState: &persistence.ReplicationState{
-			CurrentVersion:   event1.GetVersion(),
-			StartVersion:     event1.GetVersion(),
-			LastWriteVersion: event1.GetVersion(),
-			LastWriteEventID: event1.GetEventId(),
-			LastReplicationInfo: map[string]*persistence.ReplicationInfo{
-				sourceCluster: &persistence.ReplicationInfo{
-					Version:     event1.GetVersion(),
-					LastEventID: event1.GetEventId(),
+		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
+			ExecutionInfo: executionInfo,
+			ReplicationState: &persistence.ReplicationState{
+				CurrentVersion:   event1.GetVersion(),
+				StartVersion:     event1.GetVersion(),
+				LastWriteVersion: event1.GetVersion(),
+				LastWriteEventID: event1.GetEventId(),
+				LastReplicationInfo: map[string]*persistence.ReplicationInfo{
+					sourceCluster: &persistence.ReplicationInfo{
+						Version:     event1.GetVersion(),
+						LastEventID: event1.GetEventId(),
+					},
 				},
 			},
+			ActivityInfos:       []*persistence.ActivityInfo{},
+			TimerInfos:          []*persistence.TimerInfo{},
+			ChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+			RequestCancelInfos:  []*persistence.RequestCancelInfo{},
+			SignalInfos:         []*persistence.SignalInfo{},
+			SignalRequestedIDs:  []string{},
+			ReplicationTasks:    nil,
+			TransferTasks:       nil,
+			TimerTasks:          nil,
+			Condition:           s.mockContext.updateCondition,
 		},
-		Condition:                 s.mockContext.updateCondition,
-		RangeID:                   s.mockShard.shardInfo.RangeID,
-		InsertActivityInfos:       []*persistence.ActivityInfo{},
-		InsertTimerInfos:          []*persistence.TimerInfo{},
-		InsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
-		InsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
-		InsertSignalInfos:         []*persistence.SignalInfo{},
-		InsertSignalRequestedIDs:  []string{},
-		InsertReplicationTasks:    nil,
-		InsertTransferTasks:       nil,
-		InsertTimerTasks:          nil,
-		Encoding:                  common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
+		Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
 	}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,

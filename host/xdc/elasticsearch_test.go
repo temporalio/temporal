@@ -51,8 +51,9 @@ import (
 )
 
 const (
-	numOfRetry   = 50
-	waitTimeInMs = 400
+	numOfRetry        = 50
+	waitTimeInMs      = 400
+	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )
 
 type esCrossDCTestSuite struct {
@@ -197,8 +198,6 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
 
-	// List workflow in active
-	engine1 := s.cluster1.GetFrontendClient()
 	startFilter := &workflow.StartTimeFilter{}
 	startFilter.EarliestTime = common.Int64Ptr(startTime)
 	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
@@ -207,43 +206,182 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		PageSize: common.Int32Ptr(100),
 		Query:    common.StringPtr(query),
 	}
-	var openExecution1 *workflow.WorkflowExecutionInfo
-	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
 
-		resp, err := engine1.ListWorkflowExecutions(createContext(), listRequest)
-		s.Nil(err)
-		if len(resp.GetExecutions()) == 1 {
-			openExecution1 = resp.GetExecutions()[0]
-			break
+	testListResult := func(client host.FrontendClient) {
+		var openExecution *workflow.WorkflowExecutionInfo
+		for i := 0; i < numOfRetry; i++ {
+			startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+
+			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
+			s.Nil(err)
+			if len(resp.GetExecutions()) == 1 {
+				openExecution = resp.GetExecutions()[0]
+				break
+			}
+			time.Sleep(waitTimeInMs * time.Millisecond)
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		s.NotNil(openExecution)
+		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
+		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
+		var searchVal string
+		json.Unmarshal(searchValBytes, &searchVal)
+		s.Equal(s.testSearchAttributeVal, searchVal)
 	}
-	s.NotNil(openExecution1)
-	s.Equal(we.GetRunId(), openExecution1.GetExecution().GetRunId())
-	searchValBytes1 := openExecution1.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
-	var searchVal1 string
-	json.Unmarshal(searchValBytes1, &searchVal1)
-	s.Equal(s.testSearchAttributeVal, searchVal1)
+
+	// List workflow in active
+	engine1 := s.cluster1.GetFrontendClient()
+	testListResult(engine1)
 
 	// List workflow in standby
 	engine2 := s.cluster2.GetFrontendClient()
-	var openExecution2 *workflow.WorkflowExecutionInfo
-	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+	testListResult(engine2)
 
-		resp, err := engine2.ListWorkflowExecutions(createContext(), listRequest)
-		s.Nil(err)
-		if len(resp.GetExecutions()) == 1 {
-			openExecution2 = resp.GetExecutions()[0]
-			break
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+	// upsert search attributes
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		upsertDecision := &workflow.Decision{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeUpsertWorkflowSearchAttributes),
+			UpsertWorkflowSearchAttributesDecisionAttributes: &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{
+				SearchAttributes: getUpsertSearchAttributes(),
+			}}
+
+		return nil, []*workflow.Decision{upsertDecision}, nil
 	}
-	s.NotNil(openExecution2)
-	s.Equal(we.GetRunId(), openExecution2.GetExecution().GetRunId())
-	searchValBytes2 := openExecution1.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
-	var searchVal2 string
-	json.Unmarshal(searchValBytes2, &searchVal2)
-	s.Equal(s.testSearchAttributeVal, searchVal2)
+
+	poller := host.TaskPoller{
+		Engine:          client1,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	s.Nil(err)
+
+	time.Sleep(waitForESToSettle)
+
+	listRequest = &workflow.ListWorkflowExecutionsRequest{
+		Domain:   common.StringPtr(domainName),
+		PageSize: common.Int32Ptr(int32(2)),
+		Query:    common.StringPtr(fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt)),
+	}
+
+	testListResult = func(client host.FrontendClient) {
+		verified := false
+		for i := 0; i < numOfRetry; i++ {
+			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
+			s.Nil(err)
+			if len(resp.GetExecutions()) == 1 {
+				execution := resp.GetExecutions()[0]
+				retrievedSearchAttr := execution.SearchAttributes
+				if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 2 {
+					fields := retrievedSearchAttr.GetIndexedFields()
+					searchValBytes := fields[s.testSearchAttributeKey]
+					var searchVal string
+					json.Unmarshal(searchValBytes, &searchVal)
+					s.Equal("another string", searchVal)
+
+					searchValBytes2 := fields[definition.CustomIntField]
+					var searchVal2 int
+					json.Unmarshal(searchValBytes2, &searchVal2)
+					s.Equal(123, searchVal2)
+
+					verified = true
+					break
+				}
+			}
+			time.Sleep(waitTimeInMs * time.Millisecond)
+		}
+		s.True(verified)
+	}
+
+	// test upsert result in active
+	testListResult(engine1)
+
+	// terminate workflow
+	terminateReason := "force terminate to make sure standby process tasks"
+	terminateDetails := []byte("terminate details.")
+	err = client1.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+		Reason:   common.StringPtr(terminateReason),
+		Details:  terminateDetails,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	// check terminate done
+	executionTerminated := false
+	getHistoryReq := &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+	}
+GetHistoryLoop:
+	for i := 0; i < 10; i++ {
+		historyResponse, err := client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		s.Nil(err)
+		history := historyResponse.History
+
+		lastEvent := history.Events[len(history.Events)-1]
+		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTerminated {
+			s.logger.Warn("Execution not terminated yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
+		s.Equal(terminateReason, *terminateEventAttributes.Reason)
+		s.Equal(terminateDetails, terminateEventAttributes.Details)
+		s.Equal(identity, *terminateEventAttributes.Identity)
+		executionTerminated = true
+		break GetHistoryLoop
+	}
+	s.True(executionTerminated)
+
+	// check history replicated to the other cluster
+	var historyResponse *workflow.GetWorkflowExecutionHistoryResponse
+	eventsReplicated := false
+GetHistoryLoop2:
+	for i := 0; i < 15; i++ {
+		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err == nil {
+			history := historyResponse.History
+			lastEvent := history.Events[len(history.Events)-1]
+			if *lastEvent.EventType == workflow.EventTypeWorkflowExecutionTerminated {
+				terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
+				s.Equal(terminateReason, *terminateEventAttributes.Reason)
+				s.Equal(terminateDetails, terminateEventAttributes.Details)
+				s.Equal(identity, *terminateEventAttributes.Identity)
+				eventsReplicated = true
+				break GetHistoryLoop2
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.Nil(err)
+	s.True(eventsReplicated)
+
+	// test upsert result in standby
+	testListResult(engine2)
+}
+
+func getUpsertSearchAttributes() *workflow.SearchAttributes {
+	attrValBytes1, _ := json.Marshal("another string")
+	attrValBytes2, _ := json.Marshal(123)
+	upsertSearchAttr := &workflow.SearchAttributes{
+		IndexedFields: map[string][]byte{
+			definition.CustomStringField: attrValBytes1,
+			definition.CustomIntField:    attrValBytes2,
+		},
+	}
+	return upsertSearchAttr
 }

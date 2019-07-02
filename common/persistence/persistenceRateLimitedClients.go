@@ -559,6 +559,15 @@ func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosed(r
 	return err
 }
 
+func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.UpsertWorkflowExecution(request)
+	return err
+}
+
 func (p *visibilityRateLimitedPersistenceClient) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return nil, ErrPersistenceLimitExceeded

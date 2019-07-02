@@ -22,7 +22,6 @@ package filestore
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,9 +65,6 @@ func NewClient(cfg *Config) (blobstore.Client, error) {
 		return nil, err
 	}
 	if err := setupDirectories(cfg); err != nil {
-		return nil, err
-	}
-	if err := writeMetadataFiles(cfg); err != nil {
 		return nil, err
 	}
 	return &client{
@@ -201,33 +197,6 @@ func (c *client) ListByPrefix(_ context.Context, bucket string, prefix string) (
 	return matchingKeys, nil
 }
 
-func (c *client) BucketMetadata(_ context.Context, bucket string) (*blobstore.BucketMetadataResponse, error) {
-	c.Lock()
-	defer c.Unlock()
-
-	bd := bucketDirectory(c.storeDirectory, bucket)
-	if exists, err := directoryExists(bd); err != nil {
-		return nil, ErrCheckBucketExists
-	} else if !exists {
-		return nil, blobstore.ErrBucketNotExists
-	}
-
-	metadataFilepath := bucketItemPath(c.storeDirectory, bucket, metadataFilename)
-	data, err := readFile(metadataFilepath)
-	if err != nil {
-		return nil, ErrReadFile
-	}
-	bucketCfg, err := deserializeBucketConfig(data)
-	if err != nil {
-		return nil, ErrBucketConfigDeserialization
-	}
-
-	return &blobstore.BucketMetadataResponse{
-		Owner:         bucketCfg.Owner,
-		RetentionDays: bucketCfg.RetentionDays,
-	}, nil
-}
-
 func (c *client) BucketExists(_ context.Context, bucket string) (bool, error) {
 	c.Lock()
 	defer c.Unlock()
@@ -254,35 +223,11 @@ func setupDirectories(cfg *Config) error {
 	if err := mkdirAll(cfg.StoreDirectory); err != nil {
 		return err
 	}
-	if err := mkdirAll(bucketDirectory(cfg.StoreDirectory, cfg.DefaultBucket.Name)); err != nil {
+	if err := mkdirAll(bucketDirectory(cfg.StoreDirectory, cfg.DefaultBucket)); err != nil {
 		return err
 	}
 	for _, b := range cfg.CustomBuckets {
-		if err := mkdirAll(bucketDirectory(cfg.StoreDirectory, b.Name)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func writeMetadataFiles(cfg *Config) error {
-	writeMetadataFile := func(bucketConfig BucketConfig) error {
-		path := bucketItemPath(cfg.StoreDirectory, bucketConfig.Name, metadataFilename)
-		bytes, err := serializeBucketConfig(&bucketConfig)
-		if err != nil {
-			return fmt.Errorf("failed to write metadata file for bucket %v: %v", bucketConfig.Name, err)
-		}
-		if err := writeFile(path, bytes); err != nil {
-			return fmt.Errorf("failed to write metadata file for bucket %v: %v", bucketConfig.Name, err)
-		}
-		return nil
-	}
-
-	if err := writeMetadataFile(cfg.DefaultBucket); err != nil {
-		return err
-	}
-	for _, b := range cfg.CustomBuckets {
-		if err := writeMetadataFile(b); err != nil {
+		if err := mkdirAll(bucketDirectory(cfg.StoreDirectory, b)); err != nil {
 			return err
 		}
 	}

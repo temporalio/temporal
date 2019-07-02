@@ -136,6 +136,26 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 	return nil
 }
 
+func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
+	domain := request.Domain
+	domainID := request.DomainUUID
+
+	rateLimiter := p.rateLimitersForClosed.getRateLimiter(domain, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(domain))
+	if ok, _ := rateLimiter.GetToken(0, 1); ok {
+		return p.persistence.UpsertWorkflowExecution(request)
+	}
+
+	p.logger.Info("Request for upsert workflow is sampled",
+		tag.WorkflowDomainID(domainID),
+		tag.WorkflowDomainName(domain),
+		tag.WorkflowType(request.WorkflowTypeName),
+		tag.WorkflowID(request.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(request.Execution.GetRunId()),
+	)
+	p.metricClient.IncCounter(metrics.PersistenceUpsertWorkflowExecutionScope, metrics.PersistenceSampledCounter)
+	return nil
+}
+
 func (p *visibilitySamplingClient) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	domain := request.Domain
 

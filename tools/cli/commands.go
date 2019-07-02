@@ -38,6 +38,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber/cadence/common/clock"
+
 	"github.com/uber/cadence/service/history"
 
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
@@ -434,19 +436,6 @@ func DescribeDomain(c *cli.Context) {
 	if resp.Configuration.GetArchivalBucketName() != "" {
 		formatStr = formatStr + "BucketName: %v\n"
 		descValues = append(descValues, resp.Configuration.GetArchivalBucketName())
-	}
-	if resp.Configuration.ArchivalRetentionPeriodInDays != nil {
-		formatStr = formatStr + "ArchivalRetentionInDays: %v\n"
-		archivalRetentionDays := resp.Configuration.GetArchivalRetentionPeriodInDays()
-		if archivalRetentionDays == 0 {
-			descValues = append(descValues, "unlimited")
-		} else {
-			descValues = append(descValues, archivalRetentionDays)
-		}
-	}
-	if resp.Configuration.GetArchivalBucketOwner() != "" {
-		formatStr = formatStr + "BucketOwner: %v\n"
-		descValues = append(descValues, resp.Configuration.GetArchivalBucketOwner())
 	}
 	fmt.Printf(formatStr, descValues...)
 	if resp.Configuration.BadBinaries != nil {
@@ -1046,6 +1035,7 @@ type describeWorkflowExecutionResponse struct {
 	ExecutionConfiguration *shared.WorkflowExecutionConfiguration
 	WorkflowExecutionInfo  workflowExecutionInfo
 	PendingActivities      []*pendingActivityInfo
+	PendingChildren        []*shared.PendingChildExecutionInfo
 }
 
 // workflowExecutionInfo has same fields as shared.WorkflowExecutionInfo, but has datetime instead of raw time
@@ -1112,6 +1102,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		ExecutionConfiguration: resp.ExecutionConfiguration,
 		WorkflowExecutionInfo:  executionInfo,
 		PendingActivities:      pendingActs,
+		PendingChildren:        resp.PendingChildren,
 	}
 }
 
@@ -1736,7 +1727,7 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 		return "", 0, printErrorAndReturn("DescribeWorkflowExecution failed", err)
 	}
 
-	_, p := history.FindAutoResetPoint(&shared.BadBinaries{
+	_, p := history.FindAutoResetPoint(clock.NewRealTimeSource(), &shared.BadBinaries{
 		Binaries: map[string]*shared.BadBinaryInfo{
 			binChecksum: {},
 		},

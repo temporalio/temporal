@@ -75,12 +75,12 @@ clusterMetadata:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:7933"
+      rpcAddress: "localhost:7933"
     standby:
       enabled: true
       initialFailoverVersion: 0
       rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:8933"
+      rpcAddress: "localhost:8933"
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
@@ -119,18 +119,11 @@ archival:
   defaultBucket: "cadence-development"
   filestore:
     storeDirectory: "/tmp/development/blobstore/"
-    defaultBucket:
-      name: "cadence-development"
-      owner: "cadence"
-      retentionDays: 10
+    defaultBucket: "cadence-development"
     customBuckets:
-      - name: "custom-bucket-1"
-        owner: "custom-owner-1"
-        retentionDays: 10
-      - name: "custom-bucket-2"
-        owner: "custom-owner-2"
-        retentionDays: 5
+      - "custom-bucket-1"
+      - "custom-bucket-2"
 
 publicClient:
-  hostPort: "127.0.0.1:8933"
+  hostPort: "localhost:8933"
 

@@ -21,14 +21,16 @@
 package history
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
+	"testing"
 )
 
 type (
@@ -39,6 +41,9 @@ type (
 
 		maxIDLengthLimit int
 		validator        *decisionAttrValidator
+
+		testDomainID       string
+		testTargetDomainID string
 	}
 )
 
@@ -48,106 +53,128 @@ func TestDecisionAttrValidatorSuite(t *testing.T) {
 }
 
 func (s *decisionAttrValidatorSuite) SetupSuite() {
+	s.testDomainID = "test domain ID"
+	s.testTargetDomainID = "test target domain ID"
 }
 
 func (s *decisionAttrValidatorSuite) TearDownSuite() {
-
 }
 
 func (s *decisionAttrValidatorSuite) SetupTest() {
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.maxIDLengthLimit = 1000
+	config := &Config{
+		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
+		ValidSearchAttributes:             dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByDomain(100),
+		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByDomain(2 * 1024),
+		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByDomain(40 * 1024),
+	}
 	s.validator = newDecisionAttrValidator(
 		s.mockDomainCache,
-		s.maxIDLengthLimit,
+		config,
+		log.NewNoop(),
 	)
 }
 
 func (s *decisionAttrValidatorSuite) TearDownTest() {
-
+	s.mockDomainCache.AssertExpectations(s.T())
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil)
 
 	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
 
-	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(domainID, targetDomainID, attributes)
+	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "BadRequestError{Message: SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.}")
 
 	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(domainID, targetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "BadRequestError{Message: Execution is nil on decision.}")
 
 	attributes.Execution = &workflow.WorkflowExecution{}
 	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(domainID, targetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "BadRequestError{Message: SignalName is not set on decision.}")
 
 	attributes.Execution.RunId = common.StringPtr("run-id")
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(domainID, targetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
 	attributes.Execution.RunId = common.StringPtr(validRunID)
 
 	attributes.SignalName = common.StringPtr("my signal name")
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(domainID, targetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "BadRequestError{Message: Input is not set on decision.}")
 
 	attributes.Input = []byte("test input")
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(domainID, targetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	s.Nil(err)
+}
+
+func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
+	domainName := "testDomain"
+	var attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes
+
+	err := s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	s.EqualError(err, "BadRequestError{Message: UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.}")
+
+	attributes = &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	s.EqualError(err, "BadRequestError{Message: SearchAttributes is not set on decision.}")
+
+	attributes.SearchAttributes = &workflow.SearchAttributes{}
+	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	s.EqualError(err, "BadRequestError{Message: IndexedFields is empty on decision.}")
+
+	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
+	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.Nil(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToLocal() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.Nil(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiveLocal_SameCluster() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -157,24 +184,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiv
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.Nil(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiveLocal_DiffCluster() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -184,24 +209,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiv
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToGlobal() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -214,18 +237,16 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToGlobal()
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToLocal_SameCluster() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -235,24 +256,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.Nil(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToLocal_DiffCluster() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -262,24 +281,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToEffectiveLocal_SameCluster() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -289,7 +306,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -299,18 +316,16 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.Nil(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -320,7 +335,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -330,18 +345,16 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToGlobal() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -353,7 +366,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -366,18 +379,16 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToLocal() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -390,24 +401,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToLocal()
 		nil,
 	)
 	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffectiveLocal() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -420,7 +429,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffecti
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -432,18 +441,16 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffecti
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_DiffDomain() {
-	domainID := "some random domain ID"
-	targetDomainID := "some random target domain ID"
 	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: domainID},
+		&persistence.DomainInfo{Name: s.testDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -456,7 +463,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 		nil,
 	)
 	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: targetDomainID},
+		&persistence.DomainInfo{Name: s.testTargetDomainID},
 		nil,
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -469,17 +476,16 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(targetDomainEntry, nil)
+	s.mockDomainCache.On("GetDomainByID", s.testDomainID).Return(domainEntry, nil).Once()
+	s.mockDomainCache.On("GetDomainByID", s.testTargetDomainID).Return(targetDomainEntry, nil).Once()
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_SameDomain() {
-	domainID := "some random domain ID"
-	targetDomainID := domainID
+	targetDomainID := s.testDomainID
 
-	err := s.validator.validateCrossDomainCall(domainID, targetDomainID)
+	err := s.validator.validateCrossDomainCall(s.testDomainID, targetDomainID)
 	s.Nil(err)
 }

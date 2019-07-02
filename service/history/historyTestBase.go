@@ -375,7 +375,7 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	clusterMetadata := s.GetService().GetClusterMetadata()
 	clusterName := clusterMetadata.GetCurrentClusterName()
-	for _, task := range request.TimerTasks {
+	for _, task := range request.UpdateWorkflowMutation.TimerTasks {
 		ts := task.GetVisibilityTimestamp()
 		if task.GetVersion() != common.EmptyVersion {
 			clusterName = clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())

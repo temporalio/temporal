@@ -190,20 +190,6 @@ func (s *UtilSuite) TestListFiles() {
 	s.Equal(expectedFileNames, actualFileNames)
 }
 
-func (s *UtilSuite) TestSerializationBucketConfig() {
-	inCfg := &BucketConfig{
-		Name:          "test-custom-bucket-name",
-		Owner:         "test-custom-bucket-owner",
-		RetentionDays: 10,
-	}
-	bytes, err := serializeBucketConfig(inCfg)
-	s.NoError(err)
-
-	outCfg, err := deserializeBucketConfig(bytes)
-	s.NoError(err)
-	s.Equal(inCfg, outCfg)
-}
-
 func (s *UtilSuite) TestSerializationBlob() {
 	inBlob := blob.NewBlob([]byte("file contents"), map[string]string{"key1": "value1", "key2": "value2"})
 	data, err := serializeBlob(inBlob)

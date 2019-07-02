@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -123,6 +125,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockEventsCache = &MockEventsCache{}
 
 	historyEventNotifier := newHistoryEventNotifier(
+		clock.NewRealTimeSource(),
 		s.mockMetricClient,
 		func(workflowID string) int {
 			return len(workflowID)
@@ -143,6 +146,7 @@ func (s *engineSuite) SetupTest() {
 		config:                    s.config,
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.eventsCache = newEventsCache(mockShard)
 	mockShard.eventsCache = s.eventsCache
@@ -288,6 +292,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	).Once()
 
 	// test long poll on next event ID change
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(1)
 	asycWorkflowUpdate := func(delay time.Duration) {
 		taskToken, _ := json.Marshal(&common.TaskToken{
 			WorkflowID: *execution.WorkflowId,
@@ -322,6 +328,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 			},
 		})
 		s.Nil(err)
+		waitGroup.Done()
 		// right now the next event ID is 5
 	}
 
@@ -345,6 +352,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.True(time.Now().After(start.Add(time.Second * 1)))
 	s.Nil(err)
 	s.Equal(int64(5), *response.NextEventId)
+	waitGroup.Wait()
 }
 
 func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
@@ -4567,7 +4575,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
 		// need to check whether the buffered events are cleared
-		s.True(input.ClearBufferedEvents)
+		s.True(input.UpdateWorkflowMutation.ClearBufferedEvents)
 		return true
 	})).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 

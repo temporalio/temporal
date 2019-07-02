@@ -965,6 +965,29 @@ func (_m *mockMutableState) AddTimerStartedEvent(_a0 int64, _a1 *shared.StartTim
 	return r0, r1, r2
 }
 
+// AddUpsertWorkflowSearchAttributesEvent provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) AddUpsertWorkflowSearchAttributesEvent(_a0 int64, _a1 *shared.UpsertWorkflowSearchAttributesDecisionAttributes) (*shared.HistoryEvent, error) {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 *shared.HistoryEvent
+	if rf, ok := ret.Get(0).(func(int64, *shared.UpsertWorkflowSearchAttributesDecisionAttributes) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.HistoryEvent)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int64, *shared.UpsertWorkflowSearchAttributesDecisionAttributes) error); ok {
+		r1 = rf(_a0, _a1)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // AddWorkflowExecutionCancelRequestedEvent provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) AddWorkflowExecutionCancelRequestedEvent(_a0 string, _a1 *h.RequestCancelWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
 	ret := _m.Called(_a0, _a1)
@@ -1225,11 +1248,6 @@ func (_m *mockMutableState) DeleteActivity(_a0 int64) error {
 	return r0
 }
 
-// DeleteBufferedReplicationTask provides a mock function with given fields: _a0
-func (_m *mockMutableState) DeleteBufferedReplicationTask(_a0 int64) {
-	_m.Called(_a0)
-}
-
 // DeleteDecision provides a mock function with given fields:
 func (_m *mockMutableState) DeleteDecision() {
 	_m.Called()
@@ -1348,22 +1366,6 @@ func (_m *mockMutableState) GetActivityScheduledEvent(_a0 int64) (*shared.Histor
 	return r0, r1
 }
 
-// GetAllBufferedReplicationTasks provides a mock function with given fields:
-func (_m *mockMutableState) GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask {
-	ret := _m.Called()
-
-	var r0 map[int64]*persistence.BufferedReplicationTask
-	if rf, ok := ret.Get(0).(func() map[int64]*persistence.BufferedReplicationTask); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[int64]*persistence.BufferedReplicationTask)
-		}
-	}
-
-	return r0
-}
-
 // GetAllRequestCancels provides a mock function with given fields:
 func (_m *mockMutableState) GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo {
 	ret := _m.Called()
@@ -1480,15 +1482,15 @@ func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, bool) {
 }
 
 // GetContinueAsNew provides a mock function with given fields:
-func (_m *mockMutableState) GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest {
+func (_m *mockMutableState) GetContinueAsNew() *persistence.WorkflowSnapshot {
 	ret := _m.Called()
 
-	var r0 *persistence.CreateWorkflowExecutionRequest
-	if rf, ok := ret.Get(0).(func() *persistence.CreateWorkflowExecutionRequest); ok {
+	var r0 *persistence.WorkflowSnapshot
+	if rf, ok := ret.Get(0).(func() *persistence.WorkflowSnapshot); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.CreateWorkflowExecutionRequest)
+			r0 = ret.Get(0).(*persistence.WorkflowSnapshot)
 		}
 	}
 
@@ -1945,20 +1947,6 @@ func (_m *mockMutableState) GetWorkflowStateCloseStatus() (int, int) {
 
 // HasBufferedEvents provides a mock function with given fields:
 func (_m *mockMutableState) HasBufferedEvents() bool {
-	ret := _m.Called()
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// HasBufferedReplicationTasks provides a mock function with given fields:
-func (_m *mockMutableState) HasBufferedReplicationTasks() bool {
 	ret := _m.Called()
 
 	var r0 bool
@@ -2604,6 +2592,11 @@ func (_m *mockMutableState) ReplicateTransientDecisionTaskScheduled() (*decision
 	}
 
 	return r0, r1
+}
+
+// ReplicateUpsertWorkflowSearchAttributesEvent provides a mock function with given fields: _a0
+func (_m *mockMutableState) ReplicateUpsertWorkflowSearchAttributesEvent(_a0 *shared.HistoryEvent) {
+	_m.Called(_a0)
 }
 
 // ReplicateWorkflowExecutionCancelRequestedEvent provides a mock function with given fields: _a0

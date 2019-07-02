@@ -23,6 +23,8 @@ package history
 import (
 	"sync"
 	"time"
+
+	"github.com/uber/cadence/common/clock"
 )
 
 type (
@@ -52,6 +54,8 @@ type (
 		fireChan  chan struct{}
 		closeChan chan struct{}
 
+		timeSource clock.TimeSource
+
 		// the actual timer which will fire
 		timer *time.Timer
 		// variable indicating when the above timer will fire
@@ -63,7 +67,7 @@ type (
 		TimerGate
 		// SetCurrentTime set the current time, and additionally fire the fire chan
 		// if new "current" time is after the next wake up time, return true if
-		// "current" is antually updated
+		// "current" is actually updated
 		SetCurrentTime(nextTime time.Time) bool
 	}
 
@@ -84,12 +88,13 @@ type (
 )
 
 // NewLocalTimerGate create a new timer gate instance
-func NewLocalTimerGate() LocalTimerGate {
+func NewLocalTimerGate(timeSource clock.TimeSource) LocalTimerGate {
 	timer := &LocalTimerGateImpl{
 		timer:          time.NewTimer(0),
 		nextWakeupTime: time.Time{},
 		fireChan:       make(chan struct{}, 1),
 		closeChan:      make(chan struct{}),
+		timeSource:     timeSource,
 	}
 	// the timer should be stopped when initialized
 	if !timer.timer.Stop() {
@@ -134,7 +139,7 @@ func (timerGate *LocalTimerGateImpl) FireAfter(now time.Time) bool {
 // success means timer is idle or timer is set with a sooner time to fire
 func (timerGate *LocalTimerGateImpl) Update(nextTime time.Time) bool {
 	// NOTE: negative duration will make the timer fire immediately
-	now := time.Now()
+	now := timerGate.timeSource.Now()
 
 	if timerGate.timer.Stop() && timerGate.nextWakeupTime.Before(nextTime) {
 		// this means the timer, before stopped, is active && next wake up time do not have to be updated

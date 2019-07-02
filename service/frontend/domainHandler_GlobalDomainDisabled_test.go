@@ -93,13 +93,13 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TearDownTest() {
 	s.mockBlobstoreClient.AssertExpectations(s.T())
 }
 
-func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_Invalid() {
+func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_InvalidGlobalDomain() {
 	domainName := s.getRandomDomainName()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	activeClusterName := "some random active cluster"
+	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(activeClusterName),
@@ -120,6 +120,35 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_Invalid()
 		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
 	})
 	s.NotNil(err)
+	s.IsType(&shared.BadRequestError{}, err)
+}
+
+func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_InvalidCluster() {
+	domainName := s.getRandomDomainName()
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	activeClusterName := cluster.TestAlternativeClusterName
+	clusters := []*shared.ClusterReplicationConfiguration{
+		&shared.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(activeClusterName),
+		},
+	}
+	data := map[string]string{"some random key": "some random value"}
+	isGlobalDomain := false
+
+	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Description:                            common.StringPtr(description),
+		OwnerEmail:                             common.StringPtr(email),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+		EmitMetric:                             common.BoolPtr(emitMetric),
+		Clusters:                               clusters,
+		ActiveClusterName:                      common.StringPtr(activeClusterName),
+		Data:                                   data,
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
+	})
 	s.IsType(&shared.BadRequestError{}, err)
 }
 
@@ -158,9 +187,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_AllDefaul
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
 		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalRetentionPeriodInDays:          nil,
 		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-		ArchivalBucketOwner:                    nil,
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -177,7 +204,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_NoDefault
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	activeClusterName := "some random active cluster"
+	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(activeClusterName),
@@ -225,9 +252,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_NoDefault
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalRetentionPeriodInDays:          nil,
 		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-		ArchivalBucketOwner:                    nil,
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -280,9 +305,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_NoAttrSet()
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -318,7 +341,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	activeClusterName := "some random active cluster"
+	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(activeClusterName),
@@ -349,9 +372,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -373,9 +394,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalRetentionPeriodInDays:          nil,
 			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
-			ArchivalBucketOwner:                    nil,
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		},
 		ReplicationConfiguration: &shared.DomainReplicationConfiguration{

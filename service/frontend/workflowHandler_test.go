@@ -37,7 +37,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -125,7 +124,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
 	return NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr,
-		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, s.mockBlobstoreClient)
+		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, s.mockBlobstoreClient, nil, nil)
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandlerHelper() *WorkflowHandler {
@@ -473,14 +472,15 @@ func (s *workflowHandlerSuite) getWorkflowHandlerWithParams(mService cs.Service,
 	mMetadataManager persistence.MetadataManager, blobStore *mocks.BlobstoreClient) *WorkflowHandler {
 	s.mockBlobstoreClient = blobStore
 	return NewWorkflowHandler(mService, config, mMetadataManager, s.mockHistoryMgr, s.mockHistoryV2Mgr,
-		s.mockVisibilityMgr, s.mockProducer, blobStore)
+		s.mockVisibilityMgr, s.mockProducer, blobStore, nil, nil)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_BucketNotExists() {
 	config := s.newConfig()
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	clusterMetadata.On("GetCurrentClusterName").Return("active")
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	clusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
 	mMetadataManager := &mocks.MetadataManager{}
@@ -506,7 +506,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithNoBucket() 
 	config := s.newConfig()
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	clusterMetadata.On("GetCurrentClusterName").Return("active")
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	clusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
 	mMetadataManager := &mocks.MetadataManager{}
@@ -531,7 +532,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithBucket() {
 	config := s.newConfig()
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	clusterMetadata.On("GetCurrentClusterName").Return("active")
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	clusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
 	mMetadataManager := &mocks.MetadataManager{}
@@ -556,7 +558,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ClusterNotConfiguredFo
 	config := s.newConfig()
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	clusterMetadata.On("GetCurrentClusterName").Return("active")
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalDisabled, "", false))
 	clusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
 	mMetadataManager := &mocks.MetadataManager{}
@@ -579,7 +582,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_NotEnabled() {
 	config := s.newConfig()
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
-	clusterMetadata.On("GetCurrentClusterName").Return("active")
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	clusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
 	mMetadataManager := &mocks.MetadataManager{}
@@ -604,7 +608,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalNeverEnabled()
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalDisabled, "", false))
 	mMetadataManager := &mocks.MetadataManager{}
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("", shared.ArchivalStatusDisabled), nil)
-	mBlobstore := &mocks.BlobstoreClient{}
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, s.mockBlobstoreClient)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -620,9 +623,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalNeverEnabled()
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusDisabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(0))
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "")
-	mBlobstore.AssertNotCalled(s.T(), "BucketMetadata", mock.Anything, mock.Anything)
 }
 
 func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
@@ -632,7 +632,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
 	mMetadataManager := &mocks.MetadataManager{}
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("bucket-name", shared.ArchivalStatusEnabled), nil)
 	mBlobstore := &mocks.BlobstoreClient{}
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -648,9 +647,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusEnabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
-	mBlobstore.AssertCalled(s.T(), "BucketMetadata", mock.Anything, mock.Anything)
 }
 
 func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
@@ -660,7 +656,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
 	mMetadataManager := &mocks.MetadataManager{}
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("bucket-name", shared.ArchivalStatusDisabled), nil)
 	mBlobstore := &mocks.BlobstoreClient{}
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -676,9 +671,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusDisabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
-	mBlobstore.AssertCalled(s.T(), "BucketMetadata", mock.Anything, mock.Anything)
 }
 
 func (s *workflowHandlerSuite) TestDescribeDomain_Success_BlobstoreReturnsError() {
@@ -688,7 +680,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_BlobstoreReturnsError(
 	mMetadataManager := &mocks.MetadataManager{}
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("bucket-name", shared.ArchivalStatusDisabled), nil)
 	mBlobstore := &mocks.BlobstoreClient{}
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(nil, errors.New("blobstore error"))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -704,9 +695,6 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_BlobstoreReturnsError(
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusDisabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(0))
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "")
-	mBlobstore.AssertCalled(s.T(), "BucketMetadata", mock.Anything, mock.Anything)
 }
 
 func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingBucketName() {
@@ -718,6 +706,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingBucketName
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("bucket-name", shared.ArchivalStatusDisabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalPaused, "test-archival-bucket", true))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, s.mockBlobstoreClient)
@@ -739,6 +729,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_BucketNotExists() {
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("", shared.ArchivalStatusDisabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("BucketExists", mock.Anything, mock.Anything).Return(false, nil)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
@@ -763,11 +755,12 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("BucketExists", mock.Anything, mock.Anything).Return(true, nil)
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
@@ -779,8 +772,6 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusDisabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
 }
 
 func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForArchival() {
@@ -793,6 +784,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForA
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalDisabled, "", true))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, s.mockBlobstoreClient)
@@ -806,8 +799,6 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForA
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusEnabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(0))
 }
 
 func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchivalDisabledWithSettingBucket() {
@@ -820,11 +811,12 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("BucketExists", mock.Anything, mock.Anything).Return(true, nil)
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
@@ -836,8 +828,6 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusDisabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
 }
 
 func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled() {
@@ -850,11 +840,12 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("BucketExists", mock.Anything, mock.Anything).Return(true, nil)
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
@@ -866,8 +857,6 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled
 	assert.NotNil(s.T(), result.Configuration)
 	assert.Equal(s.T(), result.Configuration.GetArchivalStatus(), shared.ArchivalStatusEnabled)
 	assert.Equal(s.T(), result.Configuration.GetArchivalBucketName(), "bucket-name")
-	assert.Equal(s.T(), result.Configuration.GetArchivalBucketOwner(), "test-owner")
-	assert.Equal(s.T(), result.Configuration.GetArchivalRetentionPeriodInDays(), int32(10))
 }
 
 func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEnabled() {
@@ -880,11 +869,12 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	clusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, "test-archival-bucket", true))
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("BucketExists", mock.Anything, mock.Anything).Return(true, nil)
-	mBlobstore.On("BucketMetadata", mock.Anything, mock.Anything).Return(bucketMetadataResponse("test-owner", 10), nil)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, mBlobstore)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
@@ -964,6 +954,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalBucketEmpt
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse("", shared.ArchivalStatusDisabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, s.mockBlobstoreClient)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -979,6 +971,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidPageToken()
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, s.mockBlobstoreClient)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -994,6 +988,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidBlobKey() {
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager, s.mockBlobstoreClient)
 	wh.metricsClient = wh.Service.GetMetricsClient()
@@ -1011,6 +1007,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_FailedToGetVersion
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("failed to get tags for index blob"))
@@ -1028,6 +1026,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_FailedToDownload()
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	mBlobstore.On("GetTags", mock.Anything, mock.Anything, mock.Anything).Return(map[string]string{"10": ""}, nil)
@@ -1046,6 +1046,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	mMetadataManager.On("GetDomain", mock.Anything).Return(persistenceGetDomainResponse(testArchivalBucket, shared.ArchivalStatusEnabled), nil)
 	clusterMetadata := &mocks.ClusterMetadata{}
 	clusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	clusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	clusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	mService := cs.NewTestService(clusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	mBlobstore := &mocks.BlobstoreClient{}
 	unwrappedBlob := &archiver.HistoryBlob{
@@ -1206,21 +1208,12 @@ func (s *workflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger), numHistoryShards, false)
 }
 
-func bucketMetadataResponse(owner string, retentionDays int) *blobstore.BucketMetadataResponse {
-	return &blobstore.BucketMetadataResponse{
-		Owner:         owner,
-		RetentionDays: retentionDays,
-	}
-}
-
 func updateRequest(archivalBucketName *string, archivalStatus *shared.ArchivalStatus, archivalRetentionDays *int32, archivalOwner *string) *shared.UpdateDomainRequest {
 	return &shared.UpdateDomainRequest{
 		Name: common.StringPtr("test-name"),
 		Configuration: &shared.DomainConfiguration{
-			ArchivalBucketName:            archivalBucketName,
-			ArchivalStatus:                archivalStatus,
-			ArchivalRetentionPeriodInDays: archivalRetentionDays,
-			ArchivalBucketOwner:           archivalOwner,
+			ArchivalBucketName: archivalBucketName,
+			ArchivalStatus:     archivalStatus,
 		},
 	}
 }
@@ -1236,19 +1229,16 @@ func persistenceGetDomainResponse(archivalBucket string, archivalStatus shared.A
 			Data:        make(map[string]string),
 		},
 		Config: &persistence.DomainConfig{
-			Retention:      0,
+			Retention:      1,
 			EmitMetric:     true,
 			ArchivalBucket: archivalBucket,
 			ArchivalStatus: archivalStatus,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: "active",
+			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{
-					ClusterName: "active",
-				},
-				{
-					ClusterName: "standby",
+					ClusterName: cluster.TestCurrentClusterName,
 				},
 			},
 		},
@@ -1270,17 +1260,15 @@ func registerDomainRequest(archivalStatus *shared.ArchivalStatus, bucketName *st
 		EmitMetric:                             common.BoolPtr(true),
 		Clusters: []*shared.ClusterReplicationConfiguration{
 			{
-				ClusterName: common.StringPtr("active"),
-			},
-			{
-				ClusterName: common.StringPtr("standby"),
+				ClusterName: common.StringPtr(cluster.TestCurrentClusterName),
 			},
 		},
-		ActiveClusterName:  common.StringPtr("active"),
+		ActiveClusterName:  common.StringPtr(cluster.TestCurrentClusterName),
 		Data:               make(map[string]string),
 		SecurityToken:      common.StringPtr("token"),
 		ArchivalStatus:     archivalStatus,
 		ArchivalBucketName: bucketName,
+		IsGlobalDomain:     common.BoolPtr(false),
 	}
 }
 

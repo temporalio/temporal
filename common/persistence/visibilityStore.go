@@ -94,6 +94,21 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 	return v.persistence.RecordWorkflowExecutionClosed(req)
 }
 
+func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
+	req := &InternalUpsertWorkflowExecutionRequest{
+		DomainUUID:         request.DomainUUID,
+		WorkflowID:         request.Execution.GetWorkflowId(),
+		RunID:              request.Execution.GetRunId(),
+		WorkflowTypeName:   request.WorkflowTypeName,
+		StartTimestamp:     request.StartTimestamp,
+		ExecutionTimestamp: request.ExecutionTimestamp,
+		TaskID:             request.TaskID,
+		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		SearchAttributes:   request.SearchAttributes,
+	}
+	return v.persistence.UpsertWorkflowExecution(req)
+}
+
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
 	internalResp, err := v.persistence.ListOpenWorkflowExecutions(request)
 	if err != nil {

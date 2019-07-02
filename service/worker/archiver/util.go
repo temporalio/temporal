@@ -128,7 +128,7 @@ func validateArchivalRequest(request *ArchiveRequest) error {
 	return nil
 }
 
-func getUploadHistoryActivityResponse(progress uploadProgress, err error) (*uploadResult, error) {
+func getUploadHistoryActivityResponse(uploadedBlobs []string, err error) (*uploadResult, error) {
 	if err == nil {
 		return nil, nil
 	}
@@ -147,7 +147,7 @@ func getUploadHistoryActivityResponse(progress uploadProgress, err error) (*uplo
 		errorWithDetails = fmt.Sprintf("%v: %v", errReason, details)
 	}
 	return &uploadResult{
-		BlobsToDelete:    progress.UploadedBlobs,
+		BlobsToDelete:    uploadedBlobs,
 		ErrorWithDetails: errorWithDetails,
 	}, nil
 }

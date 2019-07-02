@@ -463,9 +463,9 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 }
 
 func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
-	id := "interation-timeouts-workflow-test"
-	wt := "interation-timeouts-workflow-test-type"
-	tl := "interation-timeouts-workflow-test-tasklist"
+	id := "integration-timeouts-workflow-test"
+	wt := "integration-timeouts-workflow-test-type"
+	tl := "integration-timeouts-workflow-test-tasklist"
 	identity := "worker1"
 	activityName := "activity_timer"
 
@@ -1021,9 +1021,9 @@ func (s *integrationSuite) TestCronWorkflow() {
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {
-	id := "interation-sequential-user-timers-test"
-	wt := "interation-sequential-user-timers-test-type"
-	tl := "interation-sequential-user-timers-test-tasklist"
+	id := "integration-sequential-user-timers-test"
+	wt := "integration-sequential-user-timers-test-type"
+	tl := "integration-sequential-user-timers-test-tasklist"
 	identity := "worker1"
 
 	workflowType := &workflow.WorkflowType{}
@@ -1200,9 +1200,9 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 }
 
 func (s *integrationSuite) TestBufferedEvents() {
-	id := "interation-buffered-events-test"
-	wt := "interation-buffered-events-test-type"
-	tl := "interation-buffered-events-test-tasklist"
+	id := "integration-buffered-events-test"
+	wt := "integration-buffered-events-test-type"
+	tl := "integration-buffered-events-test-tasklist"
 	identity := "worker1"
 	signalName := "buffered-signal"
 
@@ -1320,9 +1320,9 @@ func (s *integrationSuite) TestBufferedEvents() {
 }
 
 func (s *integrationSuite) TestDescribeWorkflowExecution() {
-	id := "interation-describe-wfe-test"
-	wt := "interation-describe-wfe-test-type"
-	tl := "interation-describe-wfe-test-tasklist"
+	id := "integration-describe-wfe-test"
+	wt := "integration-describe-wfe-test-type"
+	tl := "integration-describe-wfe-test-tasklist"
 	identity := "worker1"
 
 	workflowType := &workflow.WorkflowType{Name: &wt}
@@ -2251,9 +2251,9 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 }
 
 func (s *integrationSuite) TestDescribeTaskList() {
-	workflowID := "interation-get-poller-history"
-	workflowTypeName := "interation-get-poller-history-type"
-	tasklistName := "interation-get-poller-history-tasklist"
+	workflowID := "integration-get-poller-history"
+	workflowTypeName := "integration-get-poller-history-type"
+	tasklistName := "integration-get-poller-history-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -2473,9 +2473,9 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 }
 
 func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
-	id := "interation-no-transient-decision-after-flush-buffered-events-test"
-	wt := "interation-no-transient-decision-after-flush-buffered-events-test-type"
-	tl := "interation-no-transient-decision-after-flush-buffered-events-test-tasklist"
+	id := "integration-no-transient-decision-after-flush-buffered-events-test"
+	wt := "integration-no-transient-decision-after-flush-buffered-events-test-type"
+	tl := "integration-no-transient-decision-after-flush-buffered-events-test-tasklist"
 	identity := "worker1"
 
 	workflowType := &workflow.WorkflowType{Name: &wt}
@@ -2778,10 +2778,10 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 }
 
 func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
-	id := "interation-sticky-timeout-non-transient-decision"
-	wt := "interation-sticky-timeout-non-transient-decision-type"
-	tl := "interation-sticky-timeout-non-transient-decision-tasklist"
-	stl := "interation-sticky-timeout-non-transient-decision-tasklist-sticky"
+	id := "integration-sticky-timeout-non-transient-decision"
+	wt := "integration-sticky-timeout-non-transient-decision-type"
+	tl := "integration-sticky-timeout-non-transient-decision-tasklist"
+	stl := "integration-sticky-timeout-non-transient-decision-tasklist-sticky"
 	identity := "worker1"
 
 	workflowType := &workflow.WorkflowType{}
@@ -2952,10 +2952,10 @@ WaitForStickyTimeoutLoop:
 }
 
 func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
-	id := "interation-reset-sticky-fire-schedule-to-start-timeout"
-	wt := "interation-reset-sticky-fire-schedule-to-start-timeout-type"
-	tl := "interation-reset-sticky-fire-schedule-to-start-timeout-tasklist"
-	stl := "interation-reset-sticky-fire-schedule-to-start-timeout-tasklist-sticky"
+	id := "integration-reset-sticky-fire-schedule-to-start-timeout"
+	wt := "integration-reset-sticky-fire-schedule-to-start-timeout-type"
+	tl := "integration-reset-sticky-fire-schedule-to-start-timeout-tasklist"
+	stl := "integration-reset-sticky-fire-schedule-to-start-timeout-tasklist-sticky"
 	identity := "worker1"
 
 	workflowType := &workflow.WorkflowType{}
@@ -3120,9 +3120,9 @@ WaitForStickyTimeoutLoop:
 }
 
 func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
-	id := "interation-buffered-events-out-of-order-test"
-	wt := "interation-buffered-events-out-of-order-test-type"
-	tl := "interation-buffered-events-out-of-order-test-tasklist"
+	id := "integration-buffered-events-out-of-order-test"
+	wt := "integration-buffered-events-out-of-order-test-type"
+	tl := "integration-buffered-events-out-of-order-test-tasklist"
 	identity := "worker1"
 
 	workflowType := &workflow.WorkflowType{Name: &wt}

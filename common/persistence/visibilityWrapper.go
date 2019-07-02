@@ -20,7 +20,9 @@
 
 package persistence
 
-import "github.com/uber/cadence/common/service/dynamicconfig"
+import (
+	"github.com/uber/cadence/common/service/dynamicconfig"
+)
 
 type (
 	visibilityManagerWrapper struct {
@@ -71,6 +73,14 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *Record
 		}
 	}
 	return v.visibilityManager.RecordWorkflowExecutionClosed(request)
+}
+
+func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
+	if v.esVisibilityManager == nil { // return operation not support
+		return v.visibilityManager.UpsertWorkflowExecution(request)
+	}
+
+	return v.esVisibilityManager.UpsertWorkflowExecution(request)
 }
 
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {

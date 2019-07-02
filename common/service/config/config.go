@@ -44,9 +44,6 @@ type (
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
 		Log Logger `yaml:"log"`
-		// ClustersInfo is the config containing all valid clusters and active cluster
-		// Deprecated: please use ClusterMetadata instead
-		ClustersInfo ClustersInfo `yaml:"clustersInfo"`
 		// ClusterMetadata is the config containing all valid clusters and active cluster
 		ClusterMetadata ClusterMetadata `yaml:"clusterMetadata"`
 		// DCRedirectionPolicy contains the frontend datacenter redirection policy
@@ -226,36 +223,6 @@ type (
 		OutputFile string `yaml:"outputFile"`
 	}
 
-	// ClustersInfo contains the all cluster names and active cluster
-	//
-	// Deprecated: please use ClustersMetadata instead
-	ClustersInfo struct {
-		// EnableGlobalDomain whether the global domain is enabled, this attr should be discarded when
-		// cross DC is made public
-		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
-		// FailoverVersionIncrement is the increment of each cluster failover version
-		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
-		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
-		// all clusters can do domain failover
-		MasterClusterName string `yaml:"masterClusterName"`
-		// CurrentClusterName is the name of the current cluster
-		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInitialFailoverVersions contains all cluster names to corresponding initial failover version
-		ClusterInitialFailoverVersions map[string]int64 `yaml:"clusterInitialFailoverVersion"`
-		// ClusterAddress contains all cluster names to corresponding address
-		ClusterAddress map[string]Address `yaml:"clusterAddress"`
-	}
-
-	// Address indicate the remote cluster's service name and address
-	//
-	// Deprecated: please use ClusterInformation instead
-	Address struct {
-		// RPCName indicate the remote service name
-		RPCName string `yaml:"rpcName"`
-		// Address indicate the remote service IP address
-		RPCAddress string `yaml:"rpcAddress"`
-	}
-
 	// ClusterMetadata contains the all cluster which participated in cross DC
 	ClusterMetadata struct {
 		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
@@ -276,7 +243,7 @@ type (
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// RPCName indicate the remote service name
 		RPCName string `yaml:"rpcName"`
-		// Address indicate the remote service IP address
+		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
 	}
 
@@ -330,8 +297,10 @@ type (
 
 	// PublicClient is config for connecting to cadence frontend
 	PublicClient struct {
-		// HostPort is the host port to connect on
+		// HostPort is the host port to connect on. Host can be DNS name
 		HostPort string `yaml:"hostPort" validate:"nonzero"`
+		// interval to refresh DNS. Default to 10s
+		RefreshInterval time.Duration `yaml:"RefreshInterval"`
 	}
 
 	// BootstrapMode is an enum type for ringpop bootstrap mode
