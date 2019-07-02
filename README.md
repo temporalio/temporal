@@ -17,6 +17,7 @@ See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos
 * Build the required binaries following the instructions [here](CONTRIBUTING.md).
 
 * Install and run `cassandra` locally:
+
 ```bash
 # for OS X
 brew install cassandra
@@ -26,11 +27,13 @@ brew install cassandra
 ```
 
 * Setup the cassandra schema:
+
 ```bash
 make install-schema
 ```
 
 * Start the service:
+
 ```bash
 ./cadence-server start
 ```
@@ -53,9 +56,11 @@ Try out [Cadence Web UI](https://github.com/uber/cadence-web) to view your workf
 (This is already available at localhost:8088 if you run Cadence with docker compose)
 
 ## Contributing
-We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).
+
+We'd love your help in making Cadence great. Please review our [contribution guide](CONTRIBUTING.md).
+
+If you'd like to propose a new feature, first join the Cadence [discussion group](https://groups.google.com/d/forum/cadence-discussion) and [Slack channel](https://join.slack.com/t/uber-cadence/shared_invite/enQtNDczNTgxMjYxNDEzLTI5Yzc5ODYwMjg1ZmI3NmRmMTU1MjQ0YzQyZDc5NzMwMmM0NjkzNDE5MmM0NzU5YTlhMmI4NzIzMDhiNzFjMDM) to start a discussion and check if there are existing design discussions. Also peruse our [design docs](docs/design/index.md) in case a feature has been designed but not yet implemented. Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](PROPOSALS.md).
 
 ## License
 
 MIT License, please see [LICENSE](https://github.com/uber/cadence/blob/master/LICENSE) for details.
- 
