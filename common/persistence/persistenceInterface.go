@@ -312,6 +312,9 @@ type (
 
 		// current workflow
 		CurrentWorkflowMutation *InternalWorkflowMutation
+
+		// maybe new workflow
+		NewWorkflowSnapshot *InternalWorkflowSnapshot
 	}
 
 	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
@@ -341,7 +344,7 @@ type (
 
 		UpsertActivityInfos       []*InternalActivityInfo
 		DeleteActivityInfos       []int64
-		UpserTimerInfos           []*TimerInfo
+		UpsertTimerInfos          []*TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*InternalChildExecutionInfo
 		DeleteChildExecutionInfo  *int64

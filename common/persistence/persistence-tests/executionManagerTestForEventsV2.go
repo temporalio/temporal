@@ -298,7 +298,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 			Condition:           info0.NextEventID,
 			UpsertActivityInfos: nil,
 			DeleteActivityInfos: nil,
-			UpserTimerInfos:     nil,
+			UpsertTimerInfos:    nil,
 			DeleteTimerInfos:    nil,
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{

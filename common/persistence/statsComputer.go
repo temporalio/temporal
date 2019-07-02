@@ -102,7 +102,7 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 
 	timerInfoCount := 0
 	timerInfoSize := 0
-	for _, ti := range req.UpdateWorkflowMutation.UpserTimerInfos {
+	for _, ti := range req.UpdateWorkflowMutation.UpsertTimerInfos {
 		timerInfoCount++
 		timerInfoSize += computeTimerInfoSize(ti)
 	}

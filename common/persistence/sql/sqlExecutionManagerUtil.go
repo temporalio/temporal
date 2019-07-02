@@ -97,7 +97,7 @@ func applyWorkflowMutationTx(
 	}
 
 	if err := updateTimerInfos(tx,
-		workflowMutation.UpserTimerInfos,
+		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
 		shardID,
 		domainID,

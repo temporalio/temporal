@@ -496,6 +496,13 @@ func (m *executionManagerImpl) ResetMutableState(
 			return err
 		}
 	}
+	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
+	if request.NewWorkflowSnapshot != nil {
+		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot, request.Encoding)
+		if err != nil {
+			return err
+		}
+	}
 
 	newRequest := &InternalResetMutableStateRequest{
 		RangeID: request.RangeID,
@@ -507,6 +514,8 @@ func (m *executionManagerImpl) ResetMutableState(
 		ResetWorkflowSnapshot: *serializedResetWorkflowSnapshot,
 
 		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
+
+		NewWorkflowSnapshot: serializedNewWorkflowMutation,
 	}
 	return m.persistence.ResetMutableState(newRequest)
 }
@@ -603,7 +612,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 		UpsertActivityInfos:       serializedUpsertActivityInfos,
 		DeleteActivityInfos:       input.DeleteActivityInfos,
-		UpserTimerInfos:           input.UpserTimerInfos,
+		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
 		UpsertChildExecutionInfos: serializedUpsertChildExecutionInfos,
 		DeleteChildExecutionInfo:  input.DeleteChildExecutionInfo,

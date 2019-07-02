@@ -632,17 +632,31 @@ func (m *sqlExecutionManager) resetMutableStateTx(
 	request *p.InternalResetMutableStateRequest,
 ) error {
 
+	currentWorkflow := request.CurrentWorkflowMutation
 	resetWorkflow := request.ResetWorkflowSnapshot
-	executionInfo := resetWorkflow.ExecutionInfo
-	replicationState := resetWorkflow.ReplicationState
-	shardID := m.shardID
-	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
-	workflowID := executionInfo.WorkflowID
-	runID := sqldb.MustParseUUID(executionInfo.RunID)
+	newWorkflow := request.NewWorkflowSnapshot
 
 	prevRunID := sqldb.MustParseUUID(request.PrevRunID)
 	prevLastWriteVersion := request.PrevLastWriteVersion
 	prevState := request.PrevState
+
+	shardID := m.shardID
+
+	domainID := sqldb.MustParseUUID(resetWorkflow.ExecutionInfo.DomainID)
+	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
+
+	executionInfo := resetWorkflow.ExecutionInfo
+	replicationState := resetWorkflow.ReplicationState
+	if newWorkflow != nil {
+		executionInfo = newWorkflow.ExecutionInfo
+		replicationState = newWorkflow.ReplicationState
+	}
+	runID := sqldb.MustParseUUID(executionInfo.RunID)
+	createRequestID := executionInfo.CreateRequestID
+	state := executionInfo.State
+	closeStatus := executionInfo.CloseStatus
+	startVersion := replicationState.StartVersion
+	lastWriteVersion := replicationState.LastWriteVersion
 
 	if err := assertAndUpdateCurrentExecution(tx,
 		m.shardID,
@@ -652,18 +666,31 @@ func (m *sqlExecutionManager) resetMutableStateTx(
 		prevRunID,
 		prevLastWriteVersion,
 		prevState,
-		executionInfo.CreateRequestID,
-		executionInfo.State,
-		executionInfo.CloseStatus,
-		replicationState.StartVersion,
-		replicationState.LastWriteVersion); err != nil {
+		createRequestID,
+		state,
+		closeStatus,
+		startVersion,
+		lastWriteVersion); err != nil {
 		return &workflow.InternalServiceError{Message: fmt.Sprintf(
 			"ResetMutableState. Failed to comare and swap the current record. Error: %v",
 			err,
 		)}
 	}
 
-	return applyWorkflowSnapshotTxAsReset(tx, shardID, &resetWorkflow)
+	if err := applyWorkflowSnapshotTxAsReset(tx, shardID, &resetWorkflow); err != nil {
+		return err
+	}
+	if currentWorkflow != nil {
+		if err := applyWorkflowMutationTx(tx, shardID, currentWorkflow); err != nil {
+			return err
+		}
+	}
+	if newWorkflow != nil {
+		if err := applyWorkflowSnapshotTxAsNew(tx, shardID, newWorkflow); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *sqlExecutionManager) DeleteWorkflowExecution(

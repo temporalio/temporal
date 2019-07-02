@@ -760,6 +760,9 @@ type (
 		// current workflow
 		CurrentWorkflowMutation *WorkflowMutation
 
+		// maybe new workflow
+		NewWorkflowSnapshot *WorkflowSnapshot
+
 		Encoding common.EncodingType // optional binary encoding type
 	}
 
@@ -792,7 +795,7 @@ type (
 
 		UpsertActivityInfos       []*ActivityInfo
 		DeleteActivityInfos       []int64
-		UpserTimerInfos           []*TimerInfo
+		UpsertTimerInfos          []*TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64

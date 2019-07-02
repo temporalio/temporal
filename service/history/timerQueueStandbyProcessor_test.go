@@ -583,7 +583,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_Ca
 				Condition:                 msBuilder.GetNextEventID(),
 				UpsertActivityInfos:       input.UpdateWorkflowMutation.UpsertActivityInfos,
 				DeleteActivityInfos:       []int64{},
-				UpserTimerInfos:           []*persistence.TimerInfo{},
+				UpsertTimerInfos:          []*persistence.TimerInfo{},
 				DeleteTimerInfos:          []string{},
 				UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
 				DeleteChildExecutionInfo:  nil,

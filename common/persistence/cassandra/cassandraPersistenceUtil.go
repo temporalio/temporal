@@ -72,7 +72,7 @@ func applyWorkflowMutationBatch(
 
 	updateTimerInfos(
 		batch,
-		workflowMutation.UpserTimerInfos,
+		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
 		shardID,
 		domainID,

@@ -502,7 +502,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 
 			UpsertActivityInfos:       []*persistence.ActivityInfo{},
 			DeleteActivityInfos:       []int64{},
-			UpserTimerInfos:           []*persistence.TimerInfo{},
+			UpsertTimerInfos:          []*persistence.TimerInfo{},
 			DeleteTimerInfos:          []string{},
 			UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
 			DeleteChildExecutionInfo:  nil,
@@ -952,7 +952,7 @@ func (c *workflowExecutionContextImpl) update(
 			Condition:                 c.updateCondition,
 			UpsertActivityInfos:       updates.updateActivityInfos,
 			DeleteActivityInfos:       updates.deleteActivityInfos,
-			UpserTimerInfos:           updates.updateTimerInfos,
+			UpsertTimerInfos:          updates.updateTimerInfos,
 			DeleteTimerInfos:          updates.deleteTimerInfos,
 			UpsertChildExecutionInfos: updates.updateChildExecutionInfos,
 			DeleteChildExecutionInfo:  updates.deleteChildExecutionInfo,

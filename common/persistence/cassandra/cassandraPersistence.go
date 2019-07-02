@@ -1574,37 +1574,69 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutableStateRequest) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
+	currentWorkflow := request.CurrentWorkflowMutation
 	resetWorkflow := request.ResetWorkflowSnapshot
+	newWorkflow := request.NewWorkflowSnapshot
+
+	prevRunID := request.PrevRunID
+	prevLastWriteVersion := request.PrevLastWriteVersion
+	prevState := request.PrevState
+
 	shardID := d.shardID
+
+	domainID := resetWorkflow.ExecutionInfo.DomainID
+	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
+
 	executionInfo := resetWorkflow.ExecutionInfo
 	replicationState := resetWorkflow.ReplicationState
+	if newWorkflow != nil {
+		executionInfo = newWorkflow.ExecutionInfo
+		replicationState = newWorkflow.ReplicationState
+	}
+	runID := executionInfo.RunID
+	createRequestID := executionInfo.CreateRequestID
+	state := executionInfo.State
+	closeStatus := executionInfo.CloseStatus
+	startVersion := replicationState.StartVersion
+	lastWriteVersion := replicationState.LastWriteVersion
 
 	batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
-		executionInfo.RunID,
-		executionInfo.RunID,
-		executionInfo.CreateRequestID,
-		executionInfo.State,
-		executionInfo.CloseStatus,
-		replicationState.StartVersion,
-		replicationState.LastWriteVersion,
-		replicationState.LastWriteVersion,
-		executionInfo.State,
-		d.shardID,
+		runID,
+		runID,
+		createRequestID,
+		state,
+		closeStatus,
+		startVersion,
+		lastWriteVersion,
+		lastWriteVersion,
+		state,
+		shardID,
 		rowTypeExecution,
-		executionInfo.DomainID,
-		executionInfo.WorkflowID,
+		domainID,
+		workflowID,
 		permanentRunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-		request.PrevRunID,
-		request.PrevLastWriteVersion,
-		request.PrevState,
+		prevRunID,
+		prevLastWriteVersion,
+		prevState,
 	)
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch,
 		shardID,
 		&resetWorkflow); err != nil {
 		return err
+	}
+
+	if currentWorkflow != nil {
+		if err := applyWorkflowMutationBatch(batch, shardID, currentWorkflow); err != nil {
+			return err
+		}
+	}
+	if newWorkflow != nil {
+		if err := applyWorkflowSnapshotBatchAsNew(batch, shardID, newWorkflow); err != nil {
+			return err
+		}
 	}
 
 	// Verifies that the RangeID has not changed
@@ -1646,7 +1678,6 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 	if !applied {
 		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.ResetWorkflowSnapshot.Condition, request.RangeID, request.PrevRunID)
 	}
-
 	return nil
 }
 
