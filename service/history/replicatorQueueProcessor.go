@@ -269,8 +269,20 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
-			newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken, shardID)
+			newRunHistory, _, err = GetAllHistory(
+				historyMgr,
+				historyV2Mgr,
+				metricsClient,
+				logger,
+				false,
+				task.DomainID,
+				task.WorkflowID,
+				newRunID,
+				common.FirstEventID,
+				common.FirstEventID+1, // [common.FirstEventID to common.FirstEventID+1) will get the first batch
+				task.NewRunEventStoreVersion,
+				task.NewRunBranchToken,
+				shardID)
 			if err != nil {
 				return nil, err
 			}
