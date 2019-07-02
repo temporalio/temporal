@@ -50,6 +50,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/tokenbucket"
 	"github.com/uber/cadence/service/worker/archiver"
@@ -72,7 +73,7 @@ type (
 		tokenSerializer           common.TaskTokenSerializer
 		metricsClient             metrics.Client
 		startWG                   sync.WaitGroup
-		rateLimiter               tokenbucket.TokenBucket
+		rateLimiter               quotas.Policy
 		config                    *Config
 		blobstoreClient           blobstore.Client
 		versionChecker            *versionChecker
@@ -165,7 +166,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		metricsClient:   sVice.GetMetricsClient(),
 		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
-		rateLimiter:     tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
+		rateLimiter:     quotas.NewSimpleRateLimiter(tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource())),
 		blobstoreClient: blobstoreClient,
 		versionChecker:  &versionChecker{checkVersion: config.EnableClientVersionCheck()},
 		domainHandler: newDomainHandler(
@@ -341,7 +342,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -420,7 +421,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -553,7 +554,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
 	if heartbeatRequest.TaskToken == nil {
@@ -634,7 +635,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeatByID")
 	domainID, err := wh.domainCache.GetDomainID(heartbeatRequest.GetDomain())
@@ -740,7 +741,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	if completeRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -822,7 +823,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	domainID, err := wh.domainCache.GetDomainID(completeRequest.GetDomain())
 	if err != nil {
@@ -930,7 +931,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	if failedRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1001,7 +1002,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	domainID, err := wh.domainCache.GetDomainID(failedRequest.GetDomain())
 	if err != nil {
@@ -1097,7 +1098,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	if cancelRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1180,7 +1181,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	domainID, err := wh.domainCache.GetDomainID(cancelRequest.GetDomain())
 	if err != nil {
@@ -1287,7 +1288,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	if completeRequest.TaskToken == nil {
 		return nil, wh.error(errTaskTokenNotSet, scope)
@@ -1365,7 +1366,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	if failedRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1435,7 +1436,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.rateLimiter.Allow()
 
 	if completeRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1487,7 +1488,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -1630,7 +1631,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -1832,7 +1833,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 		return wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return wh.error(createServiceBusyError(), scope)
 	}
 
@@ -1911,7 +1912,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2069,7 +2070,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 		return wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2114,7 +2115,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2159,7 +2160,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 		return wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2203,7 +2204,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2310,7 +2311,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2435,7 +2436,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listReque
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2495,7 +2496,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listReque
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2555,7 +2556,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countReq
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2766,7 +2767,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2811,7 +2812,7 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.De
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.rateLimiter.Allow(); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
