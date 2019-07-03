@@ -46,7 +46,6 @@ const (
 	backOffMaxInterval     = time.Minute
 	rpcTimeout             = time.Second
 
-	// TODO remove this logic after this issue is resolved: https://github.com/uber/cadence/issues/2002
 	waitingForGlobalDomainCreationRacingCondition = time.Second * 20
 )
 
@@ -102,7 +101,11 @@ func (s *Batcher) Start() error {
 	if err != nil {
 		return err
 	}
-	time.Sleep(waitingForGlobalDomainCreationRacingCondition)
+
+	// TODO remove this logic after this issue is resolved: https://github.com/uber/cadence/issues/2002
+	if s.cfg.ClusterMetadata.IsGlobalDomainEnabled() {
+		time.Sleep(waitingForGlobalDomainCreationRacingCondition)
+	}
 
 	// start worker for batch operation workflows
 	workerOpts := worker.Options{
