@@ -841,6 +841,8 @@ const (
 	ArchiverArchivalWorkflowScope
 	// TaskListScavengerScope is scope used by all metrics emitted by worker.tasklist.Scavenger module
 	TaskListScavengerScope
+	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
+	BatcherScope
 
 	NumWorkerScopes
 )
@@ -1225,6 +1227,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverPumpScope:                   {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
+		BatcherScope:                        {operation: "batcher"},
 	},
 	// Blobstore Scope Names
 	Blobstore: {
@@ -1499,6 +1502,8 @@ const (
 	StoppedCount
 	ExecutorTasksDeferredCount
 	ExecutorTasksDroppedCount
+	BatcherProcessorSuccess
+	BatcherProcessorFailures
 	NumWorkerMetrics
 )
 
@@ -1747,6 +1752,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		StoppedCount:                                           {metricName: "stopped", metricType: Counter},
 		ExecutorTasksDeferredCount:                             {metricName: "executor_deferred", metricType: Counter},
 		ExecutorTasksDroppedCount:                              {metricName: "executor_dropped", metricType: Counter},
+		BatcherProcessorSuccess:                                {metricName: "batcher_processor_requests", metricType: Counter},
+		BatcherProcessorFailures:                               {metricName: "batcher_processor_errors", metricType: Counter},
 	},
 }
 

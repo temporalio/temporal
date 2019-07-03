@@ -150,7 +150,7 @@ func (s *Service) Start() {
 	scannerEnabled := s.config.ScannerCfg.Persistence.DefaultStoreType() == config.StoreTypeSQL
 	batcherEnabled := s.config.EnableBatcher()
 
-	if replicatorEnabled || archiverEnabled || scannerEnabled {
+	if replicatorEnabled || archiverEnabled || scannerEnabled || batcherEnabled {
 		pConfig := s.params.PersistenceConfig
 		pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
 		pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
