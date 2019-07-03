@@ -304,7 +304,11 @@ func (s *conflictResolverSuite) TestReset() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,
 		Execution: execution,
-	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once() // return empty resoonse since we are not testing the load
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistence.WorkflowMutableState{
+			ExecutionInfo: &persistence.WorkflowExecutionInfo{},
+		},
+	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{}, nil, "", nil,

@@ -1267,7 +1267,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
+		if err := context.updateAsActive(transferTasks, timerTasks, transactionID); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}

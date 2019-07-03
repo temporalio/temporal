@@ -783,7 +783,14 @@ Update_History_Loop:
 		}
 
 		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
-		err = context.continueAsNewWorkflowExecution(nil, continueAsNewBuilder, transferTasks, timerTasks, transactionID)
+
+		if err := context.appendFirstBatchHistoryForContinueAsNew(
+			continueAsNewBuilder,
+			transactionID,
+		); err != nil {
+			return err
+		}
+		err = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder)
 
 		if err != nil {
 			if err == ErrConflict {
@@ -834,7 +841,7 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 		return err1
 	}
 
-	err = context.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
+	err = context.updateAsActive(transferTasks, timerTasks, transactionID)
 	if err != nil {
 		if isShardOwnershiptLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates

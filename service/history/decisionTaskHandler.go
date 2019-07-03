@@ -113,9 +113,12 @@ func newDecisionTaskHandler(
 	}
 }
 
-func (handler *decisionTaskHandlerImpl) handleDecisions(decisions []*workflow.Decision) error {
-	var err error
+func (handler *decisionTaskHandlerImpl) handleDecisions(
+	executionContext []byte,
+	decisions []*workflow.Decision,
+) error {
 
+	var err error
 	for _, decision := range decisions {
 
 		err = handler.handleDecision(decision)
@@ -124,6 +127,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisions(decisions []*workflow.De
 		}
 	}
 
+	handler.mutableState.GetExecutionInfo().ExecutionContext = executionContext
 	return nil
 }
 

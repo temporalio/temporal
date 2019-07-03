@@ -1193,7 +1193,7 @@ func (r *historyReplicator) updateMutableStateWithTimer(
 	// so nothing on the replication state should be changed
 	lastWriteVersion := msBuilder.GetLastWriteVersion()
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	return context.updateWorkflowExecutionForStandby(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
+	return context.updateAsPassive(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
 }
 
 func (r *historyReplicator) deserializeBlob(
@@ -1445,7 +1445,7 @@ func (r *historyReplicator) persistWorkflowMutation(
 	if err != nil {
 		return err
 	}
-	return context.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
+	return context.updateAsActive(transferTasks, timerTasks, transactionID)
 }
 
 func logError(
