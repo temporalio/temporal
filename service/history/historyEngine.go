@@ -756,10 +756,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				WorkflowId: common.StringPtr(executionInfo.WorkflowID),
 				RunId:      common.StringPtr(executionInfo.RunID),
 			},
-			Type:            &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
-			StartTime:       common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
-			HistoryLength:   common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
-			AutoResetPoints: executionInfo.AutoResetPoints,
+			Type:             &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
+			StartTime:        common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
+			HistoryLength:    common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
+			AutoResetPoints:  executionInfo.AutoResetPoints,
+			SearchAttributes: &workflow.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
 		},
 	}
 

@@ -970,8 +970,9 @@ func DescribeWorkflowWithID(c *cli.Context) {
 func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 	frontendClient := cFactory.ServerFrontendClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	printRawTime := c.Bool(FlagPrintRawTime) // default show datetime instead of raw time
-	resetPontsOnly := c.Bool(FlagResetPointsOnly)
+	printRaw := c.Bool(FlagPrintRaw) // printRaw is false by default,
+	// and will show datetime and decoded search attributes instead of raw timestamp and byte arrays
+	printResetPointsOnly := c.Bool(FlagResetPointsOnly)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -983,41 +984,23 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 			RunId:      common.StringPtr(rid),
 		},
 	})
-
 	if err != nil {
 		ErrorAndExit("Describe workflow execution failed", err)
 	}
+
+	if printResetPointsOnly {
+		printAutoResetPoints(resp)
+		return
+	}
+
 	var o interface{}
-	if printRawTime {
+	if printRaw {
 		o = resp
 	} else {
-		o = convertDescribeWorkflowExecutionResponse(resp)
+		o = convertDescribeWorkflowExecutionResponse(resp, frontendClient, c)
 	}
 
-	if !resetPontsOnly {
-		prettyPrintJSONObject(o)
-	} else {
-		fmt.Println("Auto Reset Points:")
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetBorder(true)
-		table.SetColumnSeparator("|")
-		header := []string{"Binary Checksum", "Create Time", "RunID", "EventID"}
-		headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
-		table.SetHeader(header)
-		table.SetHeaderColor(headerColor...)
-		if resp.WorkflowExecutionInfo.AutoResetPoints != nil && len(resp.WorkflowExecutionInfo.AutoResetPoints.Points) > 0 {
-			for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
-				var row []string
-				row = append(row, pt.GetBinaryChecksum())
-				row = append(row, time.Unix(0, pt.GetCreatedTimeNano()).String())
-				row = append(row, pt.GetRunId())
-				row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
-				table.Append(row)
-			}
-		}
-		table.Render()
-	}
-
+	prettyPrintJSONObject(o)
 }
 
 func prettyPrintJSONObject(o interface{}) {
@@ -1030,6 +1013,28 @@ func prettyPrintJSONObject(o interface{}) {
 	fmt.Println()
 }
 
+func printAutoResetPoints(resp *shared.DescribeWorkflowExecutionResponse) {
+	fmt.Println("Auto Reset Points:")
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(true)
+	table.SetColumnSeparator("|")
+	header := []string{"Binary Checksum", "Create Time", "RunID", "EventID"}
+	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
+	table.SetHeader(header)
+	table.SetHeaderColor(headerColor...)
+	if resp.WorkflowExecutionInfo.AutoResetPoints != nil && len(resp.WorkflowExecutionInfo.AutoResetPoints.Points) > 0 {
+		for _, pt := range resp.WorkflowExecutionInfo.AutoResetPoints.Points {
+			var row []string
+			row = append(row, pt.GetBinaryChecksum())
+			row = append(row, time.Unix(0, pt.GetCreatedTimeNano()).String())
+			row = append(row, pt.GetRunId())
+			row = append(row, strconv.FormatInt(pt.GetFirstDecisionCompletedId(), 10))
+			table.Append(row)
+		}
+	}
+	table.Render()
+}
+
 // describeWorkflowExecutionResponse is used to print datetime instead of print raw time
 type describeWorkflowExecutionResponse struct {
 	ExecutionConfiguration *shared.WorkflowExecutionConfiguration
@@ -1040,15 +1045,16 @@ type describeWorkflowExecutionResponse struct {
 
 // workflowExecutionInfo has same fields as shared.WorkflowExecutionInfo, but has datetime instead of raw time
 type workflowExecutionInfo struct {
-	Execution       *shared.WorkflowExecution
-	Type            *shared.WorkflowType
-	StartTime       *string // change from *int64
-	CloseTime       *string // change from *int64
-	CloseStatus     *shared.WorkflowExecutionCloseStatus
-	HistoryLength   *int64
-	ParentDomainID  *string
-	ParentExecution *shared.WorkflowExecution
-	AutoResetPoints *shared.ResetPoints
+	Execution        *shared.WorkflowExecution
+	Type             *shared.WorkflowType
+	StartTime        *string // change from *int64
+	CloseTime        *string // change from *int64
+	CloseStatus      *shared.WorkflowExecutionCloseStatus
+	HistoryLength    *int64
+	ParentDomainID   *string
+	ParentExecution  *shared.WorkflowExecution
+	SearchAttributes map[string]interface{}
+	AutoResetPoints  *shared.ResetPoints
 }
 
 // pendingActivityInfo has same fields as shared.PendingActivityInfo, but different field type for better display
@@ -1067,19 +1073,23 @@ type pendingActivityInfo struct {
 	LastWorkerIdentity     *string `json:",omitempty"`
 }
 
-func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse) *describeWorkflowExecutionResponse {
+func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse,
+	wfClient workflowserviceclient.Interface, c *cli.Context) *describeWorkflowExecutionResponse {
+
 	info := resp.WorkflowExecutionInfo
 	executionInfo := workflowExecutionInfo{
-		Execution:       info.Execution,
-		Type:            info.Type,
-		StartTime:       common.StringPtr(convertTime(info.GetStartTime(), false)),
-		CloseTime:       common.StringPtr(convertTime(info.GetCloseTime(), false)),
-		CloseStatus:     info.CloseStatus,
-		HistoryLength:   info.HistoryLength,
-		ParentDomainID:  info.ParentDomainId,
-		ParentExecution: info.ParentExecution,
-		AutoResetPoints: info.AutoResetPoints,
+		Execution:        info.Execution,
+		Type:             info.Type,
+		StartTime:        common.StringPtr(convertTime(info.GetStartTime(), false)),
+		CloseTime:        common.StringPtr(convertTime(info.GetCloseTime(), false)),
+		CloseStatus:      info.CloseStatus,
+		HistoryLength:    info.HistoryLength,
+		ParentDomainID:   info.ParentDomainId,
+		ParentExecution:  info.ParentExecution,
+		SearchAttributes: convertSearchAttributesToMapOfInterface(info.SearchAttributes, wfClient, c),
+		AutoResetPoints:  info.AutoResetPoints,
 	}
+
 	var pendingActs []*pendingActivityInfo
 	var tmpAct *pendingActivityInfo
 	for _, pa := range resp.PendingActivities {
@@ -1108,6 +1118,54 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		PendingActivities:      pendingActs,
 		PendingChildren:        resp.PendingChildren,
 	}
+}
+
+func convertSearchAttributesToMapOfInterface(searchAttributes *shared.SearchAttributes,
+	wfClient workflowserviceclient.Interface, c *cli.Context) map[string]interface{} {
+
+	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+	ctx, cancel := newContext(c)
+	defer cancel()
+	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx)
+	if err != nil {
+		ErrorAndExit("Error when get search attributes", err)
+	}
+	validKeys := validSearchAttributes.GetKeys()
+
+	indexedFields := searchAttributes.GetIndexedFields()
+	for k, v := range indexedFields {
+		valueType := validKeys[k]
+		switch valueType {
+		case shared.IndexedValueTypeString, shared.IndexedValueTypeKeyword:
+			var val string
+			json.Unmarshal(v, &val)
+			result[k] = val
+		case shared.IndexedValueTypeInt:
+			var val int64
+			json.Unmarshal(v, &val)
+			result[k] = val
+		case shared.IndexedValueTypeDouble:
+			var val float64
+			json.Unmarshal(v, &val)
+			result[k] = val
+		case shared.IndexedValueTypeBool:
+			var val bool
+			json.Unmarshal(v, &val)
+			result[k] = val
+		case shared.IndexedValueTypeDatetime:
+			var val time.Time
+			json.Unmarshal(v, &val)
+			result[k] = val
+		default:
+			ErrorAndExit(fmt.Sprintf("Error unknown index value type [%v]", valueType), nil)
+		}
+	}
+
+	return result
 }
 
 func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *tablewriter.Table {

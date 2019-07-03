@@ -1017,14 +1017,10 @@ func (s *shardContextImpl) allocateTaskIDsLocked(
 		transferMaxReadLevel); err != nil {
 		return err
 	}
-	if err := s.allocateTimerIDsLocked(
+	return s.allocateTimerIDsLocked(
 		domainEntry,
 		workflowID,
-		timerTasks); err != nil {
-		return err
-	}
-
-	return nil
+		timerTasks)
 }
 
 func (s *shardContextImpl) allocateTransferIDsLocked(

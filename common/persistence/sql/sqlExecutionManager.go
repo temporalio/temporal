@@ -581,11 +581,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	}
 
 	// 4. create the new reset workflow
-	if err := applyWorkflowSnapshotTxAsNew(tx, m.shardID, &request.NewWorkflowSnapshot); err != nil {
-		return err
-	}
-
-	return nil
+	return applyWorkflowSnapshotTxAsNew(tx, m.shardID, &request.NewWorkflowSnapshot)
 }
 
 func (m *sqlExecutionManager) ResetMutableState(
