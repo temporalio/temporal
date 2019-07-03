@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.18",
+  "MinCompatibleVersion": "0.18",
+  "Description": "Added last_failure_reason and last_worker_identity to activity_info",
+  "SchemaUpdateCqlFiles": [
+    "activity_last_failure_info.cql"
+  ]
+}

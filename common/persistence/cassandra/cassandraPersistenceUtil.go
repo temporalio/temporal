@@ -1151,6 +1151,8 @@ func updateActivityInfos(
 			a.ExpirationTime,
 			a.MaximumAttempts,
 			a.NonRetriableErrors,
+			a.LastFailureReason,
+			a.LastWorkerIdentity,
 			scheduleEncoding,
 			shardID,
 			rowTypeExecution,
@@ -1953,6 +1955,10 @@ func createActivityInfo(
 			info.ExpirationTime = v.(time.Time)
 		case "non_retriable_errors":
 			info.NonRetriableErrors = v.([]string)
+		case "last_failure_reason":
+			info.LastFailureReason = v.(string)
+		case "last_worker_identity":
+			info.LastWorkerIdentity = v.(string)
 		case "event_data_encoding":
 			sharedEncoding = common.EncodingType(v.(string))
 		}
@@ -2113,6 +2119,8 @@ func resetActivityInfoMap(
 		aInfo["expiration_time"] = a.ExpirationTime
 		aInfo["max_attempts"] = a.MaximumAttempts
 		aInfo["non_retriable_errors"] = a.NonRetriableErrors
+		aInfo["last_failure_reason"] = a.LastFailureReason
+		aInfo["last_worker_identity"] = a.LastWorkerIdentity
 
 		aMap[a.ScheduleID] = aInfo
 	}

@@ -77,6 +77,8 @@ func updateActivityInfos(
 				RetryExpirationTimeNanos:      common.Int64Ptr(v.ExpirationTime.UnixNano()),
 				RetryMaximumAttempts:          &v.MaximumAttempts,
 				RetryNonRetryableErrors:       v.NonRetriableErrors,
+				RetryLastFailureReason:        &v.LastFailureReason,
+				RetryLastWorkerIdentity:       &v.LastWorkerIdentity,
 			}
 			blob, err := activityInfoToBlob(info)
 			if err != nil {
@@ -189,6 +191,8 @@ func getActivityInfoMap(
 			ExpirationTime:           time.Unix(0, decoded.GetRetryExpirationTimeNanos()),
 			MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
 			NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
+			LastFailureReason:        decoded.GetRetryLastFailureReason(),
+			LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
 		}
 		if decoded.StartedEvent != nil {
 			info.StartedEvent = persistence.NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))

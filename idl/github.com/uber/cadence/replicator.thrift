@@ -89,6 +89,8 @@ struct SyncActicvityTaskAttributes {
   90: optional i64 (js.type = "Long") lastHeartbeatTime
   100: optional binary details
   110: optional i32 attempt
+  120: optional string lastFailureReason
+  130: optional string lastWorkerIdentity
 }
 
 struct ReplicationTask {

@@ -172,7 +172,9 @@ CREATE TYPE activity_info (
   expiration_time           timestamp, -- retry expiration time
   max_attempts              int,    -- max number of attempts including initial non-retry attempt
   non_retriable_errors      list<text>,
-  event_data_encoding   text, -- Protocol used for history serialization
+  last_failure_reason       text,
+  last_worker_identity      text, -- Worker that returns the last failure reason
+  event_data_encoding       text, -- Protocol used for history serialization
 );
 
 -- User timer details

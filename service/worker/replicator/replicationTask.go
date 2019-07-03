@@ -24,13 +24,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber/cadence/common/clock"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/locks"
 	"github.com/uber/cadence/common/log"
@@ -114,17 +113,19 @@ func newActivityReplicationTask(task *replicator.ReplicationTask, msg messaging.
 			historyRereplicator: historyRereplicator,
 		},
 		req: &h.SyncActivityRequest{
-			DomainId:          attr.DomainId,
-			WorkflowId:        attr.WorkflowId,
-			RunId:             attr.RunId,
-			Version:           attr.Version,
-			ScheduledId:       attr.ScheduledId,
-			ScheduledTime:     attr.ScheduledTime,
-			StartedId:         attr.StartedId,
-			StartedTime:       attr.StartedTime,
-			LastHeartbeatTime: attr.LastHeartbeatTime,
-			Details:           attr.Details,
-			Attempt:           attr.Attempt,
+			DomainId:           attr.DomainId,
+			WorkflowId:         attr.WorkflowId,
+			RunId:              attr.RunId,
+			Version:            attr.Version,
+			ScheduledId:        attr.ScheduledId,
+			ScheduledTime:      attr.ScheduledTime,
+			StartedId:          attr.StartedId,
+			StartedTime:        attr.StartedTime,
+			LastHeartbeatTime:  attr.LastHeartbeatTime,
+			Details:            attr.Details,
+			Attempt:            attr.Attempt,
+			LastFailureReason:  attr.LastFailureReason,
+			LastWorkerIdentity: attr.LastWorkerIdentity,
 		},
 	}
 }

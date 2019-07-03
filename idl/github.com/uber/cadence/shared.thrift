@@ -1341,6 +1341,8 @@ struct PendingActivityInfo {
   80: optional i32 maximumAttempts
   90: optional i64 (js.type = "Long") scheduledTimestamp
   100: optional i64 (js.type = "Long") expirationTimestamp
+  110: optional string lastFailureReason
+  120: optional string lastWorkerIdentity
 }
 
 struct PendingChildExecutionInfo {

@@ -2475,17 +2475,19 @@ func (v *ReplicationTaskType) UnmarshalJSON(text []byte) error {
 }
 
 type SyncActicvityTaskAttributes struct {
-	DomainId          *string `json:"domainId,omitempty"`
-	WorkflowId        *string `json:"workflowId,omitempty"`
-	RunId             *string `json:"runId,omitempty"`
-	Version           *int64  `json:"version,omitempty"`
-	ScheduledId       *int64  `json:"scheduledId,omitempty"`
-	ScheduledTime     *int64  `json:"scheduledTime,omitempty"`
-	StartedId         *int64  `json:"startedId,omitempty"`
-	StartedTime       *int64  `json:"startedTime,omitempty"`
-	LastHeartbeatTime *int64  `json:"lastHeartbeatTime,omitempty"`
-	Details           []byte  `json:"details,omitempty"`
-	Attempt           *int32  `json:"attempt,omitempty"`
+	DomainId           *string `json:"domainId,omitempty"`
+	WorkflowId         *string `json:"workflowId,omitempty"`
+	RunId              *string `json:"runId,omitempty"`
+	Version            *int64  `json:"version,omitempty"`
+	ScheduledId        *int64  `json:"scheduledId,omitempty"`
+	ScheduledTime      *int64  `json:"scheduledTime,omitempty"`
+	StartedId          *int64  `json:"startedId,omitempty"`
+	StartedTime        *int64  `json:"startedTime,omitempty"`
+	LastHeartbeatTime  *int64  `json:"lastHeartbeatTime,omitempty"`
+	Details            []byte  `json:"details,omitempty"`
+	Attempt            *int32  `json:"attempt,omitempty"`
+	LastFailureReason  *string `json:"lastFailureReason,omitempty"`
+	LastWorkerIdentity *string `json:"lastWorkerIdentity,omitempty"`
 }
 
 // ToWire translates a SyncActicvityTaskAttributes struct into a Thrift-level intermediate
@@ -2505,7 +2507,7 @@ type SyncActicvityTaskAttributes struct {
 //   }
 func (v *SyncActicvityTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2597,6 +2599,22 @@ func (v *SyncActicvityTaskAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.LastFailureReason != nil {
+		w, err = wire.NewValueString(*(v.LastFailureReason)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.LastWorkerIdentity != nil {
+		w, err = wire.NewValueString(*(v.LastWorkerIdentity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -2733,6 +2751,26 @@ func (v *SyncActicvityTaskAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.LastFailureReason = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 130:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.LastWorkerIdentity = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2746,7 +2784,7 @@ func (v *SyncActicvityTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [13]string
 	i := 0
 	if v.DomainId != nil {
 		fields[i] = fmt.Sprintf("DomainId: %v", *(v.DomainId))
@@ -2790,6 +2828,14 @@ func (v *SyncActicvityTaskAttributes) String() string {
 	}
 	if v.Attempt != nil {
 		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
+		i++
+	}
+	if v.LastFailureReason != nil {
+		fields[i] = fmt.Sprintf("LastFailureReason: %v", *(v.LastFailureReason))
+		i++
+	}
+	if v.LastWorkerIdentity != nil {
+		fields[i] = fmt.Sprintf("LastWorkerIdentity: %v", *(v.LastWorkerIdentity))
 		i++
 	}
 
@@ -2839,6 +2885,12 @@ func (v *SyncActicvityTaskAttributes) Equals(rhs *SyncActicvityTaskAttributes) b
 	if !_I32_EqualsPtr(v.Attempt, rhs.Attempt) {
 		return false
 	}
+	if !_String_EqualsPtr(v.LastFailureReason, rhs.LastFailureReason) {
+		return false
+	}
+	if !_String_EqualsPtr(v.LastWorkerIdentity, rhs.LastWorkerIdentity) {
+		return false
+	}
 
 	return true
 }
@@ -2881,6 +2933,12 @@ func (v *SyncActicvityTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder
 	}
 	if v.Attempt != nil {
 		enc.AddInt32("attempt", *v.Attempt)
+	}
+	if v.LastFailureReason != nil {
+		enc.AddString("lastFailureReason", *v.LastFailureReason)
+	}
+	if v.LastWorkerIdentity != nil {
+		enc.AddString("lastWorkerIdentity", *v.LastWorkerIdentity)
 	}
 	return err
 }
@@ -3048,6 +3106,36 @@ func (v *SyncActicvityTaskAttributes) GetAttempt() (o int32) {
 // IsSetAttempt returns true if Attempt is not nil.
 func (v *SyncActicvityTaskAttributes) IsSetAttempt() bool {
 	return v != nil && v.Attempt != nil
+}
+
+// GetLastFailureReason returns the value of LastFailureReason if it is set or its
+// zero value if it is unset.
+func (v *SyncActicvityTaskAttributes) GetLastFailureReason() (o string) {
+	if v != nil && v.LastFailureReason != nil {
+		return *v.LastFailureReason
+	}
+
+	return
+}
+
+// IsSetLastFailureReason returns true if LastFailureReason is not nil.
+func (v *SyncActicvityTaskAttributes) IsSetLastFailureReason() bool {
+	return v != nil && v.LastFailureReason != nil
+}
+
+// GetLastWorkerIdentity returns the value of LastWorkerIdentity if it is set or its
+// zero value if it is unset.
+func (v *SyncActicvityTaskAttributes) GetLastWorkerIdentity() (o string) {
+	if v != nil && v.LastWorkerIdentity != nil {
+		return *v.LastWorkerIdentity
+	}
+
+	return
+}
+
+// IsSetLastWorkerIdentity returns true if LastWorkerIdentity is not nil.
+func (v *SyncActicvityTaskAttributes) IsSetLastWorkerIdentity() bool {
+	return v != nil && v.LastWorkerIdentity != nil
 }
 
 type SyncShardStatusTaskAttributes struct {
@@ -3281,7 +3369,7 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "replicator",
 	Package:  "github.com/uber/cadence/.gen/go/replicator",
 	FilePath: "replicator.thrift",
-	SHA1:     "f720025570d0f24748de4788f086846e08888d9b",
+	SHA1:     "56bb8db140cdc19594a11ab287979e60aacfff25",
 	Includes: []*thriftreflect.ThriftModule{
 		history.ThriftModule,
 		shared.ThriftModule,
@@ -3289,4 +3377,4 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\ninclude \"history.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActicvityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes\n}\n\n"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\ninclude \"history.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActicvityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes\n}\n\n"

@@ -33,6 +33,7 @@ func Test_NextRetry(t *testing.T) {
 	a := assert.New(t)
 	now, _ := time.Parse(time.RFC3339, "2018-04-13T16:08:08+00:00")
 	reason := "good-reason"
+	identity := "some-worker-identity"
 
 	// no retry without retry policy
 	var version int64 = 59
@@ -43,6 +44,7 @@ func Test_NextRetry(t *testing.T) {
 		StartToCloseTimeout:    25,
 		HasRetryPolicy:         false,
 		NonRetriableErrors:     []string{"bad-reason", "ugly-reason"},
+		StartedIdentity:        identity,
 	}
 	a.Nil(prepareActivityNextRetryWithTime(version, ai, reason, clock.NewRealTimeSource().Now()))
 
@@ -67,6 +69,8 @@ func Test_NextRetry(t *testing.T) {
 	a.NotNil(retryTask)
 	a.Equal(version, retryTask.GetVersion())
 	a.Equal(now.Add(time.Second), retryTask.(*persistence.ActivityRetryTimerTask).VisibilityTimestamp)
+	a.Equal(reason, ai.LastFailureReason)
+	a.Equal(identity, ai.LastWorkerIdentity)
 
 	retryTask = prepareActivityNextRetryWithTime(version, ai, reason, now)
 	a.NotNil(retryTask)

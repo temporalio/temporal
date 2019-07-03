@@ -826,6 +826,12 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				if ai.MaximumAttempts != 0 {
 					p.MaximumAttempts = common.Int32Ptr(ai.MaximumAttempts)
 				}
+				if ai.LastFailureReason != "" {
+					p.LastFailureReason = common.StringPtr(ai.LastFailureReason)
+				}
+				if ai.LastWorkerIdentity != "" {
+					p.LastWorkerIdentity = common.StringPtr(ai.LastWorkerIdentity)
+				}
 			}
 			result.PendingActivities = append(result.PendingActivities, p)
 		}

@@ -1063,6 +1063,8 @@ type pendingActivityInfo struct {
 	Attempt                *int32  `json:",omitempty"`
 	MaximumAttempts        *int32  `json:",omitempty"`
 	ExpirationTimestamp    *string `json:",omitempty"` // change from *int64
+	LastFailureReason      *string `json:",omitempty"`
+	LastWorkerIdentity     *string `json:",omitempty"`
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse) *describeWorkflowExecutionResponse {
@@ -1091,6 +1093,8 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 			Attempt:                pa.Attempt,
 			MaximumAttempts:        pa.MaximumAttempts,
 			ExpirationTimestamp:    timestampPtrToStringPtr(pa.ExpirationTimestamp, false),
+			LastFailureReason:      pa.LastFailureReason,
+			LastWorkerIdentity:     pa.LastWorkerIdentity,
 		}
 		if pa.HeartbeatDetails != nil {
 			tmpAct.HeartbeatDetails = common.StringPtr(string(pa.HeartbeatDetails))

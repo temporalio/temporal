@@ -153,6 +153,8 @@ struct ActivityInfo {
   60: optional i64 (js.type = "Long") retryExpirationTimeNanos
   62: optional double retryBackoffCoefficient
   64: optional list<string> retryNonRetryableErrors
+  66: optional string retryLastFailureReason
+  68: optional string retryLastWorkerIdentity
 }
 
 struct ChildExecutionInfo {

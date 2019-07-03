@@ -1517,7 +1517,8 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	id := "integration-activity-heartbeat-workflow-failover-test"
 	wt := "integration-activity-heartbeat-workflow-failover-test-type"
 	tl := "integration-activity-heartbeat-workflow-failover-test-tasklist"
-	identity := "worker1"
+	identity1 := "worker1"
+	identity2 := "worker2"
 	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
 	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
 	startReq := &workflow.StartWorkflowExecutionRequest{
@@ -1529,7 +1530,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		Input:                               nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(300),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-		Identity:                            common.StringPtr(identity),
+		Identity:                            common.StringPtr(identity1),
 	}
 	var we *workflow.StartWorkflowExecutionResponse
 	for i := 0; i < 10; i++ {
@@ -1605,7 +1606,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		Engine:          client1,
 		Domain:          domainName,
 		TaskList:        taskList,
-		Identity:        identity,
+		Identity:        identity1,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler1,
 		Logger:          s.logger,
@@ -1616,7 +1617,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		Engine:          client2,
 		Domain:          domainName,
 		TaskList:        taskList,
-		Identity:        identity,
+		Identity:        identity2,
 		DecisionHandler: dtHandler,
 		ActivityHandler: atHandler2,
 		Logger:          s.logger,
@@ -1663,6 +1664,8 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(1, len(pendingActivities))
 	s.Equal(workflow.PendingActivityStateScheduled, pendingActivities[0].GetState())
 	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
+	s.Equal("cadenceInternal:Timeout HEARTBEAT", pendingActivities[0].GetLastFailureReason())
+	s.Equal(identity1, pendingActivities[0].GetLastWorkerIdentity())
 
 	for i := 0; i < 10; i++ {
 		poller2.PollAndProcessActivityTask(false)

@@ -1065,6 +1065,9 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	}
 	ai.Details = request.GetDetails()
 	ai.Attempt = request.GetAttempt()
+	ai.LastFailureReason = request.GetLastFailureReason()
+	ai.LastWorkerIdentity = request.GetLastWorkerIdentity()
+
 	if resetActivityTimerTaskStatus {
 		ai.TimerTaskStatus = TimerTaskStatusNone
 	}

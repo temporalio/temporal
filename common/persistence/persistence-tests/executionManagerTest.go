@@ -2083,6 +2083,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		BackoffCoefficient:       5.55,
 		ExpirationTime:           currentTime,
 		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
+		LastFailureReason:        "some random error",
+		LastWorkerIdentity:       uuid.New(),
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
 	s.NoError(err2)
@@ -2125,11 +2127,13 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(activityInfos[0].BackoffCoefficient, ai.BackoffCoefficient)
 	s.EqualTimes(activityInfos[0].ExpirationTime, ai.ExpirationTime)
 	s.Equal(activityInfos[0].NonRetriableErrors, ai.NonRetriableErrors)
+	s.Equal(activityInfos[0].LastFailureReason, ai.LastFailureReason)
+	s.Equal(activityInfos[0].LastWorkerIdentity, ai.LastWorkerIdentity)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, []int64{1}, nil, nil)
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.ActivityInfos))

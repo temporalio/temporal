@@ -255,6 +255,8 @@ const (
 		`expiration_time: ?, ` +
 		`max_attempts: ?, ` +
 		`non_retriable_errors: ?, ` +
+		`last_failure_reason: ?, ` +
+		`last_worker_identity: ?, ` +
 		`event_data_encoding: ?` +
 		`}`
 
