@@ -18,12 +18,12 @@
   version = "v1.4.0"
 
 [[projects]]
-  digest = "1:512a8ed4fcd5f35911f8e90a8af9668148835b6e2de8b591ea6f9db5bf45d2d5"
+  digest = "1:d305ce4a17657b04b748f841dac052ea29e3f566fdb468491d760a9b9df85648"
   name = "github.com/Shopify/sarama"
   packages = ["."]
   pruneopts = ""
-  revision = "ea9ab1c316850bee881a07bb2555ee8a685cd4b6"
-  version = "v1.22.1"
+  revision = "dde3ddda8b4b3a594690086725799ab1573bb895"
+  version = "v1.23.0"
 
 [[projects]]
   branch = "master"
@@ -42,7 +42,7 @@
   version = "0.10.0"
 
 [[projects]]
-  digest = "1:40eb818aaeaf0cf565dea3459675f59ac1ee0188e14c6f2e55db8d7be67ff9fd"
+  digest = "1:7543a21f990a34c585c6e3e046051ac526de79ca41370bbda83fad554c8caf95"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -83,8 +83,8 @@
     "service/sts",
   ]
   pruneopts = ""
-  revision = "892e2b1c287ab828befdfb4ada461a36ec21783e"
-  version = "v1.20.13"
+  revision = "471204b4ff86c9c417adb58cec55079c06d16213"
+  version = "v1.20.15"
 
 [[projects]]
   branch = "master"
@@ -305,6 +305,14 @@
   revision = "e80d13ce29ede4452c43dea11e79b9bc8a15b478"
 
 [[projects]]
+  digest = "1:0038a7f43b51c8b2a8cd03b5372e73f8eadfe156484c2ae8185ae836f8ebc2cd"
+  name = "github.com/hashicorp/go-uuid"
+  packages = ["."]
+  pruneopts = ""
+  revision = "4f571afc59f3043a65f8fe6bf46d887b10a01d43"
+  version = "v1.0.1"
+
+[[projects]]
   digest = "1:2f0c811248aeb64978037b357178b1593372439146bda860cb16f2c80785ea93"
   name = "github.com/hashicorp/go-version.git"
   packages = ["."]
@@ -319,6 +327,17 @@
   packages = ["."]
   pruneopts = ""
   revision = "e506e3ef73653e84c592ba44aab577a46678f68c"
+
+[[projects]]
+  digest = "1:d45477e90c25c8c6d7d4237281167aa56079382fc042db4b44a8328071649bfa"
+  name = "github.com/jcmturner/gofork"
+  packages = [
+    "encoding/asn1",
+    "x/crypto/pbkdf2",
+  ]
+  pruneopts = ""
+  revision = "dc7c13fece037a4a36e2b3c69db4991498d30692"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:ca5c90960520407749b98c49650f54f5f90a667796e85c5ee1597478f702fb91"
@@ -771,7 +790,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:feb1af215017175fcd0febdb20a6c1ae3c973045e1e1c9314cd78902fbfe0d1f"
+  digest = "1:ebe283ba977541a78b51e0b895c9b032642fc553db8ed1951dc00106cb627f80"
   name = "go.uber.org/cadence"
   packages = [
     ".",
@@ -793,7 +812,7 @@
     "workflow",
   ]
   pruneopts = ""
-  revision = "cdbdc9529e32a01d17cd4e10625b08b12ddb9a1c"
+  revision = "27b0ba2bc45678ef4d390387980729e29fea46be"
 
 [[projects]]
   digest = "1:22c7effcb4da0eacb2bb1940ee173fac010e9ef3c691f5de4b524d538bd980f5"
@@ -920,6 +939,17 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:086760278d762dbb0e9a26e09b57f04c89178c86467d8d94fae47d64c222f328"
+  name = "golang.org/x/crypto"
+  packages = [
+    "md4",
+    "pbkdf2",
+  ]
+  pruneopts = ""
+  revision = "4def268fd1a49955bfb3dda92fe3db4f924f2285"
+
+[[projects]]
+  branch = "master"
   digest = "1:99dc4c94284ccd0d515bc11c906edcc33da407af228c6cf75b6f20e2cd3e6ab6"
   name = "golang.org/x/lint"
   packages = [
@@ -968,7 +998,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:12e1bc79314faa5fb479a422056b203577ce572103f39c1dc7b47f0da12b461d"
+  digest = "1:fc79718a14c4c15276044121ccab59421eb948e31408217bfae7de98aee58e86"
   name = "golang.org/x/tools"
   packages = [
     "cmd/stringer",
@@ -987,7 +1017,7 @@
     "internal/semver",
   ]
   pruneopts = ""
-  revision = "7e72c71c505fa4ee8da98520d2b0673ba2eefe56"
+  revision = "abb7e64e8926d66086e3708e237aadde4226e9eb"
 
 [[projects]]
   digest = "1:47f391ee443f578f01168347818cb234ed819521e49e4d2c8dd2fb80d48ee41a"
@@ -1004,6 +1034,72 @@
   pruneopts = ""
   revision = "d2d2541c53f18d2a059457998ce2876cc8e67cbf"
   version = "v0.9.1"
+
+[[projects]]
+  digest = "1:4777ba481cc12866b89aafb0a67529e7ac48b9aea06a25f3737b2cf5a3ffda12"
+  name = "gopkg.in/jcmturner/aescts.v1"
+  packages = ["."]
+  pruneopts = ""
+  revision = "f6abebb3171c4c1b1fea279cb7c7325020a26290"
+  version = "v1.0.1"
+
+[[projects]]
+  digest = "1:84c5b1392ef65ad1bb64da4b4d0beb2f204eefc769d6d96082347bb7057cb7b1"
+  name = "gopkg.in/jcmturner/dnsutils.v1"
+  packages = ["."]
+  pruneopts = ""
+  revision = "13eeb8d49ffb74d7a75784c35e4d900607a3943c"
+  version = "v1.0.1"
+
+[[projects]]
+  digest = "1:502ab576ba8c47c4de77fe3f2b2386adc1a1447bb5afae2ac7bf0edd2b6f7c52"
+  name = "gopkg.in/jcmturner/gokrb5.v7"
+  packages = [
+    "asn1tools",
+    "client",
+    "config",
+    "credentials",
+    "crypto",
+    "crypto/common",
+    "crypto/etype",
+    "crypto/rfc3961",
+    "crypto/rfc3962",
+    "crypto/rfc4757",
+    "crypto/rfc8009",
+    "gssapi",
+    "iana",
+    "iana/addrtype",
+    "iana/adtype",
+    "iana/asnAppTag",
+    "iana/chksumtype",
+    "iana/errorcode",
+    "iana/etypeID",
+    "iana/flags",
+    "iana/keyusage",
+    "iana/msgtype",
+    "iana/nametype",
+    "iana/patype",
+    "kadmin",
+    "keytab",
+    "krberror",
+    "messages",
+    "pac",
+    "types",
+  ]
+  pruneopts = ""
+  revision = "363118e62befa8a14ff01031c025026077fe5d6d"
+  version = "v7.3.0"
+
+[[projects]]
+  digest = "1:f9956ccc103c6208cd50c71ee5191b6fdcc635972c12624ef949c9b20b2bb9d1"
+  name = "gopkg.in/jcmturner/rpc.v1"
+  packages = [
+    "mstypes",
+    "ndr",
+  ]
+  pruneopts = ""
+  revision = "99a8ce2fbf8b8087b6ed12a37c61b10f04070043"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "v2"

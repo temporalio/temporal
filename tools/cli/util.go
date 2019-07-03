@@ -322,6 +322,9 @@ func ColorEvent(e *s.HistoryEvent) string {
 	case s.EventTypeExternalWorkflowExecutionSignaled:
 		data = e.EventType.String()
 
+	case s.EventTypeUpsertWorkflowSearchAttributes:
+		data = e.EventType.String()
+
 	default:
 		data = e.EventType.String()
 	}
