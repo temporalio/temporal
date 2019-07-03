@@ -682,6 +682,11 @@ func ArchivalBucket(bucket string) Tag {
 	return newStringTag("archival-bucket", bucket)
 }
 
+// ArchivalURI returns tag for Archival URI
+func ArchivalURI(URI string) Tag {
+	return newStringTag("archival-URI", URI)
+}
+
 // ArchivalBlobKey returns tag for BlobKey
 func ArchivalBlobKey(blobKey string) Tag {
 	return newStringTag("archival-blob-key", blobKey)
@@ -690,6 +695,11 @@ func ArchivalBlobKey(blobKey string) Tag {
 // ArchivalClusterArchivalStatus returns tag for ClusterArchivalStatus
 func ArchivalClusterArchivalStatus(clusterArchivalStatus interface{}) Tag {
 	return newObjectTag("archival-cluster-archival-status", clusterArchivalStatus)
+}
+
+// ArchivalArchiveFailReason returns tag for ArchivalArchiveFailReason
+func ArchivalArchiveFailReason(archiveFailReason string) Tag {
+	return newStringTag("archival-archive-fail-reason", archiveFailReason)
 }
 
 // ArchivalUploadFailReason returns tag for ArchivalUploadFailReason

@@ -128,7 +128,7 @@ func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryV2Manager, branchToken
 
 // ReadFullPageV2Events reads a full page of history events from HistoryV2Manager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
-// of data read, the next page token, and an error if present. Next page token will be empty when there are no more events to read.
+// of data read, the next page token, and an error if present.
 func ReadFullPageV2Events(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchRequest) ([]*shared.HistoryEvent, int, []byte, error) {
 	historyEvents := []*shared.HistoryEvent{}
 	size := int(0)
@@ -141,6 +141,30 @@ func ReadFullPageV2Events(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchR
 		size += response.Size
 		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
 			return historyEvents, size, response.NextPageToken, nil
+		}
+		req.NextPageToken = response.NextPageToken
+	}
+}
+
+// ReadFullPageV2EventsByBatch reads a full page of history events by batch from HistoryV2Manager. Due to storage format of V2 History
+// it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
+// of data read, the next page token, and an error if present.
+func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchRequest) ([]*shared.History, int, []byte, error) {
+	historyBatches := []*shared.History{}
+	eventsRead := 0
+	size := 0
+	for {
+		response, err := historyV2Mgr.ReadHistoryBranchByBatch(req)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		historyBatches = append(historyBatches, response.History...)
+		for _, batch := range historyBatches {
+			eventsRead += len(batch.Events)
+		}
+		size += response.Size
+		if eventsRead >= req.PageSize || len(response.NextPageToken) == 0 {
+			return historyBatches, size, response.NextPageToken, nil
 		}
 		req.NextPageToken = response.NextPageToken
 	}
