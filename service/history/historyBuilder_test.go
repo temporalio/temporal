@@ -27,11 +27,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/persistence"
@@ -72,7 +72,7 @@ func (s *historyBuilderSuite) SetupTest() {
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockEventsCache = &MockEventsCache{}
-	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache,
+	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger)
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
 }

@@ -96,6 +96,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
+		clusterMetadata:           s.mockClusterMetadata,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,

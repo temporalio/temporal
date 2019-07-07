@@ -114,7 +114,6 @@ func (r *conflictResolverImpl) reset(
 		lastEvent = history[len(history)-1]
 		if firstEvent.GetEventId() == common.FirstEventID {
 			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-				r.clusterMetadata.GetCurrentClusterName(),
 				r.shard,
 				r.shard.GetEventsCache(),
 				r.logger,
@@ -145,8 +144,7 @@ func (r *conflictResolverImpl) reset(
 	// the last updated time is not important here, since this should be updated with event time afterwards
 	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
 
-	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
-	resetMutableStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
+	resetMutableStateBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), replayEventID)
 
 	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
 	msBuilder, err := r.context.resetMutableState(

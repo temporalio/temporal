@@ -2754,9 +2754,9 @@ func (_m *mockMutableState) UpdateDecision(_a0 *decisionInfo) {
 	_m.Called(_a0)
 }
 
-// UpdateReplicationStateLastEventID provides a mock function with given fields: _a0, _a1, _a2
-func (_m *mockMutableState) UpdateReplicationStateLastEventID(_a0 string, _a1 int64, _a2 int64) {
-	_m.Called(_a0, _a1, _a2)
+// UpdateReplicationStateLastEventID provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) UpdateReplicationStateLastEventID(_a0 int64, _a1 int64) {
+	_m.Called(_a0, _a1)
 }
 
 // UpdateReplicationStateVersion provides a mock function with given fields: _a0, _a1

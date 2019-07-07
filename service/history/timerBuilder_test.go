@@ -33,7 +33,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
@@ -87,7 +86,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 
 	// Add one timer.
-	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger)
+	msb := newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(201)},
 		TimerInfos:    make(map[string]*persistence.TimerInfo),
@@ -120,7 +119,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 	// Add two timers. (before and after)
 	tp := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid1": tp}
-	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger)
+	msb := newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(202)},
 		TimerInfos:    timerInfos,
@@ -149,7 +148,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 	tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tp2 := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: TimerTaskStatusNone, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos = map[string]*persistence.TimerInfo{"tid1": tp2}
-	msb = newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger)
+	msb = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
@@ -177,7 +176,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 	tp := &persistence.TimerInfo{TimerID: "tid-exist", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid-exist": tp}
-	msb := newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger)
+	msb := newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
@@ -193,7 +192,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	// ScheduleToStart being more than HB.
-	builder := newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache, s.logger)
+	builder := newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger)
 	ase, ai, err := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("test-id"),

@@ -88,6 +88,7 @@ func (s *conflictResolverV2Suite) SetupTest() {
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
+		clusterMetadata:           s.mockClusterMetadata,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,

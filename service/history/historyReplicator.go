@@ -148,7 +148,6 @@ func newHistoryReplicator(
 		},
 		getNewMutableState: func(version int64, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithReplicationState(
-				shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 				shard,
 				shard.GetEventsCache(),
 				logger,
@@ -732,8 +731,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
 	case shared.EventTypeWorkflowExecutionStarted:
-		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.GetSourceCluster(), request.History, sBuilder,
-			logger)
+		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
 		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now)
@@ -751,7 +749,6 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	ctx ctx.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	sourceCluster string,
 	history *shared.History,
 	sBuilder stateBuilder,
 	logger log.Logger,
@@ -802,7 +799,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+		msBuilder, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -835,7 +832,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+			msBuilder, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -909,7 +906,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID = currentRunID
 	prevLastWriteVersion = currentLastWriteVersion
 	return context.createWorkflowExecution(
-		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+		msBuilder, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }

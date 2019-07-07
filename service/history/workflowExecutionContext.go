@@ -71,7 +71,6 @@ type (
 
 		createWorkflowExecution(
 			msBuilder mutableState,
-			sourceCluster string,
 			createReplicationTask bool,
 			now time.Time,
 			transferTasks []persistence.Task,
@@ -241,7 +240,6 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 	}
 
 	c.msBuilder = newMutableStateBuilder(
-		c.clusterMetadata.GetCurrentClusterName(),
 		c.shard,
 		c.shard.GetEventsCache(),
 		c.logger,
@@ -256,7 +254,6 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
 	msBuilder mutableState,
-	sourceCluster string,
 	createReplicationTask bool,
 	now time.Time,
 	transferTasks []persistence.Task,
@@ -269,7 +266,6 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	if msBuilder.GetReplicationState() != nil {
 		msBuilder.UpdateReplicationStateLastEventID(
-			sourceCluster,
 			msBuilder.GetCurrentVersion(),
 			msBuilder.GetNextEventID()-1,
 		)
@@ -746,7 +742,6 @@ func (c *workflowExecutionContextImpl) update(
 		if hasNewStandbyHistoryEvents {
 			lastEvent := standbyHistoryBuilder.history[len(standbyHistoryBuilder.history)-1]
 			c.msBuilder.UpdateReplicationStateLastEventID(
-				sourceCluster,
 				lastEvent.GetVersion(),
 				lastEvent.GetEventId(),
 			)
@@ -754,7 +749,6 @@ func (c *workflowExecutionContextImpl) update(
 
 		if hasNewActiveHistoryEvents {
 			c.msBuilder.UpdateReplicationStateLastEventID(
-				c.clusterMetadata.GetCurrentClusterName(),
 				c.msBuilder.GetCurrentVersion(),
 				executionInfo.NextEventID-1,
 			)
@@ -863,7 +857,6 @@ func (c *workflowExecutionContextImpl) update(
 
 				if crossDCEnabled {
 					c.msBuilder.UpdateReplicationStateLastEventID(
-						c.clusterMetadata.GetCurrentClusterName(),
 						c.msBuilder.GetCurrentVersion(),
 						executionInfo.NextEventID-1,
 					)

@@ -135,6 +135,7 @@ func (s *resetorSuite) SetupTest() {
 		historyV2Mgr:              s.mockHistoryV2Mgr,
 		domainCache:               s.mockDomainCache,
 		eventsCache:               s.mockEventsCache,
+		clusterMetadata:           s.mockClusterMetadata,
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,

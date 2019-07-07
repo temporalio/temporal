@@ -93,6 +93,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
+		clusterMetadata:           s.mockClusterMetadata,
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),

@@ -30,7 +30,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/persistence"
@@ -71,7 +70,7 @@ func (s *mutableStateSuite) SetupTest() {
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockEventsCache = &MockEventsCache{}
-	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, s.mockShard, s.mockEventsCache,
+	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger)
 }
 
@@ -83,7 +82,6 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	version := int64(12)
 	runID := uuid.New()
 	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
-		cluster.TestCurrentClusterName,
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
@@ -113,7 +111,6 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	version := int64(12)
 	runID := uuid.New()
 	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
-		cluster.TestCurrentClusterName,
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
@@ -133,7 +130,6 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	version := int64(12)
 	runID := uuid.New()
 	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
-		cluster.TestCurrentClusterName,
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,

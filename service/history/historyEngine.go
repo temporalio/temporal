@@ -324,7 +324,6 @@ func (e *historyEngineImpl) createMutableState(
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
 		msBuilder = newMutableStateBuilderWithReplicationState(
-			clusterMetadata.GetCurrentClusterName(),
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
@@ -332,7 +331,6 @@ func (e *historyEngineImpl) createMutableState(
 		)
 	} else {
 		msBuilder = newMutableStateBuilder(
-			clusterMetadata.GetCurrentClusterName(),
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
@@ -469,7 +467,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
+		msBuilder, createReplicationTask, e.timeSource.Now(),
 		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
@@ -502,7 +500,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
-				msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
+				msBuilder, createReplicationTask, e.timeSource.Now(),
 				transferTasks, replicationTasks, timerTasks,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
@@ -1587,7 +1585,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevLastWriteVersion = prevMutableState.GetLastWriteVersion()
 	}
 	err = context.createWorkflowExecution(
-		msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
+		msBuilder, createReplicationTask, e.timeSource.Now(),
 		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)

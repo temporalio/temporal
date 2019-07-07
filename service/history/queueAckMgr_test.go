@@ -114,7 +114,8 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
-		service: s.mockService,
+		service:         s.mockService,
+		clusterMetadata: s.mockClusterMetadata,
 		shardInfo: copyShardInfo(&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
@@ -322,7 +323,8 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
-		service: s.mockService,
+		service:         s.mockService,
+		clusterMetadata: s.mockClusterMetadata,
 		shardInfo: copyShardInfo(&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,

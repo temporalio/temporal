@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -91,19 +92,22 @@ type (
 		// buffered events in persistence
 		hasBufferedEventsInPersistence bool
 
-		currentCluster string
-		eventsCache    eventsCache
-		shard          ShardContext
-		config         *Config
-		timeSource     clock.TimeSource
-		logger         log.Logger
+		shard           ShardContext
+		clusterMetadata cluster.Metadata
+		eventsCache     eventsCache
+		config          *Config
+		timeSource      clock.TimeSource
+		logger          log.Logger
 	}
 )
 
 var _ mutableState = (*mutableStateBuilder)(nil)
 
-func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCache eventsCache,
-	logger log.Logger) *mutableStateBuilder {
+func newMutableStateBuilder(
+	shard ShardContext,
+	eventsCache eventsCache,
+	logger log.Logger,
+) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:             make(map[*persistence.ActivityInfo]struct{}),
 		pendingActivityInfoIDs:          make(map[int64]*persistence.ActivityInfo),
@@ -133,12 +137,12 @@ func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCac
 
 		hasBufferedEventsInPersistence: false,
 
-		currentCluster: currentCluster,
-		eventsCache:    eventsCache,
-		shard:          shard,
-		config:         shard.GetConfig(),
-		timeSource:     shard.GetTimeSource(),
-		logger:         logger,
+		clusterMetadata: shard.GetClusterMetadata(),
+		eventsCache:     eventsCache,
+		shard:           shard,
+		config:          shard.GetConfig(),
+		timeSource:      shard.GetTimeSource(),
+		logger:          logger,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		NextEventID:        common.FirstEventID,
@@ -152,13 +156,12 @@ func newMutableStateBuilder(currentCluster string, shard ShardContext, eventsCac
 }
 
 func newMutableStateBuilderWithReplicationState(
-	currentCluster string,
 	shard ShardContext,
 	eventsCache eventsCache,
 	logger log.Logger,
 	version int64,
 ) *mutableStateBuilder {
-	s := newMutableStateBuilder(currentCluster, shard, eventsCache, logger)
+	s := newMutableStateBuilder(shard, eventsCache, logger)
 	s.replicationState = &persistence.ReplicationState{
 		StartVersion:        version,
 		CurrentVersion:      version,
@@ -423,19 +426,20 @@ func (e *mutableStateBuilder) UpdateReplicationStateVersion(version int64, force
 // Assumption: It is expected CurrentVersion on replication state is updated at the start of transaction when
 // mutableState is loaded for this workflow execution.
 func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
-	clusterName string,
 	lastWriteVersion,
 	lastEventID int64,
 ) {
 	e.replicationState.LastWriteVersion = lastWriteVersion
-	// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
 	e.replicationState.LastWriteEventID = lastEventID
-	if clusterName != e.currentCluster {
-		info, ok := e.replicationState.LastReplicationInfo[clusterName]
+
+	lastEventSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
+	currentCluster := e.clusterMetadata.GetCurrentClusterName()
+	if lastEventSourceCluster != currentCluster {
+		info, ok := e.replicationState.LastReplicationInfo[lastEventSourceCluster]
 		if !ok {
 			// ReplicationInfo doesn't exist for this cluster, create one
 			info = &persistence.ReplicationInfo{}
-			e.replicationState.LastReplicationInfo[clusterName] = info
+			e.replicationState.LastReplicationInfo[lastEventSourceCluster] = info
 		}
 
 		info.Version = lastWriteVersion
@@ -3042,10 +3046,10 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	if domainEntry.IsGlobalDomain() {
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
-		newStateBuilder = newMutableStateBuilderWithReplicationState(e.currentCluster, e.shard, e.eventsCache, e.logger,
+		newStateBuilder = newMutableStateBuilderWithReplicationState(e.shard, e.eventsCache, e.logger,
 			domainEntry.GetFailoverVersion())
 	} else {
-		newStateBuilder = newMutableStateBuilder(e.currentCluster, e.shard, e.eventsCache, e.logger)
+		newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger)
 	}
 	domainID := domainEntry.GetInfo().ID
 	startedEvent, err := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes, firstRunID)
@@ -3227,7 +3231,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 
 	if di != nil {
 		if newStateBuilder.GetReplicationState() != nil {
-			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), di.ScheduleID)
+			newStateBuilder.UpdateReplicationStateLastEventID(startedEvent.GetVersion(), di.ScheduleID)
 		}
 
 		continueAsNewExecutionInfo.DecisionVersion = di.Version
@@ -3236,7 +3240,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewExecutionInfo.DecisionTimeout = di.DecisionTimeout
 
 		if newStateBuilder.GetReplicationState() != nil {
-			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), di.ScheduleID)
+			newStateBuilder.UpdateReplicationStateLastEventID(startedEvent.GetVersion(), di.ScheduleID)
 		}
 
 		continueAsNew.TransferTasks = append(continueAsNew.TransferTasks, &persistence.DecisionTask{
@@ -3250,7 +3254,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewExecutionInfo.DecisionScheduleID = common.EmptyEventID
 		continueAsNewExecutionInfo.DecisionStartedID = common.EmptyEventID
 		if newStateBuilder.GetReplicationState() != nil {
-			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), startedEvent.GetEventId())
+			newStateBuilder.UpdateReplicationStateLastEventID(startedEvent.GetVersion(), startedEvent.GetEventId())
 		}
 		backoffTimer := &persistence.WorkflowBackoffTimerTask{
 			VisibilityTimestamp: e.timeSource.Now().Add(time.Second * time.Duration(continueAsNewAttributes.GetBackoffStartIntervalInSeconds())),

@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -47,6 +48,7 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		GetHistoryV2Manager() persistence.HistoryV2Manager
 		GetDomainCache() cache.DomainCache
+		GetClusterMetadata() cluster.Metadata
 		GetNextTransferTaskID() (int64, error)
 		GetTransferTaskIDs(number int) ([]int64, error)
 		GetTransferMaxReadLevel() int64
@@ -91,7 +93,7 @@ type (
 	shardContextImpl struct {
 		shardItem        *historyShardsItem
 		shardID          int
-		currentCluster   string
+		clusterMetadata  cluster.Metadata
 		service          service.Service
 		rangeID          int64
 		shardManager     persistence.ShardManager
@@ -151,6 +153,10 @@ func (s *shardContextImpl) GetHistoryV2Manager() persistence.HistoryV2Manager {
 
 func (s *shardContextImpl) GetDomainCache() cache.DomainCache {
 	return s.domainCache
+}
+
+func (s *shardContextImpl) GetClusterMetadata() cluster.Metadata {
+	return s.clusterMetadata
 }
 
 func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
@@ -807,7 +813,6 @@ func (s *shardContextImpl) NotifyNewHistoryEvent(event *historyEventNotification
 func (s *shardContextImpl) GetConfig() *Config {
 	return s.config
 }
-
 func (s *shardContextImpl) GetEventsCache() eventsCache {
 	return s.eventsCache
 }
@@ -941,8 +946,10 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 }
 
 func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
-	minTransferLevel := s.shardInfo.ClusterTransferAckLevel[s.currentCluster]
-	maxTransferLevel := s.shardInfo.ClusterTransferAckLevel[s.currentCluster]
+	currentCluster := s.clusterMetadata.GetCurrentClusterName()
+
+	minTransferLevel := s.shardInfo.ClusterTransferAckLevel[currentCluster]
+	maxTransferLevel := s.shardInfo.ClusterTransferAckLevel[currentCluster]
 	for _, v := range s.shardInfo.ClusterTransferAckLevel {
 		if v < minTransferLevel {
 			minTransferLevel = v
@@ -953,8 +960,8 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	}
 	diffTransferLevel := maxTransferLevel - minTransferLevel
 
-	minTimerLevel := s.shardInfo.ClusterTimerAckLevel[s.currentCluster]
-	maxTimerLevel := s.shardInfo.ClusterTimerAckLevel[s.currentCluster]
+	minTimerLevel := s.shardInfo.ClusterTimerAckLevel[currentCluster]
+	maxTimerLevel := s.shardInfo.ClusterTimerAckLevel[currentCluster]
 	for _, v := range s.shardInfo.ClusterTimerAckLevel {
 		if v.Before(minTimerLevel) {
 			minTimerLevel = v
@@ -1050,16 +1057,16 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 ) error {
 
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
-	cluster := s.currentCluster
+	currentCluster := s.clusterMetadata.GetCurrentClusterName()
 	for _, task := range timerTasks {
 		ts := task.GetVisibilityTimestamp()
 		if task.GetVersion() != common.EmptyVersion {
 			// cannot use version to determine the corresponding cluster for timer task
 			// this is because during failover, timer task should be created as active
 			// or otherwise, failover + active processing logic may not pick up the task.
-			cluster = domainEntry.GetReplicationConfig().ActiveClusterName
+			currentCluster = domainEntry.GetReplicationConfig().ActiveClusterName
 		}
-		readCursorTS := s.timerMaxReadLevelMap[cluster]
+		readCursorTS := s.timerMaxReadLevelMap[currentCluster]
 		if ts.Before(readCursorTS) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
@@ -1069,7 +1076,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),
 				tag.ValueShardAllocateTimerBeforeRead)
-			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
+			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[currentCluster].Add(time.Millisecond))
 		}
 
 		seqNum, err := s.getNextTransferTaskIDLocked()
@@ -1182,7 +1189,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	context := &shardContextImpl{
 		shardItem:                 shardItem,
 		shardID:                   shardItem.shardID,
-		currentCluster:            shardItem.service.GetClusterMetadata().GetCurrentClusterName(),
+		clusterMetadata:           shardItem.service.GetClusterMetadata(),
 		service:                   shardItem.service,
 		shardManager:              shardItem.shardMgr,
 		historyMgr:                shardItem.historyMgr,

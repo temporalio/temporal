@@ -201,7 +201,7 @@ type (
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
 		UpdateDecision(*decisionInfo)
 		UpdateReplicationStateVersion(int64, bool)
-		UpdateReplicationStateLastEventID(string, int64, int64)
+		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
 	}
 )

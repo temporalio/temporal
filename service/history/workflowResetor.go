@@ -377,12 +377,11 @@ func historyGarbageCleanupInfo(domainID, workflowID, runID string) string {
 }
 
 func (w *workflowResetorImpl) setEventIDsWithHistory(msBuilder mutableState) int64 {
-	clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 	history := msBuilder.GetHistoryBuilder().GetHistory().Events
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
 	msBuilder.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
-	msBuilder.UpdateReplicationStateLastEventID(clusterMetadata.GetCurrentClusterName(), lastEvent.GetVersion(), lastEvent.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
 	return firstEvent.GetEventId()
 }
 
@@ -556,7 +555,6 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	prevMutableState mutableState,
 	newRunID string,
 ) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*workflow.HistoryEvent, continueRunID string, sBuilder stateBuilder, retError error) {
-	clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 
 	prevExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(prevMutableState.GetExecutionInfo().WorkflowID),
@@ -612,15 +610,13 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
 				if prevMutableState.GetReplicationState() != nil {
 					resetMutableState = newMutableStateBuilderWithReplicationState(
-						clusterMetadata.GetCurrentClusterName(),
 						w.eng.shard,
 						w.eng.shard.GetEventsCache(),
 						w.eng.logger,
 						firstEvent.GetVersion(),
 					)
 				} else {
-					resetMutableState = newMutableStateBuilder(clusterMetadata.GetCurrentClusterName(), w.eng.shard,
-						w.eng.shard.GetEventsCache(), w.eng.logger)
+					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger)
 				}
 
 				resetMutableState.executionInfo.EventStoreVersion = persistence.EventStoreVersionV2
@@ -819,7 +815,6 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	decisionFinishEventID := firstEvent.GetEventId()
 	resetAttr := firstEvent.GetDecisionTaskFailedEventAttributes()
 
-	clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 	requestID := uuid.New()
 	var sBuilder stateBuilder
 	var wfTimeoutSecs int64
@@ -848,7 +843,6 @@ func (w *workflowResetorImpl) replicateResetEvent(
 			if firstEvent.GetEventId() == common.FirstEventID {
 				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
 				newMsBuilder = newMutableStateBuilderWithReplicationState(
-					clusterMetadata.GetCurrentClusterName(),
 					w.eng.shard,
 					w.eng.shard.GetEventsCache(),
 					w.eng.logger,
@@ -914,7 +908,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	})
 
 	newMsBuilder.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
-	newMsBuilder.UpdateReplicationStateLastEventID(clusterMetadata.GetCurrentClusterName(), lastEvent.GetVersion(), lastEvent.GetEventId())
+	newMsBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
 	return
 }
 

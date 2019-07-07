@@ -137,7 +137,6 @@ func (r *conflictResolverV2Impl) getHistoryBatch(domainID string, execution shar
 
 func (r *conflictResolverV2Impl) initializeBuilders(firstEvent *shared.HistoryEvent) (*mutableStateBuilder, *stateBuilderImpl) {
 	resetMutableStateBuilder := newMutableStateBuilderWithReplicationState(
-		r.clusterMetadata.GetCurrentClusterName(),
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,

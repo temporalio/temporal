@@ -89,7 +89,6 @@ func newHistoryReplicatorV2(shard ShardContext, historyEngine *historyEngineImpl
 		},
 		getNewMutableState: func(version int64, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithReplicationState(
-				shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 				shard,
 				shard.GetEventsCache(),
 				logger,
@@ -210,7 +209,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
+		msBuilder, createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -239,7 +238,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
+			msBuilder, createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -295,7 +294,7 @@ func (r *historyReplicatorV2) applyStartEvents(ctx ctx.Context, context workflow
 	prevRunID = currentRunID
 	prevLastWriteVersion = task.getVersion()
 	return context.createWorkflowExecution(
-		msBuilder, task.getSourceCluster(), createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
+		msBuilder, createReplicationTask, task.getEventTime(), transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }

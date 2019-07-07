@@ -72,6 +72,7 @@ type (
 		historyV2Mgr           persistence.HistoryV2Manager
 		executionMgr           persistence.ExecutionManager
 		domainCache            cache.DomainCache
+		clusterMetadata        cluster.Metadata
 		eventsCache            eventsCache
 
 		config                    *Config
@@ -127,6 +128,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 		historyV2Mgr:              historyV2Mgr,
 		executionMgr:              executionMgr,
 		domainCache:               domainCache,
+		clusterMetadata:           clusterMetadata,
 		config:                    config,
 		logger:                    logger,
 		metricsClient:             metricsClient,
@@ -166,6 +168,11 @@ func (s *TestShardContext) GetHistoryV2Manager() persistence.HistoryV2Manager {
 // GetDomainCache test implementation
 func (s *TestShardContext) GetDomainCache() cache.DomainCache {
 	return s.domainCache
+}
+
+// GetClusterMetadata test implementation
+func (s *TestShardContext) GetClusterMetadata() cluster.Metadata {
+	return s.clusterMetadata
 }
 
 // GetEventsCache test implementation

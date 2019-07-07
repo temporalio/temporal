@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -101,6 +102,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
 		historyMgr:                s.mockHistoryMgr,
+		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
@@ -198,7 +200,7 @@ func (s *conflictResolverSuite) TestReset() {
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
 	prevState := persistence.WorkflowStateRunning
-	sourceCluster := "some random source cluster"
+	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
 	domainID := s.mockContext.domainID
 	execution := s.mockContext.workflowExecution
@@ -221,7 +223,6 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{},
 	}
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
 	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
 		Execution:     execution,
@@ -310,6 +311,7 @@ func (s *conflictResolverSuite) TestReset() {
 		},
 	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{}, nil, "", nil,
 	), nil)
