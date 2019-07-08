@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -41,13 +42,20 @@ type (
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
 
-	decisionBlobSizeChecker struct {
-		sizeLimitWarn  int
-		sizeLimitError int
-		completedID    int64
-		mutableState   mutableState
-		metricsClient  metrics.Client
-		logger         log.Logger
+	workflowSizeChecker struct {
+		blobSizeLimitWarn  int
+		blobSizeLimitError int
+
+		historySizeLimitWarn  int
+		historySizeLimitError int
+
+		historyCountLimitWarn  int
+		historyCountLimitError int
+
+		completedID   int64
+		mutableState  mutableState
+		metricsClient metrics.Client
+		logger        log.Logger
 	}
 )
 
@@ -59,33 +67,43 @@ func newDecisionAttrValidator(
 	return &decisionAttrValidator{
 		domainCache:      domainCache,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
-		searchAttributesValidator: validator.NewSearchAttributesValidator(logger,
+		searchAttributesValidator: validator.NewSearchAttributesValidator(
+			logger,
 			config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit),
+			config.SearchAttributesTotalSizeLimit,
+		),
 	}
 }
 
-func newDecisionBlobSizeChecker(
-	sizeLimitWarn int,
-	sizeLimitError int,
+func newWorkflowSizeChecker(
+	blobSizeLimitWarn int,
+	blobSizeLimitError int,
+	historySizeLimitWarn int,
+	historySizeLimitError int,
+	historyCountLimitWarn int,
+	historyCountLimitError int,
 	completedID int64,
 	mutableState mutableState,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) *decisionBlobSizeChecker {
-	return &decisionBlobSizeChecker{
-		sizeLimitWarn:  sizeLimitWarn,
-		sizeLimitError: sizeLimitError,
-		completedID:    completedID,
-		mutableState:   mutableState,
-		metricsClient:  metricsClient,
-		logger:         logger,
+) *workflowSizeChecker {
+	return &workflowSizeChecker{
+		blobSizeLimitWarn:      blobSizeLimitWarn,
+		blobSizeLimitError:     blobSizeLimitError,
+		historySizeLimitWarn:   historySizeLimitWarn,
+		historySizeLimitError:  historySizeLimitError,
+		historyCountLimitWarn:  historyCountLimitWarn,
+		historyCountLimitError: historyCountLimitError,
+		completedID:            completedID,
+		mutableState:           mutableState,
+		metricsClient:          metricsClient,
+		logger:                 logger,
 	}
 }
 
-func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
+func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 	blob []byte,
 	message string,
 ) (bool, error) {
@@ -93,8 +111,8 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 	executionInfo := c.mutableState.GetExecutionInfo()
 	err := common.CheckEventBlobSizeLimit(
 		len(blob),
-		c.sizeLimitWarn,
-		c.sizeLimitError,
+		c.blobSizeLimitWarn,
+		c.blobSizeLimitError,
 		executionInfo.DomainID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
@@ -111,10 +129,48 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 	}
 
 	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
-		return false, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+		return false, err
 	}
 
 	return true, nil
+}
+
+func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
+	historyCount := int(c.mutableState.GetNextEventID()) - 1
+	historySize := int(c.mutableState.GetHistorySize())
+
+	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
+		executionInfo := c.mutableState.GetExecutionInfo()
+		c.logger.Warn("history size exceeds limit.",
+			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowID(executionInfo.WorkflowID),
+			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+
+		attributes := &workflow.FailWorkflowExecutionDecisionAttributes{
+			Reason:  common.StringPtr(common.FailureReasonSizeExceedsLimit),
+			Details: []byte("Workflow history size / count exceeds limit."),
+		}
+
+		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
+		executionInfo := c.mutableState.GetExecutionInfo()
+		c.logger.Warn("history size exceeds limit.",
+			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowID(executionInfo.WorkflowID),
+			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+		return false, nil
+	}
+
+	return false, nil
 }
 
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(

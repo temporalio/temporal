@@ -82,8 +82,11 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		metricsClient:      historyEngine.metricsClient,
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
-		decisionAttrValidator: newDecisionAttrValidator(historyEngine.shard.GetDomainCache(),
-			historyEngine.config, historyEngine.logger),
+		decisionAttrValidator: newDecisionAttrValidator(
+			historyEngine.shard.GetDomainCache(),
+			historyEngine.config,
+			historyEngine.logger,
+		),
 	}
 }
 
@@ -374,9 +377,14 @@ Update_History_Loop:
 			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
 		} else {
 
-			decisionBlobSizeChecker := newDecisionBlobSizeChecker(
-				handler.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name),
-				handler.config.BlobSizeLimitError(domainEntry.GetInfo().Name),
+			domainName := domainEntry.GetInfo().Name
+			workflowSizeChecker := newWorkflowSizeChecker(
+				handler.config.BlobSizeLimitWarn(domainName),
+				handler.config.BlobSizeLimitError(domainName),
+				handler.config.HistorySizeLimitWarn(domainName),
+				handler.config.HistorySizeLimitError(domainName),
+				handler.config.HistoryCountLimitWarn(domainName),
+				handler.config.HistoryCountLimitError(domainName),
 				completedEvent.GetEventId(),
 				msBuilder,
 				handler.metricsClient,
@@ -390,7 +398,7 @@ Update_History_Loop:
 				domainEntry,
 				msBuilder,
 				handler.decisionAttrValidator,
-				decisionBlobSizeChecker,
+				workflowSizeChecker,
 				handler.logger,
 				timerBuilderProvider,
 				handler.domainCache,

@@ -73,12 +73,12 @@ const (
 	FailureReasonFailureDetailsExceedsLimit = "FAILURE_DETAILS_EXCEEDS_LIMIT"
 	// FailureReasonCancelDetailsExceedsLimit is failureReason for cancel details exceeds limit
 	FailureReasonCancelDetailsExceedsLimit = "CANCEL_DETAILS_EXCEEDS_LIMIT"
-	//FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
+	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "HEARTBEAT_EXCEEDS_LIMIT"
 	// FailureReasonDecisionBlobSizeExceedsLimit is the failureReason for decision blob exceeds size limit
 	FailureReasonDecisionBlobSizeExceedsLimit = "DECISION_BLOB_SIZE_EXCEEDS_LIMIT"
-	// TerminateReasonSizeExceedsLimit is reason to terminate workflow when history size or count exceed limit
-	TerminateReasonSizeExceedsLimit = "HISTORY_EXCEEDS_LIMIT"
+	// FailureReasonSizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	FailureReasonSizeExceedsLimit = "HISTORY_EXCEEDS_LIMIT"
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
 	FailureReasonTransactionSizeExceedsLimit = "TRANSACTION_SIZE_EXCEEDS_LIMIT"
 )

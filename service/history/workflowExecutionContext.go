@@ -26,7 +26,6 @@ import (
 	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -248,7 +247,12 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 	c.updateCondition = response.State.ExecutionInfo.NextEventID
 
 	// finally emit execution and session stats
-	c.emitWorkflowExecutionStats(response.MutableStateStats, c.msBuilder.GetHistorySize())
+	emitWorkflowExecutionStats(
+		c.metricsClient,
+		c.getDomainName(),
+		response.MutableStateStats,
+		c.msBuilder.GetHistorySize(),
+	)
 	return nil
 }
 
@@ -798,94 +802,6 @@ func (c *workflowExecutionContextImpl) update(
 
 		executionInfo.SetLastFirstEventID(activeHistoryBuilder.history[0].GetEventId())
 		newHistorySize += size
-
-		// enforce history size/count limit (only on active side)
-		config := c.shard.GetConfig()
-		sizeLimitWarn := config.HistorySizeLimitWarn(executionInfo.DomainID)
-		countLimitWarn := config.HistoryCountLimitWarn(executionInfo.DomainID)
-		historyCount := int(c.msBuilder.GetNextEventID()) - 1
-		historySize := int(c.msBuilder.GetHistorySize()) + newHistorySize
-
-		// All execution stats are emitted under emitWorkflowExecutionStats which is only invoked when the mutableState
-		// is loaded.  Looks like MutableStateStats are returned by persistence layer when mutableState is loaded from DB.
-		// It is much better to emit the entire execution stats on each update.  So for now we are explicitly emitting
-		// historySize and historyCount metric for execution on each update explicitly.
-		domain := ""
-		if entry, err := c.shard.GetDomainCache().GetDomainByID(executionInfo.DomainID); err == nil && entry != nil && entry.GetInfo() != nil {
-			domain = entry.GetInfo().Name
-		}
-		domainSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domain))
-		domainCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domain))
-		domainSizeScope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
-		domainCountScope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
-
-		if historySize > sizeLimitWarn || historyCount > countLimitWarn {
-			// emit warning
-			c.logger.Warn("history size exceeds limit.",
-				tag.WorkflowID(executionInfo.WorkflowID),
-				tag.WorkflowRunID(executionInfo.RunID),
-				tag.WorkflowDomainID(executionInfo.DomainID),
-				tag.WorkflowHistorySize(historySize),
-				tag.WorkflowEventCount(historyCount))
-
-			sizeLimitError := config.HistorySizeLimitError(executionInfo.DomainID)
-			countLimitError := config.HistoryCountLimitError(executionInfo.DomainID)
-			if (historySize > sizeLimitError || historyCount > countLimitError) && c.msBuilder.IsWorkflowExecutionRunning() {
-				// hard terminate workflow if it is still running
-				c.clear()                            // discard pending changes
-				_, err1 := c.loadWorkflowExecution() // reload mutable state
-				if err1 != nil {
-					return err1
-				}
-
-				if _, err = c.msBuilder.AddWorkflowExecutionTerminatedEvent(
-					common.TerminateReasonSizeExceedsLimit,
-					nil,
-					"cadence-history-server",
-				); err != nil {
-					return err
-				}
-
-				updates, err = c.msBuilder.CloseUpdateSession()
-				if err != nil {
-					return err
-				}
-
-				executionInfo = c.msBuilder.GetExecutionInfo()
-				activeHistoryBuilder = updates.newEventsBuilder
-				newStateBuilder = nil // since we terminate current workflow execution, so ignore new executions
-
-				if crossDCEnabled {
-					c.msBuilder.UpdateReplicationStateLastEventID(
-						c.msBuilder.GetCurrentVersion(),
-						executionInfo.NextEventID-1,
-					)
-				}
-
-				terminateTransactionID, err1 := c.shard.GetNextTransferTaskID()
-				if err1 != nil {
-					return err1
-				}
-				newHistorySize, newReplicationTask, err = c.appendHistoryEvents(activeHistoryBuilder.history, terminateTransactionID, true, createReplicationTask, newStateBuilder)
-				if err != nil {
-					return err
-				}
-				if newReplicationTask != nil {
-					replicationTasks = []persistence.Task{newReplicationTask}
-				}
-				executionInfo.SetLastFirstEventID(activeHistoryBuilder.GetFirstEvent().GetEventId())
-
-				// add clean up tasks
-				tranT, timerT, err := getWorkflowHistoryCleanupTasksFromShard(c.shard, executionInfo.DomainID, executionInfo.WorkflowID, nil)
-				if err != nil {
-					return err
-				}
-				// TODO since this is a force termination, should clear existing tx / timer tasks?
-				transferTasks = append(transferTasks, tranT)
-				timerTasks = append(timerTasks, timerT)
-			} // end of hard terminate workflow
-		} // end of enforce history size/count limit
-
 	} // end of update history events for active builder
 
 	if executionInfo.State == persistence.WorkflowStateCompleted {
@@ -944,7 +860,7 @@ func (c *workflowExecutionContextImpl) update(
 	c.msBuilder.GetExecutionInfo().LastUpdatedTimestamp = c.timeSource.Now()
 
 	// for any change in the workflow, send a event
-	c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(
+	_ = c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.domainID,
 		&c.workflowExecution,
 		c.msBuilder.GetLastFirstEventID(),
@@ -954,14 +870,27 @@ func (c *workflowExecutionContextImpl) update(
 	))
 
 	// finally emit session stats
-	if resp != nil {
-		c.emitSessionUpdateStats(resp.MutableStateUpdateSessionStats)
-	}
+	domainName := c.getDomainName()
+	emitWorkflowHistoryStats(
+		c.metricsClient,
+		domainName,
+		int(executionInfo.HistorySize),
+		int(executionInfo.NextEventID-1),
+	)
+	emitSessionUpdateStats(
+		c.metricsClient,
+		domainName,
+		resp.MutableStateUpdateSessionStats,
+	)
 
 	// emit workflow completion stats if any
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		if event, ok := c.msBuilder.GetCompletionEvent(); ok {
-			c.emitWorkflowCompletionStats(event)
+			emitWorkflowCompletionStats(
+				c.metricsClient,
+				domainName,
+				event,
+			)
 		}
 	}
 
@@ -1285,126 +1214,12 @@ func (c *workflowExecutionContextImpl) failInflightDecision() error {
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(
-	stats *persistence.MutableStateStats,
-	executionInfoHistorySize int64,
-) {
-
-	if stats == nil {
-		return
+func (c *workflowExecutionContextImpl) getDomainName() string {
+	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+	if err != nil {
+		return ""
 	}
-
-	domain := ""
-	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-		domain = entry.GetInfo().Name
-	}
-
-	domainSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domain))
-	domainCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domain))
-	emitWorkflowExecutionStats(domainSizeScope, domainCountScope, stats, executionInfoHistorySize)
-}
-
-func (c *workflowExecutionContextImpl) emitSessionUpdateStats(
-	stats *persistence.MutableStateUpdateSessionStats,
-) {
-
-	if stats == nil {
-		return
-	}
-
-	domain := ""
-	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-		domain = entry.GetInfo().Name
-	}
-
-	domainSizeScope := c.metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(domain))
-	domainCountScope := c.metricsClient.Scope(metrics.SessionCountStatsScope, metrics.DomainTag(domain))
-	emitSessionUpdateStats(domainSizeScope, domainCountScope, stats)
-}
-
-func (c *workflowExecutionContextImpl) emitWorkflowCompletionStats(
-	event *workflow.HistoryEvent,
-) {
-
-	domain := ""
-	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-		domain = entry.GetInfo().Name
-	}
-
-	domainScope := c.metricsClient.Scope(metrics.WorkflowCompletionStatsScope, metrics.DomainTag(domain))
-	emitWorkflowCompletionStats(domainScope, event)
-}
-
-func emitWorkflowExecutionStats(
-	sizeScope metrics.Scope,
-	countScope metrics.Scope,
-	stats *persistence.MutableStateStats,
-	executionInfoHistorySize int64,
-) {
-
-	sizeScope.RecordTimer(metrics.HistorySize, time.Duration(executionInfoHistorySize))
-	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
-	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.MutableStateSize))
-	sizeScope.RecordTimer(metrics.ActivityInfoSize, time.Duration(stats.ActivityInfoSize))
-	sizeScope.RecordTimer(metrics.TimerInfoSize, time.Duration(stats.TimerInfoSize))
-	sizeScope.RecordTimer(metrics.ChildInfoSize, time.Duration(stats.ChildInfoSize))
-	sizeScope.RecordTimer(metrics.SignalInfoSize, time.Duration(stats.SignalInfoSize))
-	sizeScope.RecordTimer(metrics.BufferedEventsSize, time.Duration(stats.BufferedEventsSize))
-
-	countScope.RecordTimer(metrics.ActivityInfoCount, time.Duration(stats.ActivityInfoCount))
-	countScope.RecordTimer(metrics.TimerInfoCount, time.Duration(stats.TimerInfoCount))
-	countScope.RecordTimer(metrics.ChildInfoCount, time.Duration(stats.ChildInfoCount))
-	countScope.RecordTimer(metrics.SignalInfoCount, time.Duration(stats.SignalInfoCount))
-	countScope.RecordTimer(metrics.RequestCancelInfoCount, time.Duration(stats.RequestCancelInfoCount))
-	countScope.RecordTimer(metrics.BufferedEventsCount, time.Duration(stats.BufferedEventsCount))
-}
-
-func emitSessionUpdateStats(
-	sizeScope metrics.Scope,
-	countScope metrics.Scope,
-	stats *persistence.MutableStateUpdateSessionStats,
-) {
-
-	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
-	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.ExecutionInfoSize))
-	sizeScope.RecordTimer(metrics.ActivityInfoSize, time.Duration(stats.ActivityInfoSize))
-	sizeScope.RecordTimer(metrics.TimerInfoSize, time.Duration(stats.TimerInfoSize))
-	sizeScope.RecordTimer(metrics.ChildInfoSize, time.Duration(stats.ChildInfoSize))
-	sizeScope.RecordTimer(metrics.SignalInfoSize, time.Duration(stats.SignalInfoSize))
-	sizeScope.RecordTimer(metrics.BufferedEventsSize, time.Duration(stats.BufferedEventsSize))
-
-	countScope.RecordTimer(metrics.ActivityInfoCount, time.Duration(stats.ActivityInfoCount))
-	countScope.RecordTimer(metrics.TimerInfoCount, time.Duration(stats.TimerInfoCount))
-	countScope.RecordTimer(metrics.ChildInfoCount, time.Duration(stats.ChildInfoCount))
-	countScope.RecordTimer(metrics.SignalInfoCount, time.Duration(stats.SignalInfoCount))
-	countScope.RecordTimer(metrics.RequestCancelInfoCount, time.Duration(stats.RequestCancelInfoCount))
-	countScope.RecordTimer(metrics.DeleteActivityInfoCount, time.Duration(stats.DeleteActivityInfoCount))
-	countScope.RecordTimer(metrics.DeleteTimerInfoCount, time.Duration(stats.DeleteTimerInfoCount))
-	countScope.RecordTimer(metrics.DeleteChildInfoCount, time.Duration(stats.DeleteChildInfoCount))
-	countScope.RecordTimer(metrics.DeleteSignalInfoCount, time.Duration(stats.DeleteSignalInfoCount))
-	countScope.RecordTimer(metrics.DeleteRequestCancelInfoCount, time.Duration(stats.DeleteRequestCancelInfoCount))
-}
-
-func emitWorkflowCompletionStats(
-	scope metrics.Scope,
-	event *workflow.HistoryEvent,
-) {
-
-	if event.EventType == nil {
-		return
-	}
-	switch *event.EventType {
-	case shared.EventTypeWorkflowExecutionCompleted:
-		scope.IncCounter(metrics.WorkflowSuccessCount)
-	case shared.EventTypeWorkflowExecutionCanceled:
-		scope.IncCounter(metrics.WorkflowCancelCount)
-	case shared.EventTypeWorkflowExecutionFailed:
-		scope.IncCounter(metrics.WorkflowFailedCount)
-	case shared.EventTypeWorkflowExecutionTimedOut:
-		scope.IncCounter(metrics.WorkflowTimeoutCount)
-	case shared.EventTypeWorkflowExecutionTerminated:
-		scope.IncCounter(metrics.WorkflowTerminateCount)
-	}
+	return domainEntry.GetInfo().Name
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch

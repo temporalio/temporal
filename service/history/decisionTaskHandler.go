@@ -60,7 +60,7 @@ type (
 
 		// validation
 		attrValidator    *decisionAttrValidator
-		sizeLimitChecker *decisionBlobSizeChecker
+		sizeLimitChecker *workflowSizeChecker
 
 		logger               log.Logger
 		timerBuilderProvider timerBuilderProvider
@@ -76,7 +76,7 @@ func newDecisionTaskHandler(
 	domainEntry *cache.DomainCacheEntry,
 	mutableState mutableState,
 	attrValidator *decisionAttrValidator,
-	sizeLimitChecker *decisionBlobSizeChecker,
+	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	timerBuilderProvider timerBuilderProvider,
 	domainCache cache.DomainCache,
@@ -118,7 +118,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisions(
 	decisions []*workflow.Decision,
 ) error {
 
-	var err error
+	// overall workflow size / count check
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowSizeExceedsLimit()
+	if err != nil || failWorkflow {
+		return err
+	}
+
 	for _, decision := range decisions {
 
 		err = handler.handleDecision(decision)
