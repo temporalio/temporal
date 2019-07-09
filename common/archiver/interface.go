@@ -25,6 +25,8 @@ import (
 	"errors"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -73,6 +75,8 @@ type (
 		HistoryV2Manager persistence.HistoryV2Manager
 		Logger           log.Logger
 		MetricsClient    metrics.Client
+		ClusterMetadata  cluster.Metadata
+		DomainCache      cache.DomainCache
 	}
 
 	// HistoryArchiver is used to archive history and read archived history

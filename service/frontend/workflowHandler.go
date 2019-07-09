@@ -38,7 +38,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
@@ -81,8 +81,7 @@ type (
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
 		historyBlobDownloader     archiver.HistoryBlobDownloader
-		historyArchivers          map[string]carchiver.HistoryArchiver
-		visibilityArchivers       map[string]carchiver.VisibilityArchiver
+		archiverProvider          provider.ArchiverProvider
 		service.Service
 	}
 
@@ -154,8 +153,7 @@ var (
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
-	blobstoreClient blobstore.Client, historyArchivers map[string]carchiver.HistoryArchiver,
-	visibilityArchivers map[string]carchiver.VisibilityArchiver) *WorkflowHandler {
+	blobstoreClient blobstore.Client, archiverProvider provider.ArchiverProvider) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		config:          config,
@@ -181,8 +179,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		searchAttributesValidator: validator.NewSearchAttributesValidator(sVice.GetLogger(), config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
 		historyBlobDownloader: archiver.NewHistoryBlobDownloader(blobstoreClient),
-		historyArchivers:      historyArchivers,
-		visibilityArchivers:   visibilityArchivers,
+		archiverProvider:      archiverProvider,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)

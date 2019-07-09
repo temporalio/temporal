@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -63,7 +63,7 @@ type (
 		Blobstore        blobstore.Client
 		DomainCache      cache.DomainCache
 		Config           *Config
-		HistoryArchivers map[string]carchiver.HistoryArchiver
+		ArchiverProvider provider.ArchiverProvider
 
 		// the following are only set in testing code
 		HistoryBlobReader     HistoryBlobReader

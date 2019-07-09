@@ -24,11 +24,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/archiver/provider"
+
 	"github.com/uber/cadence/service/worker/batcher"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/definition"
@@ -162,7 +163,7 @@ func (s *Service) Start() {
 			s.startReplicator(base, pFactory)
 		}
 		if archiverEnabled {
-			s.startArchiver(base, pFactory, s.params.HistoryArchivers)
+			s.startArchiver(base, pFactory, s.params.ArchiverProvider)
 		}
 		if scannerEnabled {
 			s.startScanner(base)
@@ -251,7 +252,7 @@ func (s *Service) startIndexer(base service.Service) {
 	}
 }
 
-func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory, historyArchivers map[string]carchiver.HistoryArchiver) {
+func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory, archiverProvider provider.ArchiverProvider) {
 	publicClient := s.params.PublicClient
 
 	historyManager, err := pFactory.NewHistoryManager()
@@ -284,7 +285,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 		Blobstore:        blobstoreClient,
 		DomainCache:      domainCache,
 		Config:           s.config.ArchiverConfig,
-		HistoryArchivers: historyArchivers,
+		ArchiverProvider: archiverProvider,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {

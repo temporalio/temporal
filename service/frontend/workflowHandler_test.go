@@ -37,6 +37,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -62,22 +63,23 @@ const (
 type (
 	workflowHandlerSuite struct {
 		suite.Suite
-		testDomain          string
-		testDomainID        string
-		logger              log.Logger
-		config              *Config
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMetricClient    metrics.Client
-		mockMessagingClient messaging.Client
-		mockMetadataMgr     *mocks.MetadataManager
-		mockHistoryMgr      *mocks.HistoryManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockVisibilityMgr   *mocks.VisibilityManager
-		mockDomainCache     *cache.DomainCacheMock
-		mockClientBean      *client.MockClientBean
-		mockService         cs.Service
-		mockBlobstoreClient *mocks.BlobstoreClient
+		testDomain           string
+		testDomainID         string
+		logger               log.Logger
+		config               *Config
+		mockClusterMetadata  *mocks.ClusterMetadata
+		mockProducer         *mocks.KafkaProducer
+		mockMetricClient     metrics.Client
+		mockMessagingClient  messaging.Client
+		mockMetadataMgr      *mocks.MetadataManager
+		mockHistoryMgr       *mocks.HistoryManager
+		mockHistoryV2Mgr     *mocks.HistoryV2Manager
+		mockVisibilityMgr    *mocks.VisibilityManager
+		mockDomainCache      *cache.DomainCacheMock
+		mockClientBean       *client.MockClientBean
+		mockService          cs.Service
+		mockBlobstoreClient  *mocks.BlobstoreClient
+		mockArchiverProvider *provider.ArchiverProviderMock
 	}
 )
 
@@ -109,6 +111,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = cs.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
 	s.mockBlobstoreClient = &mocks.BlobstoreClient{}
+	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -124,7 +127,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
 	return NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr,
-		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, s.mockBlobstoreClient, nil, nil)
+		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, s.mockBlobstoreClient, s.mockArchiverProvider)
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandlerHelper() *WorkflowHandler {
@@ -472,7 +475,7 @@ func (s *workflowHandlerSuite) getWorkflowHandlerWithParams(mService cs.Service,
 	mMetadataManager persistence.MetadataManager, blobStore *mocks.BlobstoreClient) *WorkflowHandler {
 	s.mockBlobstoreClient = blobStore
 	return NewWorkflowHandler(mService, config, mMetadataManager, s.mockHistoryMgr, s.mockHistoryV2Mgr,
-		s.mockVisibilityMgr, s.mockProducer, blobStore, nil, nil)
+		s.mockVisibilityMgr, s.mockProducer, blobStore, s.mockArchiverProvider)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_BucketNotExists() {

@@ -34,7 +34,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -81,8 +81,7 @@ type (
 		config               *Config
 		archivalClient       archiver.Client
 		resetor              workflowResetor
-		historyArchivers     map[string]carchiver.HistoryArchiver
-		visibilityArchivers  map[string]carchiver.VisibilityArchiver
+		archiverProvider     provider.ArchiverProvider
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -150,8 +149,7 @@ func NewEngineWithShardContext(
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
-	historyArchivers map[string]carchiver.HistoryArchiver,
-	visibilityArchivers map[string]carchiver.VisibilityArchiver,
+	archiverProvider provider.ArchiverProvider,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	shardWrapper := &shardContextWrapper{
@@ -181,8 +179,7 @@ func NewEngineWithShardContext(
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
 		archivalClient:       archiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS),
-		historyArchivers:     historyArchivers,
-		visibilityArchivers:  visibilityArchivers,
+		archiverProvider:     archiverProvider,
 	}
 
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)

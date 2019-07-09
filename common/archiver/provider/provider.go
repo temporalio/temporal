@@ -34,9 +34,9 @@ var (
 )
 
 type (
-	// Provider returns history or visiblity archiver based on the scheme and serviceName.
+	// ArchiverProvider returns history or visibility archiver based on the scheme and serviceName.
 	// The archiver for each combination of scheme and serviceName will be created only once and cached.
-	Provider interface {
+	ArchiverProvider interface {
 		GetHistoryArchiver(scheme string, serviceName string, tags ...tag.Tag) (archiver.HistoryArchiver, error)
 		GetVisibilityArchiver(scheme string, serviceName string, tags ...tag.Tag) (archiver.VisibilityArchiver, error)
 	}
@@ -51,7 +51,7 @@ type (
 		FileStore *filestore.VisibilityArchiverConfig
 	}
 
-	provider struct {
+	archiverProvider struct {
 		historyContainer          *archiver.HistoryBootstrapContainer
 		visibilityContainer       *archiver.VisibilityBootstrapContainer
 		historyArchiverConfigs    *HistoryArchiverConfigs
@@ -68,8 +68,8 @@ func NewArchiverProvider(
 	visibilityContainer *archiver.VisibilityBootstrapContainer,
 	historyArchiverConfigs *HistoryArchiverConfigs,
 	visibilityArchiverConfigs *VisibilityArchiverConfigs,
-) Provider {
-	return &provider{
+) ArchiverProvider {
+	return &archiverProvider{
 		historyContainer:          historyContainer,
 		visibilityContainer:       visibilityContainer,
 		historyArchiverConfigs:    historyArchiverConfigs,
@@ -77,7 +77,7 @@ func NewArchiverProvider(
 	}
 }
 
-func (p *provider) GetHistoryArchiver(scheme, serviceName string, tags ...tag.Tag) (archiver.HistoryArchiver, error) {
+func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string, tags ...tag.Tag) (archiver.HistoryArchiver, error) {
 	key := p.getArchiverKey(scheme, serviceName)
 	if historyArchiver, ok := p.historyArchivers[key]; ok {
 		return historyArchiver, nil
@@ -94,7 +94,7 @@ func (p *provider) GetHistoryArchiver(scheme, serviceName string, tags ...tag.Ta
 	return nil, ErrUnknownScheme
 }
 
-func (p *provider) GetVisibilityArchiver(scheme, serviceName string, tags ...tag.Tag) (archiver.VisibilityArchiver, error) {
+func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string, tags ...tag.Tag) (archiver.VisibilityArchiver, error) {
 	key := p.getArchiverKey(scheme, serviceName)
 	if visibilityArchiver, ok := p.visibilityArchivers[key]; ok {
 		return visibilityArchiver, nil
@@ -109,6 +109,6 @@ func (p *provider) GetVisibilityArchiver(scheme, serviceName string, tags ...tag
 	return nil, ErrUnknownScheme
 }
 
-func (p *provider) getArchiverKey(scheme, serviceName string) string {
+func (p *archiverProvider) getArchiverKey(scheme, serviceName string) string {
 	return scheme + ":" + serviceName
 }

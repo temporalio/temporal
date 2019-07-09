@@ -34,7 +34,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
@@ -49,7 +49,7 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
-// Handler - Thrift handler inteface for history service
+// Handler - Thrift handler interface for history service
 type (
 	Handler struct {
 		shardManager          persistence.ShardManager
@@ -71,8 +71,7 @@ type (
 		historyEventNotifier  historyEventNotifier
 		publisher             messaging.Producer
 		rateLimiter           tokenbucket.TokenBucket
-		historyArchivers      map[string]archiver.HistoryArchiver
-		visibilityArchivers   map[string]archiver.VisibilityArchiver
+		archiverProvider      provider.ArchiverProvider
 		service.Service
 	}
 )
@@ -97,7 +96,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	executionMgrFactory persistence.ExecutionManagerFactory, publicClient workflowserviceclient.Interface,
-	historyArchivers map[string]archiver.HistoryArchiver, visibilityArchivers map[string]archiver.VisibilityArchiver) *Handler {
+	archiverProvider provider.ArchiverProvider) *Handler {
 	handler := &Handler{
 		Service:             sVice,
 		config:              config,
@@ -110,8 +109,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
 		rateLimiter:         tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
 		publicClient:        publicClient,
-		historyArchivers:    historyArchivers,
-		visibilityArchivers: visibilityArchivers,
+		archiverProvider:    archiverProvider,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -188,7 +186,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.historyArchivers, h.visibilityArchivers)
+		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.archiverProvider)
 }
 
 // Health is for health check
