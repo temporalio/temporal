@@ -56,6 +56,10 @@ const (
 const (
 	// BatchTypeTerminate is batch type for terminating workflows
 	BatchTypeTerminate = "terminate"
+	// BatchTypeCancel is the batch type for canceling workflows
+	BatchTypeCancel = "cancel"
+	// BatchTypeSignal is batch type for signaling workflows
+	BatchTypeSignal = "signal"
 )
 
 type (
@@ -65,6 +69,20 @@ type (
 		// TODO https://github.com/uber/cadence/issues/2159
 		// Ideally default should be childPolicy of the workflow. But it's currently totally broken.
 		TerminateChildren *bool
+	}
+
+	// CancelParams is the parameters for canceling workflow
+	CancelParams struct {
+		// this indicates whether to cancel children workflow. Default to true.
+		// TODO https://github.com/uber/cadence/issues/2159
+		// Ideally default should be childPolicy of the workflow. But it's currently totally broken.
+		CancelChildren *bool
+	}
+
+	// SignalParams is the parameters for signaling workflow
+	SignalParams struct {
+		SignalName string
+		Input      string
 	}
 
 	// BatchParams is the parameters for batch operation workflow
@@ -81,6 +99,10 @@ type (
 		// Below are all optional
 		// TerminateParams is params only for BatchTypeTerminate
 		TerminateParams TerminateParams
+		// CancelParams is params only for BatchTypeCancel
+		CancelParams CancelParams
+		// SignalParams is params only for BatchTypeSignal
+		SignalParams SignalParams
 		// RPS of processing. Default to defaultRPS
 		// TODO we will implement smarter way than this static rate limiter: https://github.com/uber/cadence/issues/2138
 		RPS int
@@ -158,6 +180,13 @@ func validateParams(params BatchParams) error {
 		return fmt.Errorf("must provide required parameters: BatchType/Reason/DomainName/Query")
 	}
 	switch params.BatchType {
+	case BatchTypeSignal:
+		if params.SignalParams.SignalName == "" {
+			return fmt.Errorf("must provide signal name")
+		}
+		return nil
+	case BatchTypeCancel:
+		fallthrough
 	case BatchTypeTerminate:
 		return nil
 	default:
@@ -304,7 +333,23 @@ func startTaskProcessor(
 
 			switch batchParams.BatchType {
 			case BatchTypeTerminate:
-				err = processTerminateTask(ctx, limiter, task, batchParams, client)
+				err = processTask(ctx, limiter, task, batchParams, client,
+					batchParams.TerminateParams.TerminateChildren,
+					func(workflowID, runID string) error {
+						return client.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason, []byte{})
+					})
+			case BatchTypeCancel:
+				err = processTask(ctx, limiter, task, batchParams, client,
+					batchParams.CancelParams.CancelChildren,
+					func(workflowID, runID string) error {
+						return client.CancelWorkflow(ctx, workflowID, runID)
+					})
+			case BatchTypeSignal:
+				err = processTask(ctx, limiter, task, batchParams, client, common.BoolPtr(false),
+					func(workflowID, runID string) error {
+						return client.SignalWorkflow(ctx, workflowID, runID,
+							batchParams.SignalParams.SignalName, []byte(batchParams.SignalParams.Input))
+					})
 			}
 			if err != nil {
 				batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
@@ -326,8 +371,15 @@ func startTaskProcessor(
 	}
 }
 
-func processTerminateTask(ctx context.Context, limiter *rate.Limiter, task taskDetail, batchParams BatchParams, client cclient.Client) error {
-
+func processTask(
+	ctx context.Context,
+	limiter *rate.Limiter,
+	task taskDetail,
+	batchParams BatchParams,
+	client cclient.Client,
+	applyOnChild *bool,
+	procFn func(string, string) error,
+) error {
 	wfs := []shared.WorkflowExecution{task.execution}
 	for len(wfs) > 0 {
 		wf := wfs[0]
@@ -337,7 +389,7 @@ func processTerminateTask(ctx context.Context, limiter *rate.Limiter, task taskD
 			return err
 		}
 
-		err = client.TerminateWorkflow(ctx, wf.GetWorkflowId(), wf.GetRunId(), batchParams.Reason, []byte{})
+		err = procFn(wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
 			// EntityNotExistsError means wf is not running or deleted
 			_, ok := err.(*shared.EntityNotExistsError)
@@ -355,10 +407,11 @@ func processTerminateTask(ctx context.Context, limiter *rate.Limiter, task taskD
 			}
 			continue
 		}
+
 		// TODO https://github.com/uber/cadence/issues/2159
-		// ChildPolicy is totally broken in Cadence, we need to fix it before using
-		if *batchParams.TerminateParams.TerminateChildren && len(resp.PendingChildren) > 0 {
-			getActivityLogger(ctx).Info("Found more child workflows to terminate", tag.Number(int64(len(resp.PendingChildren))))
+		// By default should use ChildPolicy, but it is totally broken in Cadence, we need to fix it before using
+		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
+			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {
 				wfs = append(wfs, shared.WorkflowExecution{
 					WorkflowId: ch.WorkflowID,
@@ -366,6 +419,7 @@ func processTerminateTask(ctx context.Context, limiter *rate.Limiter, task taskD
 				})
 			}
 		}
+
 		activity.RecordHeartbeat(ctx, task.hbd)
 	}
 
