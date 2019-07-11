@@ -178,7 +178,12 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutions(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.StartTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		startTime := rec.StartTime.UnixNano()
+		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutions(
@@ -197,7 +202,12 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutions(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.CloseTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		closeTime := rec.CloseTime.UnixNano()
+		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
@@ -217,7 +227,12 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.StartTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		startTime := rec.StartTime.UnixNano()
+		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
@@ -237,7 +252,12 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.CloseTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		closeTime := rec.CloseTime.UnixNano()
+		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
@@ -257,7 +277,12 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.StartTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		startTime := rec.StartTime.UnixNano()
+		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
@@ -277,7 +302,12 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.CloseTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		closeTime := rec.CloseTime.UnixNano()
+		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
@@ -297,7 +327,12 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, definition.CloseTime, request.PageSize)
+	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+		closeTime := rec.CloseTime.UnixNano()
+		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+	}
+
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
 func (v *esVisibilityStore) GetClosedWorkflowExecution(
@@ -356,7 +391,7 @@ func (v *esVisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	queryDSL, sortField, err := v.getESQueryDSL(request, token)
+	queryDSL, err := v.getESQueryDSL(request, token)
 	if err != nil {
 		return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
 	}
@@ -369,7 +404,7 @@ func (v *esVisibilityStore) ListWorkflowExecutions(
 		}
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, sortField, request.PageSize)
+	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, nil)
 }
 
 func (v *esVisibilityStore) ScanWorkflowExecutions(
@@ -484,22 +519,22 @@ func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, e
 	return dsl.String(), nil
 }
 
-func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, string, error) {
+func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, error) {
 	sql := getSQLFromListRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.DomainUUID)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 
 	sortField, err := v.processSortField(dsl)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 
 	if shouldSearchAfter(token) {
 		valueOfSearchAfter, err := v.getValueOfSearchAfterInJSON(token, sortField)
 		if err != nil {
-			return "", "", err
+			return "", err
 		}
 		dsl.Set(dslFieldSearchAfter, fastjson.MustParse(valueOfSearchAfter))
 	} else { // use from+size
@@ -508,7 +543,7 @@ func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsReque
 
 	dslStr := cleanDSL(dsl.String())
 
-	return dslStr, sortField, nil
+	return dslStr, nil
 }
 
 func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
@@ -777,7 +812,7 @@ func (v *esVisibilityStore) getScanWorkflowExecutionsResponse(searchHits *elasti
 }
 
 func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
-	token *esVisibilityPageToken, sortField string, pageSize int) (*p.InternalListWorkflowExecutionsResponse, error) {
+	token *esVisibilityPageToken, pageSize int, isRecordValid func(rec *p.VisibilityWorkflowExecutionInfo) bool) (*p.InternalListWorkflowExecutionsResponse, error) {
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
@@ -786,7 +821,11 @@ func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elasti
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
 		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i])
-		response.Executions = append(response.Executions, workflowExecutionInfo)
+		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
+			// for old APIs like ListOpenWorkflowExecutions, we added 1 ms to range query to overcome ES limitation
+			// (see getSearchResult function), but manually dropped records beyond request range here.
+			response.Executions = append(response.Executions, workflowExecutionInfo)
+		}
 	}
 
 	if numOfActualHits == pageSize { // this means the response is not the last page
