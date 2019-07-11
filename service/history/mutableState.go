@@ -120,7 +120,6 @@ type (
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetEventStoreVersion() int32
 		GetHistoryBuilder() *historyBuilder
-		GetHistorySize() int64
 		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastWriteVersion() int64
@@ -146,7 +145,6 @@ type (
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool
 		HasProcessedOrPendingDecisionTask() bool
-		IncrementHistorySize(int)
 		IsCancelRequested() (bool, string)
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool
@@ -196,7 +194,6 @@ type (
 		ResetSnapshot(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task) *persistence.ResetMutableStateRequest
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
-		SetNewRunSize(size int)
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
 		UpdateDecision(*decisionInfo)

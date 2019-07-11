@@ -450,8 +450,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	context := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
 	createReplicationTask := domainEntry.CanReplicateEvent()
 	replicationTasks := []persistence.Task{}
-	var replicationTask persistence.Task
-	_, replicationTask, err = context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
+	historySize, replicationTask, err := context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +463,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, createReplicationTask, e.timeSource.Now(),
+		msBuilder, historySize, createReplicationTask, e.timeSource.Now(),
 		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
@@ -497,7 +496,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
-				msBuilder, createReplicationTask, e.timeSource.Now(),
+				msBuilder, historySize, createReplicationTask, e.timeSource.Now(),
 				transferTasks, replicationTasks, timerTasks,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
@@ -1564,8 +1563,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	context = newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
 	createReplicationTask := domainEntry.CanReplicateEvent()
 	replicationTasks := []persistence.Task{}
-	var replicationTask persistence.Task
-	_, replicationTask, err = context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
+	historySize, replicationTask, err := context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
 	if err != nil {
 		return nil, err
 	}
@@ -1582,7 +1580,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevLastWriteVersion = prevMutableState.GetLastWriteVersion()
 	}
 	err = context.createWorkflowExecution(
-		msBuilder, createReplicationTask, e.timeSource.Now(),
+		msBuilder, historySize, createReplicationTask, e.timeSource.Now(),
 		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)

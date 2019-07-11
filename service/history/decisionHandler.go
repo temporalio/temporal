@@ -307,6 +307,10 @@ Update_History_Loop:
 		if !msBuilder.IsWorkflowExecutionRunning() {
 			return nil, ErrWorkflowCompleted
 		}
+		executionStats, err := context.loadExecutionStats()
+		if err != nil {
+			return nil, err
+		}
 
 		executionInfo := msBuilder.GetExecutionInfo()
 		timerBuilderProvider := func() *timerBuilder {
@@ -387,6 +391,7 @@ Update_History_Loop:
 				handler.config.HistoryCountLimitError(domainName),
 				completedEvent.GetEventId(),
 				msBuilder,
+				executionStats,
 				handler.metricsClient,
 				handler.throttledLogger,
 			)
@@ -519,11 +524,11 @@ Update_History_Loop:
 		if continueAsNewBuilder != nil {
 			continueAsNewTimerTasks = msBuilder.GetContinueAsNew().TimerTasks
 
-			err := context.appendFirstBatchHistoryForContinueAsNew(continueAsNewBuilder, transactionID)
+			newHistorySize, err := context.appendFirstBatchHistoryForContinueAsNew(continueAsNewBuilder, transactionID)
 			if err != nil {
 				return nil, err
 			}
-			updateErr = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder)
+			updateErr = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder, newHistorySize)
 		} else {
 			updateErr = context.updateAsActive(transferTasks, timerTasks,
 				transactionID)

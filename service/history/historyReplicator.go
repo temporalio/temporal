@@ -715,6 +715,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	// If replicated events has ContinueAsNew event, then append the new run history
+	var newHistorySize int64
 	if newRunStateBuilder != nil {
 		// Generate a transaction ID for appending events to history
 		transactionID, err := r.shard.GetNextTransferTaskID()
@@ -722,7 +723,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 			return err
 		}
 		// continueAsNew
-		err = context.appendFirstBatchHistoryForContinueAsNew(newRunStateBuilder, transactionID)
+		newHistorySize, err = context.appendFirstBatchHistoryForContinueAsNew(newRunStateBuilder, transactionID)
 		if err != nil {
 			return err
 		}
@@ -734,7 +735,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now)
+		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now, newHistorySize)
 	}
 
 	if err == nil {
@@ -766,7 +767,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
 	executionInfo.SetNextEventID(lastEvent.GetEventId() + 1)
 
-	_, _, err := context.appendFirstBatchEventsForStandby(msBuilder, history.Events)
+	historySize, _, err := context.appendFirstBatchEventsForStandby(msBuilder, history.Events)
 	if err != nil {
 		return err
 	}
@@ -799,7 +800,8 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+		msBuilder, historySize, createReplicationTask, now,
+		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -832,7 +834,8 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+			msBuilder, historySize, createReplicationTask, now,
+			transferTasks, replicationTasks, timerTasks,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -906,7 +909,8 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID = currentRunID
 	prevLastWriteVersion = currentLastWriteVersion
 	return context.createWorkflowExecution(
-		msBuilder, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+		msBuilder, historySize, createReplicationTask, now,
+		transferTasks, replicationTasks, timerTasks,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }
@@ -1190,7 +1194,7 @@ func (r *historyReplicator) updateMutableStateWithTimer(
 	// so nothing on the replication state should be changed
 	lastWriteVersion := msBuilder.GetLastWriteVersion()
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	return context.updateAsPassive(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
+	return context.updateAsPassive(nil, timerTasks, transactionID, now, false, nil, sourceCluster, 0)
 }
 
 func (r *historyReplicator) deserializeBlob(

@@ -92,6 +92,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				EventStoreVersion:    p.EventStoreVersionV2,
 				BranchToken:          []byte("branchToken1"),
 			},
+			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
 				&p.DecisionTask{
 					TaskID:              s.GetNextSequenceNumber(),
@@ -116,6 +117,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal([]byte("branchToken1"), info0.BranchToken)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now().UTC()
@@ -129,7 +131,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	}}
 	updatedInfo.BranchToken = []byte("branchToken2")
 
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -142,7 +144,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
+	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
 	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -169,6 +171,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.State = p.WorkflowStateCompleted
 	updatedInfo.CloseStatus = p.WorkflowCloseStatusCompleted
 	updatedInfo.NextEventID = int64(5)
@@ -189,6 +192,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:       updatedInfo,
+			ExecutionStats:      updatedStats,
 			TransferTasks:       []p.Task{newdecisionTask},
 			TimerTasks:          nil,
 			Condition:           info0.NextEventID,
@@ -218,8 +222,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				EventStoreVersion:    p.EventStoreVersionV2,
 				BranchToken:          []byte("branchToken1"),
 			},
-			TransferTasks: nil,
-			TimerTasks:    nil,
+			ExecutionStats: &p.ExecutionStats{},
+			TransferTasks:  nil,
+			TimerTasks:     nil,
 		},
 		RangeID:  s.ShardInfo.RangeID,
 		Encoding: pickRandomEncoding(),
@@ -372,6 +377,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	}
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.BranchToken = []byte("branchToken3")
@@ -404,7 +410,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 		NewRunEventStoreVersion: p.EventStoreVersionV2,
 		NewRunBranchToken:       []byte("branchToken4"),
 	}}
-	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedReplicationState, int64(3), replicationTasks1)
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedStats, updatedReplicationState, int64(3), replicationTasks1)
 	s.NoError(err2)
 
 	taskR1, err := s.GetReplicationTasks(1, false)
@@ -519,6 +525,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 				EventStoreVersion:    p.EventStoreVersionV2,
 				BranchToken:          brToken,
 			},
+			ExecutionStats:   &p.ExecutionStats{},
 			ReplicationState: state,
 			TimerTasks:       timerTasks,
 			TransferTasks:    transferTasks,
@@ -671,6 +678,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	}
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updateStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.BranchToken = []byte("branchToken3")
@@ -705,6 +713,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		RunId:      common.StringPtr(newRunID),
 	}
 	insertInfo := copyWorkflowExecutionInfo(info0)
+	insertStats := copyExecutionStats(state0.ExecutionStats)
 	insertInfo.RunID = newRunID
 	insertInfo.NextEventID = int64(50)
 	insertInfo.LastProcessedEvent = int64(20)
@@ -796,8 +805,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	insertSignalRequests := []string{uuid.New()}
 
 	err = s.ResetWorkflowExecution(3,
-		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
-		true, updatedInfo, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000)
+		insertInfo, insertStats, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
+		true, updatedInfo, updateStats, updatedReplicationState, currTransTasks, currTimerTasks, info0.RunID, -1000)
 	s.Nil(err)
 
 	//////////////////////////////
@@ -1079,6 +1088,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
+	stats0 := state0.ExecutionStats
 	replicationState0 := state0.ReplicationState
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.NotNil(replicationState0, "Valid replication state expected.")
@@ -1114,10 +1124,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 
 	info0.State = p.WorkflowStateCompleted
 	info0.CloseStatus = p.WorkflowCloseStatusCompleted
-	err = s.UpdateWorklowStateAndReplication(info0, replicationState0, info0.NextEventID, nil)
+	err = s.UpdateWorklowStateAndReplication(info0, stats0, replicationState0, info0.NextEventID, nil)
 	s.Nil(err)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedReplicationState := copyReplicationState(replicationState0)
 
 	newRunID := uuid.New()
@@ -1126,6 +1137,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		RunId:      common.StringPtr(newRunID),
 	}
 	insertInfo := copyWorkflowExecutionInfo(info0)
+	insterStats := copyExecutionStats(state0.ExecutionStats)
 	insertInfo.State = p.WorkflowStateRunning
 	insertInfo.CloseStatus = p.WorkflowCloseStatusNone
 	insertInfo.RunID = newRunID
@@ -1218,8 +1230,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	insertSignalRequests := []string{uuid.New()}
 
 	err = s.ResetWorkflowExecution(3,
-		insertInfo, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
-		false, updatedInfo, updatedReplicationState, nil, nil, info0.RunID, -1000)
+		insertInfo, insterStats, insertReplicationState, insertActivityInfos, insertTimerInfos, insertChildExecutionInfos, insertRequestCancelInfos, insertSignalInfos, insertSignalRequests, insertTransTasks, insertTimerTasks, insertReplicationTasks,
+		false, updatedInfo, updatedStats, updatedReplicationState, nil, nil, info0.RunID, -1000)
 	s.Nil(err)
 
 	//////////////////////////////
@@ -1435,6 +1447,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	s.Equal(int64(2), info0.DecisionScheduleID)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedStats := copyExecutionStats(state0.ExecutionStats)
 
 	newRunID := uuid.New()
 	newExecution := gen.WorkflowExecution{
@@ -1442,6 +1455,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		RunId:      common.StringPtr(newRunID),
 	}
 	insertInfo := copyWorkflowExecutionInfo(info0)
+	insertStats := copyExecutionStats(state0.ExecutionStats)
 	insertInfo.RunID = newRunID
 	insertInfo.NextEventID = int64(50)
 	insertInfo.LastProcessedEvent = int64(20)
@@ -1489,8 +1503,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	}}
 
 	err = s.ResetWorkflowExecution(3,
-		insertInfo, nil, insertActivityInfos, insertTimerInfos, nil, insertRequestCancelInfos, nil, nil, insertTransTasks, insertTimerTasks, nil,
-		false, updatedInfo, nil, nil, nil, info0.RunID, -1000)
+		insertInfo, insertStats, nil, insertActivityInfos, insertTimerInfos, nil, insertRequestCancelInfos, nil, nil, insertTransTasks, insertTimerTasks, nil,
+		false, updatedInfo, updatedStats, nil, nil, nil, info0.RunID, -1000)
 	s.Nil(err)
 
 	//////////////////////////////

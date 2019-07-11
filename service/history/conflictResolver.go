@@ -85,12 +85,13 @@ func (r *conflictResolverImpl) reset(
 	var sBuilder stateBuilder
 	var lastEvent *shared.HistoryEvent
 	var history []*shared.HistoryEvent
-	var size int
+	var totalSize int64
 	var lastFirstEventID int64
 	var err error
 
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
+		var size int
 		history, size, lastFirstEventID, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, eventStoreVersion, branchToken)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
@@ -131,7 +132,7 @@ func (r *conflictResolverImpl) reset(
 			return nil, err
 		}
 		resetMutableStateBuilder.executionInfo.SetLastFirstEventID(lastFirstEventID)
-		resetMutableStateBuilder.IncrementHistorySize(size)
+		totalSize += int64(size)
 	}
 
 	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)
@@ -155,6 +156,7 @@ func (r *conflictResolverImpl) reset(
 		nil,
 		nil,
 		resetMutableStateBuilder,
+		totalSize,
 	)
 	if err != nil {
 		r.logError("Conflict resolution err reset workflow.", err)

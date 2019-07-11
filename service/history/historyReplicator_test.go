@@ -1030,6 +1030,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:    &persistence.WorkflowExecutionInfo{RunID: currentRunID, NextEventID: currentNextEventID, State: persistence.WorkflowStateRunning},
+			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -1098,6 +1099,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 				LastEventTaskID: currentLastEventTaskID,
 				State:           persistence.WorkflowStateRunning,
 			},
+			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -1250,6 +1252,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:    &persistence.WorkflowExecutionInfo{RunID: currentRunID, NextEventID: currentNextEventID, State: persistence.WorkflowStateCompleted},
+			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -1311,6 +1314,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:    &persistence.WorkflowExecutionInfo{RunID: currentRunID, NextEventID: currentNextEventID, State: persistence.WorkflowStateCompleted},
+			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -1374,6 +1378,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:    &persistence.WorkflowExecutionInfo{RunID: currentRunID},
+			ExecutionStats:   &persistence.ExecutionStats{},
 			ReplicationState: &persistence.ReplicationState{LastWriteVersion: currentVersion},
 		},
 	}, nil)
@@ -2505,7 +2510,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -2526,7 +2530,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -2552,7 +2555,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -2560,6 +2562,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 					State:                persistence.WorkflowStateRunning,
 					CloseStatus:          persistence.WorkflowCloseStatusNone,
 					EventStoreVersion:    persistence.EventStoreVersionV2,
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -2641,7 +2646,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -2660,7 +2664,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -2741,7 +2744,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -2760,7 +2762,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -2857,7 +2858,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -2878,7 +2878,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 		CronSchedule:         cronSchedule,
 		HasRetryPolicy:       true,
 		InitialInterval:      retryPolicy.GetInitialIntervalInSeconds(),
@@ -2922,7 +2921,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -2938,6 +2936,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					ExpirationSeconds:    retryPolicy.GetExpirationIntervalInSeconds(),
 					MaximumAttempts:      retryPolicy.GetMaximumAttempts(),
 					NonRetriableErrors:   retryPolicy.GetNonRetriableErrorReasons(),
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -2967,7 +2968,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -2983,6 +2983,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					ExpirationSeconds:    retryPolicy.GetExpirationIntervalInSeconds(),
 					MaximumAttempts:      retryPolicy.GetMaximumAttempts(),
 					NonRetriableErrors:   retryPolicy.GetNonRetriableErrorReasons(),
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -3063,7 +3066,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -3084,7 +3086,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -3120,7 +3121,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -3128,6 +3128,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					State:                persistence.WorkflowStateRunning,
 					CloseStatus:          persistence.WorkflowCloseStatusNone,
 					EventStoreVersion:    persistence.EventStoreVersionV2,
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -3157,7 +3160,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -3165,6 +3167,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					State:                persistence.WorkflowStateRunning,
 					CloseStatus:          persistence.WorkflowCloseStatusNone,
 					EventStoreVersion:    persistence.EventStoreVersionV2,
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -3245,7 +3250,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -3266,7 +3270,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -3302,7 +3305,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -3310,6 +3312,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					State:                persistence.WorkflowStateRunning,
 					CloseStatus:          persistence.WorkflowCloseStatusNone,
 					EventStoreVersion:    persistence.EventStoreVersionV2,
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -3339,7 +3344,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -3347,6 +3351,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 					State:                persistence.WorkflowStateRunning,
 					CloseStatus:          persistence.WorkflowCloseStatusNone,
 					EventStoreVersion:    persistence.EventStoreVersionV2,
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -3426,7 +3433,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -3445,7 +3451,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -3575,7 +3580,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -3594,7 +3598,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -3753,7 +3756,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -3917,7 +3919,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -3936,7 +3937,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 	})
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -4075,7 +4075,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
 
@@ -4204,7 +4203,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
-	msBuilder.On("IncrementHistorySize", historySize).Once()
 	msBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		CreateRequestID:      requestID,
 		DomainID:             domainID,
@@ -4225,7 +4223,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowTimeout:      workflowTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		EventStoreVersion:    persistence.EventStoreVersionV2,
-		HistorySize:          int64(historySize),
 		CronSchedule:         cronSchedule,
 		HasRetryPolicy:       true,
 		InitialInterval:      retryPolicy.GetInitialIntervalInSeconds(),
@@ -4269,7 +4266,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -4285,6 +4281,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 					ExpirationSeconds:    retryPolicy.GetExpirationIntervalInSeconds(),
 					MaximumAttempts:      retryPolicy.GetMaximumAttempts(),
 					NonRetriableErrors:   retryPolicy.GetNonRetriableErrorReasons(),
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,
@@ -4314,7 +4313,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 					DecisionTimeoutValue: decisionTimeout,
 					NextEventID:          msBuilder.GetNextEventID(),
 					LastProcessedEvent:   common.EmptyEventID,
-					HistorySize:          int64(historySize),
 					DecisionVersion:      di.Version,
 					DecisionScheduleID:   di.ScheduleID,
 					DecisionStartedID:    di.StartedID,
@@ -4330,6 +4328,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 					ExpirationSeconds:    retryPolicy.GetExpirationIntervalInSeconds(),
 					MaximumAttempts:      retryPolicy.GetMaximumAttempts(),
 					NonRetriableErrors:   retryPolicy.GetNonRetriableErrorReasons(),
+				},
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: int64(historySize),
 				},
 				ReplicationState: replicationState,
 				TransferTasks:    transferTasks,

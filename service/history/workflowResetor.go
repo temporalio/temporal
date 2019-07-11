@@ -102,7 +102,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 		return response, retError
 	}
 
-	newMutableState, newTransferTasks, newTimerTasks, retError := w.buildNewMutableStateForReset(
+	newMutableState, newHistorySize, newTransferTasks, newTimerTasks, retError := w.buildNewMutableStateForReset(
 		ctx, domainEntry, baseMutableState, currMutableState,
 		request.GetReason(), request.GetDecisionFinishEventId(), request.GetRequestId(), resetNewRunID,
 	)
@@ -133,7 +133,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 	// finally, write to persistence
 	retError = currContext.resetWorkflowExecution(
 		currMutableState, currTerminated, currCloseTask, currCleanupTask,
-		newMutableState, newTransferTasks, newTimerTasks,
+		newMutableState, newHistorySize, newTransferTasks, newTimerTasks,
 		currReplicationTasks, newReplicationTasks, baseMutableState.GetExecutionInfo().RunID,
 		baseMutableState.GetNextEventID(),
 	)
@@ -251,20 +251,21 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	resetReason string,
 	resetDecisionCompletedEventID int64,
 	requestedID, newRunID string,
-) (newMutableState mutableState, newTransferTasks, newTimerTasks []persistence.Task, retError error) {
+) (newMutableState mutableState, newHistorySize int64, newTransferTasks, newTimerTasks []persistence.Task, retError error) {
 
 	domainID := baseMutableState.GetExecutionInfo().DomainID
 	workflowID := baseMutableState.GetExecutionInfo().WorkflowID
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
 
 	// replay history to reset point(exclusive) to rebuild mutableState
-	forkEventVersion, wfTimeoutSecs, receivedSignals, continueRunID, newStateBuilder, retError := w.replayHistoryEvents(
+	forkEventVersion, wfTimeoutSecs, receivedSignals, continueRunID, newStateBuilder, historySize, retError := w.replayHistoryEvents(
 		resetDecisionCompletedEventID, requestedID, baseMutableState, newRunID,
 	)
 	if retError != nil {
 		return
 	}
 	newMutableState = newStateBuilder.getMutableState()
+	newHistorySize = historySize
 
 	retError = w.validateResetWorkflowAfterReplay(newMutableState)
 	if retError != nil {
@@ -554,7 +555,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	requestID string,
 	prevMutableState mutableState,
 	newRunID string,
-) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*workflow.HistoryEvent, continueRunID string, sBuilder stateBuilder, retError error) {
+) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*workflow.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
 
 	prevExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(prevMutableState.GetExecutionInfo().WorkflowID),
@@ -637,7 +638,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				return
 			}
 		}
-		resetMutableState.IncrementHistorySize(readResp.Size)
+		newHistorySize += int64(readResp.Size)
 		if len(readResp.NextPageToken) > 0 {
 			readReq.NextPageToken = readResp.NextPageToken
 		} else {
@@ -701,6 +702,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 ) error {
 	var currContext workflowExecutionContext
 	var baseMutableState, currMutableState, newMsBuilder mutableState
+	var newHistorySize int64
 	var newRunTransferTasks, newRunTimerTasks []persistence.Task
 
 	resetAttr, retError := validateResetReplicationTask(request)
@@ -750,7 +752,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		}
 	}
 	// before changing mutable state
-	newMsBuilder, newRunTransferTasks, newRunTimerTasks, retError = w.replicateResetEvent(baseMutableState, &baseExecution, historyAfterReset, resetAttr.GetForkEventVersion())
+	newMsBuilder, newHistorySize, newRunTransferTasks, newRunTimerTasks, retError = w.replicateResetEvent(baseMutableState, &baseExecution, historyAfterReset, resetAttr.GetForkEventVersion())
 	if retError != nil {
 		return retError
 	}
@@ -786,6 +788,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		nil,
 		nil,
 		newMsBuilder,
+		newHistorySize,
 		newRunTransferTasks,
 		newRunTimerTasks,
 		nil,
@@ -807,7 +810,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	baseExecution *workflow.WorkflowExecution,
 	newRunHistory []*workflow.HistoryEvent,
 	forkEventVersion int64,
-) (newMsBuilder mutableState, transferTasks, timerTasks []persistence.Task, retError error) {
+) (newMsBuilder mutableState, newHistorySize int64, transferTasks, timerTasks []persistence.Task, retError error) {
 	domainID := baseMutableState.GetExecutionInfo().DomainID
 	workflowID := baseMutableState.GetExecutionInfo().WorkflowID
 	firstEvent := newRunHistory[0]
@@ -856,7 +859,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 				return
 			}
 		}
-		newMsBuilder.IncrementHistorySize(readResp.Size)
+		newHistorySize += int64(readResp.Size)
 		if len(readResp.NextPageToken) > 0 {
 			readReq.NextPageToken = readResp.NextPageToken
 		} else {

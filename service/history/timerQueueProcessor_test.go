@@ -184,7 +184,7 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	s.ShardContext.Lock()
 	s.updateTimerSeqNumbers(timerTasks)
 	updatedState := createMutableState(builder)
-	err3 := s.UpdateWorkflowExecution(updatedState.ExecutionInfo, nil, nil, int64(3), timerTasks, nil, nil, timerInfos, nil)
+	err3 := s.UpdateWorkflowExecution(updatedState.ExecutionInfo, updatedState.ExecutionStats, nil, nil, int64(3), timerTasks, nil, nil, timerInfos, nil)
 	s.ShardContext.Unlock()
 	s.NoError(err3)
 
@@ -209,7 +209,7 @@ func (s *timerQueueProcessorSuite) addDecisionTimer(domainID string, we workflow
 	s.ShardContext.Lock()
 	s.updateTimerSeqNumbers(timerTasks)
 	addDecisionTaskCompletedEvent(builder, di.ScheduleID, startedEvent.GetEventId(), nil, "identity")
-	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, condition, timerTasks, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, state.ExecutionStats, nil, nil, condition, timerTasks, nil, nil, nil, nil)
 	s.ShardContext.Unlock()
 	s.NoError(err2, "No error expected.")
 	return timerTasks
@@ -272,7 +272,7 @@ func (s *timerQueueProcessorSuite) closeWorkflow(domainID string, we workflow.Wo
 	state.ExecutionInfo.State = persistence.WorkflowStateCompleted
 	state.ExecutionInfo.CloseStatus = persistence.WorkflowCloseStatusCompleted
 
-	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, state.ExecutionInfo.NextEventID, nil, nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, state.ExecutionStats, nil, nil, state.ExecutionInfo.NextEventID, nil, nil, nil, nil, nil)
 	s.NoError(err2, "No error expected.")
 }
 
@@ -399,7 +399,7 @@ func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms mutableState, timer
 	s.ShardContext.Lock()
 	s.updateTimerSeqNumbers(timerTasks)
 	err3 := s.UpdateWorkflowExecution(
-		updatedState.ExecutionInfo, nil, nil, condition, timerTasks, actInfos, nil, timerInfos, nil)
+		updatedState.ExecutionInfo, updatedState.ExecutionStats, nil, nil, condition, timerTasks, actInfos, nil, timerInfos, nil)
 	s.ShardContext.Unlock()
 	s.NoError(err3)
 }

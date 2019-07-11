@@ -53,10 +53,11 @@ type (
 		historyCountLimitWarn  int
 		historyCountLimitError int
 
-		completedID   int64
-		mutableState  mutableState
-		metricsClient metrics.Client
-		logger        log.Logger
+		completedID    int64
+		mutableState   mutableState
+		executionStats *persistence.ExecutionStats
+		metricsClient  metrics.Client
+		logger         log.Logger
 	}
 )
 
@@ -91,6 +92,7 @@ func newWorkflowSizeChecker(
 	historyCountLimitError int,
 	completedID int64,
 	mutableState mutableState,
+	executionStats *persistence.ExecutionStats,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *workflowSizeChecker {
@@ -103,6 +105,7 @@ func newWorkflowSizeChecker(
 		historyCountLimitError: historyCountLimitError,
 		completedID:            completedID,
 		mutableState:           mutableState,
+		executionStats:         executionStats,
 		metricsClient:          metricsClient,
 		logger:                 logger,
 	}
@@ -142,7 +145,7 @@ func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 
 func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 	historyCount := int(c.mutableState.GetNextEventID()) - 1
-	historySize := int(c.mutableState.GetHistorySize())
+	historySize := int(c.executionStats.HistorySize)
 
 	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
 		executionInfo := c.mutableState.GetExecutionInfo()

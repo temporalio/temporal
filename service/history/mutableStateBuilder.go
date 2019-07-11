@@ -226,20 +226,6 @@ func (e *mutableStateBuilder) SetHistoryTree(treeID string) error {
 	return nil
 }
 
-func (e *mutableStateBuilder) IncrementHistorySize(appendSize int) {
-	e.executionInfo.IncreaseHistorySize(int64(appendSize))
-}
-
-func (e *mutableStateBuilder) GetHistorySize() int64 {
-	return e.executionInfo.HistorySize
-}
-
-func (e *mutableStateBuilder) SetNewRunSize(size int) {
-	if e.continueAsNew != nil {
-		e.continueAsNew.ExecutionInfo.HistorySize = int64(size)
-	}
-}
-
 func (e *mutableStateBuilder) GetHistoryBuilder() *historyBuilder {
 	return e.hBuilder
 }

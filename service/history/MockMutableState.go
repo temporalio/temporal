@@ -1573,20 +1573,6 @@ func (_m *mockMutableState) GetHistoryBuilder() *historyBuilder {
 	return r0
 }
 
-// GetHistorySize provides a mock function with given fields:
-func (_m *mockMutableState) GetHistorySize() int64 {
-	ret := _m.Called()
-
-	var r0 int64
-	if rf, ok := ret.Get(0).(func() int64); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int64)
-	}
-
-	return r0
-}
-
 // GetInFlightDecisionTask provides a mock function with given fields:
 func (_m *mockMutableState) GetInFlightDecisionTask() (*decisionInfo, bool) {
 	ret := _m.Called()
@@ -1978,11 +1964,6 @@ func (_m *mockMutableState) HasProcessedOrPendingDecisionTask() bool {
 	}
 
 	return r0
-}
-
-// IncrementHistorySize provides a mock function with given fields: _a0
-func (_m *mockMutableState) IncrementHistorySize(_a0 int) {
-	_m.Called(_a0)
 }
 
 // IsCancelRequested provides a mock function with given fields:
@@ -2723,11 +2704,6 @@ func (_m *mockMutableState) SetHistoryTree(treeID string) error {
 	}
 
 	return r0
-}
-
-// SetNewRunSize provides a mock function with given fields: size
-func (_m *mockMutableState) SetNewRunSize(size int) {
-	_m.Called(size)
 }
 
 // UpdateActivity provides a mock function with given fields: _a0

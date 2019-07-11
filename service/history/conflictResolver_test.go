@@ -223,6 +223,7 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{},
 	}
 
+	historySize := int64(1234567)
 	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
 		Execution:     execution,
@@ -234,6 +235,7 @@ func (s *conflictResolverSuite) TestReset() {
 		History:          &shared.History{Events: []*shared.HistoryEvent{event1, event2}},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
+		Size:             int(historySize),
 	}, nil)
 
 	s.mockContext.updateCondition = int64(59)
@@ -277,6 +279,9 @@ func (s *conflictResolverSuite) TestReset() {
 		PrevState:            prevState,
 		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
 			ExecutionInfo: executionInfo,
+			ExecutionStats: &persistence.ExecutionStats{
+				HistorySize: historySize,
+			},
 			ReplicationState: &persistence.ReplicationState{
 				CurrentVersion:   event1.GetVersion(),
 				StartVersion:     event1.GetVersion(),
@@ -307,7 +312,8 @@ func (s *conflictResolverSuite) TestReset() {
 		Execution: execution,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
-			ExecutionInfo: &persistence.WorkflowExecutionInfo{},
+			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},
+			ExecutionStats: &persistence.ExecutionStats{},
 		},
 	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)

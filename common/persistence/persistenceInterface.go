@@ -188,7 +188,6 @@ type (
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
 		SignalCount                  int32
-		HistorySize                  int64
 		DecisionVersion              int64
 		DecisionScheduleID           int64
 		DecisionStartedID            int64
@@ -220,6 +219,9 @@ type (
 		CronSchedule      string
 		ExpirationSeconds int32
 		SearchAttributes  map[string][]byte
+
+		// attributes which are not related to mutable state at all
+		HistorySize int64
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface

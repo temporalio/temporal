@@ -5082,6 +5082,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
 	builder.FlushBufferedEvents()
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
+	stats := &persistence.ExecutionStats{}
 	activityInfos := make(map[int64]*persistence.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
 		activityInfos[id] = copyActivityInfo(info)
@@ -5118,6 +5119,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 
 	return &persistence.WorkflowMutableState{
 		ExecutionInfo:       info,
+		ExecutionStats:      stats,
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		BufferedEvents:      bufferedEvents,
@@ -5156,7 +5158,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		LastUpdatedTimestamp:         sourceInfo.LastUpdatedTimestamp,
 		CreateRequestID:              sourceInfo.CreateRequestID,
 		SignalCount:                  sourceInfo.SignalCount,
-		HistorySize:                  sourceInfo.HistorySize,
 		DecisionVersion:              sourceInfo.DecisionVersion,
 		DecisionScheduleID:           sourceInfo.DecisionScheduleID,
 		DecisionStartedID:            sourceInfo.DecisionStartedID,
