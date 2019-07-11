@@ -108,7 +108,7 @@ func createTestTaskListManagerWithConfig(cfg *Config) *taskListManagerImpl {
 	)
 	tl := "tl"
 	dID := "domain"
-	tlID := &taskListID{domainID: dID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
 	tlKind := common.TaskListKindPtr(workflow.TaskListKindNormal)
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
 	if err != nil {

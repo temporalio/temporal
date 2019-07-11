@@ -131,14 +131,14 @@ func newTaskListManager(
 		taskListKind = common.TaskListKindPtr(s.TaskListKindNormal)
 	}
 
-	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.taskListName, taskList.taskType, int(*taskListKind), e.logger)
+	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.name, taskList.taskType, int(*taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
 		domainCache:   e.domainCache,
 		metricsClient: e.metricsClient,
 		engine:        e,
 		shutdownCh:    make(chan struct{}),
 		taskListID:    taskList,
-		logger: e.logger.WithTags(tag.WorkflowTaskListName(taskList.taskListName),
+		logger: e.logger.WithTags(tag.WorkflowTaskListName(taskList.name),
 			tag.WorkflowTaskListType(taskList.taskType)),
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
@@ -354,7 +354,7 @@ func (c *taskListManagerImpl) String() string {
 		buf.WriteString("Decision")
 	}
 	rangeID := c.db.RangeID()
-	fmt.Fprintf(buf, " task list %v\n", c.taskListID.taskListName)
+	fmt.Fprintf(buf, " task list %v\n", c.taskListID.name)
 	fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
 	fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
@@ -394,7 +394,7 @@ func (c *taskListManagerImpl) completeTask(task *internalTask, err error) {
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskList,
 				tag.Error(err),
-				tag.WorkflowTaskListName(c.taskListID.taskListName),
+				tag.WorkflowTaskListName(c.taskListID.name),
 				tag.WorkflowTaskListType(c.taskListID.taskType))
 			c.Stop()
 			return

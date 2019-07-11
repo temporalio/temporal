@@ -64,12 +64,6 @@ type matchingEngineImpl struct {
 	domainCache  cache.DomainCache
 }
 
-type taskListID struct {
-	domainID     string
-	taskListName string
-	taskType     int
-}
-
 type pollerIDCtxKey string
 type identityCtxKey string
 
@@ -91,21 +85,7 @@ var (
 
 const (
 	maxQueryWaitCount = 5
-	maxQueryLoopCount = 5
 )
-
-func (t *taskListID) String() string {
-	var r string
-	if t.taskType == persistence.TaskListTypeActivity {
-		r += "activity"
-	} else {
-		r += "decision"
-	}
-	r += " task list \""
-	r += t.taskListName
-	r += "\""
-	return r
-}
 
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
 
@@ -184,21 +164,21 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID,
 		e.taskListsLock.Unlock()
 		return result, nil
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
 	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
 	if err != nil {
 		e.taskListsLock.Unlock()
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
 		return nil, err
 	}
 	e.taskLists[*taskList] = mgr
 	e.taskListsLock.Unlock()
 	err = mgr.Start()
 	if err != nil {
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
 	return mgr, nil
 }
 
@@ -220,14 +200,24 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *m.
 	domainID := addRequest.GetDomainUUID()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := common.TaskListKindPtr(addRequest.TaskList.GetKind())
-	e.logger.Debug(fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
-		addRequest.TaskList.GetName(), addRequest.Execution.GetWorkflowId(), addRequest.Execution.GetRunId(),
-		addRequest.GetScheduleToStartTimeoutSeconds()))
-	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+
+	e.logger.Debug(
+		fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
+			addRequest.TaskList.GetName(),
+			addRequest.Execution.GetWorkflowId(),
+			addRequest.Execution.GetRunId(),
+			addRequest.GetScheduleToStartTimeoutSeconds()))
+
+	taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+	if err != nil {
+		return false, err
+	}
+
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
 		return false, err
 	}
+
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               domainID,
 		RunID:                  addRequest.Execution.GetRunId(),
@@ -248,13 +238,23 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *m.
 	sourceDomainID := addRequest.GetSourceDomainUUID()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := common.TaskListKindPtr(addRequest.TaskList.GetKind())
-	e.logger.Debug(fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
-		taskListName, addRequest.Execution.WorkflowId, addRequest.Execution.RunId))
-	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+
+	e.logger.Debug(
+		fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
+			taskListName,
+			addRequest.Execution.WorkflowId,
+			addRequest.Execution.RunId))
+
+	taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+	if err != nil {
+		return false, err
+	}
+
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
 		return false, err
 	}
+
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               sourceDomainID,
 		RunID:                  addRequest.Execution.GetRunId(),
@@ -289,7 +289,10 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+		taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+		if err != nil {
+			return nil, err
+		}
 		taskListKind := common.TaskListKindPtr(request.TaskList.GetKind())
 		task, err := e.getTask(pollerCtx, taskList, nil, taskListKind)
 		if err != nil {
@@ -379,7 +382,11 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+		taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+		if err != nil {
+			return nil, err
+		}
+
 		var maxDispatch *float64
 		if request.TaskListMetadata != nil {
 			maxDispatch = request.TaskListMetadata.MaxTasksPerSecond
@@ -420,8 +427,11 @@ pollLoop:
 func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWorkflowRequest) (*workflow.QueryWorkflowResponse, error) {
 	domainID := queryRequest.GetDomainUUID()
 	taskListName := queryRequest.TaskList.GetName()
-	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 	taskListKind := common.TaskListKindPtr(queryRequest.TaskList.GetKind())
+	taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+	if err != nil {
+		return nil, err
+	}
 
 	var lastErr error
 query_loop:
@@ -534,7 +544,10 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 	taskListName := request.TaskList.GetName()
 	pollerID := request.GetPollerID()
 
-	taskList := newTaskListID(domainID, taskListName, taskListType)
+	taskList, err := newTaskListID(domainID, taskListName, taskListType)
+	if err != nil {
+		return err
+	}
 	taskListKind := common.TaskListKindPtr(request.TaskList.GetKind())
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
@@ -552,8 +565,10 @@ func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *m.De
 		taskListType = persistence.TaskListTypeActivity
 	}
 	taskListName := request.DescRequest.TaskList.GetName()
-
-	taskList := newTaskListID(domainID, taskListName, taskListType)
+	taskList, err := newTaskListID(domainID, taskListName, taskListType)
+	if err != nil {
+		return nil, err
+	}
 	taskListKind := common.TaskListKindPtr(request.DescRequest.TaskList.GetKind())
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
@@ -729,10 +744,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		return true
 	})
 	return resp, err
-}
-
-func newTaskListID(domainID, taskListName string, taskType int) *taskListID {
-	return &taskListID{domainID: domainID, taskListName: taskListName, taskType: taskType}
 }
 
 func workflowExecutionPtr(execution workflow.WorkflowExecution) *workflow.WorkflowExecution {
