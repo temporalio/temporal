@@ -30,6 +30,11 @@ const (
 	Version = "0.6.4"
 )
 
+// SetFactory is used to set the ClientFactory global
+func SetFactory(factory ClientFactory) {
+	cFactory = factory
+}
+
 // NewCliApp instantiates a new instance of the CLI application.
 func NewCliApp() *cli.App {
 	app := cli.NewApp()

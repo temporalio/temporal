@@ -27,16 +27,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/valyala/fastjson"
 
 	"github.com/uber/cadence/common/clock"
 
@@ -50,412 +50,9 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 )
-
-const (
-	localHostPort = "127.0.0.1:7933"
-
-	maxOutputStringLength = 200 // max length for output string
-	maxWorkflowTypeLength = 32  // max item length for output workflow type in table
-	defaultMaxFieldLength = 500 // default max length for each attribute field
-	maxWordLength         = 120 // if text length is larger than maxWordLength, it will be inserted spaces
-
-	defaultTimeFormat                = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
-	defaultDateTimeFormat            = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
-	defaultDomainRetentionDays       = 3
-	defaultContextTimeoutInSeconds   = 5
-	defaultContextTimeout            = defaultContextTimeoutInSeconds * time.Second
-	defaultContextTimeoutForLongPoll = 2 * time.Minute
-
-	defaultDecisionTimeoutInSeconds = 10
-	defaultPageSizeForList          = 500
-	defaultWorkflowIDReusePolicy    = s.WorkflowIdReusePolicyAllowDuplicateFailedOnly
-
-	workflowStatusNotSet = -1
-	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
-
-	searchAttrInputSeparator = "|"
-)
-
-var envKeysForUserName = []string{
-	"USER",
-	"LOGNAME",
-	"HOME",
-}
-
-var resetTypesMap = map[string]string{
-	"FirstDecisionCompleted": "",
-	"LastDecisionCompleted":  "",
-	"LastContinuedAsNew":     "",
-	"BadBinary":              FlagResetBadBinaryChecksum,
-}
-
-type jsonType int
-
-const (
-	jsonTypeInput jsonType = iota
-	jsonTypeMemo
-)
-
-// SetFactory is used to set the ClientFactory global
-func SetFactory(factory ClientFactory) {
-	cFactory = factory
-}
-
-var (
-	cFactory ClientFactory
-
-	colorRed     = color.New(color.FgRed).SprintFunc()
-	colorMagenta = color.New(color.FgMagenta).SprintFunc()
-	colorGreen   = color.New(color.FgGreen).SprintFunc()
-
-	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
-	optionErr               = "there is something wrong with your command options"
-	osExit                  = os.Exit
-	workflowClosedStatusMap = map[string]s.WorkflowExecutionCloseStatus{
-		"completed":      s.WorkflowExecutionCloseStatusCompleted,
-		"failed":         s.WorkflowExecutionCloseStatusFailed,
-		"canceled":       s.WorkflowExecutionCloseStatusCanceled,
-		"terminated":     s.WorkflowExecutionCloseStatusTerminated,
-		"continuedasnew": s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"continueasnew":  s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"timedout":       s.WorkflowExecutionCloseStatusTimedOut,
-		// below are some alias
-		"c":         s.WorkflowExecutionCloseStatusCompleted,
-		"complete":  s.WorkflowExecutionCloseStatusCompleted,
-		"f":         s.WorkflowExecutionCloseStatusFailed,
-		"fail":      s.WorkflowExecutionCloseStatusFailed,
-		"cancel":    s.WorkflowExecutionCloseStatusCanceled,
-		"terminate": s.WorkflowExecutionCloseStatusTerminated,
-		"term":      s.WorkflowExecutionCloseStatusTerminated,
-		"continue":  s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"cont":      s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"timeout":   s.WorkflowExecutionCloseStatusTimedOut,
-	}
-)
-
-func mapKeysToArray(m map[string]string) []string {
-	var out []string
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-// ErrorAndExit print easy to understand error msg first then error detail in a new line
-func ErrorAndExit(msg string, err error) {
-	if err != nil {
-		fmt.Printf("%s %s\n%s %+v\n", colorRed("Error:"), msg, colorMagenta("Error Details:"), err)
-		if os.Getenv(showErrorStackEnv) != `` {
-			fmt.Printf("Stack trace:\n")
-			debug.PrintStack()
-		} else {
-			fmt.Printf("('export %s=1' to see stack traces)\n", showErrorStackEnv)
-		}
-	} else {
-		fmt.Printf("%s %s\n", colorRed("Error:"), msg)
-	}
-	osExit(1)
-}
-
-// RegisterDomain register a domain
-func RegisterDomain(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
-
-	description := c.String(FlagDescription)
-	ownerEmail := c.String(FlagOwnerEmail)
-	retentionDays := defaultDomainRetentionDays
-
-	if c.IsSet(FlagRetentionDays) {
-		retentionDays = c.Int(FlagRetentionDays)
-	}
-	securityToken := c.String(FlagSecurityToken)
-	emitMetric := false
-	var err error
-	if c.IsSet(FlagEmitMetric) {
-		emitMetric, err = strconv.ParseBool(c.String(FlagEmitMetric))
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
-		}
-	}
-	var isGlobalDomainPtr *bool
-	if c.IsSet(FlagIsGlobalDomain) {
-		isGlobalDomain, err := strconv.ParseBool(c.String(FlagIsGlobalDomain))
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagIsGlobalDomain), err)
-		}
-		isGlobalDomainPtr = common.BoolPtr(isGlobalDomain)
-	}
-
-	domainData := map[string]string{}
-	if c.IsSet(FlagDomainData) {
-		domainDataStr := getRequiredOption(c, FlagDomainData)
-		domainData, err = parseDomainDataKVs(domainDataStr)
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagDomainData), err)
-		}
-	}
-	if len(requiredDomainDataKeys) > 0 {
-		err = checkRequiredDomainDataKVs(domainData)
-		if err != nil {
-			ErrorAndExit("Domain data missed required data.", err)
-		}
-	}
-
-	var activeClusterName string
-	if c.IsSet(FlagActiveClusterName) {
-		activeClusterName = c.String(FlagActiveClusterName)
-	}
-	var clusters []*shared.ClusterReplicationConfiguration
-	if c.IsSet(FlagClusters) {
-		clusterStr := c.String(FlagClusters)
-		clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(clusterStr),
-		})
-		for _, clusterStr := range c.Args() {
-			clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-				ClusterName: common.StringPtr(clusterStr),
-			})
-		}
-	}
-
-	request := &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domain),
-		Description:                            common.StringPtr(description),
-		OwnerEmail:                             common.StringPtr(ownerEmail),
-		Data:                                   domainData,
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
-		EmitMetric:                             common.BoolPtr(emitMetric),
-		Clusters:                               clusters,
-		ActiveClusterName:                      common.StringPtr(activeClusterName),
-		SecurityToken:                          common.StringPtr(securityToken),
-		ArchivalStatus:                         archivalStatus(c),
-		ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
-		IsGlobalDomain:                         isGlobalDomainPtr,
-	}
-
-	ctx, cancel := newContext(c)
-	defer cancel()
-	err = frontendClient.RegisterDomain(ctx, request)
-	if err != nil {
-		if _, ok := err.(*s.DomainAlreadyExistsError); !ok {
-			ErrorAndExit("Register Domain operation failed.", err)
-		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domain), err)
-		}
-	} else {
-		fmt.Printf("Domain %s successfully registered.\n", domain)
-	}
-}
-
-// UpdateDomain updates a domain
-func UpdateDomain(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
-
-	var updateRequest *shared.UpdateDomainRequest
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	if c.IsSet(FlagActiveClusterName) {
-		activeCluster := c.String(FlagActiveClusterName)
-		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
-		replicationConfig := &shared.DomainReplicationConfiguration{
-			ActiveClusterName: common.StringPtr(activeCluster),
-		}
-		updateRequest = &shared.UpdateDomainRequest{
-			Name:                     common.StringPtr(domain),
-			ReplicationConfiguration: replicationConfig,
-		}
-	} else {
-		resp, err := frontendClient.DescribeDomain(ctx, &shared.DescribeDomainRequest{
-			Name: common.StringPtr(domain),
-		})
-		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); !ok {
-				ErrorAndExit("Operation UpdateDomain failed.", err)
-			} else {
-				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
-			}
-			return
-		}
-
-		description := resp.DomainInfo.GetDescription()
-		ownerEmail := resp.DomainInfo.GetOwnerEmail()
-		retentionDays := resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays()
-		emitMetric := resp.Configuration.GetEmitMetric()
-		var clusters []*shared.ClusterReplicationConfiguration
-
-		if c.IsSet(FlagDescription) {
-			description = c.String(FlagDescription)
-		}
-		if c.IsSet(FlagOwnerEmail) {
-			ownerEmail = c.String(FlagOwnerEmail)
-		}
-		domainData := map[string]string{}
-		if c.IsSet(FlagDomainData) {
-			domainDataStr := c.String(FlagDomainData)
-			domainData, err = parseDomainDataKVs(domainDataStr)
-			if err != nil {
-				ErrorAndExit("Domain data format is invalid.", err)
-			}
-		}
-		if c.IsSet(FlagRetentionDays) {
-			retentionDays = int32(c.Int(FlagRetentionDays))
-		}
-		if c.IsSet(FlagEmitMetric) {
-			emitMetric, err = strconv.ParseBool(c.String(FlagEmitMetric))
-			if err != nil {
-				ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
-			}
-		}
-		if c.IsSet(FlagClusters) {
-			clusterStr := c.String(FlagClusters)
-			clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-				ClusterName: common.StringPtr(clusterStr),
-			})
-			for _, clusterStr := range c.Args() {
-				clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-					ClusterName: common.StringPtr(clusterStr),
-				})
-			}
-		}
-
-		var binBinaries *shared.BadBinaries
-		if c.IsSet(FlagAddBadBinary) {
-			if !c.IsSet(FlagReason) {
-				ErrorAndExit("Must provide a reason.", nil)
-			}
-			binChecksum := c.String(FlagAddBadBinary)
-			reason := c.String(FlagReason)
-			operator := getCurrentUserFromEnv()
-			binBinaries = &shared.BadBinaries{
-				Binaries: map[string]*shared.BadBinaryInfo{
-					binChecksum: {
-						Reason:   common.StringPtr(reason),
-						Operator: common.StringPtr(operator),
-					},
-				},
-			}
-		}
-
-		var badBinaryToDelete *string
-		if c.IsSet(FlagRemoveBadBinary) {
-			badBinaryToDelete = common.StringPtr(c.String(FlagRemoveBadBinary))
-		}
-
-		updateInfo := &shared.UpdateDomainInfo{
-			Description: common.StringPtr(description),
-			OwnerEmail:  common.StringPtr(ownerEmail),
-			Data:        domainData,
-		}
-		updateConfig := &shared.DomainConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
-			EmitMetric:                             common.BoolPtr(emitMetric),
-			ArchivalStatus:                         archivalStatus(c),
-			ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
-			BadBinaries:                            binBinaries,
-		}
-		replicationConfig := &shared.DomainReplicationConfiguration{
-			Clusters: clusters,
-		}
-		updateRequest = &shared.UpdateDomainRequest{
-			Name:                     common.StringPtr(domain),
-			UpdatedInfo:              updateInfo,
-			Configuration:            updateConfig,
-			ReplicationConfiguration: replicationConfig,
-			DeleteBadBinary:          badBinaryToDelete,
-		}
-	}
-
-	securityToken := c.String(FlagSecurityToken)
-	updateRequest.SecurityToken = common.StringPtr(securityToken)
-	_, err := frontendClient.UpdateDomain(ctx, updateRequest)
-	if err != nil {
-		if _, ok := err.(*s.EntityNotExistsError); !ok {
-			ErrorAndExit("Operation UpdateDomain failed.", err)
-		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
-		}
-	} else {
-		fmt.Printf("Domain %s successfully updated.\n", domain)
-	}
-}
-
-func getCurrentUserFromEnv() string {
-	for _, n := range envKeysForUserName {
-		if len(os.Getenv(n)) > 0 {
-			return os.Getenv(n)
-		}
-	}
-	return "unkown"
-}
-
-// DescribeDomain updates a domain
-func DescribeDomain(c *cli.Context) {
-	domainName := c.GlobalString(FlagDomain)
-	domainID := c.String(FlagDomainID)
-
-	if domainID == "" && domainName == "" {
-		ErrorAndExit("At least domainID or domainName must be provided.", nil)
-	}
-	ctx, cancel := newContext(c)
-	defer cancel()
-	frontendClient := cFactory.ServerFrontendClient(c)
-	resp, err := frontendClient.DescribeDomain(ctx, &shared.DescribeDomainRequest{
-		Name: common.StringPtr(domainName),
-		UUID: common.StringPtr(domainID),
-	})
-	if err != nil {
-		if _, ok := err.(*s.EntityNotExistsError); !ok {
-			ErrorAndExit("Operation DescribeDomain failed.", err)
-		}
-		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
-	}
-
-	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
-		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nArchivalStatus: %v\n"
-	descValues := []interface{}{
-		resp.DomainInfo.GetName(),
-		resp.DomainInfo.GetUUID(),
-		resp.DomainInfo.GetDescription(),
-		resp.DomainInfo.GetOwnerEmail(),
-		resp.DomainInfo.Data,
-		resp.DomainInfo.GetStatus(),
-		resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
-		resp.Configuration.GetEmitMetric(),
-		resp.ReplicationConfiguration.GetActiveClusterName(),
-		clustersToString(resp.ReplicationConfiguration.Clusters),
-		resp.Configuration.GetArchivalStatus().String(),
-	}
-	if resp.Configuration.GetArchivalBucketName() != "" {
-		formatStr = formatStr + "BucketName: %v\n"
-		descValues = append(descValues, resp.Configuration.GetArchivalBucketName())
-	}
-	fmt.Printf(formatStr, descValues...)
-	if resp.Configuration.BadBinaries != nil {
-		fmt.Println("Bad binaries to reset:")
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetBorder(true)
-		table.SetColumnSeparator("|")
-		header := []string{"Binary Checksum", "Operator", "Start Time", "Reason"}
-		headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
-		table.SetHeader(header)
-		table.SetHeaderColor(headerColor...)
-		for cs, bin := range resp.Configuration.BadBinaries.Binaries {
-			row := []string{cs}
-			row = append(row, bin.GetOperator())
-			row = append(row, time.Unix(0, bin.GetCreatedTimeNano()).String())
-			row = append(row, bin.GetReason())
-			table.Append(row)
-		}
-		table.Render()
-	}
-}
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
 func ShowHistory(c *cli.Context) {
@@ -666,6 +263,86 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	} else {
 		startFn()
 	}
+}
+
+func processSearchAttr(c *cli.Context) map[string][]byte {
+	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
+	var searchAttrKeys []string
+	if strings.TrimSpace(rawSearchAttrKey) != "" {
+		searchAttrKeys = trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
+	}
+
+	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
+	var searchAttrVals []interface{}
+	if strings.TrimSpace(rawSearchAttrVal) != "" {
+		searchAttrValsStr := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
+
+		for _, v := range searchAttrValsStr {
+			searchAttrVals = append(searchAttrVals, convertStringToRealType(v))
+		}
+	}
+
+	if len(searchAttrKeys) != len(searchAttrVals) {
+		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
+	}
+
+	fields := map[string][]byte{}
+	for i, key := range searchAttrKeys {
+		val, err := json.Marshal(searchAttrVals[i])
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
+		}
+		fields[key] = val
+	}
+
+	return fields
+}
+
+func processMemo(c *cli.Context) map[string][]byte {
+	rawMemoKey := c.String(FlagMemoKey)
+	var memoKeys []string
+	if strings.TrimSpace(rawMemoKey) != "" {
+		memoKeys = strings.Split(rawMemoKey, " ")
+	}
+
+	rawMemoValue := processJSONInputHelper(c, jsonTypeMemo)
+	var memoValues []string
+
+	var sc fastjson.Scanner
+	sc.Init(rawMemoValue)
+	for sc.Next() {
+		memoValues = append(memoValues, sc.Value().String())
+	}
+	if err := sc.Error(); err != nil {
+		ErrorAndExit("Parse json error.", err)
+	}
+	if len(memoKeys) != len(memoValues) {
+		ErrorAndExit("Number of memo keys and values are not equal.", nil)
+	}
+
+	fields := map[string][]byte{}
+	for i, key := range memoKeys {
+		fields[key] = []byte(memoValues[i])
+	}
+	return fields
+}
+
+func getPrintableMemo(memo *s.Memo) string {
+	buf := new(bytes.Buffer)
+	for k, v := range memo.Fields {
+		fmt.Fprintf(buf, "%s=%s\n", k, string(v))
+	}
+	return buf.String()
+}
+
+func getPrintableSearchAttr(searchAttr *s.SearchAttributes) string {
+	buf := new(bytes.Buffer)
+	for k, v := range searchAttr.IndexedFields {
+		var decodedVal interface{}
+		json.Unmarshal(v, &decodedVal)
+		fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
+	}
+	return buf.String()
 }
 
 // helper function to print workflow progress with time refresh every second
@@ -1002,16 +679,6 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 	prettyPrintJSONObject(o)
 }
 
-func prettyPrintJSONObject(o interface{}) {
-	b, err := json.MarshalIndent(o, "", "  ")
-	if err != nil {
-		fmt.Printf("Error when try to print pretty: %v\n", err)
-		fmt.Println(o)
-	}
-	os.Stdout.Write(b)
-	fmt.Println()
-}
-
 func printAutoResetPoints(resp *shared.DescribeWorkflowExecutionResponse) {
 	fmt.Println("Auto Reset Points:")
 	table := tablewriter.NewWriter(os.Stdout)
@@ -1264,6 +931,39 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	return prepareTable
 }
 
+func printRunStatus(event *s.HistoryEvent) {
+	switch event.GetEventType() {
+	case s.EventTypeWorkflowExecutionCompleted:
+		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
+		fmt.Printf("  Output: %s\n", string(event.WorkflowExecutionCompletedEventAttributes.Result))
+	case s.EventTypeWorkflowExecutionFailed:
+		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
+		fmt.Printf("  Reason: %s\n", event.WorkflowExecutionFailedEventAttributes.GetReason())
+		fmt.Printf("  Detail: %s\n", string(event.WorkflowExecutionFailedEventAttributes.Details))
+	case s.EventTypeWorkflowExecutionTimedOut:
+		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
+		fmt.Printf("  Timeout Type: %s\n", event.WorkflowExecutionTimedOutEventAttributes.GetTimeoutType())
+	case s.EventTypeWorkflowExecutionCanceled:
+		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
+		fmt.Printf("  Detail: %s\n", string(event.WorkflowExecutionCanceledEventAttributes.Details))
+	}
+}
+
+// in case workflow type is too long to show in table, trim it like .../example.Workflow
+func trimWorkflowType(str string) string {
+	res := str
+	if len(str) >= maxWorkflowTypeLength {
+		items := strings.Split(str, "/")
+		res = items[len(items)-1]
+		if len(res) >= maxWorkflowTypeLength {
+			res = "..." + res[len(res)-maxWorkflowTypeLength:]
+		} else {
+			res = ".../" + res
+		}
+	}
+	return res
+}
+
 func listWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) (
 	[]*s.WorkflowExecutionInfo, []byte) {
 
@@ -1375,6 +1075,24 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 	return result, nextPageToken
 }
 
+func getWorkflowStatus(statusStr string) s.WorkflowExecutionCloseStatus {
+	if status, ok := workflowClosedStatusMap[strings.ToLower(statusStr)]; ok {
+		return status
+	}
+	ErrorAndExit(optionErr, errors.New("option status is not one of allowed values "+
+		"[completed, failed, canceled, terminated, continueasnew, timedout]"))
+	return 0
+}
+
+func getWorkflowIDReusePolicy(value int) *s.WorkflowIdReusePolicy {
+	if value >= 0 && value <= len(s.WorkflowIdReusePolicy_Values()) {
+		return s.WorkflowIdReusePolicy(value).Ptr()
+	}
+	// At this point, the policy should return if the value is valid
+	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIDReusePolicy), nil)
+	return nil
+}
+
 // default will print decoded raw
 func printListResults(executions []*s.WorkflowExecutionInfo, inJSON bool) {
 	for i, execution := range executions {
@@ -1393,40 +1111,6 @@ func printListResults(executions []*s.WorkflowExecutionInfo, inJSON bool) {
 			}
 		}
 	}
-}
-
-// DescribeTaskList show pollers info of a given tasklist
-func DescribeTaskList(c *cli.Context) {
-	wfClient := getWorkflowClient(c)
-	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := strToTaskListType(c.String(FlagTaskListType)) // default type is decision
-
-	ctx, cancel := newContext(c)
-	defer cancel()
-	response, err := wfClient.DescribeTaskList(ctx, taskList, taskListType)
-	if err != nil {
-		ErrorAndExit("Operation DescribeTaskList failed.", err)
-	}
-
-	pollers := response.Pollers
-	if len(pollers) == 0 {
-		ErrorAndExit(colorMagenta("No poller for tasklist: "+taskList), nil)
-	}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetBorder(false)
-	table.SetColumnSeparator("|")
-	if taskListType == s.TaskListTypeActivity {
-		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
-	} else {
-		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
-	}
-	table.SetHeaderLine(false)
-	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
-	for _, poller := range pollers {
-		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
-	}
-	table.Render()
 }
 
 // ObserveHistory show the process of running workflow
@@ -1964,367 +1648,4 @@ func ObserveHistoryWithID(c *cli.Context) {
 	}
 
 	printWorkflowProgress(c, wid, rid)
-}
-
-func getWorkflowClient(c *cli.Context) client.Client {
-	domain := getRequiredGlobalOption(c, FlagDomain)
-	return client.NewClient(cFactory.ClientFrontendClient(c), domain, &client.Options{})
-}
-
-func getRequiredOption(c *cli.Context, optionName string) string {
-	value := c.String(optionName)
-	if len(value) == 0 {
-		ErrorAndExit(fmt.Sprintf("Option %s is required", optionName), nil)
-	}
-	return value
-}
-
-func getRequiredGlobalOption(c *cli.Context, optionName string) string {
-	value := c.GlobalString(optionName)
-	if len(value) == 0 {
-		ErrorAndExit(fmt.Sprintf("Global option %s is required", optionName), nil)
-	}
-	return value
-}
-
-func timestampPtrToStringPtr(unixNanoPtr *int64, onlyTime bool) *string {
-	if unixNanoPtr == nil {
-		return nil
-	}
-	return common.StringPtr(convertTime(*unixNanoPtr, onlyTime))
-}
-
-func convertTime(unixNano int64, onlyTime bool) string {
-	t := time.Unix(0, unixNano)
-	var result string
-	if onlyTime {
-		result = t.Format(defaultTimeFormat)
-	} else {
-		result = t.Format(defaultDateTimeFormat)
-	}
-	return result
-}
-
-func parseTime(timeStr string, defaultValue int64) int64 {
-	if len(timeStr) == 0 {
-		return defaultValue
-	}
-
-	// try to parse
-	parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
-	if err == nil {
-		return parsedTime.UnixNano()
-	}
-
-	// treat as raw time
-	resultValue, err := strconv.ParseInt(timeStr, 10, 64)
-	if err != nil {
-		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z' or raw UnixNano directly.", timeStr), err)
-	}
-
-	return resultValue
-}
-
-func strToTaskListType(str string) s.TaskListType {
-	if strings.ToLower(str) == "activity" {
-		return s.TaskListTypeActivity
-	}
-	return s.TaskListTypeDecision
-}
-
-func getPtrOrNilIfEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return common.StringPtr(value)
-}
-
-func getCliIdentity() string {
-	hostName, err := os.Hostname()
-	if err != nil {
-		hostName = "UnKnown"
-	}
-	return fmt.Sprintf("cadence-cli@%s", hostName)
-}
-
-func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultContextTimeout
-	if c.GlobalInt(FlagContextTimeout) > 0 {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
-	}
-	return context.WithTimeout(context.Background(), contextTimeout)
-}
-
-func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultContextTimeoutForLongPoll
-	if c.GlobalIsSet(FlagContextTimeout) {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
-	}
-	return context.WithTimeout(context.Background(), contextTimeout)
-}
-
-// process and validate input provided through cmd or file
-func processJSONInput(c *cli.Context) string {
-	return processJSONInputHelper(c, jsonTypeInput)
-}
-
-// process and validate json
-func processJSONInputHelper(c *cli.Context, jType jsonType) string {
-	var flagNameOfRawInput string
-	var flagNameOfInputFileName string
-
-	switch jType {
-	case jsonTypeInput:
-		flagNameOfRawInput = FlagInput
-		flagNameOfInputFileName = FlagInputFile
-	case jsonTypeMemo:
-		flagNameOfRawInput = FlagMemo
-		flagNameOfInputFileName = FlagMemoFile
-	default:
-		return ""
-	}
-
-	var input string
-	if c.IsSet(flagNameOfRawInput) {
-		input = c.String(flagNameOfRawInput)
-	} else if c.IsSet(flagNameOfInputFileName) {
-		inputFile := c.String(flagNameOfInputFileName)
-		data, err := ioutil.ReadFile(inputFile)
-		if err != nil {
-			ErrorAndExit("Error reading input file", err)
-		}
-		input = string(data)
-	}
-	if input != "" {
-		if err := validateJSONs(input); err != nil {
-			ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
-		}
-	}
-	return input
-}
-
-// validate whether str is a valid json or multi valid json concatenated with spaces/newlines
-func validateJSONs(str string) error {
-	input := []byte(str)
-	dec := json.NewDecoder(bytes.NewReader(input))
-	for {
-		_, err := dec.Token()
-		if err == io.EOF {
-			return nil // End of input, valid JSON
-		}
-		if err != nil {
-			return err // Invalid input
-		}
-	}
-}
-
-// use parseBool to ensure all BOOL search attributes only be "true" or "false"
-func parseBool(str string) (bool, error) {
-	switch str {
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("not parseable bool value: %s", str)
-}
-
-func trimSpace(strs []string) []string {
-	result := make([]string, len(strs))
-	for i, v := range strs {
-		result[i] = strings.TrimSpace(v)
-	}
-	return result
-}
-
-func convertStringToRealType(v string) interface{} {
-	var genVal interface{}
-	var err error
-
-	if genVal, err = strconv.ParseInt(v, 10, 64); err == nil {
-
-	} else if genVal, err = parseBool(v); err == nil {
-
-	} else if genVal, err = strconv.ParseFloat(v, 64); err == nil {
-
-	} else if genVal, err = time.Parse(defaultDateTimeFormat, v); err == nil {
-
-	} else {
-		genVal = v
-	}
-
-	return genVal
-}
-
-func processSearchAttr(c *cli.Context) map[string][]byte {
-	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
-	var searchAttrKeys []string
-	if strings.TrimSpace(rawSearchAttrKey) != "" {
-		searchAttrKeys = trimSpace(strings.Split(rawSearchAttrKey, searchAttrInputSeparator))
-	}
-
-	rawSearchAttrVal := c.String(FlagSearchAttributesVal)
-	var searchAttrVals []interface{}
-	if strings.TrimSpace(rawSearchAttrVal) != "" {
-		searchAttrValsStr := trimSpace(strings.Split(rawSearchAttrVal, searchAttrInputSeparator))
-
-		for _, v := range searchAttrValsStr {
-			searchAttrVals = append(searchAttrVals, convertStringToRealType(v))
-		}
-	}
-
-	if len(searchAttrKeys) != len(searchAttrVals) {
-		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
-	}
-
-	fields := map[string][]byte{}
-	for i, key := range searchAttrKeys {
-		val, err := json.Marshal(searchAttrVals[i])
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
-		}
-		fields[key] = val
-	}
-
-	return fields
-}
-
-func processMemo(c *cli.Context) map[string][]byte {
-	rawMemoKey := c.String(FlagMemoKey)
-	var memoKeys []string
-	if strings.TrimSpace(rawMemoKey) != "" {
-		memoKeys = strings.Split(rawMemoKey, " ")
-	}
-
-	rawMemoValue := processJSONInputHelper(c, jsonTypeMemo)
-	var memoValues []string
-
-	var sc fastjson.Scanner
-	sc.Init(rawMemoValue)
-	for sc.Next() {
-		memoValues = append(memoValues, sc.Value().String())
-	}
-	if err := sc.Error(); err != nil {
-		ErrorAndExit("Parse json error.", err)
-	}
-	if len(memoKeys) != len(memoValues) {
-		ErrorAndExit("Number of memo keys and values are not equal.", nil)
-	}
-
-	fields := map[string][]byte{}
-	for i, key := range memoKeys {
-		fields[key] = []byte(memoValues[i])
-	}
-	return fields
-}
-
-func getPrintableMemo(memo *s.Memo) string {
-	buf := new(bytes.Buffer)
-	for k, v := range memo.Fields {
-		fmt.Fprintf(buf, "%s=%s\n", k, string(v))
-	}
-	return buf.String()
-}
-
-func getPrintableSearchAttr(searchAttr *s.SearchAttributes) string {
-	buf := new(bytes.Buffer)
-	for k, v := range searchAttr.IndexedFields {
-		var decodedVal interface{}
-		json.Unmarshal(v, &decodedVal)
-		fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
-	}
-	return buf.String()
-}
-
-func truncate(str string) string {
-	if len(str) > maxOutputStringLength {
-		return str[:maxOutputStringLength]
-	}
-	return str
-}
-
-// this only works for ANSI terminal, which means remove existing lines won't work if users redirect to file
-// ref: https://en.wikipedia.org/wiki/ANSI_escape_code
-func removePrevious2LinesFromTerminal() {
-	fmt.Printf("\033[1A")
-	fmt.Printf("\033[2K")
-	fmt.Printf("\033[1A")
-	fmt.Printf("\033[2K")
-}
-
-func printRunStatus(event *s.HistoryEvent) {
-	switch event.GetEventType() {
-	case s.EventTypeWorkflowExecutionCompleted:
-		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
-		fmt.Printf("  Output: %s\n", string(event.WorkflowExecutionCompletedEventAttributes.Result))
-	case s.EventTypeWorkflowExecutionFailed:
-		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
-		fmt.Printf("  Reason: %s\n", event.WorkflowExecutionFailedEventAttributes.GetReason())
-		fmt.Printf("  Detail: %s\n", string(event.WorkflowExecutionFailedEventAttributes.Details))
-	case s.EventTypeWorkflowExecutionTimedOut:
-		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
-		fmt.Printf("  Timeout Type: %s\n", event.WorkflowExecutionTimedOutEventAttributes.GetTimeoutType())
-	case s.EventTypeWorkflowExecutionCanceled:
-		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
-		fmt.Printf("  Detail: %s\n", string(event.WorkflowExecutionCanceledEventAttributes.Details))
-	}
-}
-
-// in case workflow type is too long to show in table, trim it like .../example.Workflow
-func trimWorkflowType(str string) string {
-	res := str
-	if len(str) >= maxWorkflowTypeLength {
-		items := strings.Split(str, "/")
-		res = items[len(items)-1]
-		if len(res) >= maxWorkflowTypeLength {
-			res = "..." + res[len(res)-maxWorkflowTypeLength:]
-		} else {
-			res = ".../" + res
-		}
-	}
-	return res
-}
-
-func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string {
-	var res string
-	for i, cluster := range clusters {
-		if i == 0 {
-			res = res + cluster.GetClusterName()
-		} else {
-			res = res + ", " + cluster.GetClusterName()
-		}
-	}
-	return res
-}
-
-func getWorkflowStatus(statusStr string) s.WorkflowExecutionCloseStatus {
-	if status, ok := workflowClosedStatusMap[strings.ToLower(statusStr)]; ok {
-		return status
-	}
-	ErrorAndExit(optionErr, errors.New("option status is not one of allowed values "+
-		"[completed, failed, canceled, terminated, continueasnew, timedout]"))
-	return 0
-}
-
-func getWorkflowIDReusePolicy(value int) *s.WorkflowIdReusePolicy {
-	if value >= 0 && value <= len(s.WorkflowIdReusePolicy_Values()) {
-		return s.WorkflowIdReusePolicy(value).Ptr()
-	}
-	// At this point, the policy should return if the value is valid
-	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIDReusePolicy), nil)
-	return nil
-}
-
-func archivalStatus(c *cli.Context) *shared.ArchivalStatus {
-	if c.IsSet(FlagArchivalStatus) {
-		switch c.String(FlagArchivalStatus) {
-		case "disabled":
-			return common.ArchivalStatusPtr(shared.ArchivalStatusDisabled)
-		case "enabled":
-			return common.ArchivalStatusPtr(shared.ArchivalStatusEnabled)
-		default:
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagArchivalStatus), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
-		}
-	}
-	return nil
 }
