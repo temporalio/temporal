@@ -964,3 +964,77 @@ func getUpsertSearchAttributes() *workflow.SearchAttributes {
 	}
 	return upsertSearchAttr
 }
+
+func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey() {
+	id := "es-integration-upsert-workflow-failed-test"
+	wt := "es-integration-upsert-workflow-failed-test-type"
+	tl := "es-integration-upsert-workflow-failed-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		upsertDecision := &workflow.Decision{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeUpsertWorkflowSearchAttributes),
+			UpsertWorkflowSearchAttributesDecisionAttributes: &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{
+				SearchAttributes: &workflow.SearchAttributes{
+					IndexedFields: map[string][]byte{
+						"INVALIDKEY": []byte(`1`),
+					},
+				},
+			}}
+		return nil, []*workflow.Decision{upsertDecision}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		StickyTaskList:  taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.Nil(err)
+
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(s.domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(*we.RunId),
+		},
+	})
+	s.Nil(err)
+	history := historyResponse.History
+	decisionFailedEvent := history.GetEvents()[3]
+	s.Equal(workflow.EventTypeDecisionTaskFailed, decisionFailedEvent.GetEventType())
+	failedDecisionAttr := decisionFailedEvent.DecisionTaskFailedEventAttributes
+	s.Equal(workflow.DecisionTaskFailedCauseBadSearchAttributes, failedDecisionAttr.GetCause())
+	s.True(len(failedDecisionAttr.GetDetails()) > 0)
+}
