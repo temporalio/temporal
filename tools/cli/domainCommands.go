@@ -79,10 +79,11 @@ func RegisterDomain(c *cli.Context) {
 		}
 	}
 
-	var activeClusterName string
+	var activeClusterName *string
 	if c.IsSet(FlagActiveClusterName) {
-		activeClusterName = c.String(FlagActiveClusterName)
+		activeClusterName = common.StringPtr(c.String(FlagActiveClusterName))
 	}
+
 	var clusters []*shared.ClusterReplicationConfiguration
 	if c.IsSet(FlagClusters) {
 		clusterStr := c.String(FlagClusters)
@@ -104,7 +105,7 @@ func RegisterDomain(c *cli.Context) {
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
-		ActiveClusterName:                      common.StringPtr(activeClusterName),
+		ActiveClusterName:                      activeClusterName,
 		SecurityToken:                          common.StringPtr(securityToken),
 		ArchivalStatus:                         archivalStatus(c),
 		ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
