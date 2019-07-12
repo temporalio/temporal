@@ -524,11 +524,7 @@ Update_History_Loop:
 		if continueAsNewBuilder != nil {
 			continueAsNewTimerTasks = msBuilder.GetContinueAsNew().TimerTasks
 
-			newHistorySize, err := context.appendFirstBatchHistoryForContinueAsNew(continueAsNewBuilder, transactionID)
-			if err != nil {
-				return nil, err
-			}
-			updateErr = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder, newHistorySize)
+			updateErr = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder)
 		} else {
 			updateErr = context.updateAsActive(transferTasks, timerTasks,
 				transactionID)

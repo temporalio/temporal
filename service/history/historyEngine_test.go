@@ -1945,14 +1945,21 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	domainID := validDomainID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: "wId",
 		ScheduleID: common.EmptyEventID,
 	})
-	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), validRunID)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -1991,10 +1998,17 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 		ScheduleID: common.EmptyEventID,
 		ActivityID: "aid",
 	})
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tasklist := "testTaskList"
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), validRunID)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -2651,10 +2665,17 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 		WorkflowID: "wId",
 		ScheduleID: common.EmptyEventID,
 	})
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tasklist := "testTaskList"
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), validRunID)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -2693,10 +2714,17 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 		ScheduleID: common.EmptyEventID,
 		ActivityID: "aid",
 	})
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tasklist := "testTaskList"
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), validRunID)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: validRunID}
@@ -4637,6 +4665,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
 	}
+	tasklist := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := []byte("test input")
@@ -4653,6 +4682,8 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.DomainID = validDomainID
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4690,7 +4721,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 		WorkflowId: common.StringPtr("wId2"),
 		RunId:      common.StringPtr(validRunID),
 	}
-	identity := "testIdentity2"
+	tasklist := "testTaskList"
+	identity := "testIdentity"
 	signalName := "my signal name 2"
 	input := []byte("test input 2")
 	requestID := uuid.New()
@@ -4708,6 +4740,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	// assume duplicate request id
 	ms.SignalRequestedIDs = make(map[string]struct{})
@@ -4746,6 +4780,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
 	}
+	tasklist := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := []byte("test input")
@@ -4762,6 +4797,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, *we, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = persistence.WorkflowStateCompleted
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4792,18 +4829,23 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
 	domainID := validDomainID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
 	requestID := uuid.New()
 	removeRequest = &history.RemoveSignalMutableStateRequest{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr("wId"),
-			RunId:      common.StringPtr(validRunID),
-		},
-		RequestId: common.StringPtr(requestID),
+		DomainUUID:        common.StringPtr(domainID),
+		WorkflowExecution: &execution,
+		RequestId:         common.StringPtr(requestID),
 	}
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), validRunID)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.DomainID = validDomainID
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -4863,11 +4905,15 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 		Identity:                            common.StringPtr(identity),
 	}
 
-	event, _ := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &history.StartWorkflowExecutionRequest{
-		DomainUUID:          common.StringPtr(domainID),
-		StartRequest:        startRequest,
-		ParentExecutionInfo: parentInfo,
-	})
+	event, _ := builder.AddWorkflowExecutionStartedEvent(
+		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),
+		workflowExecution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID:          common.StringPtr(domainID),
+			StartRequest:        startRequest,
+			ParentExecutionInfo: parentInfo,
+		},
+	)
 
 	return event
 }

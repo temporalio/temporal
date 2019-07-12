@@ -419,7 +419,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		}
 	}
 
-	_, err = msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
+	_, err = msBuilder.AddWorkflowExecutionStartedEvent(domainEntry, execution, startRequest)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -1536,7 +1536,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	// Add WF start event
-	_, err = msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
+	_, err = msBuilder.AddWorkflowExecutionStartedEvent(domainEntry, execution, startRequest)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}

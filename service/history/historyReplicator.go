@@ -709,24 +709,9 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
-	lastEvent, _, newRunStateBuilder, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
+	lastEvent, _, _, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
 	if err != nil {
 		return err
-	}
-
-	// If replicated events has ContinueAsNew event, then append the new run history
-	var newHistorySize int64
-	if newRunStateBuilder != nil {
-		// Generate a transaction ID for appending events to history
-		transactionID, err := r.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
-		// continueAsNew
-		newHistorySize, err = context.appendFirstBatchHistoryForContinueAsNew(newRunStateBuilder, transactionID)
-		if err != nil {
-			return err
-		}
 	}
 
 	firstEvent := request.History.Events[0]
@@ -735,7 +720,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now, newHistorySize)
+		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now)
 	}
 
 	if err == nil {
@@ -1194,7 +1179,7 @@ func (r *historyReplicator) updateMutableStateWithTimer(
 	// so nothing on the replication state should be changed
 	lastWriteVersion := msBuilder.GetLastWriteVersion()
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	return context.updateAsPassive(nil, timerTasks, transactionID, now, false, nil, sourceCluster, 0)
+	return context.updateAsPassive(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
 }
 
 func (r *historyReplicator) deserializeBlob(

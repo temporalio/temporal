@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -44,6 +45,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		domainID        string
+		domainEntry     *cache.DomainCacheEntry
 		msBuilder       mutableState
 		builder         *historyBuilder
 		mockShard       *shardContextImpl
@@ -61,7 +63,8 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.domainID = "history-builder-test-domain"
+	s.domainID = validDomainID
+	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
 	s.mockShard = &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
@@ -247,18 +250,21 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	s.Equal(common.EmptyEventID, di0.StartedID)
 	s.Equal(common.EmptyEventID, s.getPreviousDecisionStartedEventID())
 
-	_, err := s.msBuilder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
-		DomainUUID: common.StringPtr(s.domainID),
-		StartRequest: &workflow.StartWorkflowExecutionRequest{
-			WorkflowId:                          common.StringPtr(*we.WorkflowId),
-			WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(wt)},
-			TaskList:                            &workflow.TaskList{Name: common.StringPtr(tl)},
-			Input:                               input,
-			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(execTimeout),
-			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskTimeout),
-			Identity:                            common.StringPtr(identity),
-		},
-	})
+	_, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		we,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(s.domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowId:                          common.StringPtr(*we.WorkflowId),
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(wt)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(tl)},
+				Input:                               input,
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(execTimeout),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskTimeout),
+				Identity:                            common.StringPtr(identity),
+			},
+		})
 	s.NotNil(err)
 
 	s.Equal(int64(3), s.getNextEventID(), s.printHistory())
@@ -698,10 +704,13 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.Workf
 		Identity:                            common.StringPtr(identity),
 	}
 
-	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
-		DomainUUID:   common.StringPtr(s.domainID),
-		StartRequest: request,
-	})
+	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		we, &history.StartWorkflowExecutionRequest{
+			DomainUUID:   common.StringPtr(s.domainID),
+			StartRequest: request,
+		},
+	)
 	s.Nil(err)
 
 	return event

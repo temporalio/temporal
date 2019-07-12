@@ -784,14 +784,7 @@ Update_History_Loop:
 
 		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
 
-		newHistorySize, err := context.appendFirstBatchHistoryForContinueAsNew(
-			continueAsNewBuilder,
-			transactionID,
-		)
-		if err != nil {
-			return err
-		}
-		err = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder, newHistorySize)
+		err = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder)
 
 		if err != nil {
 			if err == ErrConflict {

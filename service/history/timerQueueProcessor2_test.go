@@ -69,6 +69,9 @@ type (
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockEventsCache     *MockEventsCache
+
+		domainID    string
+		domainEntry *cache.DomainCacheEntry
 	}
 )
 
@@ -158,6 +161,9 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	h.txProcessor = newTransferQueueProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(s.mockShard, h, s.mockMatchingClient, s.logger)
 	s.mockHistoryEngine = h
+
+	s.domainID = testDomainActiveID
+	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
 }
 
 func (s *timerQueueProcessor2Suite) TearDownTest() {
@@ -173,7 +179,6 @@ func (s *timerQueueProcessor2Suite) TearDownTest() {
 }
 
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
-	domainID := testDomainActiveID
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("timer-update-timesout-test"),
 		RunId: common.StringPtr(validRunID)}
 
@@ -188,10 +193,14 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	}
-	builder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		StartRequest: startRequest,
-	})
+	_, _ = builder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		we,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID:   common.StringPtr(s.domainID),
+			StartRequest: startRequest,
+		},
+	)
 
 	di := addDecisionTaskScheduledEvent(builder)
 	addDecisionTaskStartedEvent(builder, di.ScheduleID, taskList, uuid.New())
@@ -202,7 +211,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	taskID := int64(100)
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: "wid",
 		RunID:      validRunID,
 		TaskID:     taskID,
@@ -248,7 +257,6 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
-	domainID := testDomainActiveID
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
 		RunId: common.StringPtr(validRunID)}
 	taskList := "task-workflow-times-out"
@@ -262,10 +270,14 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	}
-	builder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		StartRequest: startRequest,
-	})
+	_, _ = builder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		we,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID:   common.StringPtr(s.domainID),
+			StartRequest: startRequest,
+		},
+	)
 
 	di := addDecisionTaskScheduledEvent(builder)
 	addDecisionTaskStartedEvent(builder, di.ScheduleID, taskList, uuid.New())
@@ -276,7 +288,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 
 	taskID := int64(100)
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+		DomainID:            s.domainID,
 		WorkflowID:          "wid",
 		RunID:               validRunID,
 		TaskID:              taskID,
@@ -323,7 +335,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
-	domainID := testDomainActiveID
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
 		RunId: common.StringPtr(validRunID)}
 	taskList := "task-workflow-times-out"
@@ -339,10 +350,14 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		CronSchedule:                        &schedule,
 	}
-	builder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		StartRequest: startRequest,
-	})
+	_, _ = builder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		we,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID:   common.StringPtr(s.domainID),
+			StartRequest: startRequest,
+		},
+	)
 
 	di := addDecisionTaskScheduledEvent(builder)
 	addDecisionTaskStartedEvent(builder, di.ScheduleID, taskList, uuid.New())
@@ -353,7 +368,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 
 	taskID := int64(100)
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+		DomainID:            s.domainID,
 		WorkflowID:          "wid",
 		RunID:               validRunID,
 		TaskID:              taskID,

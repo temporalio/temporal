@@ -56,10 +56,6 @@ type (
 		lock(ctx context.Context) error
 		unlock()
 
-		appendFirstBatchHistoryForContinueAsNew(
-			newStateBuilder mutableState,
-			transactionID int64,
-		) (int64, error)
 		appendFirstBatchEventsForActive(
 			msBuilder mutableState,
 			createReplicationTask bool,
@@ -88,7 +84,6 @@ type (
 			timerTasks []persistence.Task,
 			lastEventID int64,
 			now time.Time,
-			newRunHistorySize int64,
 		) error
 		resetMutableState(
 			prevRunID string,
@@ -129,7 +124,6 @@ type (
 			timerTasks []persistence.Task,
 			transactionID int64,
 			newStateBuilder mutableState,
-			newHistorySize int64,
 		) error
 		updateAsPassive(
 			transferTasks []persistence.Task,
@@ -139,7 +133,6 @@ type (
 			createReplicationTask bool,
 			standbyHistoryBuilder *historyBuilder,
 			sourceCluster string,
-			newRunHistorySize int64,
 		) error
 	}
 )
@@ -554,7 +547,6 @@ func (c *workflowExecutionContextImpl) replicateWorkflowExecution(
 	timerTasks []persistence.Task,
 	lastEventID int64,
 	now time.Time,
-	newRunHistorySize int64,
 ) error {
 
 	transactionID, err := c.shard.GetNextTransferTaskID()
@@ -574,7 +566,6 @@ func (c *workflowExecutionContextImpl) replicateWorkflowExecution(
 		false,
 		standbyHistoryBuilder,
 		request.GetSourceCluster(),
-		newRunHistorySize,
 	)
 }
 
@@ -602,7 +593,7 @@ func (c *workflowExecutionContextImpl) updateAsActive(
 	timerTasks []persistence.Task,
 	transactionID int64,
 ) error {
-	return c.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, nil, 0)
+	return c.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, nil)
 }
 
 func (c *workflowExecutionContextImpl) updateAsActiveWithNew(
@@ -610,7 +601,6 @@ func (c *workflowExecutionContextImpl) updateAsActiveWithNew(
 	timerTasks []persistence.Task,
 	transactionID int64,
 	newStateBuilder mutableState,
-	newHistorySize int64,
 ) error {
 
 	if c.msBuilder.GetReplicationState() != nil {
@@ -696,7 +686,6 @@ func (c *workflowExecutionContextImpl) updateAsActiveWithNew(
 		nil,
 		"",
 		newStateBuilder,
-		newHistorySize,
 	)
 }
 
@@ -708,7 +697,6 @@ func (c *workflowExecutionContextImpl) updateAsPassive(
 	createReplicationTask bool,
 	standbyHistoryBuilder *historyBuilder,
 	sourceCluster string,
-	newRunHistorySize int64,
 ) error {
 
 	return c.update(
@@ -720,7 +708,6 @@ func (c *workflowExecutionContextImpl) updateAsPassive(
 		standbyHistoryBuilder,
 		sourceCluster,
 		nil,
-		newRunHistorySize,
 	)
 }
 
@@ -733,7 +720,6 @@ func (c *workflowExecutionContextImpl) update(
 	standbyHistoryBuilder *historyBuilder,
 	sourceCluster string,
 	newStateBuilder mutableState,
-	newHistorySize int64,
 ) (errRet error) {
 
 	defer func() {
@@ -855,6 +841,10 @@ func (c *workflowExecutionContextImpl) update(
 	// Update history size on mutableState before calling UpdateWorkflowExecution
 	c.stats.HistorySize += int64(historySize)
 	if updates.continueAsNew != nil {
+		newHistorySize, err := c.appendFirstBatchHistoryForContinueAsNew(updates.continueAsNewWorkflowEvents, transactionID)
+		if err != nil {
+			return err
+		}
 		updates.continueAsNew.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newHistorySize,
 		}
@@ -1094,37 +1084,37 @@ func (c *workflowExecutionContextImpl) appendHistoryEvents(
 }
 
 func (c *workflowExecutionContextImpl) appendFirstBatchHistoryForContinueAsNew(
-	newStateBuilder mutableState,
+	newWorkflowEvents *persistence.WorkflowEvents,
 	transactionID int64,
 ) (int64, error) {
 
-	executionInfo := newStateBuilder.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	newExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(executionInfo.WorkflowID),
-		RunId:      common.StringPtr(executionInfo.RunID),
+	domainID := newWorkflowEvents.DomainID
+	workflowID := newWorkflowEvents.WorkflowID
+	runID := newWorkflowEvents.RunID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
 	}
 
-	firstEvent := newStateBuilder.GetHistoryBuilder().history[0]
-	history := newStateBuilder.GetHistoryBuilder().GetHistory()
+	firstEvent := newWorkflowEvents.Events[0]
 	var historySize int
 	var err error
-	if newStateBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
+	if len(newWorkflowEvents.BranchToken) != 0 {
 		historySize, err = c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
 			IsNewBranch:   true,
-			Info:          historyGarbageCleanupInfo(domainID, newExecution.GetWorkflowId(), newExecution.GetRunId()),
-			BranchToken:   newStateBuilder.GetCurrentBranch(),
-			Events:        history.Events,
+			Info:          historyGarbageCleanupInfo(domainID, workflowID, runID),
+			BranchToken:   newWorkflowEvents.BranchToken,
+			Events:        newWorkflowEvents.Events,
 			TransactionID: transactionID,
-		}, newStateBuilder.GetExecutionInfo().DomainID, newExecution)
+		}, domainID, execution)
 	} else {
 		historySize, err = c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 			DomainID:          domainID,
-			Execution:         newExecution,
+			Execution:         execution,
 			TransactionID:     transactionID,
 			FirstEventID:      firstEvent.GetEventId(),
 			EventBatchVersion: firstEvent.GetVersion(),
-			Events:            history.Events,
+			Events:            newWorkflowEvents.Events,
 		})
 	}
 

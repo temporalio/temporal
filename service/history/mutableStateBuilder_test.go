@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -455,7 +456,13 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 
 	s.mockEventsCache.On("putEvent", domainID, execution.GetWorkflowId(), execution.GetRunId(),
 		workflowStartEvent.GetEventId(), workflowStartEvent).Return(nil).Once()
-	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, nil, execution, uuid.New(), workflowStartEvent)
+	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(
+		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),
+		nil,
+		execution,
+		uuid.New(),
+		workflowStartEvent,
+	)
 	s.Nil(err)
 
 	// setup transient decision

@@ -319,7 +319,7 @@ func (s *conflictResolverSuite) TestReset() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{}, nil, "", nil,
+		&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil,
 	), nil)
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 

@@ -765,6 +765,15 @@ type (
 		Encoding common.EncodingType // optional binary encoding type
 	}
 
+	// WorkflowEvents is used as generic workflow history events transaction container
+	WorkflowEvents struct {
+		DomainID    string
+		WorkflowID  string
+		RunID       string
+		BranchToken []byte
+		Events      []*workflow.HistoryEvent
+	}
+
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo

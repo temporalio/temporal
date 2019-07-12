@@ -237,12 +237,12 @@ func (_m *mockWorkflowExecutionContext) appendFirstBatchHistoryForContinueAsNew(
 	return r0, r1
 }
 
-func (_m *mockWorkflowExecutionContext) replicateWorkflowExecution(_a0 *h.ReplicateEventsRequest, _a1 []persistence.Task, _a2 []persistence.Task, _a3 int64, _a4 time.Time, _a5 int64) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
+func (_m *mockWorkflowExecutionContext) replicateWorkflowExecution(_a0 *h.ReplicateEventsRequest, _a1 []persistence.Task, _a2 []persistence.Task, _a3 int64, _a4 time.Time) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*h.ReplicateEventsRequest, []persistence.Task, []persistence.Task, int64, time.Time, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(0).(func(*h.ReplicateEventsRequest, []persistence.Task, []persistence.Task, int64, time.Time) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -319,12 +319,12 @@ func (_m *mockWorkflowExecutionContext) unlock() {
 	_m.Called()
 }
 
-func (_m *mockWorkflowExecutionContext) updateAsPassive(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 time.Time, _a4 bool, _a5 *historyBuilder, _a6 string, _a7 int64) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+func (_m *mockWorkflowExecutionContext) updateAsPassive(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 time.Time, _a4 bool, _a5 *historyBuilder, _a6 string) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task, int64, time.Time, bool, *historyBuilder, string, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task, int64, time.Time, bool, *historyBuilder, string) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -345,12 +345,12 @@ func (_m *mockWorkflowExecutionContext) updateAsActive(_a0 []persistence.Task, _
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) updateAsActiveWithNew(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 mutableState, _a4 int64) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+func (_m *mockWorkflowExecutionContext) updateAsActiveWithNew(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 mutableState) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task, int64, mutableState, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task, int64, mutableState) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r0 = ret.Error(0)
 	}

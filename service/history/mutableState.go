@@ -88,7 +88,7 @@ type (
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input []byte, identity string) (*workflow.HistoryEvent, error)
-		AddWorkflowExecutionStartedEvent(workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
+		AddWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(reason string, details []byte, identity string) (*workflow.HistoryEvent, error)
 		ClearStickyness()
 		CloseUpdateSession() (*mutableStateSessionUpdates, error)
@@ -185,10 +185,10 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32, int32) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*workflow.HistoryEvent) error
-		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
+		ReplicateWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *workflow.HistoryEvent) error
 		ResetSnapshot(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task) *persistence.ResetMutableStateRequest
@@ -200,5 +200,11 @@ type (
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
+
+		AddTransferTasks(transferTasks ...persistence.Task)
+		AddTimerTasks(timerTasks ...persistence.Task)
+
+		CloseTransactionAsMutation(now time.Time) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
+		CloseTransactionAsSnapshot(now time.Time) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}
 )

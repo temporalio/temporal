@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"runtime/debug"
 	"testing"
 	"time"
 
@@ -3487,14 +3486,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 }
 
 func (s *resetorSuite) TestApplyReset() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("########")
-			fmt.Println(string(debug.Stack()))
-			fmt.Println("########")
-		}
-	}()
-
 	domainID := validDomainID
 	beforeResetVersion := int64(100)
 	afterResetVersion := int64(101)

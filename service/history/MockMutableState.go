@@ -1058,12 +1058,12 @@ func (_m *mockMutableState) AddWorkflowExecutionSignaled(signalName string, inpu
 }
 
 // AddWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 shared.WorkflowExecution, _a1 *h.StartWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
-	ret := _m.Called(_a0, _a1)
+func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 *cache.DomainCacheEntry, _a1 shared.WorkflowExecution, _a2 *h.StartWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
+	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry, shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1, _a2)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -1071,8 +1071,8 @@ func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 shared.Workflow
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) error); ok {
-		r1 = rf(_a0, _a1)
+	if rf, ok := ret.Get(1).(func(*cache.DomainCacheEntry, shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) error); ok {
+		r1 = rf(_a0, _a1, _a2)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2587,13 +2587,13 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionCompletedEvent(_a0 int64, 
 	return r0
 }
 
-// ReplicateWorkflowExecutionContinuedAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8
-func (_m *mockMutableState) ReplicateWorkflowExecutionContinuedAsNewEvent(_a0 int64, _a1 string, _a2 string, _a3 *shared.HistoryEvent, _a4 *shared.HistoryEvent, _a5 *decisionInfo, _a6 mutableState, _a7 int32, _a8 int32) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8)
+// ReplicateWorkflowExecutionContinuedAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4, _a5, _a6
+func (_m *mockMutableState) ReplicateWorkflowExecutionContinuedAsNewEvent(_a0 int64, _a1 string, _a2 *shared.HistoryEvent, _a3 *shared.HistoryEvent, _a4 *decisionInfo, _a5 mutableState, _a6 int32) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int64, string, string, *shared.HistoryEvent, *shared.HistoryEvent, *decisionInfo, mutableState, int32, int32) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8)
+	if rf, ok := ret.Get(0).(func(int64, string, *shared.HistoryEvent, *shared.HistoryEvent, *decisionInfo, mutableState, int32) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -2630,11 +2630,11 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionSignaled(_a0 *shared.Histo
 }
 
 // ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
-func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 string, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.HistoryEvent) error {
+func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 *cache.DomainCacheEntry, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.HistoryEvent) error {
 	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, *string, shared.WorkflowExecution, string, *shared.HistoryEvent) error); ok {
+	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry, *string, shared.WorkflowExecution, string, *shared.HistoryEvent) error); ok {
 		r0 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r0 = ret.Error(0)
@@ -2743,4 +2743,78 @@ func (_m *mockMutableState) UpdateReplicationStateVersion(_a0 int64, _a1 bool) {
 // UpdateUserTimer provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) UpdateUserTimer(_a0 string, _a1 *persistence.TimerInfo) {
 	_m.Called(_a0, _a1)
+}
+
+// UpdateUserTimer provides a mock function with given fields: _a0
+func (_m *mockMutableState) AddTransferTasks(_a0 ...persistence.Task) {
+	_m.Called(_a0)
+}
+
+// UpdateUserTimer provides a mock function with given fields: _a0
+func (_m *mockMutableState) AddTimerTasks(_a0 ...persistence.Task) {
+	_m.Called(_a0)
+}
+
+// UpdateUserTimer provides a mock function with given fields: _a0
+func (_m *mockMutableState) CloseTransactionAsMutation(_a0 time.Time) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+	ret := _m.Called(_a0)
+
+	var r0 *persistence.WorkflowMutation
+	if rf, ok := ret.Get(0).(func(_a0 time.Time) *persistence.WorkflowMutation); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.WorkflowMutation)
+		}
+	}
+
+	var r1 []*persistence.WorkflowEvents
+	if rf, ok := ret.Get(1).(func(_a0 time.Time) []*persistence.WorkflowEvents); ok {
+		r1 = rf(_a0)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).([]*persistence.WorkflowEvents)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(_a0 time.Time) error); ok {
+		r2 = rf(_a0)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// UpdateUserTimer provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) CloseTransactionAsSnapshot(_a0 time.Time) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
+	ret := _m.Called(_a0)
+
+	var r0 *persistence.WorkflowSnapshot
+	if rf, ok := ret.Get(0).(func(_a0 time.Time) *persistence.WorkflowSnapshot); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.WorkflowSnapshot)
+		}
+	}
+
+	var r1 []*persistence.WorkflowEvents
+	if rf, ok := ret.Get(1).(func(_a0 time.Time) []*persistence.WorkflowEvents); ok {
+		r1 = rf(_a0)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).([]*persistence.WorkflowEvents)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(_a0 time.Time) error); ok {
+		r2 = rf(_a0)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }

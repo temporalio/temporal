@@ -26,7 +26,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1481,14 +1480,6 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 
 // TestCancelTransferTaskTasks test
 func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("########")
-			fmt.Println(string(debug.Stack()))
-			fmt.Println("########")
-		}
-	}()
-
 	domainID := "aeac8287-527b-4b35-80a9-667cb47e7c6d"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("cancel-workflow-test"),
