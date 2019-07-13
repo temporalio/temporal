@@ -585,7 +585,7 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 		return nil
 	}
 
-	clusterArchivalStatus := t.shard.GetService().GetClusterMetadata().ArchivalConfig().GetArchivalStatus()
+	clusterArchivalStatus := t.shard.GetService().GetClusterMetadata().HistoryArchivalConfig().ClusterStatus
 	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
 	if err != nil {
 		return err
@@ -596,7 +596,7 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
 		return t.deleteWorkflow(task, msBuilder, context)
 	case cluster.ArchivalPaused:
-		// TODO: @dandrew once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
+		// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
 		return t.deleteWorkflow(task, msBuilder, context)
 	case cluster.ArchivalEnabled:

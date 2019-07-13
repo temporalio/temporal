@@ -25,27 +25,19 @@ import (
 	"errors"
 
 	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
-	// VisibilityArchiverConfig configs the filestore implementation of archiver.VisibilityArchiver interface
-	VisibilityArchiverConfig struct{}
-
-	visibilityArchiver struct {
-		container archiver.VisibilityBootstrapContainer
-		config    *VisibilityArchiverConfig
-	}
+	visibilityArchiver struct{}
 )
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
 func NewVisibilityArchiver(
 	container archiver.VisibilityBootstrapContainer,
-	config *VisibilityArchiverConfig,
+	config *config.FilestoreVisibilityArchiver,
 ) archiver.VisibilityArchiver {
-	return &visibilityArchiver{
-		container: container,
-		config:    config,
-	}
+	return &visibilityArchiver{}
 }
 
 func (v *visibilityArchiver) Archive(

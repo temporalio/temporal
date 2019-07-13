@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/service/config"
 	"go.uber.org/zap"
 )
 
@@ -48,6 +49,9 @@ const (
 	testNextEventID          = 1800
 	testCloseFailoverVersion = 100
 	testPageSize             = 100
+
+	testFileModeStr = "0700"
+	testDirModeStr  = "0600"
 )
 
 var (
@@ -111,14 +115,14 @@ func (s *historyArchiverSuite) TestValidateURI() {
 		},
 	}
 
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	for _, tc := range testCases {
 		s.Equal(tc.expectedErr, historyArchiver.ValidateURI(tc.URI))
 	}
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -133,7 +137,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -156,7 +160,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 		historyIterator.EXPECT().Next().Return(nil, errors.New("some random error")),
 	)
 
-	historyArchiver := newHistoryArchiver(s.container, nil, historyIterator)
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -179,7 +183,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 		historyIterator.EXPECT().Next().Return(nil, &shared.ServiceBusyError{}),
 	)
 
-	historyArchiver := newHistoryArchiver(s.container, nil, historyIterator)
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -219,7 +223,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 		historyIterator.EXPECT().Next().Return(historyBlob, nil),
 	)
 
-	historyArchiver := newHistoryArchiver(s.container, nil, historyIterator)
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -278,7 +282,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
-	historyArchiver := newHistoryArchiver(s.container, nil, historyIterator)
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -296,7 +300,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidURI() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:   testDomainID,
 		WorkflowID: testWorkflowID,
@@ -309,7 +313,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:   testDomainID,
 		WorkflowID: testWorkflowID,
@@ -322,7 +326,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:   testDomainID,
 		WorkflowID: testWorkflowID,
@@ -335,7 +339,7 @@ func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:      testDomainID,
 		WorkflowID:    testWorkflowID,
@@ -349,7 +353,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:             testDomainID,
 		WorkflowID:           testWorkflowID,
@@ -363,7 +367,7 @@ func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:   testDomainID,
 		WorkflowID: testWorkflowID,
@@ -377,7 +381,7 @@ func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 }
 
 func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:             testDomainID,
 		WorkflowID:           testWorkflowID,
@@ -392,7 +396,7 @@ func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 }
 
 func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
-	historyArchiver := newHistoryArchiver(s.container, nil, nil)
+	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
 		DomainID:             testDomainID,
 		WorkflowID:           testWorkflowID,
@@ -442,7 +446,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
-	historyArchiver := newHistoryArchiver(s.container, nil, historyIterator)
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	archiveRequest := &archiver.ArchiveHistoryRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
@@ -469,6 +473,16 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Equal(s.historyBatchesV100, response.HistoryBatches)
+}
+
+func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.HistoryIterator) *historyArchiver {
+	config := &config.FilestoreHistoryArchiver{
+		FileMode: testFileModeStr,
+		DirMode:  testDirModeStr,
+	}
+	archiver, err := newHistoryArchiver(s.container, config, historyIterator)
+	s.NoError(err)
+	return archiver
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
@@ -518,7 +532,7 @@ func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*s
 	data, err := encodeHistoryBatches(historyBatches)
 	s.Require().NoError(err)
 	filename := constructFilename(testDomainID, testWorkflowID, testRunID, version)
-	err = writeFile(path.Join(s.testGetDirectory, filename), data)
+	err = writeFile(path.Join(s.testGetDirectory, filename), data, testFileMode)
 	s.Require().NoError(err)
 }
 

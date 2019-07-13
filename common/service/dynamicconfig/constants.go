@@ -56,8 +56,10 @@ var keys = map[Key]string{
 	EnableReadFromClosedExecutionV2:     "system.enableReadFromClosedExecutionV2",
 	EnableVisibilityToKafka:             "system.enableVisibilityToKafka",
 	EnableReadVisibilityFromES:          "system.enableReadVisibilityFromES",
-	ArchivalStatus:                      "system.archivalStatus",
-	EnableReadFromArchival:              "system.enableReadFromArchival",
+	HistoryArchivalStatus:               "system.historyArchivalStatus",
+	EnableReadFromHistoryArchival:       "system.enableReadFromHistoryArchival",
+	VisibilityArchivalStatus:            "system.visibilityArchivalStatus",
+	EnableReadFromVisibilityArchival:    "system.enableReadFromVisibilityArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
 	MinRetentionDays:                    "system.minRetentionDays",
@@ -234,10 +236,14 @@ const (
 	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
-	// ArchivalStatus is key for the status of archival
-	ArchivalStatus
-	// EnableReadFromArchival is key for enabling reading history from archival store
-	EnableReadFromArchival
+	// HistoryArchivalStatus is key for the status of history archival
+	HistoryArchivalStatus
+	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
+	EnableReadFromHistoryArchival
+	// VisibilityArchivalStatus is key for the status of visibility archival
+	VisibilityArchivalStatus
+	// EnableReadFromVisibilityArchival is key for enabling reading visibility from archival store
+	EnableReadFromVisibilityArchival
 	// EnableDomainNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 	// for signal / start / signal with start API if domain is not active
 	EnableDomainNotActiveAutoForwarding

@@ -24,9 +24,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/uber/cadence/common/blobstore/filestore"
-	"github.com/uber/cadence/common/blobstore/s3store"
-
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 	"github.com/uber/cadence/common/elasticsearch"
@@ -61,6 +58,8 @@ type (
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
 		DynamicConfigClient dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
+		// DomainDefaults is the default config for every domain
+		DomainDefaults DomainDefaults `yaml:"domainDefaults"`
 	}
 
 	// Service contains the service specific config items
@@ -283,17 +282,50 @@ type (
 
 	// Archival contains the config for archival
 	Archival struct {
-		// Status is the status of archival either: enabled, disabled, or paused
+		// History is the config for the history archival
+		History HistoryArchival `yaml:"history"`
+		// Visibility is the config for visibility archival
+		Visibility VisibilityArchival `yaml:"visibility"`
+	}
+
+	// HistoryArchival contains the config for history archival
+	HistoryArchival struct {
+		// Status is the status of history archival either: enabled, disabled, or paused
 		Status string `yaml:"status"`
 		// EnableReadFromArchival whether history can be read from archival
 		EnableReadFromArchival bool `yaml:"enableReadFromArchival"`
-		// DefaultBucket is the default bucket used for archival in case domain does not specify override
-		DefaultBucket string `yaml:"defaultBucket"`
-		// Filestore the configuration for file based blobstore
-		Filestore *filestore.Config `yaml:"filestore"`
-		// S3store the configuration for amazon s3 based blobstore
-		S3store *s3store.Config `yaml:"s3store"`
+		// ArchiverProvider contains the config for all history archivers
+		ArchiverProvider *HistoryArchiverProvider `yaml:"archiverProvider"`
 	}
+
+	// HistoryArchiverProvider contains the config for all history archivers
+	HistoryArchiverProvider struct {
+		Filestore *FilestoreHistoryArchiver `yaml:"filestore"`
+	}
+
+	// FilestoreHistoryArchiver contain the config for filestore history archiver
+	FilestoreHistoryArchiver struct {
+		FileMode string `yaml:"fileMode"`
+		DirMode  string `yaml:"dirMode"`
+	}
+
+	// VisibilityArchival contains the config for visibility archival
+	VisibilityArchival struct {
+		// Status is the status of visibility archival either: enabled, disabled, or paused
+		Status string `yaml:"status"`
+		// EnableReadFromArchival whether visibility can be read from archival
+		EnableReadFromArchival bool `yaml:"enableReadFromArchival"`
+		// ArchiverProvider contains the config for all visibility archivers
+		ArchiverProvider *VisibilityArchiverProvider `yaml:"archiverProvider"`
+	}
+
+	// VisibilityArchiverProvider contains the config for all visibility archivers
+	VisibilityArchiverProvider struct {
+		Filestore *FilestoreVisibilityArchiver `yaml:"filestore"`
+	}
+
+	// FilestoreVisibilityArchiver contain the config for filestore visibility archiver
+	FilestoreVisibilityArchiver struct{}
 
 	// PublicClient is config for connecting to cadence frontend
 	PublicClient struct {
@@ -301,6 +333,36 @@ type (
 		HostPort string `yaml:"hostPort" validate:"nonzero"`
 		// interval to refresh DNS. Default to 10s
 		RefreshInterval time.Duration `yaml:"RefreshInterval"`
+	}
+
+	// DomainDefaults is the default config for each domain
+	DomainDefaults struct {
+		// Archival is the default archival config for each domain
+		Archival ArchivalDomainDefaults `yaml:"archival"`
+	}
+
+	// ArchivalDomainDefaults is the default archival config for each domain
+	ArchivalDomainDefaults struct {
+		// History is the domain default history archival config for each domain
+		History HistoryArchivalDomainDefaults `yaml:"history"`
+		// Visibility is the domain default visibility archival config for each domain
+		Visibility VisibilityArchivalDomainDefaults `yaml:"visibility"`
+	}
+
+	// HistoryArchivalDomainDefaults is the default history archival config for each domain
+	HistoryArchivalDomainDefaults struct {
+		// DefaultStatus is the domain default status of history archival: enabled or disabled
+		DefaultStatus string `yaml:"defaultStatus"`
+		// DefaultURI is the domain default URI for history archiver
+		DefaultURI string `yaml:"defaultURI"`
+	}
+
+	// VisibilityArchivalDomainDefaults is the default visibility archival config for each domain
+	VisibilityArchivalDomainDefaults struct {
+		// DefaultStatus is the domain default status of visibility archival: enabled or disabled
+		DefaultStatus string `yaml:"defaultStatus"`
+		// DefaultURI is the domain default URI for visibility archiver
+		DefaultURI string `yaml:"defaultURI"`
 	}
 
 	// BootstrapMode is an enum type for ringpop bootstrap mode

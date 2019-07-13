@@ -1198,14 +1198,12 @@ func (s *historyBlobUploaderSuite) archivalConfig(
 		domainArchivalStatus = shared.ArchivalStatusEnabled
 	}
 	clusterArchivalStatus := cluster.ArchivalDisabled
-	clusterDefaultBucket := ""
 	if clusterEnablesArchival {
-		clusterDefaultBucket = "default-bucket"
 		clusterArchivalStatus = cluster.ArchivalEnabled
 	}
 	mockMetadataMgr := &mocks.MetadataManager{}
 	mockClusterMetadata := &mocks.ClusterMetadata{}
-	mockClusterMetadata.On("ArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterDefaultBucket, clusterEnablesArchival))
+	mockClusterMetadata.On("HistoryArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterEnablesArchival, cluster.DomainArchivalDisabled, ""))
 	mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	mockClusterMetadata.On("GetCurrentClusterName").Return(testCurrentClusterName)
 	mockMetadataMgr.On("GetDomain", mock.Anything).Return(

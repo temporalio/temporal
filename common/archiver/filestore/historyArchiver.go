@@ -37,8 +37,11 @@ package filestore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/uber/cadence/.gen/go/shared"
@@ -46,6 +49,7 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const (
@@ -55,17 +59,20 @@ const (
 	errEncodeHistory = "failed to encode history batches"
 	errMakeDirectory = "failed to make directory"
 	errWriteFile     = "failed to write history to file"
+
+	targetHistoryBlobSize = 2 * 1024 * 1024 // 2MB
+)
+
+var (
+	errInvalidFileMode = errors.New("invalid file mode")
+	errInvalidDirMode  = errors.New("invalid directory mode")
 )
 
 type (
-	// HistoryArchiverConfig configs the filestore implementation of archiver.HistoryArchiver interface
-	HistoryArchiverConfig struct {
-		*archiver.HistoryIteratorConfig
-	}
-
 	historyArchiver struct {
 		container archiver.HistoryBootstrapContainer
-		config    *HistoryArchiverConfig
+		fileMode  os.FileMode
+		dirMode   os.FileMode
 
 		// only set in test code
 		historyIterator archiver.HistoryIterator
@@ -80,21 +87,30 @@ type (
 // NewHistoryArchiver creates a new archiver.HistoryArchiver based on filestore
 func NewHistoryArchiver(
 	container archiver.HistoryBootstrapContainer,
-	config *HistoryArchiverConfig,
-) archiver.HistoryArchiver {
+	config *config.FilestoreHistoryArchiver,
+) (archiver.HistoryArchiver, error) {
 	return newHistoryArchiver(container, config, nil)
 }
 
 func newHistoryArchiver(
 	container archiver.HistoryBootstrapContainer,
-	config *HistoryArchiverConfig,
+	config *config.FilestoreHistoryArchiver,
 	historyIterator archiver.HistoryIterator,
-) *historyArchiver {
+) (*historyArchiver, error) {
+	fileMode, err := strconv.ParseUint(config.FileMode, 0, 32)
+	if err != nil {
+		return nil, errInvalidFileMode
+	}
+	dirMode, err := strconv.ParseUint(config.DirMode, 0, 32)
+	if err != nil {
+		return nil, errInvalidDirMode
+	}
 	return &historyArchiver{
 		container:       container,
-		config:          config,
+		fileMode:        os.FileMode(fileMode),
+		dirMode:         os.FileMode(dirMode),
 		historyIterator: historyIterator,
-	}
+	}, nil
 }
 
 func (h *historyArchiver) Archive(
@@ -118,7 +134,7 @@ func (h *historyArchiver) Archive(
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
 		var err error
-		historyIterator, err = archiver.NewHistoryIterator(request, h.container.HistoryManager, h.container.HistoryV2Manager, h.config.HistoryIteratorConfig, nil, nil)
+		historyIterator, err = archiver.NewHistoryIterator(request, h.container.HistoryManager, h.container.HistoryV2Manager, targetHistoryBlobSize, nil, nil)
 		if err != nil {
 			// this should not happen
 			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrConstructHistoryIterator), tag.Error(err))
@@ -149,13 +165,13 @@ func (h *historyArchiver) Archive(
 	}
 
 	dirPath := getDirPathFromURI(URI)
-	if err = mkdirAll(dirPath); err != nil {
+	if err = mkdirAll(dirPath, h.dirMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return archiver.ErrArchiveNonRetriable
 	}
 
 	filename := constructFilename(request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion)
-	if err := writeFile(path.Join(dirPath, filename), encodedHistoryBatches); err != nil {
+	if err := writeFile(path.Join(dirPath, filename), encodedHistoryBatches, h.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return archiver.ErrArchiveNonRetriable
 	}

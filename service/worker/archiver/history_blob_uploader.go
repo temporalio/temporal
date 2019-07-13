@@ -28,7 +28,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/blobstore/blob"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -90,7 +89,7 @@ func (h *historyBlobUploader) UploadHistory(ctx context.Context, request *Archiv
 		h.logger.Error(uploadErrorMsg, tag.ArchivalUploadFailReason(errorDetails(err)), tag.Error(err))
 		return result, err
 	}
-	if clusterMetadata.ArchivalConfig().GetArchivalStatus() != cluster.ArchivalEnabled {
+	if !clusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival() {
 		h.logger.Error(uploadSkipMsg, tag.ArchivalUploadFailReason("cluster is not enabled for archival"))
 		h.scope.IncCounter(metrics.ArchiverSkipUploadCount)
 		return result, nil

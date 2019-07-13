@@ -94,14 +94,14 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
 			logger,
-			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalDomain),
+			dynamicconfig.NewNopCollection(),
+			options.ClusterMetadata.EnableGlobalDomain,
 			options.ClusterMetadata.FailoverVersionIncrement,
 			options.ClusterMetadata.MasterClusterName,
 			options.ClusterMetadata.CurrentClusterName,
 			options.ClusterMetadata.ClusterInformation,
-			"disabled",
-			"",
-			false,
+			config.Archival{},
+			config.ArchivalDomainDefaults{},
 		)
 	}
 

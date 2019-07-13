@@ -34,6 +34,11 @@ import (
 	"github.com/uber/cadence/common/archiver"
 )
 
+const (
+	testDirMode  = os.FileMode(0700)
+	testFileMode = os.FileMode(0600)
+)
+
 type UtilSuite struct {
 	*require.Assertions
 	suite.Suite
@@ -93,19 +98,19 @@ func (s *UtilSuite) TestMkdirAll() {
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
 
-	s.NoError(mkdirAll(dir))
+	s.NoError(mkdirAll(dir, testDirMode))
 	s.assertDirectoryExists(dir)
 
 	subDirPath := filepath.Join(dir, "subdir_1", "subdir_2", "subdir_3")
 	s.assertDirectoryNotExists(subDirPath)
-	s.NoError(mkdirAll(subDirPath))
+	s.NoError(mkdirAll(subDirPath, testDirMode))
 	s.assertDirectoryExists(subDirPath)
 	s.assertCorrectFileMode(subDirPath)
 
 	filename := "test-file-name"
 	s.createFile(dir, filename)
 	fpath := filepath.Join(dir, filename)
-	s.Error(mkdirAll(fpath))
+	s.Error(mkdirAll(fpath, testDirMode))
 }
 
 func (s *UtilSuite) TestWriteFile() {
@@ -116,15 +121,15 @@ func (s *UtilSuite) TestWriteFile() {
 
 	filename := "test-file-name"
 	fpath := filepath.Join(dir, filename)
-	s.NoError(writeFile(fpath, []byte("file body 1")))
+	s.NoError(writeFile(fpath, []byte("file body 1"), testFileMode))
 	s.assertFileExists(fpath)
 	s.assertCorrectFileMode(fpath)
 
-	s.NoError(writeFile(fpath, []byte("file body 2")))
+	s.NoError(writeFile(fpath, []byte("file body 2"), testFileMode))
 	s.assertFileExists(fpath)
 	s.assertCorrectFileMode(fpath)
 
-	s.Error(writeFile(dir, []byte("")))
+	s.Error(writeFile(dir, []byte(""), testFileMode))
 	s.assertFileExists(fpath)
 }
 
@@ -140,7 +145,7 @@ func (s *UtilSuite) TestReadFile() {
 	s.Error(err)
 	s.Empty(data)
 
-	err = writeFile(fpath, []byte("file contents"))
+	err = writeFile(fpath, []byte("file contents"), testFileMode)
 	s.NoError(err)
 	data, err = readFile(fpath)
 	s.NoError(err)
@@ -160,7 +165,7 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 	s.Nil(files)
 
 	subDirPath := filepath.Join(dir, "subdir")
-	s.NoError(mkdirAll(subDirPath))
+	s.NoError(mkdirAll(subDirPath, testDirMode))
 	s.assertDirectoryExists(subDirPath)
 	expectedFileNames := []string{"file_1", "file_2", "file_3"}
 	for _, f := range expectedFileNames {
@@ -430,7 +435,7 @@ func (s *UtilSuite) TestSerializeDeserializeGetHistoryToken() {
 }
 
 func (s *UtilSuite) createFile(dir string, filename string) {
-	err := ioutil.WriteFile(filepath.Join(dir, filename), []byte("file contents"), fileMode)
+	err := ioutil.WriteFile(filepath.Join(dir, filename), []byte("file contents"), testFileMode)
 	s.Nil(err)
 }
 
@@ -455,9 +460,9 @@ func (s *UtilSuite) assertDirectoryNotExists(path string) {
 func (s *UtilSuite) assertCorrectFileMode(path string) {
 	info, err := os.Stat(path)
 	s.NoError(err)
-	mode := fileMode
+	mode := testFileMode
 	if info.IsDir() {
-		mode = dirMode | os.ModeDir
+		mode = testDirMode | os.ModeDir
 	}
 	s.Equal(mode, info.Mode())
 }

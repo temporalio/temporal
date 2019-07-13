@@ -37,11 +37,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 )
 
-const (
-	dirMode  = os.FileMode(0700)
-	fileMode = os.FileMode(0600)
-)
-
 var (
 	errDirectoryExpected  = errors.New("a path to a directory was expected")
 	errFileExpected       = errors.New("a path to a file was expected")
@@ -72,11 +67,11 @@ func directoryExists(path string) (bool, error) {
 	return true, nil
 }
 
-func mkdirAll(path string) error {
+func mkdirAll(path string, dirMode os.FileMode) error {
 	return os.MkdirAll(path, dirMode)
 }
 
-func writeFile(filepath string, data []byte) error {
+func writeFile(filepath string, data []byte, fileMode os.FileMode) error {
 	if err := os.Remove(filepath); err != nil && !os.IsNotExist(err) {
 		return err
 	}

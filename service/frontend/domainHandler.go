@@ -126,19 +126,8 @@ func (d *domainHandlerImpl) registerDomain(
 	}
 	clusters = persistence.GetOrUseDefaultClusters(activeClusterName, clusters)
 
-	currentArchivalState := neverEnabledState()
-	nextArchivalState := currentArchivalState
-	archivalClusterConfig := d.clusterMetadata.ArchivalConfig()
-	if archivalClusterConfig.ConfiguredForArchival() {
-		archivalEvent, err := d.toArchivalRegisterEvent(registerRequest, archivalClusterConfig.GetDefaultBucket())
-		if err != nil {
-			return err
-		}
-		nextArchivalState, _, err = currentArchivalState.getNextState(ctx, d.blobstoreClient, archivalEvent)
-		if err != nil {
-			return err
-		}
-	}
+	nextArchivalState := neverEnabledState()
+	// ycyang TODO: handle register domain with archival enabled.
 
 	info := &persistence.DomainInfo{
 		ID:          uuid.New(),
@@ -340,17 +329,7 @@ func (d *domainHandlerImpl) updateDomain(
 	}
 	nextArchivalState := currentArchivalState
 	archivalConfigChanged := false
-	archivalClusterConfig := d.clusterMetadata.ArchivalConfig()
-	if archivalClusterConfig.ConfiguredForArchival() {
-		archivalEvent, err := d.toArchivalUpdateEvent(updateRequest, archivalClusterConfig.GetDefaultBucket())
-		if err != nil {
-			return nil, err
-		}
-		nextArchivalState, archivalConfigChanged, err = currentArchivalState.getNextState(ctx, d.blobstoreClient, archivalEvent)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// ycyang TODO: handle update for archival related domain config
 
 	// whether active cluster is changed
 	activeClusterChanged := false
@@ -609,6 +588,7 @@ func (d *domainHandlerImpl) createResponse(
 		UUID:        common.StringPtr(info.ID),
 	}
 
+	// ycyang TODO: change archival part of describe domain response
 	configResult := &shared.DomainConfiguration{
 		EmitMetric:                             common.BoolPtr(config.EmitMetric),
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
