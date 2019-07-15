@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/quotas"
 	"golang.org/x/time/rate"
 )
 
@@ -41,7 +42,7 @@ type TaskMatcher struct {
 	// not active in a cluster
 	queryTaskC chan *internalTask
 	// ratelimiter that limits the rate at which tasks can be dispatched to consumers
-	limiter *rateLimiter
+	limiter *quotas.RateLimiter
 	// domain metric scope
 	scope func() metrics.Scope
 }
@@ -58,7 +59,7 @@ var errTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
 // matches should use this implementation
 func newTaskMatcher(config *taskListConfig, scopeFunc func() metrics.Scope) *TaskMatcher {
 	dPtr := _defaultTaskDispatchRPS
-	limiter := newRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
+	limiter := quotas.NewRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
 	return &TaskMatcher{
 		limiter:    limiter,
 		scope:      scopeFunc,

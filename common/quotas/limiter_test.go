@@ -21,25 +21,39 @@
 package quotas
 
 import (
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/tokenbucket"
+	"golang.org/x/time/rate"
 )
 
-type simpleRateLimitPolicy struct {
-	tb tokenbucket.TokenBucket
+const (
+	defaultDomain = "test"
+	defaultRps    = 1200
+	_minBurst     = 10000
+)
+
+func TestNewRateLimiter(t *testing.T) {
+	maxDispatch := float64(0.01)
+	rl := NewRateLimiter(&maxDispatch, time.Second, _minBurst)
+	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	assert.Equal(t, _minBurst, limiter.Burst())
 }
 
-// NewSimpleRateLimiter returns a new simple rate limiter
-func NewSimpleRateLimiter(tb tokenbucket.TokenBucket) Policy {
-	return &simpleRateLimitPolicy{tb}
+func BenchmarkSimpleRateLimiter(b *testing.B) {
+	policy := NewSimpleRateLimiter(tokenbucket.New(defaultRps, clock.NewRealTimeSource()))
+	for n := 0; n < b.N; n++ {
+		policy.Allow()
+	}
 }
 
-func (s *simpleRateLimitPolicy) Allow() bool {
-	ok, _ := s.tb.TryConsume(1)
-	return ok
-}
-
-func (s *simpleRateLimitPolicy) Wait(d time.Duration) bool {
-	return s.tb.Consume(1, d)
+func BenchmarkRateLimiter(b *testing.B) {
+	rps := float64(defaultRps)
+	policy := NewRateLimiter(&rps, 2*time.Minute, defaultRps)
+	for n := 0; n < b.N; n++ {
+		policy.Allow()
+	}
 }

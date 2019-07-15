@@ -21,14 +21,12 @@
 package matching
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"context"
-
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -39,10 +37,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"golang.org/x/time/rate"
 )
-
-const _minBurst = 10000
 
 func TestDeliverBufferTasks(t *testing.T) {
 	tests := []func(tlm *taskListManagerImpl){
@@ -82,13 +77,6 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
 	tlm.taskReader.cancelFunc()
 	wg.Wait()
-}
-
-func TestNewRateLimiter(t *testing.T) {
-	maxDispatch := float64(0.01)
-	rl := newRateLimiter(&maxDispatch, time.Second, _minBurst)
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
-	assert.Equal(t, _minBurst, limiter.Burst())
 }
 
 func createTestTaskListManager() *taskListManagerImpl {

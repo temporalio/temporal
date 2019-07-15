@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"github.com/davecgh/go-spew/spew"
@@ -65,6 +66,8 @@ type (
 		sync.Mutex
 	}
 )
+
+const _minBurst = 10000
 
 func TestMatchingEngineSuite(t *testing.T) {
 	s := new(matchingEngineSuite)
@@ -596,7 +599,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	mgrImpl, ok := mgr.(*taskListManagerImpl)
 	s.True(ok)
 
-	mgrImpl.matcher.limiter = newRateLimiter(&dPtr, dispatchTTL, _minBurst)
+	mgrImpl.matcher.limiter = quotas.NewRateLimiter(&dPtr, dispatchTTL, _minBurst)
 	s.matchingEngine.updateTaskList(tlID, mgr)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.NoError(mgr.Start())
@@ -789,7 +792,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.NoError(err)
 
 	mgrImpl := mgr.(*taskListManagerImpl)
-	mgrImpl.matcher.limiter = newRateLimiter(&dPtr, dispatchTTL, _minBurst)
+	mgrImpl.matcher.limiter = quotas.NewRateLimiter(&dPtr, dispatchTTL, _minBurst)
 	s.matchingEngine.updateTaskList(tlID, mgr)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.NoError(mgr.Start())
