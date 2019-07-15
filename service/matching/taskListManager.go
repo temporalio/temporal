@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -67,7 +68,7 @@ type (
 		// DispatchQueryTask dispatches a query task to a poller. When there are no pollers
 		// to pick up the task, this method will return error. Task will not be persisted to
 		// db and no ratelimits are applied for this call
-		DispatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
+		DispatchQueryTask(ctx context.Context, taskID string, request *matching.QueryWorkflowRequest) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*s.PollerInfo
 		// DescribeTaskList returns information about the target tasklist
@@ -234,9 +235,13 @@ func (c *taskListManagerImpl) DispatchTask(ctx context.Context, task *internalTa
 // DispatchQueryTask dispatches a query task to a poller. When there are no pollers
 // to pick up the task, this method will return error. Task will not be persisted to
 // db and no ratelimits will be applied for this call
-func (c *taskListManagerImpl) DispatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error {
+func (c *taskListManagerImpl) DispatchQueryTask(
+	ctx context.Context,
+	taskID string,
+	request *matching.QueryWorkflowRequest,
+) error {
 	c.startWG.Wait()
-	task := newInternalQueryTask(queryTask, c.completeTask)
+	task := newInternalQueryTask(taskID, request)
 	_, err := c.matcher.Offer(ctx, task)
 	if err == context.DeadlineExceeded {
 		return &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
@@ -363,18 +368,11 @@ func (c *taskListManagerImpl) String() string {
 	return buf.String()
 }
 
-// completeTask marks a task as processed. If this task was synchronously matched, a notification
-// is sent in the syncMatch response channel to be picked by addTask goroutine. If this task was
-// created by taskReader (i.e. backlog from db):
-//   - it is deleted from the database when err is nil
+// completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
+// here. As part of completion:
+//   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *taskListManagerImpl) completeTask(task *internalTask, err error) {
-	if task.syncResponseCh != nil {
-		// It is OK to succeed task creation as it was already completed
-		task.syncResponseCh <- err
-		return
-	}
-
+func (c *taskListManagerImpl) completeTask(task *persistence.TaskInfo, err error) {
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
@@ -384,7 +382,8 @@ func (c *taskListManagerImpl) completeTask(task *internalTask, err error) {
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			return c.taskWriter.appendTask(&task.workflowExecution, task.info)
+			wf := &s.WorkflowExecution{WorkflowId: &task.WorkflowID, RunId: &task.RunID}
+			return c.taskWriter.appendTask(wf, task)
 		})
 
 		if err != nil {
@@ -401,7 +400,7 @@ func (c *taskListManagerImpl) completeTask(task *internalTask, err error) {
 		}
 		c.taskReader.Signal()
 	}
-	ackLevel := c.taskAckManager.completeTask(task.info.TaskID)
+	ackLevel := c.taskAckManager.completeTask(task.TaskID)
 	c.taskGC.Run(ackLevel)
 }
 

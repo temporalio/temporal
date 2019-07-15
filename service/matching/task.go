@@ -27,67 +27,102 @@ import (
 )
 
 type (
+	// genericTaskInfo contains the info for an activity or decision task
+	genericTaskInfo struct {
+		*persistence.TaskInfo
+		completionFunc func(*persistence.TaskInfo, error)
+	}
+	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
 		taskID       string
 		queryRequest *m.QueryWorkflowRequest
 	}
-	// internalTask represents an activity, decision or query task
-	// holds task specific info and additional metadata
+	// forwardedTaskInfo contains the forwarded info for any task forwarded from
+	// another matching host. Forwarded tasks are already started
+	forwardedTaskInfo struct {
+		decisionTaskInfo *m.PollForDecisionTaskResponse
+		activityTaskInfo *s.PollForActivityTaskResponse
+	}
+	// internalTask represents an activity, decision, query or remote forwarded task.
+	// this struct is more like a union and only one of [ query, generic, forwarded ] is
+	// non-nil for any given task
 	internalTask struct {
-		info              *persistence.TaskInfo
-		syncResponseCh    chan error
-		workflowExecution s.WorkflowExecution
-		queryInfo         *queryTaskInfo
-		backlogCountHint  int64
-		domainName        string
-		completionFunc    func(*internalTask, error)
+		query            *queryTaskInfo     // non-nil for locally matched matched query task
+		generic          *genericTaskInfo   // non-nil for locally matched activity or decision task
+		forwarded        *forwardedTaskInfo // non-nil for a remote forwarded task
+		domainName       string
+		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
+		backlogCountHint int64
 	}
 )
 
 func newInternalTask(
 	info *persistence.TaskInfo,
-	completionFunc func(*internalTask, error),
+	completionFunc func(*persistence.TaskInfo, error),
 	forSyncMatch bool,
 ) *internalTask {
 	task := &internalTask{
-		info:           info,
-		completionFunc: completionFunc,
-		workflowExecution: s.WorkflowExecution{
-			WorkflowId: &info.WorkflowID,
-			RunId:      &info.RunID,
+		generic: &genericTaskInfo{
+			TaskInfo:       info,
+			completionFunc: completionFunc,
 		},
 	}
 	if forSyncMatch {
-		task.syncResponseCh = make(chan error, 1)
+		task.responseC = make(chan error, 1)
 	}
 	return task
 }
 
 func newInternalQueryTask(
-	queryInfo *queryTaskInfo,
-	completionFunc func(*internalTask, error),
+	taskID string,
+	request *m.QueryWorkflowRequest,
 ) *internalTask {
 	return &internalTask{
-		info: &persistence.TaskInfo{
-			DomainID:   queryInfo.queryRequest.GetDomainUUID(),
-			WorkflowID: queryInfo.queryRequest.QueryRequest.Execution.GetWorkflowId(),
-			RunID:      queryInfo.queryRequest.QueryRequest.Execution.GetRunId(),
+		query: &queryTaskInfo{
+			taskID:       taskID,
+			queryRequest: request,
 		},
-		completionFunc:    completionFunc,
-		queryInfo:         queryInfo,
-		workflowExecution: *queryInfo.queryRequest.QueryRequest.GetExecution(),
-		syncResponseCh:    make(chan error, 1),
+		responseC: make(chan error, 1),
 	}
+}
+
+func newInternalForwardedTask(info *forwardedTaskInfo) *internalTask {
+	return &internalTask{forwarded: info}
 }
 
 // isQuery returns true if the underlying task is a query task
 func (task *internalTask) isQuery() bool {
-	return task.queryInfo != nil
+	return task.query != nil
+}
+
+// isForwarded returns true if the underlying task is forwarded by a remote matching host
+// forwarded tasks are already marked as started in history
+func (task *internalTask) isForwarded() bool {
+	return task.forwarded != nil
+}
+
+func (task *internalTask) workflowExecution() *s.WorkflowExecution {
+	switch {
+	case task.generic != nil:
+		return &s.WorkflowExecution{WorkflowId: &task.generic.WorkflowID, RunId: &task.generic.RunID}
+	case task.query != nil:
+		return task.query.queryRequest.GetQueryRequest().GetExecution()
+	case task.forwarded != nil && task.forwarded.decisionTaskInfo != nil:
+		return task.forwarded.decisionTaskInfo.WorkflowExecution
+	case task.forwarded != nil && task.forwarded.activityTaskInfo != nil:
+		return task.forwarded.activityTaskInfo.WorkflowExecution
+	}
+	return &s.WorkflowExecution{}
 }
 
 // finish marks a task as finished. Should be called after a poller picks up a task
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
 func (task *internalTask) finish(err error) {
-	task.completionFunc(task, err)
+	switch {
+	case task.responseC != nil:
+		task.responseC <- err
+	case task.generic.completionFunc != nil:
+		task.generic.completionFunc(task.generic.TaskInfo, err)
+	}
 }

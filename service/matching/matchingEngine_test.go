@@ -1396,10 +1396,10 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, nil, tlKind)
 	s.NoError(err)
 
-	s.NotEqual(ctx.info.TaskID, ctx2.info.TaskID)
-	s.Equal(ctx.info.WorkflowID, ctx2.info.WorkflowID)
-	s.Equal(ctx.info.RunID, ctx2.info.RunID)
-	s.Equal(ctx.info.ScheduleID, ctx2.info.ScheduleID)
+	s.NotEqual(ctx.generic.TaskID, ctx2.generic.TaskID)
+	s.Equal(ctx.generic.WorkflowID, ctx2.generic.WorkflowID)
+	s.Equal(ctx.generic.RunID, ctx2.generic.RunID)
+	s.Equal(ctx.generic.ScheduleID, ctx2.generic.ScheduleID)
 
 	ctx2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))

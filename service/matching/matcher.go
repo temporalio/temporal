@@ -82,7 +82,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	if task.isQuery() {
 		select {
 		case tm.queryTaskC <- task:
-			<-task.syncResponseCh
+			<-task.responseC
 			return true, nil
 		case <-ctx.Done():
 			return false, ctx.Err()
@@ -97,10 +97,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 
 	select {
 	case tm.taskC <- task: // poller picked up the task
-		if task.syncResponseCh != nil {
+		if task.responseC != nil {
 			// if there is a response channel, block until resp is received
 			// and return error if the response contains error
-			err = <-task.syncResponseCh
+			err = <-task.responseC
 			return true, err
 		}
 		return false, nil
@@ -135,7 +135,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask) error 
 func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
 	select {
 	case task := <-tm.taskC:
-		if task.syncResponseCh != nil {
+		if task.responseC != nil {
 			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
 		}
 		tm.scope().IncCounter(metrics.PollSuccessCounter)
