@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -46,6 +47,7 @@ type (
 		blobstoreClient     blobstore.Client
 		domainReplicator    DomainReplicator
 		domainAttrValidator *domainAttrValidatorImpl
+		archiverProvider    provider.ArchiverProvider
 	}
 )
 
@@ -55,8 +57,9 @@ func newDomainHandler(config *Config,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
 	blobstoreClient blobstore.Client,
-	domainReplicator DomainReplicator) *domainHandlerImpl {
-
+	domainReplicator DomainReplicator,
+	archiverProvider provider.ArchiverProvider,
+) *domainHandlerImpl {
 	return &domainHandlerImpl{
 		config:              config,
 		logger:              logger,
@@ -65,6 +68,7 @@ func newDomainHandler(config *Config,
 		blobstoreClient:     blobstoreClient,
 		domainReplicator:    domainReplicator,
 		domainAttrValidator: newDomainAttrValidator(clusterMetadata, int32(config.MinRetentionDays())),
+		archiverProvider:    archiverProvider,
 	}
 }
 
@@ -126,8 +130,45 @@ func (d *domainHandlerImpl) registerDomain(
 	}
 	clusters = persistence.GetOrUseDefaultClusters(activeClusterName, clusters)
 
-	nextArchivalState := neverEnabledState()
-	// ycyang TODO: handle register domain with archival enabled.
+	currentHistoryArchivalState := neverEnabledState()
+	nextHistoryArchivalState := currentHistoryArchivalState
+	clusterHistoryArchivalConfig := d.clusterMetadata.HistoryArchivalConfig()
+	if clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
+		archivalEvent, err := d.toArchivalRegisterEvent(
+			registerRequest.HistoryArchivalStatus,
+			registerRequest.GetHistoryArchivalURI(),
+			clusterHistoryArchivalConfig.DomainDefaultStatus,
+			clusterHistoryArchivalConfig.DomainDefaultURI,
+		)
+		if err != nil {
+			return err
+		}
+
+		nextHistoryArchivalState, _, err = currentHistoryArchivalState.getNextState(archivalEvent, d.validateHistoryArchivalURI)
+		if err != nil {
+			return err
+		}
+	}
+
+	currentVisibilityArchivalState := neverEnabledState()
+	nextVisibilityArchivalState := currentVisibilityArchivalState
+	clusterVisibilityArchivalConfig := d.clusterMetadata.VisibilityArchivalConfig()
+	if clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
+		archivalEvent, err := d.toArchivalRegisterEvent(
+			registerRequest.VisibilityArchivalStatus,
+			registerRequest.GetVisibilityArchivalURI(),
+			clusterVisibilityArchivalConfig.DomainDefaultStatus,
+			clusterVisibilityArchivalConfig.DomainDefaultURI,
+		)
+		if err != nil {
+			return err
+		}
+
+		nextVisibilityArchivalState, _, err = currentVisibilityArchivalState.getNextState(archivalEvent, d.validateVisibilityArchivalURI)
+		if err != nil {
+			return err
+		}
+	}
 
 	info := &persistence.DomainInfo{
 		ID:          uuid.New(),
@@ -138,11 +179,13 @@ func (d *domainHandlerImpl) registerDomain(
 		Data:        registerRequest.Data,
 	}
 	config := &persistence.DomainConfig{
-		Retention:      registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
-		EmitMetric:     registerRequest.GetEmitMetric(),
-		ArchivalBucket: nextArchivalState.bucket,
-		ArchivalStatus: nextArchivalState.status,
-		BadBinaries:    shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		Retention:                registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
+		EmitMetric:               registerRequest.GetEmitMetric(),
+		HistoryArchivalStatus:    nextHistoryArchivalState.status,
+		HistoryArchivalURI:       nextHistoryArchivalState.URI,
+		VisibilityArchivalStatus: nextVisibilityArchivalState.status,
+		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
+		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistence.DomainReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -323,13 +366,43 @@ func (d *domainHandlerImpl) updateDomain(
 	failoverNotificationVersion := getResponse.FailoverNotificationVersion
 	isGlobalDomain := getResponse.IsGlobalDomain
 
-	currentArchivalState := &archivalState{
-		bucket: config.ArchivalBucket,
-		status: config.ArchivalStatus,
+	currentHistoryArchivalState := &archivalState{
+		status: config.HistoryArchivalStatus,
+		URI:    config.HistoryArchivalURI,
 	}
-	nextArchivalState := currentArchivalState
-	archivalConfigChanged := false
-	// ycyang TODO: handle update for archival related domain config
+	nextHistoryArchivalState := currentHistoryArchivalState
+	historyArchivalConfigChanged := false
+	clusterHistoryArchivalConfig := d.clusterMetadata.HistoryArchivalConfig()
+	if updateRequest.Configuration != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
+		cfg := updateRequest.GetConfiguration()
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.DomainDefaultURI)
+		if err != nil {
+			return nil, err
+		}
+		nextHistoryArchivalState, historyArchivalConfigChanged, err = currentHistoryArchivalState.getNextState(archivalEvent, d.validateHistoryArchivalURI)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	currentVisibilityArchivalState := &archivalState{
+		status: config.VisibilityArchivalStatus,
+		URI:    config.VisibilityArchivalURI,
+	}
+	nextVisibilityArchivalState := currentVisibilityArchivalState
+	visibilityArchivalConfigChanged := false
+	clusterVisibilityArchivalConfig := d.clusterMetadata.VisibilityArchivalConfig()
+	if updateRequest.Configuration != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
+		cfg := updateRequest.GetConfiguration()
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.DomainDefaultURI)
+		if err != nil {
+			return nil, err
+		}
+		nextVisibilityArchivalState, visibilityArchivalConfigChanged, err = currentVisibilityArchivalState.getNextState(archivalEvent, d.validateVisibilityArchivalURI)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// whether active cluster is changed
 	activeClusterChanged := false
@@ -362,10 +435,15 @@ func (d *domainHandlerImpl) updateDomain(
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
 		}
-		if archivalConfigChanged {
+		if historyArchivalConfigChanged {
 			configurationChanged = true
-			config.ArchivalBucket = nextArchivalState.bucket
-			config.ArchivalStatus = nextArchivalState.status
+			config.HistoryArchivalStatus = nextHistoryArchivalState.status
+			config.HistoryArchivalURI = nextHistoryArchivalState.URI
+		}
+		if visibilityArchivalConfigChanged {
+			configurationChanged = true
+			config.VisibilityArchivalStatus = nextVisibilityArchivalState.status
+			config.VisibilityArchivalURI = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.config.MaxBadBinaries(updateRequest.GetName())
@@ -588,12 +666,13 @@ func (d *domainHandlerImpl) createResponse(
 		UUID:        common.StringPtr(info.ID),
 	}
 
-	// ycyang TODO: change archival part of describe domain response
 	configResult := &shared.DomainConfiguration{
 		EmitMetric:                             common.BoolPtr(config.EmitMetric),
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
-		ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
-		ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
+		HistoryArchivalStatus:                  common.ArchivalStatusPtr(config.HistoryArchivalStatus),
+		HistoryArchivalURI:                     common.StringPtr(config.HistoryArchivalURI),
+		VisibilityArchivalStatus:               common.ArchivalStatusPtr(config.VisibilityArchivalStatus),
+		VisibilityArchivalURI:                  common.StringPtr(config.VisibilityArchivalURI),
 		BadBinaries:                            &config.BadBinaries,
 	}
 
@@ -661,14 +740,19 @@ func (d *domainHandlerImpl) checkPermission(
 }
 
 func (d *domainHandlerImpl) toArchivalRegisterEvent(
-	request *shared.RegisterDomainRequest,
-	defaultBucket string,
+	status *shared.ArchivalStatus,
+	URI string,
+	defaultStatus shared.ArchivalStatus,
+	defaultURI string,
 ) (*archivalEvent, error) {
 
 	event := &archivalEvent{
-		defaultBucket: defaultBucket,
-		bucket:        request.GetArchivalBucketName(),
-		status:        request.ArchivalStatus,
+		status:     status,
+		URI:        URI,
+		defaultURI: defaultURI,
+	}
+	if event.status == nil {
+		event.status = defaultStatus.Ptr()
 	}
 	if err := event.validate(); err != nil {
 		return nil, err
@@ -677,20 +761,42 @@ func (d *domainHandlerImpl) toArchivalRegisterEvent(
 }
 
 func (d *domainHandlerImpl) toArchivalUpdateEvent(
-	request *shared.UpdateDomainRequest,
-	defaultBucket string,
+	status *shared.ArchivalStatus,
+	URI string,
+	defaultURI string,
 ) (*archivalEvent, error) {
 
 	event := &archivalEvent{
-		defaultBucket: defaultBucket,
-	}
-	if request.Configuration != nil {
-		cfg := request.GetConfiguration()
-		event.bucket = cfg.GetArchivalBucketName()
-		event.status = cfg.ArchivalStatus
+		status:     status,
+		URI:        URI,
+		defaultURI: defaultURI,
 	}
 	if err := event.validate(); err != nil {
 		return nil, err
 	}
 	return event, nil
+}
+
+func (d *domainHandlerImpl) validateHistoryArchivalURI(URI string) error {
+	scheme, err := common.GetArchivalScheme(URI)
+	if err != nil {
+		return err
+	}
+	archiver, err := d.archiverProvider.GetHistoryArchiver(scheme, common.FrontendServiceName)
+	if err != nil {
+		return err
+	}
+	return archiver.ValidateURI(URI)
+}
+
+func (d *domainHandlerImpl) validateVisibilityArchivalURI(URI string) error {
+	scheme, err := common.GetArchivalScheme(URI)
+	if err != nil {
+		return err
+	}
+	archiver, err := d.archiverProvider.GetVisibilityArchiver(scheme, common.FrontendServiceName)
+	if err != nil {
+		return err
+	}
+	return archiver.ValidateURI(URI)
 }

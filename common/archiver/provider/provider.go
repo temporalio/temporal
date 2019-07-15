@@ -72,6 +72,10 @@ func NewArchiverProvider(
 	return &archiverProvider{
 		historyArchiverConfigs:    historyArchiverConfigs,
 		visibilityArchiverConfigs: visibilityArchiverConfigs,
+		historyContainers:         make(map[string]*archiver.HistoryBootstrapContainer),
+		visibilityContainers:      make(map[string]*archiver.VisibilityBootstrapContainer),
+		historyArchivers:          make(map[string]archiver.HistoryArchiver),
+		visibilityArchivers:       make(map[string]archiver.VisibilityArchiver),
 	}
 }
 

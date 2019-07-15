@@ -28,22 +28,21 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/blobstore/blob"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/persistence"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/blobstore"
+	"github.com/uber/cadence/common/blobstore/blob"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 	"go.uber.org/cadence/encoded"
 	"go.uber.org/cadence/testsuite"
 	"go.uber.org/cadence/worker"
@@ -1198,21 +1197,23 @@ func (s *historyBlobUploaderSuite) archivalConfig(
 		domainArchivalStatus = shared.ArchivalStatusEnabled
 	}
 	clusterArchivalStatus := cluster.ArchivalDisabled
+	defaultURI := ""
 	if clusterEnablesArchival {
 		clusterArchivalStatus = cluster.ArchivalEnabled
+		defaultURI = "some default URI"
 	}
 	mockMetadataMgr := &mocks.MetadataManager{}
 	mockClusterMetadata := &mocks.ClusterMetadata{}
-	mockClusterMetadata.On("HistoryArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterEnablesArchival, cluster.DomainArchivalDisabled, ""))
+	mockClusterMetadata.On("HistoryArchivalConfig").Return(cluster.NewArchivalConfig(clusterArchivalStatus, clusterEnablesArchival, shared.ArchivalStatusDisabled, defaultURI))
 	mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	mockClusterMetadata.On("GetCurrentClusterName").Return(testCurrentClusterName)
 	mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
 			Info: &persistence.DomainInfo{ID: testDomainID, Name: testDomain},
 			Config: &persistence.DomainConfig{
-				Retention:      1,
-				ArchivalBucket: domainArchivalBucket,
-				ArchivalStatus: domainArchivalStatus,
+				Retention:             1,
+				HistoryArchivalStatus: domainArchivalStatus,
+				HistoryArchivalURI:    domainArchivalBucket,
 			},
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,

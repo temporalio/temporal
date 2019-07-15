@@ -107,8 +107,10 @@ func RegisterDomain(c *cli.Context) {
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		SecurityToken:                          common.StringPtr(securityToken),
-		ArchivalStatus:                         archivalStatus(c),
-		ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
+		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
+		HistoryArchivalURI:                     common.StringPtr(c.String(FlagHistoryArchivalURI)),
+		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
+		VisibilityArchivalURI:                  common.StringPtr(c.String(FlagVisibilityArchivalURI)),
 		IsGlobalDomain:                         isGlobalDomainPtr,
 	}
 
@@ -230,8 +232,10 @@ func UpdateDomain(c *cli.Context) {
 		updateConfig := &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 			EmitMetric:                             common.BoolPtr(emitMetric),
-			ArchivalStatus:                         archivalStatus(c),
-			ArchivalBucketName:                     common.StringPtr(c.String(FlagArchivalBucketName)),
+			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
+			HistoryArchivalURI:                     common.StringPtr(c.String(FlagHistoryArchivalURI)),
+			VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
+			VisibilityArchivalURI:                  common.StringPtr(c.String(FlagVisibilityArchivalURI)),
 			BadBinaries:                            binBinaries,
 		}
 		replicationConfig := &shared.DomainReplicationConfiguration{
@@ -283,7 +287,7 @@ func DescribeDomain(c *cli.Context) {
 	}
 
 	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
-		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nArchivalStatus: %v\n"
+		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
 		resp.DomainInfo.GetName(),
 		resp.DomainInfo.GetUUID(),
@@ -295,11 +299,17 @@ func DescribeDomain(c *cli.Context) {
 		resp.Configuration.GetEmitMetric(),
 		resp.ReplicationConfiguration.GetActiveClusterName(),
 		clustersToString(resp.ReplicationConfiguration.Clusters),
-		resp.Configuration.GetArchivalStatus().String(),
+		resp.Configuration.GetHistoryArchivalStatus().String(),
 	}
-	if resp.Configuration.GetArchivalBucketName() != "" {
-		formatStr = formatStr + "BucketName: %v\n"
-		descValues = append(descValues, resp.Configuration.GetArchivalBucketName())
+	if resp.Configuration.GetHistoryArchivalURI() != "" {
+		formatStr = formatStr + "HistoryArchivalURI: %v\n"
+		descValues = append(descValues, resp.Configuration.GetHistoryArchivalURI())
+	}
+	formatStr = formatStr + "VisibilityArchivalStatus: %v\n"
+	descValues = append(descValues, resp.Configuration.GetVisibilityArchivalStatus().String())
+	if resp.Configuration.GetVisibilityArchivalURI() != "" {
+		formatStr = formatStr + "VisibilityArchivalURI: %v\n"
+		descValues = append(descValues, resp.Configuration.GetVisibilityArchivalURI())
 	}
 	fmt.Printf(formatStr, descValues...)
 	if resp.Configuration.BadBinaries != nil {
@@ -322,15 +332,15 @@ func DescribeDomain(c *cli.Context) {
 	}
 }
 
-func archivalStatus(c *cli.Context) *shared.ArchivalStatus {
-	if c.IsSet(FlagArchivalStatus) {
-		switch c.String(FlagArchivalStatus) {
+func archivalStatus(c *cli.Context, statusFlagName string) *shared.ArchivalStatus {
+	if c.IsSet(statusFlagName) {
+		switch c.String(statusFlagName) {
 		case "disabled":
 			return common.ArchivalStatusPtr(shared.ArchivalStatusDisabled)
 		case "enabled":
 			return common.ArchivalStatusPtr(shared.ArchivalStatusEnabled)
 		default:
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagArchivalStatus), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
 		}
 	}
 	return nil

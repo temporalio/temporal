@@ -909,9 +909,11 @@ struct DomainInfo {
 struct DomainConfiguration {
   10: optional i32 workflowExecutionRetentionPeriodInDays
   20: optional bool emitMetric
-  30: optional string archivalBucketName
-  50: optional ArchivalStatus archivalStatus
   70: optional BadBinaries badBinaries
+  80: optional ArchivalStatus historyArchivalStatus
+  90: optional string historyArchivalURI
+  100: optional ArchivalStatus visibilityArchivalStatus
+  110: optional string visibilityArchivalURI
 }
 
 struct BadBinaries{
@@ -951,9 +953,11 @@ struct RegisterDomainRequest {
   // A key-value map for any customized purpose
   80: optional map<string,string> data
   90: optional string securityToken
-  100: optional ArchivalStatus archivalStatus
-  110: optional string archivalBucketName
   120: optional bool isGlobalDomain
+  130: optional ArchivalStatus historyArchivalStatus
+  140: optional string historyArchivalURI
+  150: optional ArchivalStatus visibilityArchivalStatus
+  160: optional string visibilityArchivalURI
 }
 
 struct ListDomainsRequest {

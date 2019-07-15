@@ -1499,8 +1499,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 		&persistence.GetDomainResponse{
 			Info: &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{
-				Retention:      1,
-				ArchivalStatus: workflow.ArchivalStatusEnabled,
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
 			},
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -1573,8 +1574,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 		&persistence.GetDomainResponse{
 			Info: &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{
-				Retention:      1,
-				ArchivalStatus: workflow.ArchivalStatusEnabled,
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
 			},
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,

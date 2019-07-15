@@ -84,6 +84,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 	}
 
 	archivalClusterConfig := config.Archival{}
+	archivalDomainDefaults := config.ArchivalDomainDefaults{}
 	if enableArchival {
 		archivalClusterConfig = config.Archival{
 			History: config.HistoryArchival{
@@ -93,6 +94,16 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 			Visibility: config.VisibilityArchival{
 				Status:                 "enabled",
 				EnableReadFromArchival: true,
+			},
+		}
+		archivalDomainDefaults = config.ArchivalDomainDefaults{
+			History: config.HistoryArchivalDomainDefaults{
+				DefaultStatus: "enabled",
+				DefaultURI:    "testScheme://test/archive/path",
+			},
+			Visibility: config.VisibilityArchivalDomainDefaults{
+				DefaultStatus: "enabled",
+				DefaultURI:    "testScheme://test/archive/path",
 			},
 		}
 	}
@@ -106,7 +117,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 			TestCurrentClusterName,
 			TestAllClusterInfo,
 			archivalClusterConfig,
-			config.ArchivalDomainDefaults{},
+			archivalDomainDefaults,
 		)
 	}
 
@@ -119,6 +130,6 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 		TestCurrentClusterName,
 		TestSingleDCClusterInfo,
 		archivalClusterConfig,
-		config.ArchivalDomainDefaults{},
+		archivalDomainDefaults,
 	)
 }

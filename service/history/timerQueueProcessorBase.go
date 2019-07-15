@@ -590,7 +590,7 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	if err != nil {
 		return err
 	}
-	domainArchivalStatus := domainCacheEntry.GetConfig().ArchivalStatus
+	domainArchivalStatus := domainCacheEntry.GetConfig().HistoryArchivalStatus
 	switch clusterArchivalStatus {
 	case cluster.ArchivalDisabled:
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
@@ -638,6 +638,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 		return err
 	}
 
+	// TODO ycyang: rewrite archiveRequest
 	req := &archiver.ArchiveRequest{
 		ShardID:              t.shard.GetShardID(),
 		DomainID:             task.DomainID,
@@ -648,7 +649,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 		BranchToken:          msBuilder.GetCurrentBranch(),
 		NextEventID:          msBuilder.GetNextEventID(),
 		CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
-		BucketName:           domainCacheEntry.GetConfig().ArchivalBucket,
+		BucketName:           domainCacheEntry.GetConfig().HistoryArchivalURI,
 	}
 
 	// send signal before deleting mutable state to make sure archival is idempotent

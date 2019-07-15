@@ -22,6 +22,7 @@ package common
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -453,4 +454,13 @@ func IsJustOrderByClause(clause string) bool {
 	whereClause := strings.TrimSpace(clause)
 	whereClause = strings.ToLower(whereClause)
 	return strings.HasPrefix(whereClause, "order by")
+}
+
+// GetArchivalScheme extract archival scheme from URI
+func GetArchivalScheme(URI string) (string, error) {
+	sepIdx := strings.Index(URI, "://")
+	if sepIdx == -1 {
+		return "", errors.New("invalid archival URI")
+	}
+	return URI[:sepIdx], nil
 }

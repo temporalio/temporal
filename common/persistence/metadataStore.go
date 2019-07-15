@@ -156,11 +156,13 @@ func (m *metadataManagerImpl) serializeDomainConfig(c *DomainConfig) (InternalDo
 		return InternalDomainConfig{}, err
 	}
 	return InternalDomainConfig{
-		Retention:      c.Retention,
-		EmitMetric:     c.EmitMetric,
-		ArchivalBucket: c.ArchivalBucket,
-		ArchivalStatus: c.ArchivalStatus,
-		BadBinaries:    badBinaries,
+		Retention:                c.Retention,
+		EmitMetric:               c.EmitMetric,
+		HistoryArchivalStatus:    c.HistoryArchivalStatus,
+		HistoryArchivalURI:       c.HistoryArchivalURI,
+		VisibilityArchivalStatus: c.VisibilityArchivalStatus,
+		VisibilityArchivalURI:    c.VisibilityArchivalURI,
+		BadBinaries:              badBinaries,
 	}, nil
 }
 
@@ -176,11 +178,13 @@ func (m *metadataManagerImpl) deserializeDomainConfig(ic *InternalDomainConfig) 
 		badBinaries.Binaries = map[string]*shared.BadBinaryInfo{}
 	}
 	return DomainConfig{
-		Retention:      ic.Retention,
-		EmitMetric:     ic.EmitMetric,
-		ArchivalBucket: ic.ArchivalBucket,
-		ArchivalStatus: ic.ArchivalStatus,
-		BadBinaries:    *badBinaries,
+		Retention:                ic.Retention,
+		EmitMetric:               ic.EmitMetric,
+		HistoryArchivalStatus:    ic.HistoryArchivalStatus,
+		HistoryArchivalURI:       ic.HistoryArchivalURI,
+		VisibilityArchivalStatus: ic.VisibilityArchivalStatus,
+		VisibilityArchivalURI:    ic.VisibilityArchivalURI,
+		BadBinaries:              *badBinaries,
 	}, nil
 }
 

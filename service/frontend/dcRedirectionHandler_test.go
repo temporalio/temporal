@@ -25,12 +25,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/mock"
-
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -60,6 +60,7 @@ type (
 		mockClientBean           *client.MockClientBean
 		mockFrontendHandler      *MockWorkflowHandler
 		mockRemoteFrontendClient *mocks.FrontendClient
+		mockArchiverProvider     *provider.ArchiverProviderMock
 
 		frontendHandler *WorkflowHandler
 		handler         *DCRedirectionHandlerImpl
@@ -98,7 +99,10 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
 
-	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, nil, nil)
+	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
+	s.mockArchiverProvider.On("RegisterBootstrapContainer", common.FrontendServiceName, mock.Anything, mock.Anything)
+
+	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, nil, s.mockArchiverProvider)
 	frontendHandler.metricsClient = metricsClient
 	frontendHandler.startWG.Done()
 

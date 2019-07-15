@@ -26,14 +26,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
-
-	"github.com/stretchr/testify/require"
 )
 
 type (
@@ -87,8 +85,10 @@ func (s *metadataPersistenceProxySuite) TestDomainV1V2Migration() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	archivalBucketName := "bucket-test-name"
-	archivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalURI := "test://visibility/uri"
 	badBinaries := gen.BadBinaries{Binaries: map[string]*gen.BadBinaryInfo{
 		uuid.New(): &gen.BadBinaryInfo{
 			Reason:          common.StringPtr("some random reason,"),
@@ -124,11 +124,13 @@ func (s *metadataPersistenceProxySuite) TestDomainV1V2Migration() {
 			Data:        data,
 		},
 		Config: &p.DomainConfig{
-			Retention:      retention,
-			EmitMetric:     emitMetric,
-			ArchivalBucket: archivalBucketName,
-			ArchivalStatus: archivalStatus,
-			BadBinaries:    badBinaries,
+			Retention:                retention,
+			EmitMetric:               emitMetric,
+			HistoryArchivalStatus:    historyArchivalStatus,
+			HistoryArchivalURI:       historyArchivalURI,
+			VisibilityArchivalStatus: visibilityArchivalStatus,
+			VisibilityArchivalURI:    visibilityArchivalURI,
+			BadBinaries:              badBinaries,
 		},
 		ReplicationConfig: &p.DomainReplicationConfig{
 			ActiveClusterName: clusterActive,
@@ -156,8 +158,10 @@ func (s *metadataPersistenceProxySuite) TestDomainV1V2Migration() {
 	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
-	s.Equal(archivalBucketName, resp.Config.ArchivalBucket)
-	s.Equal(archivalStatus, resp.Config.ArchivalStatus)
+	s.Equal(historyArchivalStatus, resp.Config.HistoryArchivalStatus)
+	s.Equal(historyArchivalURI, resp.Config.HistoryArchivalURI)
+	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
+	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	s.Equal(len(clusters), len(resp.ReplicationConfig.Clusters))
 	for index := range clusters {

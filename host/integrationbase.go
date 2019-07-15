@@ -96,11 +96,11 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.domainName = s.randomizeStr("integration-test-domain")
 	s.Require().NoError(
-		s.registerDomain(s.domainName, 1, workflow.ArchivalStatusDisabled, "default-test-bucket"))
+		s.registerDomain(s.domainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))
 
 	s.foreignDomainName = s.randomizeStr("integration-foreign-test-domain")
 	s.Require().NoError(
-		s.registerDomain(s.foreignDomainName, 1, workflow.ArchivalStatusDisabled, ""))
+		s.registerDomain(s.foreignDomainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))
 
 	s.Require().NoError(s.registerArchivalDomain())
 
@@ -153,15 +153,21 @@ func (s *IntegrationBase) tearDownSuite() {
 func (s *IntegrationBase) registerDomain(
 	domain string,
 	retentionDays int,
-	archivalStatus workflow.ArchivalStatus, archivalBucket string) error {
+	historyArchivalStatus workflow.ArchivalStatus,
+	historyArchivalURI string,
+	visibilityArchivalStatus workflow.ArchivalStatus,
+	visibilityArchivalURI string,
+) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return s.engine.RegisterDomain(ctx, &workflow.RegisterDomainRequest{
 		Name:                                   &domain,
 		Description:                            &domain,
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
-		ArchivalStatus:                         &archivalStatus,
-		ArchivalBucketName:                     &archivalBucket,
+		HistoryArchivalStatus:                  &historyArchivalStatus,
+		HistoryArchivalURI:                     &historyArchivalURI,
+		VisibilityArchivalStatus:               &visibilityArchivalStatus,
+		VisibilityArchivalURI:                  &visibilityArchivalURI,
 	})
 }
 
@@ -220,10 +226,12 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 			Status: persistence.DomainStatusRegistered,
 		},
 		Config: &persistence.DomainConfig{
-			Retention:      0,
-			ArchivalBucket: s.testCluster.blobstore.bucketName,
-			ArchivalStatus: workflow.ArchivalStatusEnabled,
-			BadBinaries:    workflow.BadBinaries{Binaries: map[string]*workflow.BadBinaryInfo{}},
+			Retention:                0,
+			HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+			HistoryArchivalURI:       s.testCluster.blobstore.bucketName, // TODO ycyang: change this to a URI.
+			VisibilityArchivalStatus: workflow.ArchivalStatusDisabled,
+			VisibilityArchivalURI:    "",
+			BadBinaries:              workflow.BadBinaries{Binaries: map[string]*workflow.BadBinaryInfo{}},
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: currentClusterName,

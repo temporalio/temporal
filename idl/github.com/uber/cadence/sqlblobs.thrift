@@ -52,6 +52,10 @@ struct DomainInfo {
   38: optional map<string, string> data
   39: optional binary badBinaries
   40: optional string badBinariesEncoding
+  42: optional i16 historyArchivalStatus
+  44: optional string historyArchivalURI
+  46: optional i16 visibilityArchivalStatus
+  48: optional string visibilityArchivalURI
 }
 
 struct HistoryTreeInfo {

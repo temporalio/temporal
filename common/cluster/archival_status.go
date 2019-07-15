@@ -23,20 +23,19 @@ package cluster
 import (
 	"fmt"
 	"strings"
+
+	"github.com/uber/cadence/.gen/go/shared"
 )
 
 type (
 	// ArchivalStatus represents the archival status of the cluster
 	ArchivalStatus int
 
-	// DomainArchivalStatus represents the archival status of a domain
-	DomainArchivalStatus int
-
 	// ArchivalConfig is an immutable representation of the current archival configuration of the cluster
 	ArchivalConfig struct {
 		ClusterStatus          ArchivalStatus
 		EnableReadFromArchival bool
-		DomainDefaultStatus    DomainArchivalStatus
+		DomainDefaultStatus    shared.ArchivalStatus
 		DomainDefaultURI       string
 	}
 )
@@ -48,18 +47,13 @@ const (
 	ArchivalPaused
 	// ArchivalEnabled means this cluster is currently archiving
 	ArchivalEnabled
-
-	// DomainArchivalDisabled means a domain is not configured to handle archival
-	DomainArchivalDisabled DomainArchivalStatus = iota
-	// DomainArchivalEnabled means a domain is currently archiving
-	DomainArchivalEnabled
 )
 
 // NewArchivalConfig constructs a new valid ArchivalConfig
 func NewArchivalConfig(
 	clusterStatus ArchivalStatus,
 	enableReadFromArchival bool,
-	domainDefaultStatus DomainArchivalStatus,
+	domainDefaultStatus shared.ArchivalStatus,
 	domainDefaultURI string,
 ) *ArchivalConfig {
 	ac := &ArchivalConfig{
@@ -68,8 +62,8 @@ func NewArchivalConfig(
 		DomainDefaultStatus:    domainDefaultStatus,
 		DomainDefaultURI:       domainDefaultURI,
 	}
-	if !ac.isDomainDefaultValid() {
-		return newDisabledArchivalConfig()
+	if !ac.isValid() {
+		panic("invalid cluster level archival configuration")
 	}
 	return ac
 }
@@ -79,19 +73,10 @@ func (a *ArchivalConfig) ClusterConfiguredForArchival() bool {
 	return a.ClusterStatus == ArchivalEnabled
 }
 
-func (a *ArchivalConfig) isDomainDefaultValid() bool {
+func (a *ArchivalConfig) isValid() bool {
 	URISet := len(a.DomainDefaultURI) != 0
-	disabled := a.DomainDefaultStatus == DomainArchivalDisabled
+	disabled := a.ClusterStatus == ArchivalDisabled
 	return (!URISet && disabled) || (URISet && !disabled)
-}
-
-func newDisabledArchivalConfig() *ArchivalConfig {
-	return &ArchivalConfig{
-		ClusterStatus:          ArchivalDisabled,
-		EnableReadFromArchival: false,
-		DomainDefaultStatus:    DomainArchivalDisabled,
-		DomainDefaultURI:       "",
-	}
 }
 
 func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
@@ -107,13 +92,13 @@ func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
 	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v for cluster, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
 }
 
-func getDomainArchivalStatus(str string) (DomainArchivalStatus, error) {
+func getDomainArchivalStatus(str string) (shared.ArchivalStatus, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
 	case "", "disabled":
-		return DomainArchivalDisabled, nil
+		return shared.ArchivalStatusDisabled, nil
 	case "enabled":
-		return DomainArchivalEnabled, nil
+		return shared.ArchivalStatusEnabled, nil
 	}
-	return DomainArchivalDisabled, fmt.Errorf("invalid archival status of %v for domain, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
+	return shared.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for domain, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
 }

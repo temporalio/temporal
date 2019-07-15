@@ -43,7 +43,10 @@ const (
 
 	templateGetDomainByNameQueryV2 = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, config.bad_binaries, config.bad_binaries_encoding,` +
+		`config.archival_bucket, config.archival_status, ` +
+		`config.history_archival_status, config.history_archival_uri, ` +
+		`config.visibility_archival_status, config.visibility_archival_uri, ` +
+		`config.bad_binaries, config.bad_binaries_encoding, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -82,7 +85,10 @@ const (
 
 	templateListDomainQueryV2 = `SELECT name, domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, config.bad_binaries, config.bad_binaries_encoding,` +
+		`config.archival_bucket, config.archival_status, ` +
+		`config.history_archival_status, config.history_archival_uri, ` +
+		`config.visibility_archival_status, config.visibility_archival_uri, ` +
+		`config.bad_binaries, config.bad_binaries_encoding, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -170,6 +176,10 @@ func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.Intern
 		request.Config.EmitMetric,
 		request.Config.ArchivalBucket,
 		request.Config.ArchivalStatus,
+		request.Config.HistoryArchivalStatus,
+		request.Config.HistoryArchivalURI,
+		request.Config.VisibilityArchivalStatus,
+		request.Config.VisibilityArchivalURI,
 		request.Config.BadBinaries.Data,
 		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
@@ -230,6 +240,10 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.InternalUpdateD
 		request.Config.EmitMetric,
 		request.Config.ArchivalBucket,
 		request.Config.ArchivalStatus,
+		request.Config.HistoryArchivalStatus,
+		request.Config.HistoryArchivalURI,
+		request.Config.VisibilityArchivalStatus,
+		request.Config.VisibilityArchivalURI,
 		request.Config.BadBinaries.Data,
 		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
@@ -327,6 +341,10 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		&config.EmitMetric,
 		&config.ArchivalBucket,
 		&config.ArchivalStatus,
+		&config.HistoryArchivalStatus,
+		&config.HistoryArchivalURI,
+		&config.VisibilityArchivalStatus,
+		&config.VisibilityArchivalURI,
 		&badBinariesData,
 		&badBinariesDataEncoding,
 		&replicationConfig.ActiveClusterName,
@@ -387,12 +405,29 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 	response := &p.InternalListDomainsResponse{}
 	for iter.Scan(
 		&name,
-		&domain.Info.ID, &domain.Info.Name, &domain.Info.Status, &domain.Info.Description, &domain.Info.OwnerEmail, &domain.Info.Data,
-		&domain.Config.Retention, &domain.Config.EmitMetric,
-		&domain.Config.ArchivalBucket, &domain.Config.ArchivalStatus, &badBinariesData, &badBinariesDataEncoding,
-		&domain.ReplicationConfig.ActiveClusterName, &replicationClusters,
-		&domain.IsGlobalDomain, &domain.ConfigVersion, &domain.FailoverVersion,
-		&domain.FailoverNotificationVersion, &domain.NotificationVersion,
+		&domain.Info.ID,
+		&domain.Info.Name,
+		&domain.Info.Status,
+		&domain.Info.Description,
+		&domain.Info.OwnerEmail,
+		&domain.Info.Data,
+		&domain.Config.Retention,
+		&domain.Config.EmitMetric,
+		&domain.Config.ArchivalBucket,
+		&domain.Config.ArchivalStatus,
+		&domain.Config.HistoryArchivalStatus,
+		&domain.Config.HistoryArchivalURI,
+		&domain.Config.VisibilityArchivalStatus,
+		&domain.Config.VisibilityArchivalURI,
+		&badBinariesData,
+		&badBinariesDataEncoding,
+		&domain.ReplicationConfig.ActiveClusterName,
+		&replicationClusters,
+		&domain.IsGlobalDomain,
+		&domain.ConfigVersion,
+		&domain.FailoverVersion,
+		&domain.FailoverNotificationVersion,
+		&domain.NotificationVersion,
 	) {
 		if name != domainMetadataRecordName {
 			// do not include the metadata record
@@ -444,7 +479,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteDomain(request *p.DeleteDomainReq
 func (m *cassandraMetadataPersistenceV2) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil

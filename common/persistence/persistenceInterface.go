@@ -582,11 +582,15 @@ type (
 	// InternalDomainConfig describes the domain configuration
 	InternalDomainConfig struct {
 		// NOTE: this retention is in days, not in seconds
-		Retention      int32
-		EmitMetric     bool
-		ArchivalBucket string
-		ArchivalStatus workflow.ArchivalStatus
-		BadBinaries    *DataBlob
+		Retention                int32
+		EmitMetric               bool
+		ArchivalBucket           string                  // deprecated
+		ArchivalStatus           workflow.ArchivalStatus // deprecated
+		HistoryArchivalStatus    workflow.ArchivalStatus
+		HistoryArchivalURI       string
+		VisibilityArchivalStatus workflow.ArchivalStatus
+		VisibilityArchivalURI    string
+		BadBinaries              *DataBlob
 	}
 
 	// InternalCreateDomainRequest is used to create the domain

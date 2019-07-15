@@ -94,7 +94,7 @@ func (h *historyBlobUploader) UploadHistory(ctx context.Context, request *Archiv
 		h.scope.IncCounter(metrics.ArchiverSkipUploadCount)
 		return result, nil
 	}
-	if domainCacheEntry.GetConfig().ArchivalStatus != shared.ArchivalStatusEnabled {
+	if domainCacheEntry.GetConfig().HistoryArchivalStatus != shared.ArchivalStatusEnabled {
 		h.logger.Error(uploadSkipMsg, tag.ArchivalUploadFailReason("domain is not enabled for archival"))
 		h.scope.IncCounter(metrics.ArchiverSkipUploadCount)
 		return result, nil

@@ -609,11 +609,13 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 		result.info.Data[k] = v
 	}
 	result.config = &persistence.DomainConfig{
-		Retention:      entry.config.Retention,
-		EmitMetric:     entry.config.EmitMetric,
-		ArchivalBucket: entry.config.ArchivalBucket,
-		ArchivalStatus: entry.config.ArchivalStatus,
-		BadBinaries:    copyResetBinary(entry.config.BadBinaries),
+		Retention:                entry.config.Retention,
+		EmitMetric:               entry.config.EmitMetric,
+		HistoryArchivalStatus:    entry.config.HistoryArchivalStatus,
+		HistoryArchivalURI:       entry.config.HistoryArchivalURI,
+		VisibilityArchivalStatus: entry.config.VisibilityArchivalStatus,
+		VisibilityArchivalURI:    entry.config.VisibilityArchivalURI,
+		BadBinaries:              copyResetBinary(entry.config.BadBinaries),
 	}
 	result.replicationConfig = &persistence.DomainReplicationConfig{
 		ActiveClusterName: entry.replicationConfig.ActiveClusterName,

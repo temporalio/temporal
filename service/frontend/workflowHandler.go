@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
@@ -53,7 +54,7 @@ import (
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/tokenbucket"
-	"github.com/uber/cadence/service/worker/archiver"
+	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -80,7 +81,7 @@ type (
 		domainHandler             *domainHandlerImpl
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
-		historyBlobDownloader     archiver.HistoryBlobDownloader
+		historyBlobDownloader     warchiver.HistoryBlobDownloader
 		archiverProvider          provider.ArchiverProvider
 		service.Service
 	}
@@ -174,13 +175,23 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 			sVice.GetClusterMetadata(),
 			blobstoreClient,
 			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
+			archiverProvider,
 		),
 		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(sVice.GetLogger(), config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
-		historyBlobDownloader: archiver.NewHistoryBlobDownloader(blobstoreClient),
+		historyBlobDownloader: warchiver.NewHistoryBlobDownloader(blobstoreClient),
 		archiverProvider:      archiverProvider,
 	}
+	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
+		HistoryManager:   handler.historyMgr,
+		HistoryV2Manager: handler.historyV2Mgr,
+		Logger:           sVice.GetLogger(),
+		MetricsClient:    handler.metricsClient,
+		ClusterMetadata:  sVice.GetClusterMetadata(),
+		DomainCache:      handler.domainCache,
+	}
+	archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
 	return handler
@@ -3205,11 +3216,11 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	archivalBucket := entry.GetConfig().ArchivalBucket
+	archivalBucket := entry.GetConfig().HistoryArchivalURI // TODO ycyang: rewrite get archived history with archiver
 	if archivalBucket == "" {
 		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
 	}
-	downloadReq := &archiver.DownloadBlobRequest{
+	downloadReq := &warchiver.DownloadBlobRequest{
 		NextPageToken:  request.NextPageToken,
 		ArchivalBucket: archivalBucket,
 		DomainID:       domainID,
