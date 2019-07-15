@@ -523,7 +523,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				WorkflowId: execution.WorkflowId,
 				RunId:      common.StringPtr(newRunID),
 			}
-			newRunLastEvent, newRunDecisionInfo, _, err := newRunStateBuilder.applyEvents(
+			_, newRunDecisionInfo, _, err := newRunStateBuilder.applyEvents(
 				domainID,
 				uuid.New(),
 				newExecution,
@@ -535,16 +535,6 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if err != nil {
 				return nil, nil, nil, err
 			}
-
-			newRunExecutionInfo := newRunMutableStateBuilder.GetExecutionInfo()
-			newRunExecutionInfo.SetNextEventID(newRunLastEvent.GetEventId() + 1)
-			newRunExecutionInfo.SetLastFirstEventID(newRunStartedEvent.GetEventId())
-			// Set the history from replication task on the newStateBuilder
-			newRunMutableStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory, b.logger))
-			newRunMutableStateBuilder.UpdateReplicationStateLastEventID(
-				newRunLastEvent.GetVersion(),
-				newRunLastEvent.GetEventId(),
-			)
 
 			b.newRunTransferTasks = append(b.newRunTransferTasks, newRunStateBuilder.getTransferTasks()...)
 			b.newRunTimerTasks = append(b.newRunTimerTasks, newRunStateBuilder.getTimerTasks()...)
@@ -572,6 +562,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 	b.msBuilder.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
 	b.msBuilder.GetExecutionInfo().SetNextEventID(lastEvent.GetEventId() + 1)
+
+	b.msBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(history, b.logger))
+	b.msBuilder.AddTransferTasks(b.transferTasks...)
+	b.msBuilder.AddTimerTasks(b.timerTasks...)
 
 	return lastEvent, lastDecision, newRunMutableStateBuilder, nil
 }

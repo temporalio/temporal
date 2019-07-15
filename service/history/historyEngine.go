@@ -448,14 +448,17 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	}
 
 	context := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
-	createReplicationTask := domainEntry.CanReplicateEvent()
-	replicationTasks := []persistence.Task{}
-	historySize, replicationTask, err := context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
+	msBuilder.AddTransferTasks(transferTasks...)
+	msBuilder.AddTimerTasks(timerTasks...)
+
+	now := e.timeSource.Now()
+	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(now)
 	if err != nil {
 		return nil, err
 	}
-	if replicationTask != nil {
-		replicationTasks = append(replicationTasks, replicationTask)
+	historySize, err := context.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	if err != nil {
+		return nil, err
 	}
 
 	// create as brand new
@@ -463,8 +466,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, historySize, createReplicationTask, e.timeSource.Now(),
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err != nil {
@@ -496,8 +498,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
-				msBuilder, historySize, createReplicationTask, e.timeSource.Now(),
-				transferTasks, replicationTasks, timerTasks,
+				newWorkflow, historySize, now,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
 		}
@@ -1561,14 +1562,17 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}}
 
 	context = newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
-	createReplicationTask := domainEntry.CanReplicateEvent()
-	replicationTasks := []persistence.Task{}
-	historySize, replicationTask, err := context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
+	msBuilder.AddTransferTasks(transferTasks...)
+	msBuilder.AddTimerTasks(timerTasks...)
+
+	now := e.timeSource.Now()
+	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(now)
 	if err != nil {
 		return nil, err
 	}
-	if replicationTask != nil {
-		replicationTasks = append(replicationTasks, replicationTask)
+	historySize, err := context.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	if err != nil {
+		return nil, err
 	}
 
 	createMode := persistence.CreateWorkflowModeBrandNew
@@ -1580,8 +1584,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevLastWriteVersion = prevMutableState.GetLastWriteVersion()
 	}
 	err = context.createWorkflowExecution(
-		msBuilder, historySize, createReplicationTask, e.timeSource.Now(),
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 

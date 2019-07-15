@@ -136,6 +136,10 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*shared.HistoryEvent) {
 		s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event.GetVersion()).Return(s.sourceCluster).Once()
 		s.mockMutableState.On("UpdateReplicationStateLastEventID", event.GetVersion(), event.GetEventId()).Once()
 	}
+	s.mockMutableState.On("SetHistoryBuilder", newHistoryBuilderFromEvents(events, s.logger)).Once()
+	// the timer task and transfer tasks are checked in each individual tests
+	s.mockMutableState.On("AddTransferTasks", mock.Anything).Once()
+	s.mockMutableState.On("AddTimerTasks", mock.Anything).Once()
 }
 
 func (s *stateBuilderSuite) toHistory(events ...*shared.HistoryEvent) []*shared.HistoryEvent {
@@ -555,7 +559,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		mock.Anything,
 		int32(0),
 	).Return(nil)
-	s.mockUpdateVersion(continueAsNewEvent, newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent)
+	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
@@ -599,14 +603,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder.condition = newRunStateBuilder.(*mutableStateBuilder).condition
 	expectedNewRunStateBuilder.insertTransferTasks = newRunStateBuilder.(*mutableStateBuilder).insertTransferTasks
 	expectedNewRunStateBuilder.insertTimerTasks = newRunStateBuilder.(*mutableStateBuilder).insertTimerTasks
-
-	expectedSnapshot, _, err := expectedNewRunStateBuilder.CloseTransactionAsSnapshot(now)
-	s.Nil(err)
-	actualSnapshot, _, err := newRunStateBuilder.CloseTransactionAsSnapshot(now)
-	s.Nil(err)
-	expectedSnapshot.ReplicationTasks = nil
-	actualSnapshot.ReplicationTasks = nil
-	s.Equal(expectedSnapshot, actualSnapshot)
+	s.Equal(expectedNewRunStateBuilder, newRunStateBuilder)
 
 	s.Equal([]persistence.Task{&persistence.CloseExecutionTask{}}, s.stateBuilder.transferTasks)
 	s.Equal(1, len(s.stateBuilder.timerTasks))
@@ -780,15 +777,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	parentInitiatedEventID := int64(144)
 	retentionDays := int32(1)
 
-	msBuilder := newMutableStateBuilderWithReplicationState(
-		s.mockShard,
-		s.mockShard.GetEventsCache(),
-		s.logger,
-		version,
-	)
-
-	stateBuilder := newStateBuilder(s.mockShard, msBuilder, s.logger)
-
 	now := time.Now()
 	tasklist := "some random tasklist"
 	workflowType := "some random workflow type"
@@ -881,30 +869,29 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", continueAsNewEvent.GetVersion()).Return(s.sourceCluster)
 	s.mockMutableState.On("ReplicateWorkflowExecutionContinuedAsNewEvent",
 		continueAsNewEvent.GetEventId(),
-		s.sourceCluster,
 		domainID,
 		continueAsNewEvent,
 		newRunStartedEvent,
 		&decisionInfo{
-			Version:         newRunDecisionEvent.GetVersion(),
-			ScheduleID:      newRunDecisionEvent.GetEventId(),
-			StartedID:       common.EmptyEventID,
-			RequestID:       emptyUUID,
-			DecisionTimeout: decisionTimeoutSecond,
-			TaskList:        tasklist,
-			Attempt:         newRunDecisionAttempt,
+			Version:            newRunDecisionEvent.GetVersion(),
+			ScheduleID:         newRunDecisionEvent.GetEventId(),
+			StartedID:          common.EmptyEventID,
+			RequestID:          emptyUUID,
+			DecisionTimeout:    decisionTimeoutSecond,
+			TaskList:           tasklist,
+			Attempt:            newRunDecisionAttempt,
+			ScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
 		},
 		mock.Anything,
 		int32(persistence.EventStoreVersionV2),
 	).Return(nil)
-	s.mockUpdateVersion(continueAsNewEvent, newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent)
+	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent}}
 	s.mockMutableState.On("ClearStickyness").Once()
-	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Times(3)
-
-	_, _, newRunStateBuilder, err := stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events,
+	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Times(2)
+	_, _, newRunStateBuilder, err := s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events,
 		0, persistence.EventStoreVersionV2)
 	s.Nil(err)
 	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(
@@ -945,24 +932,16 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder.condition = newRunStateBuilder.(*mutableStateBuilder).condition
 	expectedNewRunStateBuilder.insertTransferTasks = newRunStateBuilder.(*mutableStateBuilder).insertTransferTasks
 	expectedNewRunStateBuilder.insertTimerTasks = newRunStateBuilder.(*mutableStateBuilder).insertTimerTasks
+	s.Equal(expectedNewRunStateBuilder, newRunStateBuilder)
 
-	expectedSnapshot, _, err := expectedNewRunStateBuilder.CloseTransactionAsSnapshot(now)
-	s.Nil(err)
-	actualSnapshot, _, err := newRunStateBuilder.CloseTransactionAsSnapshot(now)
-	s.Nil(err)
-	expectedSnapshot.ReplicationTasks = nil
-	actualSnapshot.ReplicationTasks = nil
-	s.Equal(expectedSnapshot, actualSnapshot)
-	s.Equal(int32(persistence.EventStoreVersionV2), newRunStateBuilder.GetEventStoreVersion())
-
-	s.Equal([]persistence.Task{&persistence.CloseExecutionTask{}}, stateBuilder.transferTasks)
-	s.Equal(1, len(stateBuilder.timerTasks))
-	timerTask, ok := stateBuilder.timerTasks[0].(*persistence.DeleteHistoryEventTask)
+	s.Equal([]persistence.Task{&persistence.CloseExecutionTask{}}, s.stateBuilder.transferTasks)
+	s.Equal(1, len(s.stateBuilder.timerTasks))
+	timerTask, ok := s.stateBuilder.timerTasks[0].(*persistence.DeleteHistoryEventTask)
 	s.True(ok)
 	s.True(timerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(retentionDays) * time.Hour * 24)))
 
-	s.Equal(1, len(stateBuilder.newRunTimerTasks))
-	newRunTimerTask, ok := stateBuilder.newRunTimerTasks[0].(*persistence.WorkflowTimeoutTask)
+	s.Equal(1, len(s.stateBuilder.newRunTimerTasks))
+	newRunTimerTask, ok := s.stateBuilder.newRunTimerTasks[0].(*persistence.WorkflowTimeoutTask)
 	s.True(ok)
 	s.True(newRunTimerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(workflowTimeoutSecond) * time.Second)))
 	s.Equal([]persistence.Task{
@@ -972,7 +951,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			TaskList:   tasklist,
 			ScheduleID: newRunDecisionEvent.GetEventId(),
 		},
-	}, stateBuilder.newRunTransferTasks)
+	}, s.stateBuilder.newRunTransferTasks)
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {

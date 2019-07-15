@@ -56,6 +56,13 @@ type (
 		lock(ctx context.Context) error
 		unlock()
 
+		persistFirstWorkflowEvents(
+			workflowEvents *persistence.WorkflowEvents,
+		) (int64, error)
+		persistNonFirstWorkflowEvents(
+			workflowEvents *persistence.WorkflowEvents,
+		) (int64, error)
+
 		appendFirstBatchEventsForActive(
 			msBuilder mutableState,
 			createReplicationTask bool,
@@ -66,13 +73,9 @@ type (
 		) (int64, persistence.Task, error)
 
 		createWorkflowExecution(
-			msBuilder mutableState,
+			newWorkflow *persistence.WorkflowSnapshot,
 			historySize int64,
-			createReplicationTask bool,
 			now time.Time,
-			transferTasks []persistence.Task,
-			replicationTasks []persistence.Task,
-			timerTasks []persistence.Task,
 			createMode int,
 			prevRunID string,
 			prevLastWriteVersion int64,
@@ -267,29 +270,13 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 }
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
-	msBuilder mutableState,
+	newWorkflow *persistence.WorkflowSnapshot,
 	historySize int64,
-	createReplicationTask bool,
 	now time.Time,
-	transferTasks []persistence.Task,
-	replicationTasks []persistence.Task,
-	timerTasks []persistence.Task,
 	createMode int,
 	prevRunID string,
 	prevLastWriteVersion int64,
 ) error {
-
-	if msBuilder.GetReplicationState() != nil {
-		msBuilder.UpdateReplicationStateLastEventID(
-			msBuilder.GetCurrentVersion(),
-			msBuilder.GetNextEventID()-1,
-		)
-	}
-
-	executionInfo := msBuilder.GetExecutionInfo()
-	replicationState := msBuilder.GetReplicationState()
-
-	setTaskInfo(msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
 
 	createRequest := &persistence.CreateWorkflowExecutionRequest{
 		// workflow create mode & prev run ID & version
@@ -297,56 +284,11 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		PreviousRunID:            prevRunID,
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
-		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				CreateRequestID: executionInfo.CreateRequestID,
-				DomainID:        executionInfo.DomainID,
-				WorkflowID:      executionInfo.WorkflowID,
-				RunID:           executionInfo.RunID,
-
-				// parent execution
-				ParentDomainID:   executionInfo.ParentDomainID,
-				ParentWorkflowID: executionInfo.ParentWorkflowID,
-				ParentRunID:      executionInfo.ParentRunID,
-				InitiatedID:      executionInfo.InitiatedID,
-
-				TaskList:             executionInfo.TaskList,
-				WorkflowTypeName:     executionInfo.WorkflowTypeName,
-				WorkflowTimeout:      executionInfo.WorkflowTimeout,
-				DecisionTimeoutValue: executionInfo.DecisionTimeoutValue,
-				ExecutionContext:     nil,
-				LastEventTaskID:      executionInfo.LastEventTaskID,
-				NextEventID:          executionInfo.NextEventID,
-				LastProcessedEvent:   common.EmptyEventID,
-				DecisionVersion:      executionInfo.DecisionVersion,
-				DecisionScheduleID:   executionInfo.DecisionScheduleID,
-				DecisionStartedID:    executionInfo.DecisionStartedID,
-				DecisionTimeout:      executionInfo.DecisionTimeout,
-				State:                executionInfo.State,
-				CloseStatus:          executionInfo.CloseStatus,
-				EventStoreVersion:    executionInfo.EventStoreVersion,
-				BranchToken:          executionInfo.BranchToken,
-				CronSchedule:         executionInfo.CronSchedule,
-				SearchAttributes:     executionInfo.SearchAttributes,
-
-				// retry policy
-				HasRetryPolicy:     executionInfo.HasRetryPolicy,
-				BackoffCoefficient: executionInfo.BackoffCoefficient,
-				ExpirationSeconds:  executionInfo.ExpirationSeconds,
-				InitialInterval:    executionInfo.InitialInterval,
-				MaximumAttempts:    executionInfo.MaximumAttempts,
-				MaximumInterval:    executionInfo.MaximumInterval,
-				NonRetriableErrors: executionInfo.NonRetriableErrors,
-				ExpirationTime:     executionInfo.ExpirationTime,
-			},
-			ExecutionStats: &persistence.ExecutionStats{
-				HistorySize: historySize,
-			},
-			ReplicationState: replicationState,
-			TransferTasks:    transferTasks,
-			ReplicationTasks: replicationTasks,
-			TimerTasks:       timerTasks,
-		},
+		NewWorkflowSnapshot: *newWorkflow,
+	}
+	// the history size needs to be special treated
+	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: historySize,
 	}
 
 	_, err := c.shard.CreateWorkflowExecution(createRequest)
@@ -1278,7 +1220,6 @@ func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(
 		workflow.EventTypeWorkflowExecutionTerminated,
 		workflow.EventTypeWorkflowExecutionContinuedAsNew,
 		workflow.EventTypeWorkflowExecutionCanceled:
-
 		return nil
 
 	default:
@@ -1290,4 +1231,99 @@ func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(
 		return ErrEventsAterWorkflowFinish
 	}
 
+}
+
+func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
+	workflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+
+	if len(workflowEvents.Events) == 0 {
+		return 0, &workflow.InternalServiceError{
+			Message: "cannot persist first workflow events with empty events",
+		}
+	}
+
+	transactionID, err := c.shard.GetNextTransferTaskID()
+	if err != nil {
+		return 0, err
+	}
+
+	domainID := workflowEvents.DomainID
+	workflowID := workflowEvents.WorkflowID
+	runID := workflowEvents.RunID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowEvents.WorkflowID),
+		RunId:      common.StringPtr(workflowEvents.RunID),
+	}
+	branchToken := workflowEvents.BranchToken
+	events := workflowEvents.Events
+	firstEvent := events[0]
+
+	if len(branchToken) == 0 {
+		size, err := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+			DomainID:          domainID,
+			Execution:         execution,
+			TransactionID:     transactionID,
+			FirstEventID:      firstEvent.GetEventId(),
+			EventBatchVersion: firstEvent.GetVersion(),
+			Events:            events,
+		})
+		return int64(size), err
+	}
+
+	size, err := c.shard.AppendHistoryV2Events(
+		&persistence.AppendHistoryNodesRequest{
+			IsNewBranch:   true,
+			Info:          historyGarbageCleanupInfo(domainID, workflowID, runID),
+			BranchToken:   branchToken,
+			Events:        events,
+			TransactionID: transactionID,
+		},
+		domainID,
+		execution,
+	)
+	return int64(size), err
+}
+
+func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
+	workflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+
+	if len(workflowEvents.Events) == 0 {
+		return 0, nil // allow update workflow without events
+	}
+
+	transactionID, err := c.shard.GetNextTransferTaskID()
+	if err != nil {
+		return 0, err
+	}
+
+	domainID := workflowEvents.DomainID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowEvents.WorkflowID),
+		RunId:      common.StringPtr(workflowEvents.RunID),
+	}
+	branchToken := workflowEvents.BranchToken
+	events := workflowEvents.Events
+	firstEvent := events[0]
+
+	if len(branchToken) == 0 {
+		size, err := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+			DomainID:          domainID,
+			Execution:         execution,
+			TransactionID:     transactionID,
+			FirstEventID:      firstEvent.GetEventId(),
+			EventBatchVersion: firstEvent.GetVersion(),
+			Events:            events,
+		})
+		return int64(size), err
+	}
+
+	size, err := c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
+		IsNewBranch:   false,
+		BranchToken:   branchToken,
+		Events:        events,
+		TransactionID: transactionID,
+	}, domainID, execution)
+	return int64(size), err
 }

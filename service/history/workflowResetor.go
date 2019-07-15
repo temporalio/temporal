@@ -265,6 +265,14 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 		return
 	}
 	newMutableState = newStateBuilder.getMutableState()
+
+	// before this, the mutable state is in replay mode
+	// need to close / flush the mutable state for new changes
+	_, _, retError = newMutableState.CloseTransactionAsSnapshot(w.timeSource.Now())
+	if retError != nil {
+		return
+	}
+
 	newHistorySize = historySize
 
 	retError = w.validateResetWorkflowAfterReplay(newMutableState)

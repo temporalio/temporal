@@ -3494,16 +3494,25 @@ func (e *mutableStateBuilder) GetContinueAsNew() *persistence.WorkflowSnapshot {
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 
 // TODO convert AddTransferTasks to prepareTransferTasks
-func (e *mutableStateBuilder) AddTransferTasks(transferTasks ...persistence.Task) {
+func (e *mutableStateBuilder) AddTransferTasks(
+	transferTasks ...persistence.Task,
+) {
+
 	e.insertTransferTasks = append(e.insertTransferTasks, transferTasks...)
 }
 
 // TODO convert AddTransferTasks to prepareTimerTasks
-func (e *mutableStateBuilder) AddTimerTasks(timerTasks ...persistence.Task) {
+func (e *mutableStateBuilder) AddTimerTasks(
+	timerTasks ...persistence.Task,
+) {
+
 	e.insertTimerTasks = append(e.insertTimerTasks, timerTasks...)
 }
 
-func (e *mutableStateBuilder) CloseTransactionAsMutation(now time.Time) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+func (e *mutableStateBuilder) CloseTransactionAsMutation(
+	now time.Time,
+) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+
 	if err := e.FlushBufferedEvents(); err != nil {
 		return nil, nil, err
 	}
@@ -3513,10 +3522,13 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(now time.Time) (*persis
 		return nil, nil, err
 	}
 
-	if len(workflowEventsSeq) > 0 && e.GetReplicationState() != nil {
+	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
-		e.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
+		e.GetExecutionInfo().LastEventTaskID = lastEvent.GetTaskId()
+		if e.GetReplicationState() != nil {
+			e.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
+		}
 	}
 
 	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
@@ -3553,7 +3565,10 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(now time.Time) (*persis
 	return workflowMutation, workflowEventsSeq, nil
 }
 
-func (e *mutableStateBuilder) CloseTransactionAsSnapshot(now time.Time) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
+func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
+	now time.Time,
+) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
+
 	if err := e.FlushBufferedEvents(); err != nil {
 		return nil, nil, err
 	}
@@ -3575,10 +3590,13 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(now time.Time) (*persis
 		}
 	}
 
-	if len(workflowEventsSeq) > 0 && e.GetReplicationState() != nil {
+	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
-		e.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
+		e.GetExecutionInfo().LastEventTaskID = lastEvent.GetTaskId()
+		if e.GetReplicationState() != nil {
+			e.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
+		}
 	}
 
 	setTaskInfo(e.GetCurrentVersion(), now, e.insertTransferTasks, e.insertTimerTasks)
@@ -3664,9 +3682,6 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks() ([]*persistence
 			BranchToken: e.GetCurrentBranch(),
 			Events:      e.hBuilder.history,
 		})
-
-		// this update the last event task ID in execution info
-		e.GetExecutionInfo().LastEventTaskID = e.hBuilder.history[len(e.hBuilder.history)-1].GetTaskId()
 	}
 
 	if err := e.validateNoEventsAfterWorkflowFinish(e.hBuilder.history); err != nil {
@@ -3688,7 +3703,9 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks() ([]*persistence
 	return workflowEventsSeq, nil
 }
 
-func (e *mutableStateBuilder) eventsToReplicationTask(events []*workflow.HistoryEvent) []persistence.Task {
+func (e *mutableStateBuilder) eventsToReplicationTask(
+	events []*workflow.HistoryEvent,
+) []persistence.Task {
 
 	if len(events) == 0 || e.GetReplicationState() == nil {
 		return []persistence.Task{}
@@ -3760,7 +3777,10 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 }
 
-func (e *mutableStateBuilder) checkMutability(actionTag tag.Tag) error {
+func (e *mutableStateBuilder) checkMutability(
+	actionTag tag.Tag,
+) error {
+
 	if !e.IsWorkflowExecutionRunning() {
 		e.logger.Warn(
 			mutableStateInvalidHistoryActionMsg,
@@ -3774,11 +3794,17 @@ func (e *mutableStateBuilder) checkMutability(actionTag tag.Tag) error {
 	return nil
 }
 
-func (e *mutableStateBuilder) createInternalServerError(actionTag tag.Tag) error {
+func (e *mutableStateBuilder) createInternalServerError(
+	actionTag tag.Tag,
+) error {
+
 	return &workflow.InternalServiceError{Message: actionTag.Field().String + " operation failed"}
 }
 
-func (e *mutableStateBuilder) createCallerError(actionTag tag.Tag) error {
+func (e *mutableStateBuilder) createCallerError(
+	actionTag tag.Tag,
+) error {
+
 	return &workflow.BadRequestError{
 		Message: fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String),
 	}

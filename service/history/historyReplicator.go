@@ -720,6 +720,8 @@ func (r *historyReplicator) ApplyReplicationTask(
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
+		// TODO remove this set history builder once the update path is re-written
+		msBuilder.SetHistoryBuilder(newHistoryBuilder(msBuilder, r.logger))
 		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now)
 	}
 
@@ -749,20 +751,18 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	firstEvent := history.Events[0]
 	incomingVersion := firstEvent.GetVersion()
 	lastEvent := history.Events[len(history.Events)-1]
-	executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
-	executionInfo.SetNextEventID(lastEvent.GetEventId() + 1)
 
-	historySize, _, err := context.appendFirstBatchEventsForStandby(msBuilder, history.Events)
+	now := time.Unix(0, lastEvent.GetTimestamp())
+	newWorkflow, workflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(now)
 	if err != nil {
 		return err
 	}
-
-	// workflow passive side logic should not generate any replication task
-	createReplicationTask := false
-	transferTasks := sBuilder.getTransferTasks()
-	var replicationTasks []persistence.Task // passive side generates no replication tasks
-	timerTasks := sBuilder.getTimerTasks()
-	now := time.Unix(0, lastEvent.GetTimestamp())
+	historySize, err := context.persistFirstWorkflowEvents(workflowEventsSeq[0])
+	if err != nil {
+		return err
+	}
+	// TODO add a check here guarantee that no replication tasks will be persisted
+	newWorkflow.ReplicationTasks = nil
 
 	deleteHistory := func() {
 		// this function should be only called when we drop start workflow execution
@@ -785,8 +785,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, historySize, createReplicationTask, now,
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -819,8 +818,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, historySize, createReplicationTask, now,
-			transferTasks, replicationTasks, timerTasks,
+			newWorkflow, historySize, now,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -894,8 +892,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID = currentRunID
 	prevLastWriteVersion = currentLastWriteVersion
 	return context.createWorkflowExecution(
-		msBuilder, historySize, createReplicationTask, now,
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }

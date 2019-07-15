@@ -101,13 +101,13 @@ func (_m *mockWorkflowExecutionContext) clear() {
 	_m.Called()
 }
 
-func (_m *mockWorkflowExecutionContext) createWorkflowExecution(_a0 mutableState, _a1 int64, _a2 bool, _a3 time.Time, _a4 []persistence.Task, _a5 []persistence.Task, _a6 []persistence.Task, _a7 int, _a8 string, _a9 int64) error {
+func (_m *mockWorkflowExecutionContext) createWorkflowExecution(_a0 *persistence.WorkflowSnapshot, _a1 int64, _a2 time.Time, _a3 int, _a4 string, _a5 int64) error {
 
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9)
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(mutableState, int64, bool, time.Time, []persistence.Task, []persistence.Task, []persistence.Task, int, string, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9)
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowSnapshot, int64, time.Time, int, string, int64) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -356,4 +356,44 @@ func (_m *mockWorkflowExecutionContext) updateAsActiveWithNew(_a0 []persistence.
 	}
 
 	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) persistFirstWorkflowEvents(_a0 *persistence.WorkflowEvents) (int64, error) {
+	ret := _m.Called(_a0)
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowEvents) int64); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.WorkflowEvents) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+func (_m *mockWorkflowExecutionContext) persistNonFirstWorkflowEvents(_a0 *persistence.WorkflowEvents) (int64, error) {
+	ret := _m.Called(_a0)
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowEvents) int64); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.WorkflowEvents) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
