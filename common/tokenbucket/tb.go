@@ -140,19 +140,6 @@ func newTokenBucket(rps int, timeSource clock.TimeSource) *tokenBucketImpl {
 	return tb
 }
 
-// NewFactory creates an instance of factory used for creating TokenBucket instances
-func NewFactory() Factory {
-	return &tokenBucketFactoryImpl{}
-}
-
-// CreateTokenBucket creates and returns a
-// new token bucket rate limiter that
-// repelenishes the bucket every 100
-// milliseconds. Thread safe.
-func (f *tokenBucketFactoryImpl) CreateTokenBucket(rps int, timeSource clock.TimeSource) TokenBucket {
-	return New(rps, timeSource)
-}
-
 func (tb *tokenBucketImpl) TryConsume(count int) (bool, time.Duration) {
 	now := tb.timeSource.Now().UnixNano()
 	tb.Lock()

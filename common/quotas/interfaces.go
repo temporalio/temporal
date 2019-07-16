@@ -20,6 +20,9 @@
 
 package quotas
 
+// RPSFunc returns a float64 as the RPS
+type RPSFunc func() float64
+
 // Policy corresponds to a quota policy. A policy allows implementing layered
 // and more complex rate limiting functionality.
 type Policy interface {

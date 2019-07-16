@@ -30,6 +30,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const _defaultRPSTTL = 60 * time.Second
+
 // RateLimiter is a wrapper around the golang rate limiter handling dynamic
 // configuration updates of the max dispatch per second. This has comparable
 // performance to the token bucket rate limiter.
@@ -122,4 +124,22 @@ func (rl *RateLimiter) shouldUpdate(maxDispatchPerSecond *float64) bool {
 		defer rl.RUnlock()
 		return *maxDispatchPerSecond < *rl.maxDispatchPerSecond
 	}
+}
+
+type dynamicRateLimiter struct {
+	rps RPSFunc
+	rl  *RateLimiter
+}
+
+// NewDynamicRateLimiter returns a rate limiter which handles dynamic config
+func NewDynamicRateLimiter(rps RPSFunc) Policy {
+	initialRps := rps()
+	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, int(rps()))
+	return &dynamicRateLimiter{rps, rl}
+}
+
+func (d *dynamicRateLimiter) Allow() bool {
+	rps := float64(d.rps())
+	d.rl.UpdateMaxDispatch(&rps)
+	return d.rl.Allow()
 }
