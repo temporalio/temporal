@@ -21,20 +21,29 @@
 package elasticsearch
 
 import (
-	"github.com/uber/cadence/common"
-	"net/url"
+	"fmt"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
-// Config for connecting to ElasticSearch
-type (
-	Config struct {
-		Enable  bool              `yaml:enable`
-		URL     url.URL           `yaml:url`
-		Indices map[string]string `yaml:indices`
+func Test_BuildPutMappingBody(t *testing.T) {
+	tests := []struct {
+		root     string
+		expected string
+	}{
+		{
+			root:     "Attr",
+			expected: "map[properties:map[Attr:map[properties:map[testKey:map[type:text]]]]]",
+		},
+		{
+			root:     "",
+			expected: "map[properties:map[testKey:map[type:text]]]",
+		},
 	}
-)
+	k := "testKey"
+	v := "text"
 
-// GetVisibilityIndex return visibility index name
-func (cfg *Config) GetVisibilityIndex() string {
-	return cfg.Indices[common.VisibilityAppName]
+	for _, test := range tests {
+		require.Equal(t, test.expected, fmt.Sprintf("%v", buildPutMappingBody(test.root, k, v)))
+	}
 }

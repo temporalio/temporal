@@ -37,6 +37,27 @@ type AdminClient struct {
 
 var _ adminserviceclient.Interface = (*AdminClient)(nil)
 
+// AddSearchAttribute provides a mock function with given fields: ctx, Request, opts
+func (_m *AdminClient) AddSearchAttribute(ctx context.Context, Request *admin.AddSearchAttributeRequest, opts ...yarpc.CallOption) error {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, Request)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *admin.AddSearchAttributeRequest, ...yarpc.CallOption) error); ok {
+		r0 = rf(ctx, Request, opts...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // DescribeHistoryHost provides a mock function with given fields: ctx, request
 func (_m *AdminClient) DescribeHistoryHost(ctx context.Context, request *shared.DescribeHistoryHostRequest, opts ...yarpc.CallOption) (*shared.DescribeHistoryHostResponse, error) {
 	ret := _m.Called(ctx, request)

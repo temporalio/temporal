@@ -22,7 +22,6 @@ package admin
 
 import (
 	"context"
-
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
@@ -42,6 +41,24 @@ func NewMetricClient(client Client, metricsClient metrics.Client) Client {
 		client:        client,
 		metricsClient: metricsClient,
 	}
+}
+
+func (c *metricClient) AddSearchAttribute(
+	ctx context.Context,
+	request *admin.AddSearchAttributeRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientLatency)
+	err := c.client.AddSearchAttribute(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientFailures)
+	}
+	return err
 }
 
 func (c *metricClient) DescribeHistoryHost(

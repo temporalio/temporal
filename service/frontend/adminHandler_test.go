@@ -18,23 +18,50 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package frontend
 
 import (
-	"github.com/uber/cadence/common"
-	"net/url"
+	"github.com/stretchr/testify/require"
+	"github.com/uber/cadence/.gen/go/shared"
+	"testing"
 )
 
-// Config for connecting to ElasticSearch
-type (
-	Config struct {
-		Enable  bool              `yaml:enable`
-		URL     url.URL           `yaml:url`
-		Indices map[string]string `yaml:indices`
+func Test_ConvertIndexedValueTypeToESDataType(t *testing.T) {
+	tests := []struct {
+		input    shared.IndexedValueType
+		expected string
+	}{
+		{
+			input:    shared.IndexedValueTypeString,
+			expected: "text",
+		},
+		{
+			input:    shared.IndexedValueTypeKeyword,
+			expected: "keyword",
+		},
+		{
+			input:    shared.IndexedValueTypeInt,
+			expected: "long",
+		},
+		{
+			input:    shared.IndexedValueTypeDouble,
+			expected: "double",
+		},
+		{
+			input:    shared.IndexedValueTypeBool,
+			expected: "boolean",
+		},
+		{
+			input:    shared.IndexedValueTypeDatetime,
+			expected: "date",
+		},
+		{
+			input:    shared.IndexedValueType(-1),
+			expected: "",
+		},
 	}
-)
 
-// GetVisibilityIndex return visibility index name
-func (cfg *Config) GetVisibilityIndex() string {
-	return cfg.Indices[common.VisibilityAppName]
+	for _, test := range tests {
+		require.Equal(t, test.expected, convertIndexedValueTypeToESDataType(test.input))
+	}
 }

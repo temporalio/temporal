@@ -58,6 +58,16 @@ service AdminService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
     )
+
+  /**
+  * AddSearchAttribute whitelist search attribute in request.
+  **/
+  void AddSearchAttribute(1: AddSearchAttributeRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
+    )
 }
 
 struct DescribeWorkflowExecutionRequest {
@@ -65,7 +75,7 @@ struct DescribeWorkflowExecutionRequest {
   20: optional shared.WorkflowExecution     execution
 }
 
-struct DescribeWorkflowExecutionResponse{
+struct DescribeWorkflowExecutionResponse {
   10: optional string shardId
   20: optional string historyAddr
   40: optional string mutableStateInCache
@@ -86,4 +96,8 @@ struct GetWorkflowExecutionRawHistoryResponse {
   20: optional list<shared.DataBlob> historyBatches
   30: optional map<string, shared.ReplicationInfo> replicationInfo
   40: optional i32 eventStoreVersion
+}
+
+struct AddSearchAttributeRequest {
+  10: optional map<string, shared.IndexedValueType> searchAttribute
 }

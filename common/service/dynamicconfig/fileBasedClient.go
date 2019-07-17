@@ -35,7 +35,10 @@ import (
 
 var _ Client = (*fileBasedClient)(nil)
 
-const minPollInterval = time.Second * 5
+const (
+	minPollInterval = time.Second * 5
+	fileMode        = 0644 // used for update config file
+)
 
 type constrainedValue struct {
 	Value       interface{}
@@ -118,6 +121,8 @@ func (fc *fileBasedClient) GetFloatValue(name Key, filters map[Filter]interface{
 
 	if floatVal, ok := val.(float64); ok {
 		return floatVal, nil
+	} else if intVal, ok := val.(int); ok {
+		return float64(intVal), nil
 	}
 	return defaultValue, errors.New("value type is not float64")
 }
@@ -179,6 +184,33 @@ func (fc *fileBasedClient) GetDurationValue(
 	return durationVal, nil
 }
 
+func (fc *fileBasedClient) UpdateValue(name Key, value interface{}) error {
+	keyName := keys[name]
+	currentValues := make(map[string][]*constrainedValue)
+
+	confContent, err := ioutil.ReadFile(fc.config.Filepath)
+	if err != nil {
+		return fmt.Errorf("failed to read dynamic config file %v: %v", fc.config.Filepath, err)
+	}
+
+	if err = yaml.Unmarshal(confContent, currentValues); err != nil {
+		return fmt.Errorf("failed to decode dynamic config %v", err)
+	}
+
+	cVal := &constrainedValue{
+		Value: value,
+	}
+	currentValues[keyName] = []*constrainedValue{cVal}
+	newBytes, _ := yaml.Marshal(currentValues)
+
+	err = ioutil.WriteFile(fc.config.Filepath, newBytes, fileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write config file, err: %v", err)
+	}
+
+	return fc.storeValues(currentValues)
+}
+
 func (fc *fileBasedClient) update() error {
 	defer func() {
 		fc.lastUpdatedTime = time.Now()
@@ -203,6 +235,10 @@ func (fc *fileBasedClient) update() error {
 		return fmt.Errorf("failed to decode dynamic config %v", err)
 	}
 
+	return fc.storeValues(newValues)
+}
+
+func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
 	// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
 	// manually convert key type to string for all values here
 	// We don't need to convert constraints as their type can't be map. If user does use a map as filter

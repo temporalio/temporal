@@ -21,6 +21,7 @@
 package host
 
 import (
+	"errors"
 	"time"
 
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -76,6 +77,10 @@ func (d *dynamicClient) GetDurationValue(
 	name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue time.Duration,
 ) (time.Duration, error) {
 	return d.client.GetDurationValue(name, filters, defaultValue)
+}
+
+func (d *dynamicClient) UpdateValue(name dynamicconfig.Key, value interface{}) error {
+	return errors.New("operation not supported")
 }
 
 // newIntegrationConfigClient - returns a dynamic config client for integration testing

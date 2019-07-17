@@ -113,6 +113,11 @@ func (mc *inMemoryClient) GetDurationValue(
 	return defaultValue, errors.New("unable to find key")
 }
 
+func (mc *inMemoryClient) UpdateValue(key Key, value interface{}) error {
+	mc.SetValue(key, value)
+	return nil
+}
+
 type configSuite struct {
 	suite.Suite
 	client *inMemoryClient
@@ -241,6 +246,17 @@ func (s *configSuite) TestGetMapProperty() {
 	s.client.SetValue(key, val)
 	s.Equal(val, value())
 	s.Equal("321", value()["testKey"])
+}
+
+func (s *configSuite) TestUpdateConfig() {
+	key := testGetBoolPropertyKey
+	value := s.cln.GetBoolProperty(key, true)
+	err := s.client.UpdateValue(key, false)
+	s.NoError(err)
+	s.Equal(false, value())
+	err = s.client.UpdateValue(key, true)
+	s.NoError(err)
+	s.Equal(true, value())
 }
 
 func TestDynamicConfigKeyIsMapped(t *testing.T) {

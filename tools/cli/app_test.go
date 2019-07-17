@@ -512,6 +512,11 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 	s.Equal(1, errorCode)
 }
 
+func (s *cliAppSuite) TestAdminAddSearchAttribute() {
+	err := s.app.Run([]string{"", "--do", domainName, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
+	s.Nil(err)
+}
+
 func (s *cliAppSuite) TestDescribeTaskList() {
 	resp := describeTaskListResponse
 	s.clientFrontendClient.EXPECT().DescribeTaskList(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
@@ -631,7 +636,7 @@ func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
 func (s *cliAppSuite) TestGetSearchAttributes() {
 	resp := &shared.GetSearchAttributesResponse{}
 	s.clientFrontendClient.EXPECT().GetSearchAttributes(gomock.Any(), callOptions...).Return(resp, nil).Times(1)
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "get-search-attr"})
+	err := s.app.Run([]string{"", "--do", domainName, "cluster", "get-search-attr"})
 	s.Nil(err)
 }
 
