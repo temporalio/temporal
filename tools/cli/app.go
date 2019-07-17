@@ -120,7 +120,19 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on taskList",
 					Subcommands: newAdminTaskListCommands(),
 				},
+				{
+					Name:        "cluster",
+					Aliases:     []string{"cl"},
+					Usage:       "Run admin operation on cluster",
+					Subcommands: newAdminClusterCommands(),
+				},
 			},
+		},
+		{
+			Name:        "cluster",
+			Aliases:     []string{"cl"},
+			Usage:       "Operate cadence cluster",
+			Subcommands: newClusterCommands(),
 		},
 	}
 

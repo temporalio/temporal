@@ -18,23 +18,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package cli
 
 import (
-	"github.com/uber/cadence/common"
-	"net/url"
+	"os"
+	"sort"
+
+	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
 )
 
-// Config for connecting to ElasticSearch
-type (
-	Config struct {
-		Enable  bool              `yaml:enable`
-		URL     url.URL           `yaml:url`
-		Indices map[string]string `yaml:indices`
+// GetSearchAttributes get valid search attributes
+func GetSearchAttributes(c *cli.Context) {
+	wfClient := getWorkflowClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := wfClient.GetSearchAttributes(ctx)
+	if err != nil {
+		ErrorAndExit("Failed to get search attributes.", err)
 	}
-)
 
-// GetVisibilityIndex return visibility index name
-func (cfg *Config) GetVisibilityIndex() string {
-	return cfg.Indices[common.VisibilityAppName]
+	table := tablewriter.NewWriter(os.Stdout)
+	header := []string{"Key", "Value type"}
+	table.SetHeader(header)
+	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
+	rows := [][]string{}
+	for k, v := range resp.Keys {
+		rows = append(rows, []string{k, v.String()})
+	}
+	sort.Sort(byKey(rows))
+	table.AppendBulk(rows)
+	table.Render()
 }

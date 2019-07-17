@@ -18,23 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package cli
 
-import (
-	"github.com/uber/cadence/common"
-	"net/url"
-)
+import "github.com/urfave/cli"
 
-// Config for connecting to ElasticSearch
-type (
-	Config struct {
-		Enable  bool              `yaml:enable`
-		URL     url.URL           `yaml:url`
-		Indices map[string]string `yaml:indices`
+func newClusterCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "get-search-attr",
+			Usage: "get list of legal search attributes that can be used in list workflow query.",
+			Action: func(c *cli.Context) {
+				GetSearchAttributes(c)
+			},
+		},
 	}
-)
-
-// GetVisibilityIndex return visibility index name
-func (cfg *Config) GetVisibilityIndex() string {
-	return cfg.Indices[common.VisibilityAppName]
 }

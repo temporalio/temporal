@@ -168,6 +168,7 @@ const (
 	FlagMemoFile                          = "memo_file"
 	FlagSearchAttributesKey               = "search_attr_key"
 	FlagSearchAttributesVal               = "search_attr_value"
+	FlagSearchAttributesType              = "search_attr_type"
 	FlagAddBadBinary                      = "add_bad_binary"
 	FlagRemoveBadBinary                   = "remove_bad_binary"
 	FlagResetType                         = "reset_type"
@@ -295,12 +296,12 @@ func getFlagsForStart() []cli.Flag {
 		cli.StringFlag{
 			Name: FlagSearchAttributesKey,
 			Usage: "Optional search attributes keys that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
-				"Use `workflow get-search-attr` cmd to list legal keys.",
+				"Use 'cluster get-search-attr' cmd to list legal keys.",
 		},
 		cli.StringFlag{
 			Name: FlagSearchAttributesVal,
 			Usage: "Optional search attributes value that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
-				"Use `workflow get-search-attr` cmd to list legal keys and value types",
+				"Use 'cluster get-search-attr' cmd to list legal keys and value types",
 		},
 	}
 }

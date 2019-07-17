@@ -21,6 +21,7 @@
 package tag
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -335,12 +336,17 @@ func Name(k string) Tag {
 	return newStringTag("name", k)
 }
 
-// Value returns tag for Key
+// Value returns tag for Value
 func Value(v interface{}) Tag {
 	return newObjectTag("value", v)
 }
 
-// DefaultValue returns tag for Key
+// ValueType returns tag for ValueType
+func ValueType(v interface{}) Tag {
+	return newStringTag("value-type", fmt.Sprintf("%T", v))
+}
+
+// DefaultValue returns tag for DefaultValue
 func DefaultValue(v interface{}) Tag {
 	return newObjectTag("default-value", v)
 }

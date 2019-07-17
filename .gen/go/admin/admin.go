@@ -36,6 +36,239 @@ import (
 	strings "strings"
 )
 
+type AddSearchAttributeRequest struct {
+	SearchAttribute map[string]shared.IndexedValueType `json:"searchAttribute,omitempty"`
+}
+
+type _Map_String_IndexedValueType_MapItemList map[string]shared.IndexedValueType
+
+func (m _Map_String_IndexedValueType_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := v.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_IndexedValueType_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_IndexedValueType_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_IndexedValueType_MapItemList) ValueType() wire.Type {
+	return wire.TI32
+}
+
+func (_Map_String_IndexedValueType_MapItemList) Close() {}
+
+// ToWire translates a AddSearchAttributeRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AddSearchAttributeRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.SearchAttribute != nil {
+		w, err = wire.NewValueMap(_Map_String_IndexedValueType_MapItemList(v.SearchAttribute)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _IndexedValueType_Read(w wire.Value) (shared.IndexedValueType, error) {
+	var v shared.IndexedValueType
+	err := v.FromWire(w)
+	return v, err
+}
+
+func _Map_String_IndexedValueType_Read(m wire.MapItemList) (map[string]shared.IndexedValueType, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TI32 {
+		return nil, nil
+	}
+
+	o := make(map[string]shared.IndexedValueType, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := _IndexedValueType_Read(x.Value)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
+}
+
+// FromWire deserializes a AddSearchAttributeRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AddSearchAttributeRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AddSearchAttributeRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AddSearchAttributeRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TMap {
+				v.SearchAttribute, err = _Map_String_IndexedValueType_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AddSearchAttributeRequest
+// struct.
+func (v *AddSearchAttributeRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.SearchAttribute != nil {
+		fields[i] = fmt.Sprintf("SearchAttribute: %v", v.SearchAttribute)
+		i++
+	}
+
+	return fmt.Sprintf("AddSearchAttributeRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Map_String_IndexedValueType_Equals(lhs, rhs map[string]shared.IndexedValueType) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+	return true
+}
+
+// Equals returns true if all the fields of this AddSearchAttributeRequest match the
+// provided AddSearchAttributeRequest.
+//
+// This function performs a deep comparison.
+func (v *AddSearchAttributeRequest) Equals(rhs *AddSearchAttributeRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.SearchAttribute == nil && rhs.SearchAttribute == nil) || (v.SearchAttribute != nil && rhs.SearchAttribute != nil && _Map_String_IndexedValueType_Equals(v.SearchAttribute, rhs.SearchAttribute))) {
+		return false
+	}
+
+	return true
+}
+
+type _Map_String_IndexedValueType_Zapper map[string]shared.IndexedValueType
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of _Map_String_IndexedValueType_Zapper.
+func (m _Map_String_IndexedValueType_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	for k, v := range m {
+		err = multierr.Append(err, enc.AddObject((string)(k), v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AddSearchAttributeRequest.
+func (v *AddSearchAttributeRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.SearchAttribute != nil {
+		err = multierr.Append(err, enc.AddObject("searchAttribute", (_Map_String_IndexedValueType_Zapper)(v.SearchAttribute)))
+	}
+	return err
+}
+
+// GetSearchAttribute returns the value of SearchAttribute if it is set or its
+// zero value if it is unset.
+func (v *AddSearchAttributeRequest) GetSearchAttribute() (o map[string]shared.IndexedValueType) {
+	if v != nil && v.SearchAttribute != nil {
+		return v.SearchAttribute
+	}
+
+	return
+}
+
+// IsSetSearchAttribute returns true if SearchAttribute is not nil.
+func (v *AddSearchAttributeRequest) IsSetSearchAttribute() bool {
+	return v != nil && v.SearchAttribute != nil
+}
+
 type DescribeWorkflowExecutionRequest struct {
 	Domain    *string                   `json:"domain,omitempty"`
 	Execution *shared.WorkflowExecution `json:"execution,omitempty"`
@@ -1324,14 +1557,559 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "admin",
 	Package:  "github.com/uber/cadence/.gen/go/admin",
 	FilePath: "admin.thrift",
-	SHA1:     "5136f687aeefc01dd9b57994864926bb8f277b9f",
+	SHA1:     "e0204db2c0f09897b1f0efaf590a7f5e1b961d1a",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.admin\n\ninclude \"shared.thrift\"\n\n/**\n* AdminService provides advanced APIs for debugging and analysis with admin privillege\n**/\nservice AdminService {\n  /**\n  * DescribeWorkflowExecution returns information about the internal states of workflow execution.\n  **/\n  DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest request)\n    throws (\n      1: shared.BadRequestError         badRequestError,\n      2: shared.InternalServiceError    internalServiceError,\n      3: shared.EntityNotExistsError    entityNotExistError,\n      4: shared.AccessDeniedError       accessDeniedError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n  /**\n  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow\n  * execution in unknown to the service.\n  **/\n  GetWorkflowExecutionRawHistoryResponse GetWorkflowExecutionRawHistory(1: GetWorkflowExecutionRawHistoryRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string                       domain\n  20: optional shared.WorkflowExecution     execution\n}\n\nstruct DescribeWorkflowExecutionResponse{\n  10: optional string shardId\n  20: optional string historyAddr\n  40: optional string mutableStateInCache\n  50: optional string mutableStateInDatabase\n}\n\nstruct GetWorkflowExecutionRawHistoryRequest {\n  10: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") firstEventId\n  40: optional i64 (js.type = \"Long\") nextEventId\n  50: optional i32 maximumPageSize\n  60: optional binary nextPageToken\n}\n\nstruct GetWorkflowExecutionRawHistoryResponse {\n  10: optional binary nextPageToken\n  20: optional list<shared.DataBlob> historyBatches\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional i32 eventStoreVersion\n}"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.admin\n\ninclude \"shared.thrift\"\n\n/**\n* AdminService provides advanced APIs for debugging and analysis with admin privillege\n**/\nservice AdminService {\n  /**\n  * DescribeWorkflowExecution returns information about the internal states of workflow execution.\n  **/\n  DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest request)\n    throws (\n      1: shared.BadRequestError         badRequestError,\n      2: shared.InternalServiceError    internalServiceError,\n      3: shared.EntityNotExistsError    entityNotExistError,\n      4: shared.AccessDeniedError       accessDeniedError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n  /**\n  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow\n  * execution in unknown to the service.\n  **/\n  GetWorkflowExecutionRawHistoryResponse GetWorkflowExecutionRawHistory(1: GetWorkflowExecutionRawHistoryRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * AddSearchAttribute whitelist search attribute in request.\n  **/\n  void AddSearchAttribute(1: AddSearchAttributeRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n    )\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string                       domain\n  20: optional shared.WorkflowExecution     execution\n}\n\nstruct DescribeWorkflowExecutionResponse {\n  10: optional string shardId\n  20: optional string historyAddr\n  40: optional string mutableStateInCache\n  50: optional string mutableStateInDatabase\n}\n\nstruct GetWorkflowExecutionRawHistoryRequest {\n  10: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") firstEventId\n  40: optional i64 (js.type = \"Long\") nextEventId\n  50: optional i32 maximumPageSize\n  60: optional binary nextPageToken\n}\n\nstruct GetWorkflowExecutionRawHistoryResponse {\n  10: optional binary nextPageToken\n  20: optional list<shared.DataBlob> historyBatches\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional i32 eventStoreVersion\n}\n\nstruct AddSearchAttributeRequest {\n  10: optional map<string, shared.IndexedValueType> searchAttribute\n}\n"
+
+// AdminService_AddSearchAttribute_Args represents the arguments for the AdminService.AddSearchAttribute function.
+//
+// The arguments for AddSearchAttribute are sent and received over the wire as this struct.
+type AdminService_AddSearchAttribute_Args struct {
+	Request *AddSearchAttributeRequest `json:"request,omitempty"`
+}
+
+// ToWire translates a AdminService_AddSearchAttribute_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AdminService_AddSearchAttribute_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _AddSearchAttributeRequest_Read(w wire.Value) (*AddSearchAttributeRequest, error) {
+	var v AddSearchAttributeRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a AdminService_AddSearchAttribute_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AdminService_AddSearchAttribute_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AdminService_AddSearchAttribute_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AdminService_AddSearchAttribute_Args) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.Request, err = _AddSearchAttributeRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AdminService_AddSearchAttribute_Args
+// struct.
+func (v *AdminService_AddSearchAttribute_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
+		i++
+	}
+
+	return fmt.Sprintf("AdminService_AddSearchAttribute_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AdminService_AddSearchAttribute_Args match the
+// provided AdminService_AddSearchAttribute_Args.
+//
+// This function performs a deep comparison.
+func (v *AdminService_AddSearchAttribute_Args) Equals(rhs *AdminService_AddSearchAttribute_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AdminService_AddSearchAttribute_Args.
+func (v *AdminService_AddSearchAttribute_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Request != nil {
+		err = multierr.Append(err, enc.AddObject("request", v.Request))
+	}
+	return err
+}
+
+// GetRequest returns the value of Request if it is set or its
+// zero value if it is unset.
+func (v *AdminService_AddSearchAttribute_Args) GetRequest() (o *AddSearchAttributeRequest) {
+	if v != nil && v.Request != nil {
+		return v.Request
+	}
+
+	return
+}
+
+// IsSetRequest returns true if Request is not nil.
+func (v *AdminService_AddSearchAttribute_Args) IsSetRequest() bool {
+	return v != nil && v.Request != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "AddSearchAttribute" for this struct.
+func (v *AdminService_AddSearchAttribute_Args) MethodName() string {
+	return "AddSearchAttribute"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *AdminService_AddSearchAttribute_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// AdminService_AddSearchAttribute_Helper provides functions that aid in handling the
+// parameters and return values of the AdminService.AddSearchAttribute
+// function.
+var AdminService_AddSearchAttribute_Helper = struct {
+	// Args accepts the parameters of AddSearchAttribute in-order and returns
+	// the arguments struct for the function.
+	Args func(
+		request *AddSearchAttributeRequest,
+	) *AdminService_AddSearchAttribute_Args
+
+	// IsException returns true if the given error can be thrown
+	// by AddSearchAttribute.
+	//
+	// An error can be thrown by AddSearchAttribute only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for AddSearchAttribute
+	// given the error returned by it. The provided error may
+	// be nil if AddSearchAttribute did not fail.
+	//
+	// This allows mapping errors returned by AddSearchAttribute into a
+	// serializable result struct. WrapResponse returns a
+	// non-nil error if the provided error cannot be thrown by
+	// AddSearchAttribute
+	//
+	//   err := AddSearchAttribute(args)
+	//   result, err := AdminService_AddSearchAttribute_Helper.WrapResponse(err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from AddSearchAttribute: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(error) (*AdminService_AddSearchAttribute_Result, error)
+
+	// UnwrapResponse takes the result struct for AddSearchAttribute
+	// and returns the erorr returned by it (if any).
+	//
+	// The error is non-nil only if AddSearchAttribute threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   err := AdminService_AddSearchAttribute_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*AdminService_AddSearchAttribute_Result) error
+}{}
+
+func init() {
+	AdminService_AddSearchAttribute_Helper.Args = func(
+		request *AddSearchAttributeRequest,
+	) *AdminService_AddSearchAttribute_Args {
+		return &AdminService_AddSearchAttribute_Args{
+			Request: request,
+		}
+	}
+
+	AdminService_AddSearchAttribute_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.BadRequestError:
+			return true
+		case *shared.InternalServiceError:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	AdminService_AddSearchAttribute_Helper.WrapResponse = func(err error) (*AdminService_AddSearchAttribute_Result, error) {
+		if err == nil {
+			return &AdminService_AddSearchAttribute_Result{}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.BadRequestError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_AddSearchAttribute_Result.BadRequestError")
+			}
+			return &AdminService_AddSearchAttribute_Result{BadRequestError: e}, nil
+		case *shared.InternalServiceError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_AddSearchAttribute_Result.InternalServiceError")
+			}
+			return &AdminService_AddSearchAttribute_Result{InternalServiceError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_AddSearchAttribute_Result.ServiceBusyError")
+			}
+			return &AdminService_AddSearchAttribute_Result{ServiceBusyError: e}, nil
+		}
+
+		return nil, err
+	}
+	AdminService_AddSearchAttribute_Helper.UnwrapResponse = func(result *AdminService_AddSearchAttribute_Result) (err error) {
+		if result.BadRequestError != nil {
+			err = result.BadRequestError
+			return
+		}
+		if result.InternalServiceError != nil {
+			err = result.InternalServiceError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+		return
+	}
+
+}
+
+// AdminService_AddSearchAttribute_Result represents the result of a AdminService.AddSearchAttribute function call.
+//
+// The result of a AddSearchAttribute execution is sent and received over the wire as this struct.
+type AdminService_AddSearchAttribute_Result struct {
+	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
+	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
+	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+}
+
+// ToWire translates a AdminService_AddSearchAttribute_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AdminService_AddSearchAttribute_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.BadRequestError != nil {
+		w, err = v.BadRequestError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.InternalServiceError != nil {
+		w, err = v.InternalServiceError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+
+	if i > 1 {
+		return wire.Value{}, fmt.Errorf("AdminService_AddSearchAttribute_Result should have at most one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
+	var v shared.BadRequestError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
+	var v shared.InternalServiceError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _ServiceBusyError_Read(w wire.Value) (*shared.ServiceBusyError, error) {
+	var v shared.ServiceBusyError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a AdminService_AddSearchAttribute_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AdminService_AddSearchAttribute_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AdminService_AddSearchAttribute_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AdminService_AddSearchAttribute_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.BadRequestError, err = _BadRequestError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.InternalServiceError, err = _InternalServiceError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.BadRequestError != nil {
+		count++
+	}
+	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if count > 1 {
+		return fmt.Errorf("AdminService_AddSearchAttribute_Result should have at most one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AdminService_AddSearchAttribute_Result
+// struct.
+func (v *AdminService_AddSearchAttribute_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.BadRequestError != nil {
+		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
+		i++
+	}
+	if v.InternalServiceError != nil {
+		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+
+	return fmt.Sprintf("AdminService_AddSearchAttribute_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AdminService_AddSearchAttribute_Result match the
+// provided AdminService_AddSearchAttribute_Result.
+//
+// This function performs a deep comparison.
+func (v *AdminService_AddSearchAttribute_Result) Equals(rhs *AdminService_AddSearchAttribute_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
+		return false
+	}
+	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AdminService_AddSearchAttribute_Result.
+func (v *AdminService_AddSearchAttribute_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.BadRequestError != nil {
+		err = multierr.Append(err, enc.AddObject("badRequestError", v.BadRequestError))
+	}
+	if v.InternalServiceError != nil {
+		err = multierr.Append(err, enc.AddObject("internalServiceError", v.InternalServiceError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	return err
+}
+
+// GetBadRequestError returns the value of BadRequestError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_AddSearchAttribute_Result) GetBadRequestError() (o *shared.BadRequestError) {
+	if v != nil && v.BadRequestError != nil {
+		return v.BadRequestError
+	}
+
+	return
+}
+
+// IsSetBadRequestError returns true if BadRequestError is not nil.
+func (v *AdminService_AddSearchAttribute_Result) IsSetBadRequestError() bool {
+	return v != nil && v.BadRequestError != nil
+}
+
+// GetInternalServiceError returns the value of InternalServiceError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_AddSearchAttribute_Result) GetInternalServiceError() (o *shared.InternalServiceError) {
+	if v != nil && v.InternalServiceError != nil {
+		return v.InternalServiceError
+	}
+
+	return
+}
+
+// IsSetInternalServiceError returns true if InternalServiceError is not nil.
+func (v *AdminService_AddSearchAttribute_Result) IsSetInternalServiceError() bool {
+	return v != nil && v.InternalServiceError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_AddSearchAttribute_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *AdminService_AddSearchAttribute_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "AddSearchAttribute" for this struct.
+func (v *AdminService_AddSearchAttribute_Result) MethodName() string {
+	return "AddSearchAttribute"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *AdminService_AddSearchAttribute_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
 
 // AdminService_DescribeHistoryHost_Args represents the arguments for the AdminService.DescribeHistoryHost function.
 //
@@ -1688,18 +2466,6 @@ func (v *AdminService_DescribeHistoryHost_Result) ToWire() (wire.Value, error) {
 
 func _DescribeHistoryHostResponse_Read(w wire.Value) (*shared.DescribeHistoryHostResponse, error) {
 	var v shared.DescribeHistoryHostResponse
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
-	var v shared.BadRequestError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
-	var v shared.InternalServiceError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -2962,12 +3728,6 @@ func (v *AdminService_GetWorkflowExecutionRawHistory_Result) ToWire() (wire.Valu
 
 func _GetWorkflowExecutionRawHistoryResponse_Read(w wire.Value) (*GetWorkflowExecutionRawHistoryResponse, error) {
 	var v GetWorkflowExecutionRawHistoryResponse
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _ServiceBusyError_Read(w wire.Value) (*shared.ServiceBusyError, error) {
-	var v shared.ServiceBusyError
 	err := v.FromWire(w)
 	return &v, err
 }

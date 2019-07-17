@@ -68,6 +68,10 @@ func (mc *nopClient) GetDurationValue(
 	return defaultValue, errors.New("unable to find key")
 }
 
+func (mc *nopClient) UpdateValue(name Key, value interface{}) error {
+	return errors.New("unable to update key")
+}
+
 // NewNopClient creates a nop client
 func NewNopClient() Client {
 	return &nopClient{}

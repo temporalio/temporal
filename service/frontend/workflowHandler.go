@@ -3241,21 +3241,15 @@ func (wh *WorkflowHandler) getArchivedHistory(
 func (wh *WorkflowHandler) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]gen.IndexedValueType {
 	converted := make(map[string]gen.IndexedValueType)
 	for k, v := range keys {
-		switch v {
-		case gen.IndexedValueTypeString:
-			converted[k] = gen.IndexedValueTypeString
-		case gen.IndexedValueTypeKeyword:
-			converted[k] = gen.IndexedValueTypeKeyword
-		case gen.IndexedValueTypeInt:
-			converted[k] = gen.IndexedValueTypeInt
-		case gen.IndexedValueTypeDouble:
-			converted[k] = gen.IndexedValueTypeDouble
-		case gen.IndexedValueTypeBool:
-			converted[k] = gen.IndexedValueTypeBool
-		case gen.IndexedValueTypeDatetime:
-			converted[k] = gen.IndexedValueTypeDatetime
+		switch v.(type) {
+		case float64:
+			converted[k] = gen.IndexedValueType(v.(float64))
+		case int:
+			converted[k] = gen.IndexedValueType(v.(int))
+		case gen.IndexedValueType:
+			converted[k] = v.(gen.IndexedValueType)
 		default:
-			wh.GetLogger().Error("unknown index value type", tag.Value(v))
+			wh.GetLogger().Error("unknown index value type", tag.Key(k), tag.Value(v), tag.ValueType(v))
 		}
 	}
 	return converted

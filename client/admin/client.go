@@ -55,6 +55,22 @@ func NewClient(
 	}
 }
 
+func (c *clientImpl) AddSearchAttribute(
+	ctx context.Context,
+	request *admin.AddSearchAttributeRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.AddSearchAttribute(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
 	request *shared.DescribeHistoryHostRequest,
