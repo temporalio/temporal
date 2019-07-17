@@ -1,6 +1,6 @@
 # Proposal: Resource-Specific Tasklist
 
-Author: Yichao Yang (yycptt)
+Author: Yichao Yang (@yycptt)
 
 Last updated: July 2019
 
