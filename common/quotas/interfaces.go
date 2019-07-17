@@ -23,11 +23,16 @@ package quotas
 // RPSFunc returns a float64 as the RPS
 type RPSFunc func() float64
 
+// Info corresponds to information required to determine rate limits
+type Info struct {
+	Domain string
+}
+
 // Policy corresponds to a quota policy. A policy allows implementing layered
 // and more complex rate limiting functionality.
 type Policy interface {
 	// Allow attempts to allow a request to go through. The method returns
 	// immediately with a true or false indicating if the request can make
 	// progress
-	Allow() bool
+	Allow(info Info) bool
 }

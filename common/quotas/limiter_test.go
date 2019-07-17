@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	defaultRps    = 1200
+	defaultRps    = 2000
 	defaultDomain = "test"
 	_minBurst     = 10000
 )
@@ -47,7 +47,7 @@ func TestNewRateLimiter(t *testing.T) {
 func BenchmarkSimpleRateLimiter(b *testing.B) {
 	policy := NewSimpleRateLimiter(tokenbucket.New(defaultRps, clock.NewRealTimeSource()))
 	for n := 0; n < b.N; n++ {
-		policy.Allow()
+		policy.Allow(Info{})
 	}
 }
 
@@ -59,40 +59,50 @@ func BenchmarkRateLimiter(b *testing.B) {
 	}
 }
 
-func BenchmarkDomainRateLimiter(b *testing.B) {
-	policy := newDomainRateLimiter(defaultRps)
+func BenchmarkMultiStageRateLimiter(b *testing.B) {
+	policy := getPolicy()
 	for n := 0; n < b.N; n++ {
-		policy.Allow(defaultDomain)
+		policy.Allow(Info{Domain: defaultDomain})
 	}
 }
 
-func BenchmarkDomainRateLimiter20Domains(b *testing.B) {
-	numDomains := 100
-	policy := newDomainRateLimiter(defaultRps)
+func BenchmarkMultiStageRateLimiter20Domains(b *testing.B) {
+	numDomains := 20
+	policy := getPolicy()
 	domains := getDomains(numDomains)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(domains[n%numDomains])
+		policy.Allow(Info{Domain: domains[n%numDomains]})
 	}
 }
 
-func BenchmarkDomainRateLimiter100Domains(b *testing.B) {
+func BenchmarkMultiStageRateLimiter100Domains(b *testing.B) {
 	numDomains := 100
-	policy := newDomainRateLimiter(defaultRps)
+	policy := getPolicy()
 	domains := getDomains(numDomains)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(domains[n%numDomains])
+		policy.Allow(Info{Domain: domains[n%numDomains]})
 	}
 }
 
-func BenchmarkDomainRateLimiter1000Domains(b *testing.B) {
-	numDomains := 100
-	policy := newDomainRateLimiter(defaultRps)
+func BenchmarkMultiStageRateLimiter1000Domains(b *testing.B) {
+	numDomains := 1000
+	policy := getPolicy()
 	domains := getDomains(numDomains)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(domains[n%numDomains])
+		policy.Allow(Info{Domain: domains[n%numDomains]})
 	}
 }
 
+func getPolicy() Policy {
+	return NewMultiStageRateLimiter(
+		func() float64 {
+			return float64(defaultRps)
+		},
+		func() float64 {
+			return float64(defaultRps)
+		},
+	)
+}
 func getDomains(n int) []string {
 	domains := make([]string, n)
 	for i := 0; i < n; i++ {

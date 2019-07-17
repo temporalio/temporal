@@ -23,9 +23,7 @@ package quotas
 import (
 	"sync"
 
-	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/tokenbucket"
-	"golang.org/x/time/rate"
 )
 
 const domainRps = 400
@@ -39,34 +37,28 @@ func NewSimpleRateLimiter(tb tokenbucket.TokenBucket) Policy {
 	return &simpleRateLimitPolicy{tb}
 }
 
-func (s *simpleRateLimitPolicy) Allow() bool {
+func (s *simpleRateLimitPolicy) Allow(info Info) bool {
 	ok, _ := s.tb.TryConsume(1)
 	return ok
 }
 
-// DomainRateLimitPolicy indicates a domain specific rate limit policy
-type DomainRateLimitPolicy struct {
+// MultiStageRateLimiter indicates a domain specific rate limit policy
+type MultiStageRateLimiter struct {
 	sync.RWMutex
-	rps            dynamicconfig.IntPropertyFn
-	domainLimiters map[string]*rate.Limiter
-	globalLimiter  Policy
+	rps            RPSFunc
+	domainRPS      RPSFunc
+	domainLimiters map[string]*RateLimiter
+	globalLimiter  *DynamicRateLimiter
 }
 
-// NewDomainRateLimiter returns a new domain quota rate limiter. This is about
+// NewMultiStageRateLimiter returns a new domain quota rate limiter. This is about
 // an order of magnitude slower than
-func NewDomainRateLimiter(rps RPSFunc) *DomainRateLimitPolicy {
-	rl := &DomainRateLimitPolicy{
-		domainLimiters: map[string]*rate.Limiter{},
+func NewMultiStageRateLimiter(rps RPSFunc, domainRps RPSFunc) *MultiStageRateLimiter {
+	rl := &MultiStageRateLimiter{
+		rps:            rps,
+		domainRPS:      domainRps,
+		domainLimiters: map[string]*RateLimiter{},
 		globalLimiter:  NewDynamicRateLimiter(rps),
-	}
-	return rl
-}
-
-func newDomainRateLimiter(rps int) *DomainRateLimitPolicy {
-	initialRps := float64(rps)
-	rl := &DomainRateLimitPolicy{
-		domainLimiters: map[string]*rate.Limiter{},
-		globalLimiter:  NewRateLimiter(&initialRps, _defaultRPSTTL, rps),
 	}
 	return rl
 }
@@ -74,7 +66,12 @@ func newDomainRateLimiter(rps int) *DomainRateLimitPolicy {
 // Allow attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
-func (d *DomainRateLimitPolicy) Allow(domain string) bool {
+func (d *MultiStageRateLimiter) Allow(info Info) bool {
+	domain := info.Domain
+	if len(domain) == 0 {
+		return d.globalLimiter.allow()
+	}
+
 	// check if we have a per-domain limiter - if not create a default one for
 	// the domain.
 	d.RLock()
@@ -83,7 +80,8 @@ func (d *DomainRateLimitPolicy) Allow(domain string) bool {
 
 	if !ok {
 		// create a new limiter
-		domainLimiter := rate.NewLimiter(rate.Limit(domainRps), domainRps)
+		initialRps := d.domainRPS()
+		domainLimiter := NewRateLimiter(&initialRps, _defaultRPSTTL, 5*int(d.domainRPS()))
 
 		// verify that it is needed and add to map
 		d.Lock()
@@ -103,7 +101,7 @@ func (d *DomainRateLimitPolicy) Allow(domain string) bool {
 
 	// ensure that the reservation does not break the global rate limit, if it
 	// does, cancel the reservation and do not allow to proceed.
-	if !d.globalLimiter.Allow() {
+	if !d.globalLimiter.allow() {
 		rsv.Cancel()
 		return false
 	}

@@ -55,8 +55,7 @@ func NewRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration, minBurst i
 		maxDispatchPerSecond: maxDispatchPerSecond,
 		ttl:                  ttl,
 		ttlTimer:             time.NewTimer(ttl),
-		// Note: Potentially expose burst config to users in future
-		minBurst: minBurst,
+		minBurst:             minBurst,
 	}
 	rl.storeLimiter(maxDispatchPerSecond)
 	return rl
@@ -126,19 +125,28 @@ func (rl *RateLimiter) shouldUpdate(maxDispatchPerSecond *float64) bool {
 	}
 }
 
-type dynamicRateLimiter struct {
+// DynamicRateLimiter implements a dynamic config wrapper around the rate limiter
+type DynamicRateLimiter struct {
 	rps RPSFunc
 	rl  *RateLimiter
 }
 
 // NewDynamicRateLimiter returns a rate limiter which handles dynamic config
-func NewDynamicRateLimiter(rps RPSFunc) Policy {
+func NewDynamicRateLimiter(rps RPSFunc) *DynamicRateLimiter {
 	initialRps := rps()
-	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, int(rps()))
-	return &dynamicRateLimiter{rps, rl}
+	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, 5*int(rps()))
+	return &DynamicRateLimiter{rps, rl}
 }
 
-func (d *dynamicRateLimiter) Allow() bool {
+// Allow immediately returns with true or false indicating if a rate limit
+// token is available or not
+func (d *DynamicRateLimiter) Allow(info Info) bool {
+	return d.allow()
+}
+
+// Allow immediately returns with true or false indicating if a rate limit
+// token is available or not
+func (d *DynamicRateLimiter) allow() bool {
 	rps := float64(d.rps())
 	d.rl.UpdateMaxDispatch(&rps)
 	return d.rl.Allow()
