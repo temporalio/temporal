@@ -4079,15 +4079,6 @@ func (s *resetorSuite) TestApplyReset() {
 		},
 	}
 
-	appendV2Req := &p.AppendHistoryNodesRequest{
-		IsNewBranch:   false,
-		Info:          "",
-		BranchToken:   newBranchToken,
-		Events:        historyAfterReset.Events,
-		TransactionID: 1,
-		Encoding:      common.EncodingType(s.config.EventEncodingType(domainID)),
-		ShardID:       common.IntPtr(s.shardID),
-	}
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,
 	}
@@ -4107,7 +4098,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", forkReq).Return(forkResp, nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", appendV2Req).Return(appendV2Resp, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	err := s.resetor.ApplyResetEvent(context.Background(), request, domainID, wid, currRunID)
 	s.Nil(err)
@@ -4138,6 +4129,8 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(32), appendReq.Events[2].GetEventId())
 	s.Equal(int64(33), appendReq.Events[3].GetEventId())
 	s.Equal(int64(34), appendReq.Events[4].GetEventId())
+
+	s.Equal(common.EncodingType(s.config.EventEncodingType(domainID)), appendReq.Encoding)
 
 	// verify executionManager request
 	calls = s.mockExecutionMgr.Calls

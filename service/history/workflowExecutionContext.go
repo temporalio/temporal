@@ -72,6 +72,14 @@ type (
 			prevRunID string,
 			prevLastWriteVersion int64,
 		) error
+		conflictResolveWorkflowExecution(
+			now time.Time,
+			prevRunID string,
+			prevLastWriteVersion int64,
+			prevState int,
+			resetMutableState mutableState,
+			resetHistorySize int64,
+		) (mutableState, error)
 		updateWorkflowExecutionAsActive(
 			now time.Time,
 		) error
@@ -96,16 +104,6 @@ type (
 			newWorkflowTransactionPolicy *transactionPolicy,
 		) error
 
-		resetMutableState(
-			prevRunID string,
-			prevLastWriteVersion int64,
-			prevState int,
-			replicationTasks []persistence.Task,
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			resetBuilder mutableState,
-			resetHistorySize int64,
-		) (mutableState, error)
 		resetWorkflowExecution(
 			currMutableState mutableState,
 			updateCurr bool,
@@ -314,6 +312,48 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	_, err := c.createWorkflowExecutionWithRetry(createRequest)
 	return err
+}
+
+func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
+	now time.Time,
+	prevRunID string,
+	prevLastWriteVersion int64,
+	prevState int,
+	resetMutableState mutableState,
+	resetHistorySize int64,
+) (mutableState, error) {
+
+	// this only resets one mutableState for a workflow
+	resetWorkflow, workflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyPassive,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(workflowEventsSeq) != 0 {
+		return nil, &workflow.BadRequestError{
+			Message: "reset mutable state should not generate new events",
+		}
+	}
+
+	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: resetHistorySize,
+	}
+
+	if err := c.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
+		// previous workflow information
+		PrevRunID:            prevRunID,
+		PrevLastWriteVersion: prevLastWriteVersion,
+		PrevState:            prevState,
+
+		ResetWorkflowSnapshot: *resetWorkflow,
+	}); err != nil {
+		return nil, err
+	}
+
+	c.clear()
+	return c.loadWorkflowExecution()
 }
 
 func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
@@ -541,11 +581,6 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 		}
 	}
 
-	transactionID, err := c.shard.GetNextTransferTaskID()
-	if err != nil {
-		return 0, err
-	}
-
 	domainID := workflowEvents.DomainID
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
@@ -561,10 +596,10 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 		size, err := c.appendHistoryEventsWithRetry(&persistence.AppendHistoryEventsRequest{
 			DomainID:          domainID,
 			Execution:         execution,
-			TransactionID:     transactionID,
 			FirstEventID:      firstEvent.GetEventId(),
 			EventBatchVersion: firstEvent.GetVersion(),
 			Events:            events,
+			// TransactionID is set by shard context
 		})
 		return int64(size), err
 	}
@@ -573,11 +608,11 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 		domainID,
 		execution,
 		&persistence.AppendHistoryNodesRequest{
-			IsNewBranch:   true,
-			Info:          historyGarbageCleanupInfo(domainID, workflowID, runID),
-			BranchToken:   branchToken,
-			Events:        events,
-			TransactionID: transactionID,
+			IsNewBranch: true,
+			Info:        historyGarbageCleanupInfo(domainID, workflowID, runID),
+			BranchToken: branchToken,
+			Events:      events,
+			// TransactionID is set by shard context
 		},
 	)
 	return int64(size), err
@@ -589,11 +624,6 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 
 	if len(workflowEvents.Events) == 0 {
 		return 0, nil // allow update workflow without events
-	}
-
-	transactionID, err := c.shard.GetNextTransferTaskID()
-	if err != nil {
-		return 0, err
 	}
 
 	domainID := workflowEvents.DomainID
@@ -609,10 +639,10 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 		size, err := c.appendHistoryEventsWithRetry(&persistence.AppendHistoryEventsRequest{
 			DomainID:          domainID,
 			Execution:         execution,
-			TransactionID:     transactionID,
 			FirstEventID:      firstEvent.GetEventId(),
 			EventBatchVersion: firstEvent.GetVersion(),
 			Events:            events,
+			// TransactionID is set by shard context
 		})
 		return int64(size), err
 	}
@@ -621,10 +651,10 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 		domainID,
 		execution,
 		&persistence.AppendHistoryNodesRequest{
-			IsNewBranch:   false,
-			BranchToken:   branchToken,
-			Events:        events,
-			TransactionID: transactionID,
+			IsNewBranch: false,
+			BranchToken: branchToken,
+			Events:      events,
+			// TransactionID is set by shard context
 		},
 	)
 	return int64(size), err
@@ -768,40 +798,6 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
 	}
 }
 
-func (c *workflowExecutionContextImpl) resetMutableState(
-	prevRunID string,
-	prevLastWriteVersion int64,
-	prevState int,
-	replicationTasks []persistence.Task,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	resetBuilder mutableState,
-	resetHistorySize int64,
-) (mutableState, error) {
-
-	// this only resets one mutableState for a workflow
-	snapshotRequest := resetBuilder.ResetSnapshot( // TODO
-		prevRunID,
-		prevLastWriteVersion,
-		prevState,
-		replicationTasks,
-		transferTasks,
-		timerTasks,
-	)
-	snapshotRequest.ResetWorkflowSnapshot.ExecutionStats = &persistence.ExecutionStats{
-		HistorySize: resetHistorySize,
-	}
-	snapshotRequest.ResetWorkflowSnapshot.Condition = c.updateCondition
-
-	err := c.shard.ResetMutableState(snapshotRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	c.clear()
-	return c.loadWorkflowExecution()
-}
-
 // this reset is more complex than "resetMutableState", it involes currentMutableState and newMutableState:
 // 1. append history to new run
 // 2. append history to current run if current run is not closed
@@ -832,11 +828,6 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	}
 	setTaskInfo(currMutableState.GetCurrentVersion(), now, currTransferTasks, currTimerTasks)
 	setTaskInfo(newMutableState.GetCurrentVersion(), now, newTransferTasks, newTimerTasks)
-
-	transactionID, retError := c.shard.GetNextTransferTaskID()
-	if retError != nil {
-		return retError
-	}
 
 	// Since we always reset to decision task, there shouldn't be any buffered events.
 	// Therefore currently ResetWorkflowExecution persistence API doesn't implement setting buffered events.
@@ -876,24 +867,39 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		c.stats.HistorySize += int64(size)
 	}
 
-	// Note: we already made sure that newMutableState is using eventsV2
-	hBuilder := newMutableState.GetHistoryBuilder()
-	size, retError := c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
-		IsNewBranch:   false,
-		BranchToken:   newMutableState.GetCurrentBranch(),
-		Events:        hBuilder.GetHistory().GetEvents(),
-		TransactionID: transactionID,
-	}, c.domainID, c.workflowExecution)
-	if retError != nil {
-		return
+	// TODO refactor resetWorkflowExecution to use CloseTransactionAsSnapshot
+	//  and CloseTransactionAsMutation correctly
+	resetWorkflow, workflowEventsSeq, err := newMutableState.CloseTransactionAsSnapshot(
+		c.shard.GetTimeSource().Now(),
+		// the reason to use passive policy is because this resetWorkflowExecution function
+		// mostly handcraft all parameters to be persisted
+		transactionPolicyPassive,
+	)
+	if err != nil {
+		return err
 	}
-	newHistorySize += int64(size)
+	if len(workflowEventsSeq) != 1 {
+		return &workflow.InternalServiceError{
+			Message: "reset workflow execution should generate exactly 1 event batch",
+		}
+	}
+	for _, workflowEvents := range workflowEventsSeq {
+		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		if err != nil {
+			return err
+		}
+		newHistorySize += eventsSize
+	}
+	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: newHistorySize,
+	}
+	resetWorkflow.TransferTasks = newTransferTasks
+	resetWorkflow.ReplicationTasks = newReplicationTasks
+	resetWorkflow.TimerTasks = newTimerTasks
 
-	// ResetSnapshot function used here really does rely on inputs below
-	snapshotRequest := newMutableState.ResetSnapshot("", 0, 0, nil, nil, nil)
-	if len(snapshotRequest.ResetWorkflowSnapshot.ChildExecutionInfos) > 0 ||
-		len(snapshotRequest.ResetWorkflowSnapshot.SignalInfos) > 0 ||
-		len(snapshotRequest.ResetWorkflowSnapshot.SignalRequestedIDs) > 0 {
+	if len(resetWorkflow.ChildExecutionInfos) > 0 ||
+		len(resetWorkflow.SignalInfos) > 0 ||
+		len(resetWorkflow.SignalRequestedIDs) > 0 {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("something went wrong, we shouldn't see any pending childWF, sending Signal or signal requested"),
 		}
@@ -908,24 +914,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 
 		CurrentWorkflowMutation: nil,
 
-		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo: newMutableState.GetExecutionInfo(),
-			ExecutionStats: &persistence.ExecutionStats{
-				HistorySize: newHistorySize,
-			},
-			ReplicationState: newMutableState.GetReplicationState(),
-
-			ActivityInfos:       snapshotRequest.ResetWorkflowSnapshot.ActivityInfos,
-			TimerInfos:          snapshotRequest.ResetWorkflowSnapshot.TimerInfos,
-			ChildExecutionInfos: snapshotRequest.ResetWorkflowSnapshot.ChildExecutionInfos,
-			RequestCancelInfos:  snapshotRequest.ResetWorkflowSnapshot.RequestCancelInfos,
-			SignalInfos:         snapshotRequest.ResetWorkflowSnapshot.SignalInfos,
-			SignalRequestedIDs:  snapshotRequest.ResetWorkflowSnapshot.SignalRequestedIDs,
-
-			TransferTasks:    newTransferTasks,
-			ReplicationTasks: newReplicationTasks,
-			TimerTasks:       newTimerTasks,
-		},
+		NewWorkflowSnapshot: *resetWorkflow,
 	}
 
 	if updateCurr {

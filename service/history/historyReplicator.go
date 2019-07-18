@@ -1163,6 +1163,7 @@ func (r *historyReplicator) resetMutableState(
 		uuid.New(),
 		lastEventID,
 		msBuilder.GetExecutionInfo(),
+		msBuilder.GetUpdateCondition(),
 	)
 	logger.Info("Completed Resetting of workflow execution.")
 	if err != nil {

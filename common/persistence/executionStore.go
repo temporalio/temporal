@@ -485,8 +485,8 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 	}, nil
 }
 
-func (m *executionManagerImpl) ResetMutableState(
-	request *ResetMutableStateRequest,
+func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
+	request *ConflictResolveWorkflowExecutionRequest,
 ) error {
 
 	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot, request.Encoding)
@@ -501,7 +501,7 @@ func (m *executionManagerImpl) ResetMutableState(
 		}
 	}
 
-	newRequest := &InternalResetMutableStateRequest{
+	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		RangeID: request.RangeID,
 
 		PrevRunID:            request.PrevRunID,
@@ -512,7 +512,7 @@ func (m *executionManagerImpl) ResetMutableState(
 
 		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
 	}
-	return m.persistence.ResetMutableState(newRequest)
+	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
 }
 
 func (m *executionManagerImpl) ResetWorkflowExecution(

@@ -61,7 +61,7 @@ type (
 		//The below three APIs are related to serialization/deserialization
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
-		ResetMutableState(request *InternalResetMutableStateRequest) error
+		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *InternalResetWorkflowExecutionRequest) error
 
 		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
@@ -300,8 +300,8 @@ type (
 		NewWorkflowSnapshot *InternalWorkflowSnapshot
 	}
 
-	// InternalResetMutableStateRequest is used to reset workflow execution state for Persistence Interface
-	InternalResetMutableStateRequest struct {
+	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
+	InternalConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
 
 		// previous workflow information

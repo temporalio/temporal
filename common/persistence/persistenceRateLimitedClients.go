@@ -218,12 +218,12 @@ func (p *workflowExecutionRateLimitedPersistenceClient) UpdateWorkflowExecution(
 	return resp, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) ResetMutableState(request *ResetMutableStateRequest) error {
+func (p *workflowExecutionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.ResetMutableState(request)
+	err := p.persistence.ConflictResolveWorkflowExecution(request)
 	return err
 }
 

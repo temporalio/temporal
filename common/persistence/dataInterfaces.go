@@ -726,8 +726,8 @@ type (
 		Encoding common.EncodingType // optional binary encoding type
 	}
 
-	// ResetMutableStateRequest is used to reset workflow execution state for a single run
-	ResetMutableStateRequest struct {
+	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
+	ConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
 
 		// previous workflow information
@@ -1379,7 +1379,7 @@ type (
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
-		ResetMutableState(request *ResetMutableStateRequest) error
+		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error

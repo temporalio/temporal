@@ -2939,8 +2939,8 @@ func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 	s.Equal(0, stats3.BufferedEventsSize)
 }
 
-// TestResetMutableStateCurrentIsSelf test
-func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
+// TestConflictResolveWorkflowExecutionCurrentIsSelf test
+func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSelf() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("test-reset-mutable-state-test-current-is-self"),
@@ -3314,7 +3314,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		StartVersion:   int64(8780),
 	}
 
-	err3 := s.ResetMutableState(
+	err3 := s.ConflictResolveWorkflowExecution(
 		workflowExecution.GetRunId(), state1.ReplicationState.LastWriteVersion, state1.ExecutionInfo.State,
 		updatedInfo1, updatedStats1, rState, int64(5), resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
@@ -3410,8 +3410,8 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 
 }
 
-// TestResetMutableStateCurrentIsNotSelf test
-func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
+// TestConflictResolveWorkflowExecutionCurrentIsNotSelf test
+func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsNotSelf() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowID := "test-reset-mutable-state-test-current-is-not-self"
 
@@ -3488,7 +3488,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
 	}
-	err = s.ResetMutableState(
+	err = s.ConflictResolveWorkflowExecution(
 		currentRunID, currentState.LastWriteVersion, currentInfo.State,
 		resetExecutionInfo, resetStats, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
@@ -3522,7 +3522,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	currentInfo = copyWorkflowExecutionInfo(state.ExecutionInfo)
 	currentState = copyReplicationState(state.ReplicationState)
 
-	err = s.ResetMutableState(
+	err = s.ConflictResolveWorkflowExecution(
 		workflowExecutionCurrent2.GetRunId(), currentState.LastWriteVersion, currentInfo.State,
 		resetExecutionInfo, resetStats, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
@@ -3533,8 +3533,8 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	s.Equal(workflowExecutionReset.GetRunId(), runID)
 }
 
-// TestResetMutableStateMismatch test
-func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
+// TestConflictResolveWorkflowExecutionMismatch test
+func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionMismatch() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowID := "test-reset-mutable-state-test-mismatch"
 
@@ -3622,21 +3622,21 @@ func (s *ExecutionManagerSuite) TestResetMutableStateMismatch() {
 	}
 
 	wrongPrevRunID := uuid.New()
-	err = s.ResetMutableState(
+	err = s.ConflictResolveWorkflowExecution(
 		wrongPrevRunID, currentState.LastWriteVersion, currentInfo.State,
 		resetExecutionInfo, resetStats, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NotNil(err)
 
 	wrongLastWriteVersion := currentState.LastWriteVersion + 1
-	err = s.ResetMutableState(
+	err = s.ConflictResolveWorkflowExecution(
 		workflowExecutionCurrent.GetRunId(), wrongLastWriteVersion, currentInfo.State,
 		resetExecutionInfo, resetStats, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NotNil(err)
 
 	wrongState := currentInfo.State + 1
-	err = s.ResetMutableState(
+	err = s.ConflictResolveWorkflowExecution(
 		workflowExecutionCurrent.GetRunId(), currentState.LastWriteVersion, wrongState,
 		resetExecutionInfo, resetStats, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)

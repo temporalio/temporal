@@ -427,9 +427,9 @@ func (s *TestShardContext) GetTimerMaxReadLevel(cluster string) time.Time {
 	return s.timerMaxReadLevelMap[cluster]
 }
 
-// ResetMutableState test implementation
-func (s *TestShardContext) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
-	return s.executionMgr.ResetMutableState(request)
+// ConflictResolveWorkflowExecution test implementation
+func (s *TestShardContext) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error {
+	return s.executionMgr.ConflictResolveWorkflowExecution(request)
 }
 
 // ResetWorkflowExecution test implementation

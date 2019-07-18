@@ -1143,16 +1143,16 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					}
 				}
 
-				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != executionInfo.RunID {
+				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.PreviousRunID {
 					// currentRunID on previous run has been changed, return to caller to handle
-					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, CurrentRunID: %v, columns: (%v)",
-						executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
+					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunID: %v, Actual Current RunID: %v",
+						executionInfo.WorkflowID, request.PreviousRunID, prevRunID)
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
 				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunID: %v, columns: (%v)",
 					executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
-				return nil, &p.ConditionFailedError{Msg: msg}
+				return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 			}
 
 			previous = make(map[string]interface{})
@@ -1515,7 +1515,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	return nil
 }
 
-func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutableStateRequest) error {
+func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.InternalConflictResolveWorkflowExecutionRequest) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	resetWorkflow := request.ResetWorkflowSnapshot
@@ -1576,14 +1576,14 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
-			return &p.TimeoutError{Msg: fmt.Sprintf("ResetMutableState timed out. Error: %v", err)}
+			return &p.TimeoutError{Msg: fmt.Sprintf("ConflictResolveWorkflowExecution timed out. Error: %v", err)}
 		} else if isThrottlingError(err) {
 			return &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("ResetMutableState operation failed. Error: %v", err),
+				Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err),
 			}
 		}
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err),
 		}
 	}
 

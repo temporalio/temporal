@@ -202,7 +202,7 @@ func applyWorkflowSnapshotTxAsReset(
 			return err
 		default:
 			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("ResetMutableState operation failed. Failed to lock executions row. Error: %v", err),
+				Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
 			}
 		}
 	}
@@ -212,7 +212,7 @@ func applyWorkflowSnapshotTxAsReset(
 		replicationState,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to update executions row. Erorr: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 		}
 	}
 
@@ -233,7 +233,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear activity info map. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear activity info map. Error: %v", err),
 		}
 	}
 
@@ -245,7 +245,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -255,7 +255,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear timer info map. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear timer info map. Error: %v", err),
 		}
 	}
 
@@ -267,7 +267,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into timer info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into timer info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -277,7 +277,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear child execution info map. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear child execution info map. Error: %v", err),
 		}
 	}
 
@@ -289,7 +289,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -299,7 +299,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear request cancel info map. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear request cancel info map. Error: %v", err),
 		}
 	}
 
@@ -311,7 +311,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into request cancel info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into request cancel info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -321,7 +321,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear signal info map. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear signal info map. Error: %v", err),
 		}
 	}
 
@@ -333,7 +333,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into signal info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into signal info map after clearing. Error: %v", err),
 		}
 	}
 

@@ -73,7 +73,7 @@ type (
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
-		ResetMutableState(request *persistence.ResetMutableStateRequest) error
+		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
 		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error)
@@ -634,7 +634,7 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
+func (s *shardContextImpl) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error {
 
 	domainID := request.ResetWorkflowSnapshot.ExecutionInfo.DomainID
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowID
@@ -681,7 +681,7 @@ Reset_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
-		err := s.executionManager.ResetMutableState(request)
+		err := s.executionManager.ConflictResolveWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
@@ -729,8 +729,18 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	if err != nil {
 		return 0, err
 	}
+
+	// NOTE: do not use getNextTransferTaskIDLocked since
+	// getNextTransferTaskIDLocked is not guarded by lock
+	transactionID, err := s.GetNextTransferTaskID()
+	if err != nil {
+		return 0, err
+	}
+
 	request.Encoding = s.getDefaultEncoding(domainEntry)
 	request.ShardID = common.IntPtr(s.shardID)
+	request.TransactionID = transactionID
+
 	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
@@ -760,7 +770,16 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	if err != nil {
 		return 0, err
 	}
+
+	// NOTE: do not use getNextTransferTaskIDLocked since
+	// getNextTransferTaskIDLocked is not guarded by lock
+	transactionID, err := s.GetNextTransferTaskID()
+	if err != nil {
+		return 0, err
+	}
+
 	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.TransactionID = transactionID
 
 	size := 0
 	defer func() {

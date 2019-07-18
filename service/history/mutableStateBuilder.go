@@ -261,66 +261,6 @@ func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationStat
 	return e.replicationState
 }
 
-func (e *mutableStateBuilder) ResetSnapshot(
-	prevRunID string,
-	prevLastWriteVersion int64,
-	prevState int,
-	replicationTasks []persistence.Task,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-) *persistence.ResetMutableStateRequest {
-	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
-
-	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
-	for _, info := range e.pendingActivityInfoIDs {
-		insertActivities = append(insertActivities, info)
-	}
-
-	insertTimers := make([]*persistence.TimerInfo, 0, len(e.pendingTimerInfoIDs))
-	for _, info := range e.pendingTimerInfoIDs {
-		insertTimers = append(insertTimers, info)
-	}
-
-	insertChildExecutions := make([]*persistence.ChildExecutionInfo, 0, len(e.pendingChildExecutionInfoIDs))
-	for _, info := range e.pendingChildExecutionInfoIDs {
-		insertChildExecutions = append(insertChildExecutions, info)
-	}
-
-	insertRequestCancels := make([]*persistence.RequestCancelInfo, 0, len(e.pendingRequestCancelInfoIDs))
-	for _, info := range e.pendingRequestCancelInfoIDs {
-		insertRequestCancels = append(insertRequestCancels, info)
-	}
-
-	insertSignals := make([]*persistence.SignalInfo, 0, len(e.pendingSignalInfoIDs))
-	for _, info := range e.pendingSignalInfoIDs {
-		insertSignals = append(insertSignals, info)
-	}
-
-	insertSignalRequested := make([]string, 0, len(e.pendingSignalRequestedIDs))
-	for id := range e.pendingSignalRequestedIDs {
-		insertSignalRequested = append(insertSignalRequested, id)
-	}
-
-	return &persistence.ResetMutableStateRequest{
-		PrevRunID:            prevRunID,
-		PrevLastWriteVersion: prevLastWriteVersion,
-		PrevState:            prevState,
-		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo:       e.executionInfo,
-			ReplicationState:    e.replicationState,
-			ActivityInfos:       insertActivities,
-			TimerInfos:          insertTimers,
-			ChildExecutionInfos: insertChildExecutions,
-			RequestCancelInfos:  insertRequestCancels,
-			SignalInfos:         insertSignals,
-			SignalRequestedIDs:  insertSignalRequested,
-			ReplicationTasks:    replicationTasks,
-			TransferTasks:       transferTasks,
-			TimerTasks:          timerTasks,
-		},
-	}
-}
-
 func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	// put new events into 2 buckets:
 	//  1) if the event was added while there was in-flight decision, then put it in buffered bucket
@@ -704,7 +644,7 @@ func (e *mutableStateBuilder) shouldBufferEvent(eventType workflow.EventType) bo
 		workflow.EventTypeActivityTaskScheduled,
 		workflow.EventTypeActivityTaskCancelRequested,
 		workflow.EventTypeTimerStarted,
-		// DecisionTypeCancelTimer is an excption. This decision will be mapped
+		// DecisionTypeCancelTimer is an exception. This decision will be mapped
 		// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
 		// So both should not be buffered. Ref: historyEngine, search for "workflow.DecisionTypeCancelTimer"
 		workflow.EventTypeTimerCanceled,
@@ -3454,6 +3394,14 @@ func (e *mutableStateBuilder) AddTimerTasks(
 
 func (e *mutableStateBuilder) GetTimerTasks() []persistence.Task {
 	return e.insertTimerTasks
+}
+
+func (e *mutableStateBuilder) SetUpdateCondition(condition int64) {
+	e.condition = condition
+}
+
+func (e *mutableStateBuilder) GetUpdateCondition() int64 {
+	return e.condition
 }
 
 func (e *mutableStateBuilder) CloseTransactionAsMutation(

@@ -903,12 +903,12 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 	return err
 }
 
-// ResetMutableState is  utility method to reset mutable state
-func (s *TestBase) ResetMutableState(prevRunID string, prevLastWriteVersion int64, prevState int,
+// ConflictResolveWorkflowExecution is  utility method to reset mutable state
+func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState int,
 	info *p.WorkflowExecutionInfo, stats *p.ExecutionStats, replicationState *p.ReplicationState, nextEventID int64,
 	activityInfos []*p.ActivityInfo, timerInfos []*p.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*p.SignalInfo, ids []string) error {
-	return s.ExecutionManager.ResetMutableState(&p.ResetMutableStateRequest{
+	return s.ExecutionManager.ConflictResolveWorkflowExecution(&p.ConflictResolveWorkflowExecutionRequest{
 		RangeID:              s.ShardInfo.RangeID,
 		PrevRunID:            prevRunID,
 		PrevLastWriteVersion: prevLastWriteVersion,

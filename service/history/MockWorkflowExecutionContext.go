@@ -165,12 +165,12 @@ func (_m *mockWorkflowExecutionContext) loadExecutionStats() (*persistence.Execu
 	return r0, r1
 }
 
-func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 int64, _a2 int, _a3 []persistence.Task, _a4 []persistence.Task, _a5 []persistence.Task, _a6 mutableState, _a7 int64) (mutableState, error) {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+func (_m *mockWorkflowExecutionContext) conflictResolveWorkflowExecution(_a0 time.Time, _a1 string, _a2 int64, _a3 int, _a4 mutableState, _a5 int64) (mutableState, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
 
 	var r0 mutableState
-	if rf, ok := ret.Get(0).(func(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task, mutableState, int64) mutableState); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+	if rf, ok := ret.Get(0).(func(time.Time, string, int64, int, mutableState, int64) mutableState); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(mutableState)
@@ -178,8 +178,8 @@ func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 int64,
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task, mutableState, int64) error); ok {
-		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+	if rf, ok := ret.Get(1).(func(time.Time, string, int64, int, mutableState, int64) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		r1 = ret.Error(1)
 	}
