@@ -512,22 +512,32 @@ Update_History_Loop:
 			timerTasks = append(timerTasks, timerT)
 		}
 
-		// Generate a transaction ID for appending events to history
-		transactionID, err := handler.shard.GetNextTransferTaskID()
-		if err != nil {
-			return nil, err
-		}
+		msBuilder.AddTransferTasks(transferTasks...)
+		msBuilder.AddTimerTasks(timerTasks...)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
 		var updateErr error
 		if continueAsNewBuilder != nil {
-			continueAsNewTimerTasks = msBuilder.GetContinueAsNew().TimerTasks
+			continueAsNewTimerTasks = continueAsNewBuilder.GetTimerTasks()
 
-			updateErr = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder)
+			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
+			updateErr = context.updateWorkflowExecutionWithNewAsActive(
+				handler.shard.GetTimeSource().Now(),
+				newWorkflowExecutionContext(
+					continueAsNewExecutionInfo.DomainID,
+					workflow.WorkflowExecution{
+						WorkflowId: common.StringPtr(continueAsNewExecutionInfo.WorkflowID),
+						RunId:      common.StringPtr(continueAsNewExecutionInfo.RunID),
+					},
+					handler.shard,
+					handler.shard.GetExecutionManager(),
+					handler.logger,
+				),
+				continueAsNewBuilder,
+			)
 		} else {
-			updateErr = context.updateAsActive(transferTasks, timerTasks,
-				transactionID)
+			updateErr = context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
 		}
 
 		if updateErr != nil {
@@ -554,17 +564,13 @@ Update_History_Loop:
 				if err != nil {
 					return nil, err
 				}
-				tranT, timerT, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
+				transferTask, timerTask, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
 				if err != nil {
 					return nil, err
 				}
-				transferTasks = []persistence.Task{tranT}
-				timerTasks = []persistence.Task{timerT}
-				transactionID, err = handler.shard.GetNextTransferTaskID()
-				if err != nil {
-					return nil, err
-				}
-				if err := context.updateAsActive(transferTasks, timerTasks, transactionID); err != nil {
+				msBuilder.AddTransferTasks(transferTask)
+				msBuilder.AddTimerTasks(timerTask)
+				if err := context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now()); err != nil {
 					return nil, err
 				}
 				handler.timerProcessor.NotifyNewTimers(handler.currentClusterName, handler.shard.GetCurrentTime(handler.currentClusterName), timerTasks)

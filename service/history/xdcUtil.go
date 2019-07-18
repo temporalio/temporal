@@ -22,6 +22,7 @@ package history
 
 import (
 	"fmt"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -58,6 +59,7 @@ var (
 			tag.WorkflowDomainID(timerTask.DomainID),
 			tag.TaskID(timerTask.TaskID),
 			tag.TaskType(timerTask.TaskType),
+			tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
 			tag.FailoverVersion(timerTask.GetVersion()),
 			tag.Timestamp(timerTask.VisibilityTimestamp),
 			tag.WorkflowEventID(timerTask.EventID))
@@ -110,7 +112,6 @@ func loadMutableStateForTransferTask(context workflowExecutionContext, transferT
 
 	if transferTask.ScheduleID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
-		logger.Debug(fmt.Sprintf("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v.", transferTask.ScheduleID, msBuilder.GetNextEventID()))
 		context.clear()
 
 		msBuilder, err = context.loadWorkflowExecution()
@@ -119,7 +120,7 @@ func loadMutableStateForTransferTask(context workflowExecutionContext, transferT
 		}
 		// after refresh, still mutable state's next event ID <= task ID
 		if transferTask.ScheduleID >= msBuilder.GetNextEventID() {
-			logger.Info("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.",
+			logger.Info("Transfer Task Processor: task event ID >= MS NextEventID, skip.",
 				tag.WorkflowScheduleID(transferTask.ScheduleID),
 				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
 			return nil, nil
@@ -150,7 +151,6 @@ func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *p
 
 	if timerTask.EventID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-		logger.Debug(fmt.Sprintf("Timer Task Processor: task event ID: %v >= MS NextEventID: %v.", timerTask.EventID, msBuilder.GetNextEventID()))
 		context.clear()
 
 		msBuilder, err = context.loadWorkflowExecution()
@@ -159,7 +159,7 @@ func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *p
 		}
 		// after refresh, still mutable state's next event ID <= task ID
 		if timerTask.EventID >= msBuilder.GetNextEventID() {
-			logger.Info("Timer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.",
+			logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
 				tag.WorkflowEventID(timerTask.EventID),
 				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
 			return nil, nil

@@ -254,11 +254,6 @@ func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_CurrentWorkflowCondit
 	s.Nil(s.timerQueueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
 }
 
-func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_LimitExceededError() {
-	err := &workflow.LimitExceededError{}
-	s.Equal(err, s.timerQueueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
-}
-
 func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_RandomErr() {
 	err := errors.New("random error")
 	s.Equal(err, s.timerQueueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))

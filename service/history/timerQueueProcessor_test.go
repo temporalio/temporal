@@ -164,7 +164,7 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	timerTasks := []persistence.Task{}
 	timerInfos := []*persistence.TimerInfo{}
 	decisionCompletedID := int64(4)
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, clock.NewRealTimeSource())
+	tBuilder := newTimerBuilder(s.logger, clock.NewRealTimeSource())
 
 	for _, timeOut := range timeOuts {
 		_, ti, err := builder.AddTimerStartedEvent(decisionCompletedID,
@@ -340,7 +340,7 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	processor := s.engineImpl.timerProcessor.(*timerQueueProcessorImpl)
 	processor.Start()
 
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, clock.NewRealTimeSource())
+	tBuilder := newTimerBuilder(s.logger, clock.NewRealTimeSource())
 	tt := s.addDecisionTimer(domainID, workflowExecution, tBuilder)
 	processor.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), tt)
 
@@ -434,7 +434,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 	s.Nil(err)
 	s.NotNil(activityScheduledEvent)
 
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
@@ -482,7 +482,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 	s.Nil(err)
 
 	// create a schedule to start timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
@@ -528,7 +528,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 	s.Nil(err)
 	s.NotNil(activityScheduledEvent)
 
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	s.Equal(workflow.TimeoutTypeScheduleToStart, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
@@ -576,7 +576,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 	s.Nil(err)
 
 	// create a start to close timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
@@ -627,7 +627,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 	s.Nil(err)
 
 	// create a start to close timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	t, err := tBuilder.AddStartToCloseActivityTimeout(ai)
 	s.NoError(err)
 	s.NotNil(t)
@@ -673,7 +673,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 	s.NotNil(ase)
 
 	// create a schedule to close timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
@@ -721,7 +721,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 	s.Nil(err)
 
 	// create a schedule to close timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
@@ -773,7 +773,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 	s.Nil(err)
 
 	// create a schedule to close timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ai)
 	s.NoError(err)
 	s.NotNil(t)
@@ -802,7 +802,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() 
 	p := s.engineImpl.timerProcessor.(*timerQueueProcessorImpl)
 	p.Start()
 
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	ase, timerTasks := s.addHeartBeatTimer(domainID, workflowExecution, tBuilder)
 
 	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
@@ -854,7 +854,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask_SameExpiry() {
 	s.NotNil(ase2)
 
 	// create a schedule to close timeout
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ai1)
 	s.NoError(err)
 	s.NotNil(t)
@@ -895,7 +895,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	p := s.engineImpl.timerProcessor.(*timerQueueProcessorImpl)
 	p.Start()
 
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	timerID := "tid1"
 	timerTasks := s.addUserTimer(domainID, workflowExecution, timerID, tBuilder)
 	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
@@ -926,7 +926,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers_SameExpiry() {
 	condition := state.ExecutionInfo.NextEventID
 
 	// load any timers.
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now().Add(-1 * time.Second)})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now().Add(-1 * time.Second)})
 	timerTasks := []persistence.Task{}
 
 	// create two user timers.
@@ -973,7 +973,7 @@ func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 	p := s.engineImpl.timerProcessor.(*timerQueueProcessorImpl)
 	p.Start()
 
-	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 
 	// Start of one of each timers each
 	s.addDecisionTimer(domainID, workflowExecution, tBuilder)

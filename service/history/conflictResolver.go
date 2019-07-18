@@ -23,6 +23,7 @@ package history
 import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -119,6 +120,9 @@ func (r *conflictResolverImpl) reset(
 				r.shard.GetEventsCache(),
 				r.logger,
 				firstEvent.GetVersion(),
+				// if can see replication task, meaning that domain is
+				// global domain with > 1 target clusters
+				cache.ReplicationPolicyMultiCluster,
 			)
 
 			resetMutableStateBuilder.executionInfo.EventStoreVersion = eventStoreVersion

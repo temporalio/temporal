@@ -40,6 +40,18 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
+// ReplicationPolicy is the domain's replication policy,
+// derived from domain's replication config
+type ReplicationPolicy int
+
+const (
+	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
+	// applicable to local domain & global domain with one cluster
+	ReplicationPolicyOneCluster ReplicationPolicy = 0
+	// ReplicationPolicyMultiCluster indicate that workflows need to be replicated
+	ReplicationPolicyMultiCluster ReplicationPolicy = 1
+)
+
 const (
 	domainCacheInitialSize = 10 * 1024
 	domainCacheMaxSize     = 64 * 1024
@@ -685,11 +697,14 @@ func (entry *DomainCacheEntry) IsDomainActive() bool {
 	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName
 }
 
-// CanReplicateEvent return whether the workflows within this domain should be replicated
-func (entry *DomainCacheEntry) CanReplicateEvent() bool {
+// GetReplicationPolicy return the derived workflow replication policy
+func (entry *DomainCacheEntry) GetReplicationPolicy() ReplicationPolicy {
 	// frontend guarantee that the clusters always contains the active domain, so if the # of clusters is 1
 	// then we do not need to send out any events for replication
-	return entry.isGlobalDomain && len(entry.replicationConfig.Clusters) > 1
+	if entry.isGlobalDomain && len(entry.replicationConfig.Clusters) > 1 {
+		return ReplicationPolicyMultiCluster
+	}
+	return ReplicationPolicyOneCluster
 }
 
 // GetDomainNotActiveErr return err if domain is not active, nil otherwise

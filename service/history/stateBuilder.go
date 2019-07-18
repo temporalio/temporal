@@ -510,11 +510,16 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 			newRunStartedEvent := newRunHistory[0]
 			// Create mutable state updates for the new run
+			domainEntry, err := b.domainCache.GetDomainByID(domainID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 			newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
 				b.shard,
 				b.shard.GetEventsCache(),
 				b.logger,
 				newRunStartedEvent.GetVersion(),
+				domainEntry.GetReplicationPolicy(),
 			)
 			newRunStateBuilder := newStateBuilder(b.shard, newRunMutableStateBuilder, b.logger)
 
@@ -693,7 +698,7 @@ func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBui
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)
 
-	return newTimerBuilder(b.shard.GetConfig(), b.logger, timeSource)
+	return newTimerBuilder(b.logger, timeSource)
 }
 
 func (b *stateBuilderImpl) appendTasksForFinishedExecutions(event *shared.HistoryEvent, domainID, workflowID string) error {

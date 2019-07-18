@@ -24,6 +24,17 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
+type transactionPolicy int
+
+const (
+	transactionPolicyActive  transactionPolicy = 0
+	transactionPolicyPassive transactionPolicy = 1
+)
+
+func (policy transactionPolicy) ptr() *transactionPolicy {
+	return &policy
+}
+
 // NOTE: do not use make(type, len(input))
 // since this will assume initial length being len(inputs)
 // always use make(type, 0, len(input))

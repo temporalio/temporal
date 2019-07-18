@@ -1252,22 +1252,17 @@ Update_History_Loop:
 
 		if createDecisionTask {
 			// Create a transfer task to schedule a decision task
-			var err error
-			transferTasks, timerTasks, err = context.scheduleNewDecision(transferTasks, timerTasks)
+			err := scheduleDecision(msBuilder, t.shard.GetTimeSource(), t.logger)
 			if err != nil {
 				return err
 			}
 		}
 
-		// Generate a transaction ID for appending events to history
-		transactionID, err2 := t.shard.GetNextTransferTaskID()
-		if err2 != nil {
-			return err2
-		}
-
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateAsActive(transferTasks, timerTasks, transactionID); err != nil {
+		msBuilder.AddTransferTasks(transferTasks...)
+		msBuilder.AddTimerTasks(timerTasks...)
+		if err := context.updateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now()); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}

@@ -1122,29 +1122,6 @@ func (_m *mockMutableState) ClearStickyness() {
 	_m.Called()
 }
 
-// CloseUpdateSession provides a mock function with given fields:
-func (_m *mockMutableState) CloseUpdateSession() (*mutableStateSessionUpdates, error) {
-	ret := _m.Called()
-
-	var r0 *mutableStateSessionUpdates
-	if rf, ok := ret.Get(0).(func() *mutableStateSessionUpdates); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*mutableStateSessionUpdates)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // CopyToPersistence provides a mock function with given fields:
 func (_m *mockMutableState) CopyToPersistence() *persistence.WorkflowMutableState {
 	ret := _m.Called()
@@ -1465,22 +1442,6 @@ func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, bool) {
 	}
 
 	return r0, r1
-}
-
-// GetContinueAsNew provides a mock function with given fields:
-func (_m *mockMutableState) GetContinueAsNew() *persistence.WorkflowSnapshot {
-	ret := _m.Called()
-
-	var r0 *persistence.WorkflowSnapshot
-	if rf, ok := ret.Get(0).(func() *persistence.WorkflowSnapshot); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.WorkflowSnapshot)
-		}
-	}
-
-	return r0
 }
 
 // GetCronBackoffDuration provides a mock function with given fields:
@@ -2730,6 +2691,11 @@ func (_m *mockMutableState) UpdateDecision(_a0 *decisionInfo) {
 	_m.Called(_a0)
 }
 
+// UpdateReplicationPolicy provides a mock function with given fields: _a0
+func (_m *mockMutableState) UpdateReplicationPolicy(_a0 cache.ReplicationPolicy) {
+	_m.Called(_a0)
+}
+
 // UpdateReplicationStateLastEventID provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) UpdateReplicationStateLastEventID(_a0 int64, _a1 int64) {
 	_m.Called(_a0, _a1)
@@ -2745,23 +2711,55 @@ func (_m *mockMutableState) UpdateUserTimer(_a0 string, _a1 *persistence.TimerIn
 	_m.Called(_a0, _a1)
 }
 
-// UpdateUserTimer provides a mock function with given fields: _a0
+// AddTransferTasks provides a mock function with given fields: _a0
 func (_m *mockMutableState) AddTransferTasks(_a0 ...persistence.Task) {
 	_m.Called(_a0)
 }
 
-// UpdateUserTimer provides a mock function with given fields: _a0
+// GetTransferTasks provides a mock function with given fields:
+func (_m *mockMutableState) GetTransferTasks() []persistence.Task {
+	ret := _m.Called()
+
+	var r0 []persistence.Task
+	if rf, ok := ret.Get(0).(func() []persistence.Task); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]persistence.Task)
+		}
+	}
+
+	return r0
+}
+
+// AddTimerTasks provides a mock function with given fields: _a0
 func (_m *mockMutableState) AddTimerTasks(_a0 ...persistence.Task) {
 	_m.Called(_a0)
 }
 
-// UpdateUserTimer provides a mock function with given fields: _a0
-func (_m *mockMutableState) CloseTransactionAsMutation(_a0 time.Time) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
-	ret := _m.Called(_a0)
+// GetTimerTasks provides a mock function with given fields:
+func (_m *mockMutableState) GetTimerTasks() []persistence.Task {
+	ret := _m.Called()
+
+	var r0 []persistence.Task
+	if rf, ok := ret.Get(0).(func() []persistence.Task); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]persistence.Task)
+		}
+	}
+
+	return r0
+}
+
+// CloseTransactionAsMutation provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) CloseTransactionAsMutation(_a0 time.Time, _a1 transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+	ret := _m.Called(_a0, _a1)
 
 	var r0 *persistence.WorkflowMutation
-	if rf, ok := ret.Get(0).(func(_a0 time.Time) *persistence.WorkflowMutation); ok {
-		r0 = rf(_a0)
+	if rf, ok := ret.Get(0).(func(time.Time, transactionPolicy) *persistence.WorkflowMutation); ok {
+		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.WorkflowMutation)
@@ -2769,8 +2767,8 @@ func (_m *mockMutableState) CloseTransactionAsMutation(_a0 time.Time) (*persiste
 	}
 
 	var r1 []*persistence.WorkflowEvents
-	if rf, ok := ret.Get(1).(func(_a0 time.Time) []*persistence.WorkflowEvents); ok {
-		r1 = rf(_a0)
+	if rf, ok := ret.Get(1).(func(time.Time, transactionPolicy) []*persistence.WorkflowEvents); ok {
+		r1 = rf(_a0, _a1)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).([]*persistence.WorkflowEvents)
@@ -2778,8 +2776,8 @@ func (_m *mockMutableState) CloseTransactionAsMutation(_a0 time.Time) (*persiste
 	}
 
 	var r2 error
-	if rf, ok := ret.Get(2).(func(_a0 time.Time) error); ok {
-		r2 = rf(_a0)
+	if rf, ok := ret.Get(2).(func(time.Time, transactionPolicy) error); ok {
+		r2 = rf(_a0, _a1)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -2787,13 +2785,13 @@ func (_m *mockMutableState) CloseTransactionAsMutation(_a0 time.Time) (*persiste
 	return r0, r1, r2
 }
 
-// UpdateUserTimer provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) CloseTransactionAsSnapshot(_a0 time.Time) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
-	ret := _m.Called(_a0)
+// CloseTransactionAsSnapshot provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) CloseTransactionAsSnapshot(_a0 time.Time, _a1 transactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
+	ret := _m.Called(_a0, _a1)
 
 	var r0 *persistence.WorkflowSnapshot
-	if rf, ok := ret.Get(0).(func(_a0 time.Time) *persistence.WorkflowSnapshot); ok {
-		r0 = rf(_a0)
+	if rf, ok := ret.Get(0).(func(time.Time, transactionPolicy) *persistence.WorkflowSnapshot); ok {
+		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.WorkflowSnapshot)
@@ -2801,8 +2799,8 @@ func (_m *mockMutableState) CloseTransactionAsSnapshot(_a0 time.Time) (*persiste
 	}
 
 	var r1 []*persistence.WorkflowEvents
-	if rf, ok := ret.Get(1).(func(_a0 time.Time) []*persistence.WorkflowEvents); ok {
-		r1 = rf(_a0)
+	if rf, ok := ret.Get(1).(func(time.Time, transactionPolicy) []*persistence.WorkflowEvents); ok {
+		r1 = rf(_a0, _a1)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).([]*persistence.WorkflowEvents)
@@ -2810,8 +2808,8 @@ func (_m *mockMutableState) CloseTransactionAsSnapshot(_a0 time.Time) (*persiste
 	}
 
 	var r2 error
-	if rf, ok := ret.Get(2).(func(_a0 time.Time) error); ok {
-		r2 = rf(_a0)
+	if rf, ok := ret.Get(2).(func(time.Time, transactionPolicy) error); ok {
+		r2 = rf(_a0, _a1)
 	} else {
 		r2 = ret.Error(2)
 	}

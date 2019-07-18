@@ -222,11 +222,6 @@ func (s *queueProcessorSuite) TestHandleTaskError_CurrentWorkflowConditionFailed
 	s.Nil(s.queueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
 }
 
-func (s *queueProcessorSuite) TestHandleTaskError_LimitExceededError() {
-	err := &workflow.LimitExceededError{}
-	s.Equal(err, s.queueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
-}
-
 func (s *queueProcessorSuite) TestHandleTaskError_RandomErr() {
 	err := errors.New("random error")
 	s.Equal(err, s.queueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))

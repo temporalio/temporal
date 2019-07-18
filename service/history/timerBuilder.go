@@ -69,7 +69,6 @@ type (
 		activityTimers         timers
 		pendingActivityTimers  map[int64]*persistence.ActivityInfo
 		isLoadedActivityTimers bool
-		config                 *Config
 		logger                 log.Logger
 		localSeqNumGen         SequenceNumberGenerator // This one used to order in-memory list.
 		timeSource             clock.TimeSource
@@ -120,13 +119,12 @@ func (l *localSeqNumGenerator) NextSeq() int64 {
 }
 
 // newTimerBuilder creates a timer builder.
-func newTimerBuilder(config *Config, logger log.Logger, timeSource clock.TimeSource) *timerBuilder {
+func newTimerBuilder(logger log.Logger, timeSource clock.TimeSource) *timerBuilder {
 	return &timerBuilder{
 		userTimers:            timers{},
 		pendingUserTimers:     make(map[string]*persistence.TimerInfo),
 		activityTimers:        timers{},
 		pendingActivityTimers: make(map[int64]*persistence.ActivityInfo),
-		config:                config,
 		logger:                logger.WithTags(tag.ComponentTimerBuilder),
 		localSeqNumGen:        &localSeqNumGenerator{counter: 1},
 		timeSource:            timeSource,

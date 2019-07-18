@@ -122,8 +122,6 @@ var (
 	ErrSignalOverSize = &workflow.BadRequestError{Message: "Signal input size is over 256K."}
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
 	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "Cancellation already requested for this workflow execution."}
-	// ErrBufferedEventsLimitExceeded is the error indicating limit reached for maximum number of buffered events
-	ErrBufferedEventsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for buffered events"}
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for signal events"}
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
@@ -325,6 +323,7 @@ func (e *historyEngineImpl) createMutableState(
 			e.shard.GetEventsCache(),
 			e.logger,
 			domainEntry.GetFailoverVersion(),
+			domainEntry.GetReplicationPolicy(),
 		)
 	} else {
 		msBuilder = newMutableStateBuilder(
@@ -452,7 +451,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	msBuilder.AddTimerTasks(timerTasks...)
 
 	now := e.timeSource.Now()
-	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(now)
+	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyActive,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1450,16 +1452,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 				}
 			}
-			// Generate a transaction ID for appending events to history
-			var transactionID int64
-			transactionID, err = e.shard.GetNextTransferTaskID()
-			if err != nil {
-				return nil, err
-			}
 
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 			// the history and try the operation again.
-			if err := context.updateAsActive(transferTasks, timerTasks, transactionID); err != nil {
+			msBuilder.AddTransferTasks(transferTasks...)
+			msBuilder.AddTimerTasks(timerTasks...)
+			if err := context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now()); err != nil {
 				if err == ErrConflict {
 					continue Just_Signal_Loop
 				}
@@ -1566,7 +1564,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	msBuilder.AddTimerTasks(timerTasks...)
 
 	now := e.timeSource.Now()
-	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(now)
+	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyActive,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1951,15 +1952,11 @@ Update_History_Loop:
 			}
 		}
 
-		// Generate a transaction ID for appending events to history
-		transactionID, err2 := e.shard.GetNextTransferTaskID()
-		if err2 != nil {
-			return err2
-		}
-
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateAsActive(transferTasks, timerTasks, transactionID); err != nil {
+		msBuilder.AddTransferTasks(transferTasks...)
+		msBuilder.AddTimerTasks(timerTasks...)
+		if err := context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now()); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
@@ -2093,7 +2090,7 @@ func (e *historyEngineImpl) getTimerBuilder(
 ) *timerBuilder {
 
 	log := e.logger.WithTags(tag.WorkflowID(we.GetWorkflowId()), tag.WorkflowRunID(we.GetRunId()))
-	return newTimerBuilder(e.shard.GetConfig(), log, clock.NewRealTimeSource())
+	return newTimerBuilder(log, clock.NewRealTimeSource())
 }
 
 func (s *shardContextWrapper) UpdateWorkflowExecution(

@@ -291,7 +291,6 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 		// need to clear the activity heartbeat timer task marks
 		doUpdate := false
 		lastWriteVersion := msBuilder.GetLastWriteVersion()
-		sourceCluster := t.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 		isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
 		if activityInfo, pending := msBuilder.GetActivityInfo(timerTask.EventID); isHeartBeatTask && pending {
 			doUpdate = true
@@ -310,17 +309,14 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 			return nil
 		}
 
-		// code below does the update of activity and possible generation of a new activity timer task
-		transactionID, err := t.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
 		now := t.getStandbyClusterTime()
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
 		msBuilder.UpdateReplicationStateVersion(lastWriteVersion, true)
-		err = context.updateAsPassive(nil, newTimerTasks, transactionID, now, false, nil, sourceCluster)
+
+		msBuilder.AddTimerTasks(newTimerTasks...)
+		err := context.updateWorkflowExecutionAsPassive(now)
 		if err == nil {
 			t.notifyNewTimers(newTimerTasks)
 		}
@@ -464,7 +460,7 @@ func (t *timerQueueStandbyProcessorImpl) getTimerBuilder() *timerBuilder {
 	timeSource := clock.NewEventTimeSource()
 	now := t.getStandbyClusterTime()
 	timeSource.Update(now)
-	return newTimerBuilder(t.shard.GetConfig(), t.logger, timeSource)
+	return newTimerBuilder(t.logger, timeSource)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.TimerTaskInfo,

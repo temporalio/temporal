@@ -757,7 +757,7 @@ Update_History_Loop:
 		if t.config.EnableEventsV2(domainEntry.GetInfo().Name) {
 			eventStoreVersion = persistence.EventStoreVersionV2
 		}
-		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(msBuilder.GetNextEventID(), common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion)
+		_, newMutableState, err := msBuilder.AddContinueAsNewEvent(msBuilder.GetNextEventID(), common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion)
 		if err != nil {
 			return err
 		}
@@ -776,16 +776,26 @@ Update_History_Loop:
 		transferTasks = append(transferTasks, tranT)
 		timerTasks = append(timerTasks, timerT)
 
-		// Generate a transaction ID for appending events to history
-		transactionID, err3 := t.shard.GetNextTransferTaskID()
-		if err3 != nil {
-			return err3
-		}
+		timersToNotify := append(timerTasks, newMutableState.GetTimerTasks()...)
 
-		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
+		msBuilder.AddTransferTasks(transferTasks...)
+		msBuilder.AddTimerTasks(timerTasks...)
 
-		err = context.updateAsActiveWithNew(transferTasks, timerTasks, transactionID, continueAsNewBuilder)
-
+		newExecutionInfo := newMutableState.GetExecutionInfo()
+		err = context.updateWorkflowExecutionWithNewAsActive(
+			t.shard.GetTimeSource().Now(),
+			newWorkflowExecutionContext(
+				newExecutionInfo.DomainID,
+				workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr(newExecutionInfo.WorkflowID),
+					RunId:      common.StringPtr(newExecutionInfo.RunID),
+				},
+				t.shard,
+				t.shard.GetExecutionManager(),
+				t.logger,
+			),
+			newMutableState,
+		)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -806,11 +816,10 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	timerTasks []persistence.Task,
 ) error {
 	executionInfo := msBuilder.GetExecutionInfo()
-	var transferTasks []persistence.Task
 	var err error
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		transferTasks, timerTasks, err = context.scheduleNewDecision(transferTasks, timerTasks)
+		err = scheduleDecision(msBuilder, t.shard.GetTimeSource(), t.logger)
 		if err != nil {
 			return err
 		}
@@ -818,24 +827,20 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 
 	if createDeletionTask {
 		tBuilder := t.historyService.getTimerBuilder(context.getExecution())
-		tranT, timerT, err := t.historyService.getWorkflowHistoryCleanupTasks(
+		transferTask, timerTask, err := t.historyService.getWorkflowHistoryCleanupTasks(
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			tBuilder)
 		if err != nil {
 			return err
 		}
-		transferTasks = append(transferTasks, tranT)
-		timerTasks = append(timerTasks, timerT)
+		msBuilder.AddTransferTasks(transferTask)
+		msBuilder.AddTimerTasks(timerTask)
 	}
+	msBuilder.AddTimerTasks(timerTasks...)
 
-	// Generate a transaction ID for appending events to history
-	transactionID, err1 := t.historyService.shard.GetNextTransferTaskID()
-	if err1 != nil {
-		return err1
-	}
-
-	err = context.updateAsActive(transferTasks, timerTasks, transactionID)
+	now := t.shard.GetTimeSource().Now()
+	err = context.updateWorkflowExecutionAsActive(now)
 	if err != nil {
 		if isShardOwnershiptLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates

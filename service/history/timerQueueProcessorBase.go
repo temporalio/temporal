@@ -515,12 +515,6 @@ func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time
 		return nil
 	}
 
-	if _, ok := err.(*workflow.LimitExceededError); ok {
-		t.metricsClient.IncCounter(scope, metrics.TaskLimitExceededCounter)
-		logger.Error("Task encounter limit exceeded error.", tag.Error(err), tag.LifeCycleProcessingFailed)
-		return err
-	}
-
 	logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
 }
@@ -541,13 +535,15 @@ func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, s
 
 func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo) log.Logger {
 	logger := t.logger.WithTags(
+		tag.ShardID(t.shard.GetShardID()),
+		tag.WorkflowDomainID(task.DomainID),
 		tag.WorkflowID(task.WorkflowID),
 		tag.WorkflowRunID(task.RunID),
-		tag.WorkflowDomainID(task.DomainID),
-		tag.ShardID(t.shard.GetShardID()),
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()))
+		tag.TaskType(task.GetTaskType()),
+		tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+	)
 	logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
 	return logger
 }

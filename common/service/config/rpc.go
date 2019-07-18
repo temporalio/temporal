@@ -71,7 +71,7 @@ func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
 func (d *RPCFactory) CreateDispatcherForOutbound(
 	callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	// Setup dispatcher(outbound) for onebox
-	d.logger.Info("Created RPC dispatcher outbound for service '%v' for host '%v'", tag.Service(d.serviceName), tag.Address(hostName))
+	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.Address(hostName))
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{
 		Name: callerName,
 		Outbounds: yarpc.Outbounds{
