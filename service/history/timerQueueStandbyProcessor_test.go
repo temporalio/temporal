@@ -671,6 +671,32 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 	s.Equal(ErrTaskDiscarded, err)
 }
 
+func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_ScheduleToStartTimer() {
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+
+	version := int64(4096)
+	decisionScheduleID := int64(16384)
+
+	timerTask := &persistence.TimerTaskInfo{
+		Version:             version,
+		DomainID:            s.domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeDecisionTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeScheduleToStart),
+		VisibilityTimestamp: time.Now(),
+		EventID:             decisionScheduleID,
+	}
+
+	_, err := s.timerQueueStandbyProcessor.process(timerTask, true)
+	s.Equal(nil, err)
+}
+
 func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Success() {
 
 	execution := workflow.WorkflowExecution{

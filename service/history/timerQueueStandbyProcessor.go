@@ -330,6 +330,13 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 
 func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persistence.TimerTaskInfo, lastAttempt bool) error {
 
+	// decision schedule to start timer task is a special snowflake.
+	// the schedule to start timer is for sticky decision, which is
+	// not applicable on the passive cluster
+	if timerTask.TimeoutType == int(workflow.TimeoutTypeScheduleToStart) {
+		return nil
+	}
+
 	var nextEventID *int64
 	postProcessingFn := func() error {
 		return t.fetchHistoryAndVerifyOnce(timerTask, nextEventID, t.processDecisionTimeout)
