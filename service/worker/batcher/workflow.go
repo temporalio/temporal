@@ -38,19 +38,21 @@ import (
 )
 
 const (
-	batcherContextKey   = "batcherContext"
-	batcherTaskListName = "cadence-sys-batcher-tasklist"
-	batchWFTypeName     = "cadence-sys-batch-workflow"
-	batchActivityName   = "cadence-sys-batch-activity"
-
-	infiniteDuration = 20 * 365 * 24 * time.Hour
+	batcherContextKey = "batcherContext"
+	// BatcherTaskListName is the tasklist name
+	BatcherTaskListName = "cadence-sys-batcher-tasklist"
+	// BatchWFTypeName is the workflow type
+	BatchWFTypeName   = "cadence-sys-batch-workflow"
+	batchActivityName = "cadence-sys-batch-activity"
+	// InfiniteDuration is a long duration(20 yrs) we used for infinite workflow running
+	InfiniteDuration = 20 * 365 * 24 * time.Hour
 	pageSize         = 1000
 
 	// below are default values for BatchParams
-	defaultRPS                      = 50
-	defaultConcurrency              = 5
-	defaultAttemptsOnRetryableError = 50
-	defaultActivityHeartBeatTimeout = time.Minute
+	DefaultRPS                      = 50
+	DefaultConcurrency              = 5
+	DefaultAttemptsOnRetryableError = 50
+	DefaultActivityHeartBeatTimeout = time.Second * 10
 )
 
 const (
@@ -61,6 +63,9 @@ const (
 	// BatchTypeSignal is batch type for signaling workflows
 	BatchTypeSignal = "signal"
 )
+
+// AllBatchTypes is the batch types we supported
+var AllBatchTypes = []string{BatchTypeTerminate, BatchTypeCancel, BatchTypeSignal}
 
 type (
 	// TerminateParams is the parameters for terminating workflow
@@ -103,7 +108,7 @@ type (
 		CancelParams CancelParams
 		// SignalParams is params only for BatchTypeSignal
 		SignalParams SignalParams
-		// RPS of processing. Default to defaultRPS
+		// RPS of processing. Default to DefaultRPS
 		// TODO we will implement smarter way than this static rate limiter: https://github.com/uber/cadence/issues/2138
 		RPS int
 		// Number of goroutines running in parallel to process
@@ -143,18 +148,18 @@ var (
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,
 		MaximumInterval:    5 * time.Minute,
-		ExpirationInterval: infiniteDuration,
+		ExpirationInterval: InfiniteDuration,
 	}
 
 	batchActivityOptions = workflow.ActivityOptions{
 		ScheduleToStartTimeout: 5 * time.Minute,
-		StartToCloseTimeout:    infiniteDuration,
+		StartToCloseTimeout:    InfiniteDuration,
 		RetryPolicy:            &batchActivityRetryPolicy,
 	}
 )
 
 func init() {
-	workflow.RegisterWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: batchWFTypeName})
+	workflow.RegisterWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	activity.RegisterWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 }
 
@@ -196,16 +201,16 @@ func validateParams(params BatchParams) error {
 
 func setDefaultParams(params BatchParams) BatchParams {
 	if params.RPS <= 0 {
-		params.RPS = defaultRPS
+		params.RPS = DefaultRPS
 	}
 	if params.Concurrency <= 0 {
-		params.Concurrency = defaultConcurrency
+		params.Concurrency = DefaultConcurrency
 	}
 	if params.AttemptsOnRetryableError <= 0 {
-		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
+		params.AttemptsOnRetryableError = DefaultAttemptsOnRetryableError
 	}
 	if params.ActivityHeartBeatTimeout <= 0 {
-		params.ActivityHeartBeatTimeout = defaultActivityHeartBeatTimeout
+		params.ActivityHeartBeatTimeout = DefaultActivityHeartBeatTimeout
 	}
 	if len(params.NonRetryableErrors) > 0 {
 		params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))

@@ -23,6 +23,7 @@ package cli
 import (
 	"strings"
 
+	"github.com/uber/cadence/service/worker/batcher"
 	"github.com/urfave/cli"
 )
 
@@ -287,6 +288,11 @@ func newWorkflowCommands() []cli.Command {
 				ResetInBatch(c)
 			},
 		},
+		{
+			Name:        "batch",
+			Usage:       "batch operation on a list of workflows from query.",
+			Subcommands: newBatchCommands(),
+		},
 	}
 }
 
@@ -353,6 +359,96 @@ func newActivityCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				FailActivity(c)
+			},
+		},
+	}
+}
+
+func newBatchCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "describe",
+			Aliases: []string{"desc"},
+			Usage:   "Describe a batch operation job",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagJobIDWithAlias,
+					Usage: "Batch Job ID",
+				},
+			},
+			Action: func(c *cli.Context) {
+				DescribeBatchJob(c)
+			},
+		},
+		{
+			Name:  "terminate",
+			Usage: "terminate a batch operation job",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagJobIDWithAlias,
+					Usage: "Batch Job ID",
+				},
+				cli.StringFlag{
+					Name:  FlagReasonWithAlias,
+					Usage: "Reason to stop this batch job",
+				},
+			},
+			Action: func(c *cli.Context) {
+				TerminateBatchJob(c)
+			},
+		},
+		{
+			Name:    "list",
+			Aliases: []string{"l"},
+			Usage:   "Describe a batch operation job",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagPageSizeWithAlias,
+					Value: 30,
+					Usage: "Result page size",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ListBatchJobs(c)
+			},
+		},
+		{
+			Name:  "start",
+			Usage: "Start a batch operation job",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagListQueryWithAlias,
+					Usage: "Query to get workflows for being executed this batch operation",
+				},
+				cli.StringFlag{
+					Name:  FlagReasonWithAlias,
+					Usage: "Reason to run this batch job",
+				},
+				cli.StringFlag{
+					Name:  FlagBatchTypeWithAlias,
+					Usage: "Types supported: " + strings.Join(batcher.AllBatchTypes, ","),
+				},
+				//below are optional
+				cli.StringFlag{
+					Name:  FlagSignalNameWithAlias,
+					Usage: "Required for batch signal",
+				},
+				cli.StringFlag{
+					Name:  FlagInputWithAlias,
+					Usage: "Optional input of signal",
+				},
+				cli.IntFlag{
+					Name:  FlagRPS,
+					Value: batcher.DefaultRPS,
+					Usage: "RPS of processing",
+				},
+				cli.BoolFlag{
+					Name:  FlagYes,
+					Usage: "Optional flag to disable confirmation prompt",
+				},
+			},
+			Action: func(c *cli.Context) {
+				StartBatchJob(c)
 			},
 		},
 	}

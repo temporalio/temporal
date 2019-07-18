@@ -176,6 +176,14 @@ const (
 	FlagResetBadBinaryChecksum            = "reset_bad_binary_checksum"
 	FlagListQuery                         = "query"
 	FlagListQueryWithAlias                = FlagListQuery + ", q"
+	FlagBatchType                         = "batch_type"
+	FlagBatchTypeWithAlias                = FlagBatchType + ", bt"
+	FlagSignalName                        = "signal_name"
+	FlagSignalNameWithAlias               = FlagSignalName + ", sig"
+	FlagRPS                               = "rps"
+	FlagJobID                             = "job_id"
+	FlagJobIDWithAlias                    = FlagJobID + ", jid"
+	FlagYes                               = "yes"
 )
 
 var flagsForExecution = []cli.Flag{
