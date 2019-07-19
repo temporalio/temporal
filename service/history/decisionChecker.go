@@ -22,6 +22,7 @@ package history
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -30,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -41,14 +43,26 @@ type (
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
 
-	decisionBlobSizeChecker struct {
-		sizeLimitWarn  int
-		sizeLimitError int
+	workflowSizeChecker struct {
+		blobSizeLimitWarn  int
+		blobSizeLimitError int
+
+		historySizeLimitWarn  int
+		historySizeLimitError int
+
+		historyCountLimitWarn  int
+		historyCountLimitError int
+
 		completedID    int64
 		mutableState   mutableState
+		executionStats *persistence.ExecutionStats
 		metricsClient  metrics.Client
 		logger         log.Logger
 	}
+)
+
+const (
+	reservedTaskListPrefix = "/__cadence_sys/"
 )
 
 func newDecisionAttrValidator(
@@ -59,33 +73,45 @@ func newDecisionAttrValidator(
 	return &decisionAttrValidator{
 		domainCache:      domainCache,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
-		searchAttributesValidator: validator.NewSearchAttributesValidator(logger,
+		searchAttributesValidator: validator.NewSearchAttributesValidator(
+			logger,
 			config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit),
+			config.SearchAttributesTotalSizeLimit,
+		),
 	}
 }
 
-func newDecisionBlobSizeChecker(
-	sizeLimitWarn int,
-	sizeLimitError int,
+func newWorkflowSizeChecker(
+	blobSizeLimitWarn int,
+	blobSizeLimitError int,
+	historySizeLimitWarn int,
+	historySizeLimitError int,
+	historyCountLimitWarn int,
+	historyCountLimitError int,
 	completedID int64,
 	mutableState mutableState,
+	executionStats *persistence.ExecutionStats,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) *decisionBlobSizeChecker {
-	return &decisionBlobSizeChecker{
-		sizeLimitWarn:  sizeLimitWarn,
-		sizeLimitError: sizeLimitError,
-		completedID:    completedID,
-		mutableState:   mutableState,
-		metricsClient:  metricsClient,
-		logger:         logger,
+) *workflowSizeChecker {
+	return &workflowSizeChecker{
+		blobSizeLimitWarn:      blobSizeLimitWarn,
+		blobSizeLimitError:     blobSizeLimitError,
+		historySizeLimitWarn:   historySizeLimitWarn,
+		historySizeLimitError:  historySizeLimitError,
+		historyCountLimitWarn:  historyCountLimitWarn,
+		historyCountLimitError: historyCountLimitError,
+		completedID:            completedID,
+		mutableState:           mutableState,
+		executionStats:         executionStats,
+		metricsClient:          metricsClient,
+		logger:                 logger,
 	}
 }
 
-func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
+func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 	blob []byte,
 	message string,
 ) (bool, error) {
@@ -93,8 +119,8 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 	executionInfo := c.mutableState.GetExecutionInfo()
 	err := common.CheckEventBlobSizeLimit(
 		len(blob),
-		c.sizeLimitWarn,
-		c.sizeLimitError,
+		c.blobSizeLimitWarn,
+		c.blobSizeLimitError,
 		executionInfo.DomainID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
@@ -111,10 +137,48 @@ func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 	}
 
 	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
-		return false, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+		return false, err
 	}
 
 	return true, nil
+}
+
+func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
+	historyCount := int(c.mutableState.GetNextEventID()) - 1
+	historySize := int(c.executionStats.HistorySize)
+
+	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
+		executionInfo := c.mutableState.GetExecutionInfo()
+		c.logger.Warn("history size exceeds limit.",
+			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowID(executionInfo.WorkflowID),
+			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+
+		attributes := &workflow.FailWorkflowExecutionDecisionAttributes{
+			Reason:  common.StringPtr(common.FailureReasonSizeExceedsLimit),
+			Details: []byte("Workflow history size / count exceeds limit."),
+		}
+
+		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
+		executionInfo := c.mutableState.GetExecutionInfo()
+		c.logger.Warn("history size exceeds limit.",
+			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowID(executionInfo.WorkflowID),
+			tag.WorkflowRunID(executionInfo.RunID),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+		return false, nil
+	}
+
+	return false, nil
 }
 
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(
@@ -135,8 +199,9 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return &workflow.BadRequestError{Message: "ScheduleActivityTaskDecisionAttributes is not set on decision."}
 	}
 
-	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
-		return &workflow.BadRequestError{Message: "TaskList is not set on decision."}
+	defaultTaskListName := ""
+	if _, err := v.validatedTaskList(attributes.TaskList, defaultTaskListName); err != nil {
+		return err
 	}
 
 	if attributes.GetActivityId() == "" {
@@ -397,8 +462,10 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	return nil
 }
 
-func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(domainName string,
-	attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) error {
+func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
+	domainName string,
+	attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes,
+) error {
 
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision."}
@@ -429,16 +496,16 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		attributes.WorkflowType = &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)}
 	}
 
-	// Inherit Tasklist from previous execution if not provided on decision
-	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
-		attributes.TaskList = &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)}
-	}
-	if len(attributes.TaskList.GetName()) > v.maxIDLengthLimit {
-		return &workflow.BadRequestError{Message: "TaskList exceeds length limit."}
-	}
 	if len(attributes.WorkflowType.GetName()) > v.maxIDLengthLimit {
 		return &workflow.BadRequestError{Message: "WorkflowType exceeds length limit."}
 	}
+
+	// Inherit Tasklist from previous execution if not provided on decision
+	tl, err := v.validatedTaskList(attributes.TaskList, executionInfo.TaskList)
+	if err != nil {
+		return err
+	}
+	attributes.TaskList = tl
 
 	// Inherit workflow timeout from previous execution if not provided on decision
 	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
@@ -504,13 +571,11 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	// Inherit tasklist from parent workflow execution if not provided on decision
-	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
-		attributes.TaskList = &workflow.TaskList{Name: common.StringPtr(parentInfo.TaskList)}
+	tl, err := v.validatedTaskList(attributes.TaskList, parentInfo.TaskList)
+	if err != nil {
+		return err
 	}
-
-	if len(attributes.TaskList.GetName()) > v.maxIDLengthLimit {
-		return &workflow.BadRequestError{Message: "TaskList exceeds length limit."}
-	}
+	attributes.TaskList = tl
 
 	// Inherit workflow timeout from parent workflow execution if not provided on decision
 	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
@@ -523,6 +588,39 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	return nil
+}
+
+func (v *decisionAttrValidator) validatedTaskList(
+	tl *workflow.TaskList,
+	defaultVal string,
+) (*workflow.TaskList, error) {
+
+	if tl == nil {
+		tl = &workflow.TaskList{}
+	}
+
+	if tl.GetName() == "" {
+		if defaultVal == "" {
+			return tl, &workflow.BadRequestError{"missing task list name"}
+		}
+		tl.Name = &defaultVal
+		return tl, nil
+	}
+
+	name := tl.GetName()
+	if len(name) > v.maxIDLengthLimit {
+		return tl, &workflow.BadRequestError{
+			Message: fmt.Sprintf("task list name exceeds length limit of %v", v.maxIDLengthLimit),
+		}
+	}
+
+	if strings.HasPrefix(name, reservedTaskListPrefix) {
+		return tl, &workflow.BadRequestError{
+			Message: fmt.Sprintf("task list name cannot start with reserved prefix %v", reservedTaskListPrefix),
+		}
+	}
+
+	return tl, nil
 }
 
 func (v *decisionAttrValidator) validateCrossDomainCall(

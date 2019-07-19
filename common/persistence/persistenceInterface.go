@@ -61,7 +61,7 @@ type (
 		//The below three APIs are related to serialization/deserialization
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
-		ResetMutableState(request *InternalResetMutableStateRequest) error
+		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *InternalResetWorkflowExecutionRequest) error
 
 		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
@@ -188,7 +188,6 @@ type (
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
 		SignalCount                  int32
-		HistorySize                  int64
 		DecisionVersion              int64
 		DecisionScheduleID           int64
 		DecisionStartedID            int64
@@ -220,6 +219,9 @@ type (
 		CronSchedule      string
 		ExpirationSeconds int32
 		SearchAttributes  map[string][]byte
+
+		// attributes which are not related to mutable state at all
+		HistorySize int64
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
@@ -270,6 +272,8 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
+		LastFailureReason  string
+		LastWorkerIdentity string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibility int64
 	}
@@ -298,8 +302,8 @@ type (
 		NewWorkflowSnapshot *InternalWorkflowSnapshot
 	}
 
-	// InternalResetMutableStateRequest is used to reset workflow execution state for Persistence Interface
-	InternalResetMutableStateRequest struct {
+	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
+	InternalConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
 
 		// previous workflow information
@@ -585,11 +589,15 @@ type (
 	// InternalDomainConfig describes the domain configuration
 	InternalDomainConfig struct {
 		// NOTE: this retention is in days, not in seconds
-		Retention      int32
-		EmitMetric     bool
-		ArchivalBucket string
-		ArchivalStatus workflow.ArchivalStatus
-		BadBinaries    *DataBlob
+		Retention                int32
+		EmitMetric               bool
+		ArchivalBucket           string                  // deprecated
+		ArchivalStatus           workflow.ArchivalStatus // deprecated
+		HistoryArchivalStatus    workflow.ArchivalStatus
+		HistoryArchivalURI       string
+		VisibilityArchivalStatus workflow.ArchivalStatus
+		VisibilityArchivalURI    string
+		BadBinaries              *DataBlob
 	}
 
 	// InternalCreateDomainRequest is used to create the domain

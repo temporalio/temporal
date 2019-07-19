@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
@@ -148,11 +149,13 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 	version int64,
 ) (mutableState, stateBuilder) {
 	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
-		r.clusterMetadata.GetCurrentClusterName(),
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
 		version,
+		// if can see replication task, meaning that domain is
+		// global domain with > 1 target clusters
+		cache.ReplicationPolicyMultiCluster,
 	)
 	resetMutableStateBuilder.executionInfo.EventStoreVersion = nDCMutableStateEventStoreVersion
 	stateBuilder := newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)

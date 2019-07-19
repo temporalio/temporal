@@ -96,7 +96,7 @@ func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainC
 	}
 
 	domain := domainEntry.GetInfo().Name
-	taskListName := id.taskListName
+	taskListName := id.name
 	taskType := id.taskType
 	return &taskListConfig{
 		RangeSize: config.RangeSize,

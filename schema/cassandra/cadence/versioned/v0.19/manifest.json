@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.19",
+  "MinCompatibleVersion": "0.19",
+  "Description": "Added archival related domain config to enable archiver interface",
+  "SchemaUpdateCqlFiles": [
+    "archival_domain_config.cql"
+  ]
+}

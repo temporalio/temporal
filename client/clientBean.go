@@ -268,8 +268,6 @@ func (d *dnsUpdater) Start() {
 					d.logger.Error("Failed to update peerList", tag.Error(err), tag.Address(d.dnsAddress))
 				}
 				d.currentPeers = res.newPeers
-			} else {
-				d.logger.Debug("No change in DNS lookup", tag.Address(d.dnsAddress))
 			}
 			sleepDu := now.Add(d.interval).Sub(now)
 			time.Sleep(sleepDu)

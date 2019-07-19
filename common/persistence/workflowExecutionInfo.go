@@ -26,16 +26,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
-// SetHistorySize set the historySize
-func (e *WorkflowExecutionInfo) SetHistorySize(size int64) {
-	e.HistorySize = size
-}
-
-// IncreaseHistorySize increase historySize by delta
-func (e *WorkflowExecutionInfo) IncreaseHistorySize(delta int64) {
-	e.HistorySize += delta
-}
-
 // SetNextEventID sets the nextEventID
 func (e *WorkflowExecutionInfo) SetNextEventID(id int64) {
 	e.NextEventID = id

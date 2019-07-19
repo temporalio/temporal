@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/quotas"
 	"golang.org/x/time/rate"
 )
 
@@ -41,7 +42,7 @@ type TaskMatcher struct {
 	// not active in a cluster
 	queryTaskC chan *internalTask
 	// ratelimiter that limits the rate at which tasks can be dispatched to consumers
-	limiter *rateLimiter
+	limiter *quotas.RateLimiter
 	// domain metric scope
 	scope func() metrics.Scope
 }
@@ -58,7 +59,7 @@ var errTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
 // matches should use this implementation
 func newTaskMatcher(config *taskListConfig, scopeFunc func() metrics.Scope) *TaskMatcher {
 	dPtr := _defaultTaskDispatchRPS
-	limiter := newRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
+	limiter := quotas.NewRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
 	return &TaskMatcher{
 		limiter:    limiter,
 		scope:      scopeFunc,
@@ -82,7 +83,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	if task.isQuery() {
 		select {
 		case tm.queryTaskC <- task:
-			<-task.syncResponseCh
+			<-task.responseC
 			return true, nil
 		case <-ctx.Done():
 			return false, ctx.Err()
@@ -97,10 +98,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 
 	select {
 	case tm.taskC <- task: // poller picked up the task
-		if task.syncResponseCh != nil {
+		if task.responseC != nil {
 			// if there is a response channel, block until resp is received
 			// and return error if the response contains error
-			err = <-task.syncResponseCh
+			err = <-task.responseC
 			return true, err
 		}
 		return false, nil
@@ -135,7 +136,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask) error 
 func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
 	select {
 	case task := <-tm.taskC:
-		if task.syncResponseCh != nil {
+		if task.responseC != nil {
 			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
 		}
 		tm.scope().IncCounter(metrics.PollSuccessCounter)

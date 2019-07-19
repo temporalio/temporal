@@ -23,15 +23,16 @@ package history
 import (
 	ctx "context"
 	"testing"
-	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -104,6 +105,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		eventsCache:               s.mockEventsCache,
+		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
@@ -133,7 +135,6 @@ func (s *nDCBranchMgrSuite) TearDownTest() {
 }
 
 func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
-
 	baseBranchToken := []byte("some random base branch token")
 	baseBranchLCAEventVersion := int64(200)
 	baseBranchLCAEventID := int64(1394)
@@ -160,12 +161,8 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		RunID:      s.runID,
 	}).Once()
 
-	// TODO 3+DC eventually will deprecate the last write version, modify lines below accordingly
-	s.mockMutableState.On("GetLastWriteVersion").Return(baseBranchLastEventVersion)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", baseBranchLastEventVersion).Return(cluster.TestAlternativeClusterName)
-	s.mockContext.On("updateWorkflowExecutionForStandby",
-		[]persistence.Task(nil), []persistence.Task(nil), mock.Anything, time.Time{}, false, (*historyBuilder)(nil), cluster.TestAlternativeClusterName,
-	).Return(nil)
+	s.mockContext.On("updateWorkflowExecutionAsPassive", mock.Anything).Return(nil)
 
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
@@ -253,12 +250,8 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_NotAppendable() {
 		RunID:      s.runID,
 	}).Once()
 
-	// TODO 3+DC eventually will deprecate the last write version, modify lines below accordingly
-	s.mockMutableState.On("GetLastWriteVersion").Return(baseBranchLastEventVersion)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", baseBranchLastEventVersion).Return(cluster.TestAlternativeClusterName)
-	s.mockContext.On("updateWorkflowExecutionForStandby",
-		[]persistence.Task(nil), []persistence.Task(nil), mock.Anything, time.Time{}, false, (*historyBuilder)(nil), cluster.TestAlternativeClusterName,
-	).Return(nil)
+	s.mockContext.On("updateWorkflowExecutionAsPassive", mock.Anything).Return(nil)
 
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""

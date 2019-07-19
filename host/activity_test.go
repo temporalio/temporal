@@ -250,7 +250,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			time.Sleep(time.Second * 2)
 		} else if activityExecutedCount == 1 {
 			// return an error and retry
-			err = errors.New("retry")
+			err = errors.New("retryable-error")
 		}
 
 		activityExecutedCount++
@@ -305,6 +305,12 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(int32(3), pendingActivity.GetMaximumAttempts())
 			s.Equal(int32(i+1), pendingActivity.GetAttempt())
 			s.Equal(workflow.PendingActivityStateScheduled, pendingActivity.GetState())
+			if i == 0 {
+				s.Equal("cadenceInternal:Timeout HEARTBEAT", pendingActivity.GetLastFailureReason())
+			} else { // i == 1
+				s.Equal("retryable-error", pendingActivity.GetLastFailureReason())
+			}
+			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
 
 			scheduledTS := pendingActivity.ScheduledTimestamp
 			lastHeartbeatTS := pendingActivity.LastHeartbeatTimestamp
@@ -332,6 +338,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	wt := "integration-activity-retry-type"
 	tl := "integration-activity-retry-tasklist"
 	identity := "worker1"
+	identity2 := "worker2"
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
 
@@ -466,14 +473,53 @@ func (s *integrationSuite) TestActivityRetry() {
 		T:               s.T(),
 	}
 
+	poller2 := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	describeWorkflowExecution := func() (*workflow.DescribeWorkflowExecutionResponse, error) {
+		return s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      we.RunId,
+			},
+		})
+	}
+
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
-	err = poller.PollAndProcessActivityTask(false)
+	descResp, err := describeWorkflowExecution()
+	s.Nil(err)
+	for _, pendingActivity := range descResp.GetPendingActivities() {
+		if pendingActivity.GetActivityID() == "A" {
+			s.Equal("bad-luck-please-retry", pendingActivity.GetLastFailureReason())
+			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
+		}
+	}
+
+	err = poller2.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
+
+	descResp, err = describeWorkflowExecution()
+	s.Nil(err)
+	for _, pendingActivity := range descResp.GetPendingActivities() {
+		if pendingActivity.GetActivityID() == "A" {
+			s.Equal("bad-bug", pendingActivity.GetLastFailureReason())
+			s.Equal(identity2, pendingActivity.GetLastWorkerIdentity())
+		}
+	}
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(*we.RunId))
 	for i := 0; i < 3; i++ {

@@ -327,6 +327,20 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          12345,
 	}, nil).Once()
 
+	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+		&persistence.DomainInfo{ID: s.domainID},
+		&persistence.DomainConfig{},
+		&persistence.DomainReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []*persistence.ClusterReplicationConfig{
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
+			},
+		},
+		1234,
+		s.mockClusterMetadata,
+	), nil)
+
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	rebuildMutableState, err := s.nDCStateRebuilder.rebuild(ctx.Background(), requestID)
 	s.NoError(err)

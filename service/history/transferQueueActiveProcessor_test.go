@@ -51,9 +51,7 @@ type (
 	transferQueueActiveProcessorSuite struct {
 		suite.Suite
 
-		mockShardManager *mocks.ShardManager
-		logger           log.Logger
-
+		mockShardManager           *mocks.ShardManager
 		mockHistoryEngine          *historyEngineImpl
 		mockMetadataMgr            *mocks.MetadataManager
 		mockVisibilityMgr          *mocks.VisibilityManager
@@ -71,7 +69,10 @@ type (
 		mockTransferQueueProcessor *MockTransferQueueProcessor
 		mockTimerQueueProcessor    *MockTimerQueueProcessor
 		mockService                service.Service
+		logger                     log.Logger
 
+		domainID                     string
+		domainEntry                  *cache.DomainCacheEntry
 		version                      int64
 		transferQueueActiveProcessor *transferQueueActiveProcessorImpl
 	}
@@ -133,6 +134,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		shardManager:              s.mockShardManager,
 		historyMgr:                s.mockHistoryMgr,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
+		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
@@ -164,6 +166,9 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
 	s.transferQueueActiveProcessor.queueAckMgr = s.mockQueueAckMgr
 	s.transferQueueActiveProcessor.queueProcessorBase.ackMgr = s.mockQueueAckMgr
+
+	s.domainID = validDomainID
+	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
 }
 
 func (s *transferQueueActiveProcessorSuite) TearDownTest() {
@@ -182,7 +187,7 @@ func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
-	domainID := "some random domain ID"
+
 	targetDomainID := "some random target domain ID"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -191,12 +196,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -216,11 +221,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
 	activityID := "activity-1"
 	activityType := "some random activity type"
 	event, ai := addActivityTaskScheduledEvent(msBuilder, event.GetEventId(), activityID, activityType, taskListName, []byte{}, 1, 1, 1)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:        s.version,
-		DomainID:       domainID,
+		DomainID:       s.domainID,
 		TargetDomainID: targetDomainID,
 		WorkflowID:     execution.GetWorkflowId(),
 		RunID:          execution.GetRunId(),
@@ -239,7 +245,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Duplication() {
-	domainID := "some random domain ID"
+
 	targetDomainID := "some random target domain ID"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -248,12 +254,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Duplication(
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -276,7 +282,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Duplication(
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:        s.version,
-		DomainID:       domainID,
+		DomainID:       s.domainID,
 		TargetDomainID: targetDomainID,
 		WorkflowID:     execution.GetWorkflowId(),
 		RunID:          execution.GetRunId(),
@@ -289,7 +295,8 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Duplication(
 	event = addActivityTaskStartedEvent(msBuilder, event.GetEventId(), "")
 	ai.StartedID = event.GetEventId()
 	event = addActivityTaskCompletedEvent(msBuilder, ai.ScheduleID, ai.StartedID, nil, "")
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -299,7 +306,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Duplication(
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecision() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -307,12 +314,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecisio
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -325,11 +332,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecisio
 
 	taskID := int64(59)
 	di := addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, di.ScheduleID)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -347,7 +355,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecisio
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDecision() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -355,12 +363,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDeci
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -379,11 +387,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDeci
 	// make another round of decision
 	taskID := int64(59)
 	di = addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, di.ScheduleID)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -401,7 +410,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDeci
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFirstDecision() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -411,12 +420,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 	stickyTaskListName := "some random sticky task list"
 	stickyTaskListTimeout := int32(233)
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -439,11 +448,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 	// make another round of decision
 	taskID := int64(59)
 	di = addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, di.ScheduleID)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -461,7 +471,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotSticky_MutableStateSticky() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -471,12 +481,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotS
 	stickyTaskListName := "some random sticky task list"
 	stickyTaskListTimeout := int32(233)
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -499,11 +509,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotS
 	// make another round of decision
 	taskID := int64(59)
 	di = addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, di.ScheduleID)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -521,7 +532,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotS
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Duplication() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -529,12 +540,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Duplication(
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -550,11 +561,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Duplication(
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -571,7 +583,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Duplication(
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -587,12 +599,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent(
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -616,11 +628,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent(
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -645,7 +658,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent(
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -653,12 +666,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -676,11 +689,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -698,7 +712,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Success() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -712,12 +726,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Success()
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -738,7 +752,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Success()
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   targetDomainID,
@@ -763,7 +777,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Success()
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Failure() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -777,12 +791,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Failure()
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -800,11 +814,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Failure()
 
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(), targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   targetDomainID,
@@ -829,7 +844,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Failure()
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Duplication() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -843,12 +858,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Duplicati
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -869,7 +884,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Duplicati
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   targetDomainID,
@@ -882,7 +897,8 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Duplicati
 	}
 
 	event = addCancelRequestedEvent(msBuilder, event.GetEventId(), targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -892,7 +908,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Duplicati
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Success() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -909,12 +925,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Success()
 	signalInput := []byte("some random signal input")
 	signalControl := []byte("some random signal control")
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -933,11 +949,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Success()
 	taskID := int64(59)
 	event, si := addRequestSignalInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   targetDomainID,
@@ -970,7 +987,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Success()
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Failure() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -987,12 +1004,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Failure()
 	signalInput := []byte("some random signal input")
 	signalControl := []byte("some random signal control")
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1011,11 +1028,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Failure()
 	taskID := int64(59)
 	event, si := addRequestSignalInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   targetDomainID,
@@ -1040,7 +1058,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Failure()
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Duplication() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -1057,12 +1075,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Duplicati
 	signalInput := []byte("some random signal input")
 	signalControl := []byte("some random signal control")
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1084,7 +1102,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Duplicati
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   targetDomainID,
@@ -1097,7 +1115,8 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Duplicati
 	}
 
 	event = addSignaledEvent(msBuilder, event.GetEventId(), targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), nil)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -1107,7 +1126,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Duplicati
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Success() {
-	domainID := "some random domain ID"
+
 	domainName := "some random domain Name"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -1123,12 +1142,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 	childWorkflowType := "some random child workflow type"
 	childTaskListName := "some random child task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1147,11 +1166,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 	taskID := int64(59)
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		childDomainID, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   childDomainID,
@@ -1165,7 +1185,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(&persistence.GetDomainResponse{
 		Info:              &persistence.DomainInfo{Name: domainName},
 		Config:            &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
@@ -1204,7 +1224,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failure() {
-	domainID := "some random domain ID"
+
 	domainName := "some random domain Name"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -1219,12 +1239,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failu
 	childWorkflowType := "some random child workflow type"
 	childTaskListName := "some random child task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1243,11 +1263,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failu
 	taskID := int64(59)
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		childDomainID, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   childDomainID,
@@ -1261,7 +1282,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failu
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(&persistence.GetDomainResponse{
 		Info:              &persistence.DomainInfo{Name: domainName},
 		Config:            &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
@@ -1292,7 +1313,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failu
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Success_Dup() {
-	domainID := "some random domain ID"
+
 	domainName := "some random domain Name"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -1308,12 +1329,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 	childWorkflowType := "some random child workflow type"
 	childTaskListName := "some random child task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1335,7 +1356,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   childDomainID,
@@ -1349,11 +1370,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 
 	event = addChildWorkflowExecutionStartedEvent(msBuilder, event.GetEventId(), childDomainID, childWorkflowID, childRunID, childWorkflowType)
 	ci.StartedID = event.GetEventId()
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(&persistence.GetDomainResponse{
 		Info:              &persistence.DomainInfo{Name: domainName},
 		Config:            &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
@@ -1381,7 +1403,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Duplication() {
-	domainID := "some random domain ID"
+
 	domainName := "some random domain Name"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -1399,12 +1421,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 	childWorkflowType := "some random child workflow type"
 	childTaskListName := "some random child task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1426,7 +1448,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
-		DomainID:         domainID,
+		DomainID:         s.domainID,
 		WorkflowID:       execution.GetWorkflowId(),
 		RunID:            execution.GetRunId(),
 		TargetDomainID:   childDomainID,
@@ -1444,11 +1466,12 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 		Result:                       []byte("some random child workflow execution result"),
 		DecisionTaskCompletedEventId: common.Int64Ptr(transferTask.ScheduleID),
 	})
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(&persistence.GetDomainResponse{
 		Info:              &persistence.DomainInfo{Name: domainName},
 		Config:            &persistence.DomainConfig{},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
@@ -1468,7 +1491,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessRecordWorkflowStartedTask() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -1478,13 +1501,13 @@ func (s *transferQueueActiveProcessorSuite) TestProcessRecordWorkflowStartedTask
 	cronSchedule := "@every 5s"
 	backoffSeconds := int32(5)
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 
 	event, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1498,15 +1521,13 @@ func (s *transferQueueActiveProcessorSuite) TestProcessRecordWorkflowStartedTask
 	s.Nil(err)
 
 	taskID := int64(59)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
-
-	msBuilder.UpdateReplicationStateVersion(s.version+1, false)
 	di := addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), di.Version, di.ScheduleID)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(di.Version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,
@@ -1524,7 +1545,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessRecordWorkflowStartedTask
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessUpsertWorkflowSearchAttributes() {
-	domainID := "some random domain ID"
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -1532,13 +1553,13 @@ func (s *transferQueueActiveProcessorSuite) TestProcessUpsertWorkflowSearchAttri
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockClusterMetadata.GetCurrentClusterName(),
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 
 	event, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
 		execution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID: common.StringPtr(domainID),
+			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
@@ -1550,15 +1571,13 @@ func (s *transferQueueActiveProcessorSuite) TestProcessUpsertWorkflowSearchAttri
 	s.Nil(err)
 
 	taskID := int64(59)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), s.version, event.GetEventId())
-
-	msBuilder.UpdateReplicationStateVersion(s.version+1, false)
 	di := addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), di.Version, di.ScheduleID)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(di.Version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
-		DomainID:   domainID,
+		DomainID:   s.domainID,
 		WorkflowID: execution.GetWorkflowId(),
 		RunID:      execution.GetRunId(),
 		TaskID:     taskID,

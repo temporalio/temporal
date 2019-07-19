@@ -26,14 +26,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log/loggerimpl"
-
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-
-	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/archiver/provider"
+	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
@@ -51,6 +50,7 @@ type (
 		mockBlobstoreClient  *mocks.BlobstoreClient
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator DomainReplicator
+		mockArchiverProvider *provider.ArchiverProviderMock
 
 		handler *domainHandlerImpl
 	}
@@ -83,9 +83,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) SetupTest() {
 	s.mockBlobstoreClient = &mocks.BlobstoreClient{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
+	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
 
 	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
-		s.mockBlobstoreClient, s.mockDomainReplicator)
+		s.mockBlobstoreClient, s.mockDomainReplicator, s.mockArchiverProvider)
 }
 
 func (s *domainHandlerGlobalDomainDisabledSuite) TearDownTest() {
@@ -186,8 +187,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_AllDefaul
 	s.Equal(&shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(false),
-		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+		HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+		HistoryArchivalURI:                     common.StringPtr(""),
+		VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+		VisibilityArchivalURI:                  common.StringPtr(""),
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -251,8 +254,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_NoDefault
 	s.Equal(&shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(emitMetric),
-		ArchivalBucketName:                     common.StringPtr(""),
-		ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+		HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+		HistoryArchivalURI:                     common.StringPtr(""),
+		VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+		VisibilityArchivalURI:                  common.StringPtr(""),
 		BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}, resp.Configuration)
 	s.Equal(&shared.DomainReplicationConfiguration{
@@ -304,8 +309,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_NoAttrSet()
 		s.Equal(&shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
-			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+			HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+			HistoryArchivalURI:                     common.StringPtr(""),
+			VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+			VisibilityArchivalURI:                  common.StringPtr(""),
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -371,8 +378,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 		s.Equal(&shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
-			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+			HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+			HistoryArchivalURI:                     common.StringPtr(""),
+			VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+			VisibilityArchivalURI:                  common.StringPtr(""),
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		}, config)
 		s.Equal(&shared.DomainReplicationConfiguration{
@@ -393,8 +402,10 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 		Configuration: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 			EmitMetric:                             common.BoolPtr(emitMetric),
-			ArchivalBucketName:                     common.StringPtr(""),
-			ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+			HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+			HistoryArchivalURI:                     common.StringPtr(""),
+			VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+			VisibilityArchivalURI:                  common.StringPtr(""),
 			BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 		},
 		ReplicationConfiguration: &shared.DomainReplicationConfiguration{

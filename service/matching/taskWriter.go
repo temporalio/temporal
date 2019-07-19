@@ -176,7 +176,7 @@ writerLoop:
 					w.logger.Error("Persistent store operation failure",
 						tag.StoreOperationCreateTask,
 						tag.Error(err),
-						tag.WorkflowTaskListName(w.taskListID.taskListName),
+						tag.WorkflowTaskListName(w.taskListID.name),
 						tag.WorkflowTaskListType(w.taskListID.taskType),
 						tag.Number(taskIDs[0]),
 						tag.NextNumber(taskIDs[batchSize-1]),

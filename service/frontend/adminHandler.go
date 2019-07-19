@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -37,18 +38,20 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	historyService "github.com/uber/cadence/service/history"
 )
 
 var _ adminserviceserver.Interface = (*AdminHandler)(nil)
 
 type (
-	// AdminHandler - Thrift handler inteface for admin service
+	// AdminHandler - Thrift handler interface for admin service
 	AdminHandler struct {
 		status                int32
 		numberOfHistoryShards int
@@ -59,13 +62,19 @@ type (
 		historyMgr    persistence.HistoryManager
 		historyV2Mgr  persistence.HistoryV2Manager
 		startWG       sync.WaitGroup
+		params        *service.BootstrapParams
 	}
 )
 
 // NewAdminHandler creates a thrift handler for the cadence admin service
 func NewAdminHandler(
-	sVice service.Service, numberOfHistoryShards int, metadataMgr persistence.MetadataManager,
-	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager) *AdminHandler {
+	sVice service.Service,
+	numberOfHistoryShards int,
+	metadataMgr persistence.MetadataManager,
+	historyMgr persistence.HistoryManager,
+	historyV2Mgr persistence.HistoryV2Manager,
+	params *service.BootstrapParams,
+) *AdminHandler {
 	handler := &AdminHandler{
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: numberOfHistoryShards,
@@ -73,6 +82,7 @@ func NewAdminHandler(
 		domainCache:           cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
 		historyMgr:            historyMgr,
 		historyV2Mgr:          historyV2Mgr,
+		params:                params,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -105,6 +115,52 @@ func (adh *AdminHandler) Stop() {
 	}
 	adh.Service.Stop()
 	adh.domainCache.Stop()
+}
+
+// AddSearchAttribute add search attribute to whitelist
+func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.AddSearchAttributeRequest) error {
+	// validate request
+	if request == nil {
+		return &gen.BadRequestError{Message: "Request is not provided"}
+	}
+	if len(request.GetSearchAttribute()) == 0 {
+		return &gen.BadRequestError{Message: "SearchAttributes are not provided"}
+	}
+
+	searchAttr := request.GetSearchAttribute()
+	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
+		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
+	for k, v := range searchAttr {
+		if definition.IsSystemIndexedKey(k) {
+			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserverd by system", k)}
+		}
+		if _, exist := currentValidAttr[k]; exist {
+			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}
+		}
+
+		currentValidAttr[k] = int(v)
+	}
+
+	// update dynamic config
+	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
+	if err != nil {
+		return &gen.InternalServiceError{Message: fmt.Sprintf("Failed to update dynamic config, err: %v", err)}
+	}
+
+	// update elasticsearch mapping, new added field will not be able to remove or update
+	index := adh.params.ESConfig.GetVisibilityIndex()
+	for k, v := range searchAttr {
+		valueType := convertIndexedValueTypeToESDataType(v)
+		if len(valueType) == 0 {
+			return &gen.BadRequestError{Message: fmt.Sprintf("Unknown value type, %v", v)}
+		}
+		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		if err != nil {
+			return &gen.InternalServiceError{Message: fmt.Sprintf("Failed to update ES mapping, err: %v", err)}
+		}
+	}
+
+	return nil
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -356,5 +412,24 @@ func (adh *AdminHandler) error(err error, scope int) error {
 	default:
 		adh.Service.GetLogger().Error("Uncategorized error", tag.Error(err))
 		return &gen.InternalServiceError{Message: err.Error()}
+	}
+}
+
+func convertIndexedValueTypeToESDataType(valueType gen.IndexedValueType) string {
+	switch valueType {
+	case gen.IndexedValueTypeString:
+		return "text"
+	case gen.IndexedValueTypeKeyword:
+		return "keyword"
+	case gen.IndexedValueTypeInt:
+		return "long"
+	case gen.IndexedValueTypeDouble:
+		return "double"
+	case gen.IndexedValueTypeBool:
+		return "boolean"
+	case gen.IndexedValueTypeDatetime:
+		return "date"
+	default:
+		return ""
 	}
 }

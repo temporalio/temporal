@@ -46,6 +46,18 @@ func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable b
 	}
 }
 
+func (c *retryableClient) AddSearchAttribute(
+	ctx context.Context,
+	request *admin.AddSearchAttributeRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		return c.client.AddSearchAttribute(ctx, request, opts...)
+	}
+	return backoff.Retry(op, c.policy, c.isRetryable)
+}
+
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *shared.DescribeHistoryHostRequest,

@@ -125,12 +125,12 @@ func (_m *ExecutionManager) UpdateWorkflowExecution(request *persistence.UpdateW
 	return r0, r1
 }
 
-// ResetMutableState provides a mock function with given fields: request
-func (_m *ExecutionManager) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
+// ConflictResolveWorkflowExecution provides a mock function with given fields: request
+func (_m *ExecutionManager) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*persistence.ResetMutableStateRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*persistence.ConflictResolveWorkflowExecutionRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)

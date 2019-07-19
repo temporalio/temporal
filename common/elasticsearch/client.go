@@ -37,6 +37,7 @@ type (
 		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error)
+		PutMapping(ctx context.Context, index, root, key, valueType string) error
 	}
 
 	// ScrollService is a interface for elastic.ScrollService
@@ -148,6 +149,35 @@ func (c *elasticWrapper) RunBulkProcessor(ctx context.Context, p *BulkProcessorP
 		Before(p.BeforeFunc).
 		After(p.AfterFunc).
 		Do(ctx)
+}
+
+// root is for nested object like Attr property for search attributes.
+func (c *elasticWrapper) PutMapping(ctx context.Context, index, root, key, valueType string) error {
+	body := buildPutMappingBody(root, key, valueType)
+	_, err := c.client.PutMapping().Index(index).Type("_doc").BodyJson(body).Do(ctx)
+	return err
+}
+
+func buildPutMappingBody(root, key, valueType string) map[string]interface{} {
+	body := make(map[string]interface{})
+	if len(root) != 0 {
+		body["properties"] = map[string]interface{}{
+			root: map[string]interface{}{
+				"properties": map[string]interface{}{
+					key: map[string]interface{}{
+						"type": valueType,
+					},
+				},
+			},
+		}
+	} else {
+		body["properties"] = map[string]interface{}{
+			key: map[string]interface{}{
+				"type": valueType,
+			},
+		}
+	}
+	return body
 }
 
 func (s *scrollServiceImpl) Clear(ctx context.Context) error {

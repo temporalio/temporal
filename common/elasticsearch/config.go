@@ -21,6 +21,7 @@
 package elasticsearch
 
 import (
+	"github.com/uber/cadence/common"
 	"net/url"
 )
 
@@ -32,3 +33,8 @@ type (
 		Indices map[string]string `yaml:indices`
 	}
 )
+
+// GetVisibilityIndex return visibility index name
+func (cfg *Config) GetVisibilityIndex() string {
+	return cfg.Indices[common.VisibilityAppName]
+}

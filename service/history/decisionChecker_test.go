@@ -21,6 +21,8 @@
 package history
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -30,7 +32,6 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"testing"
 )
 
 type (
@@ -488,4 +489,48 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, targetDomainID)
 	s.Nil(err)
+}
+
+func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
+	taskList := func(name string) *workflow.TaskList {
+		kind := workflow.TaskListKindNormal
+		return &workflow.TaskList{Name: &name, Kind: &kind}
+	}
+
+	testCases := []struct {
+		defaultVal  string
+		input       *workflow.TaskList
+		output      *workflow.TaskList
+		isOutputErr bool
+	}{
+		{"tl-1", nil, &workflow.TaskList{Name: common.StringPtr("tl-1")}, false},
+		{"", taskList("tl-1"), taskList("tl-1"), false},
+		{"tl-1", taskList("tl-1"), taskList("tl-1"), false},
+		{"", taskList("/tl-1"), taskList("/tl-1"), false},
+		{"", taskList("/__cadence_sys"), taskList("/__cadence_sys"), false},
+		{"", nil, &workflow.TaskList{}, true},
+		{"", taskList(""), taskList(""), true},
+		{"", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
+		{"tl-1", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
+		{"", taskList(reservedTaskListPrefix + "tl-1"), taskList(reservedTaskListPrefix + "tl-1"), true},
+		{"tl-1", taskList(reservedTaskListPrefix + "tl-1"), taskList(reservedTaskListPrefix + "tl-1"), true},
+	}
+
+	for _, tc := range testCases {
+		key := tc.defaultVal + "#"
+		if tc.input != nil {
+			key += tc.input.GetName()
+		} else {
+			key += "nil"
+		}
+		s.Run(key, func() {
+			output, err := s.validator.validatedTaskList(tc.input, tc.defaultVal)
+			if tc.isOutputErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+			}
+			s.EqualValues(tc.output, output)
+		})
+	}
 }

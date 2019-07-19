@@ -34,6 +34,11 @@ import (
 
 // Interface is the server-side interface for the AdminService service.
 type Interface interface {
+	AddSearchAttribute(
+		ctx context.Context,
+		Request *admin.AddSearchAttributeRequest,
+	) error
+
 	DescribeHistoryHost(
 		ctx context.Context,
 		Request *shared.DescribeHistoryHostRequest,
@@ -60,6 +65,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 	service := thrift.Service{
 		Name: "AdminService",
 		Methods: []thrift.Method{
+
+			thrift.Method{
+				Name: "AddSearchAttribute",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.AddSearchAttribute),
+				},
+				Signature:    "AddSearchAttribute(Request *admin.AddSearchAttributeRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
 
 			thrift.Method{
 				Name: "DescribeHistoryHost",
@@ -96,12 +112,31 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 3)
+	procedures := make([]transport.Procedure, 0, 4)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
 
 type handler struct{ impl Interface }
+
+func (h handler) AddSearchAttribute(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_AddSearchAttribute_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.AddSearchAttribute(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_AddSearchAttribute_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
 
 func (h handler) DescribeHistoryHost(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args admin.AdminService_DescribeHistoryHost_Args

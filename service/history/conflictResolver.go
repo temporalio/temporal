@@ -23,6 +23,7 @@ package history
 import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -38,6 +39,7 @@ type (
 			requestID string,
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
+			updateCondition int64,
 		) (mutableState, error)
 	}
 
@@ -71,6 +73,7 @@ func (r *conflictResolverImpl) reset(
 	requestID string,
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
+	updateCondition int64,
 ) (mutableState, error) {
 
 	domainID := r.context.getDomainID()
@@ -83,15 +86,14 @@ func (r *conflictResolverImpl) reset(
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var lastEvent *shared.HistoryEvent
 	var history []*shared.HistoryEvent
-	var size int
-	var lastFirstEventID int64
+	var totalSize int64
 	var err error
 
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
-		history, size, lastFirstEventID, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, eventStoreVersion, branchToken)
+		var size int
+		history, size, _, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, eventStoreVersion, branchToken)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
 			return nil, err
@@ -111,14 +113,15 @@ func (r *conflictResolverImpl) reset(
 		}
 
 		firstEvent := history[0]
-		lastEvent = history[len(history)-1]
 		if firstEvent.GetEventId() == common.FirstEventID {
 			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-				r.clusterMetadata.GetCurrentClusterName(),
 				r.shard,
 				r.shard.GetEventsCache(),
 				r.logger,
 				firstEvent.GetVersion(),
+				// if can see replication task, meaning that domain is
+				// global domain with > 1 target clusters
+				cache.ReplicationPolicyMultiCluster,
 			)
 
 			resetMutableStateBuilder.executionInfo.EventStoreVersion = eventStoreVersion
@@ -131,32 +134,46 @@ func (r *conflictResolverImpl) reset(
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err
 		}
-		resetMutableStateBuilder.executionInfo.SetLastFirstEventID(lastFirstEventID)
-		resetMutableStateBuilder.IncrementHistorySize(size)
+		totalSize += int64(size)
+	}
+
+	if resetMutableStateBuilder == nil {
+		return nil, &shared.BadRequestError{
+			Message: "unable to create reset mutable state",
+		}
 	}
 
 	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)
 	resetMutableStateBuilder.executionInfo.BranchToken = branchToken
-	// similarly, in case of resetWF, the runID in startEvent is incorrect
-	resetMutableStateBuilder.executionInfo.RunID = info.RunID
-	// Applying events to mutableState does not move the nextEventID.  Explicitly set nextEventID to new value
-	resetMutableStateBuilder.executionInfo.SetNextEventID(replayNextEventID)
+
 	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime
 	// the last updated time is not important here, since this should be updated with event time afterwards
 	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
 
-	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
-	resetMutableStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
+	// close the rebuild transaction on reset mutable state, since we do not want oo write the
+	// events used in the replay to be persisted again
+	_, _, err = resetMutableStateBuilder.CloseTransactionAsSnapshot(
+		startTime,
+		transactionPolicyPassive,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resetMutableStateBuilder.SetUpdateCondition(updateCondition)
+	if r.shard.GetConfig().EnableVisibilityToKafka() {
+		// whenever a reset of mutable state is done, we need to sync the workflow search attribute
+		resetMutableStateBuilder.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
+	}
 
 	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
-	msBuilder, err := r.context.resetMutableState(
+	msBuilder, err := r.context.conflictResolveWorkflowExecution(
+		startTime,
 		prevRunID,
 		prevLastWriteVersion,
 		prevState,
-		nil,
-		nil,
-		nil,
 		resetMutableStateBuilder,
+		totalSize,
 	)
 	if err != nil {
 		r.logError("Conflict resolution err reset workflow.", err)

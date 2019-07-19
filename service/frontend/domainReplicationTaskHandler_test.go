@@ -75,8 +75,10 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	archivalBucket := "some random archival bucket name"
-	archivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalURI := "some random history archival uri"
+	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -100,11 +102,13 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 		Data:        data,
 	}
 	config := &p.DomainConfig{
-		Retention:      retention,
-		EmitMetric:     emitMetric,
-		ArchivalBucket: archivalBucket,
-		ArchivalStatus: archivalStatus,
-		BadBinaries:    shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		Retention:                retention,
+		EmitMetric:               emitMetric,
+		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalURI:       historyArchivalURI,
+		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalURI:    visibilityArchivalURI,
+		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -127,8 +131,10 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 			Config: &shared.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 				EmitMetric:                             common.BoolPtr(emitMetric),
-				ArchivalBucketName:                     common.StringPtr(archivalBucket),
-				ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
+				HistoryArchivalStatus:                  common.ArchivalStatusPtr(historyArchivalStatus),
+				HistoryArchivalURI:                     common.StringPtr(historyArchivalURI),
+				VisibilityArchivalStatus:               common.ArchivalStatusPtr(visibilityArchivalStatus),
+				VisibilityArchivalURI:                  common.StringPtr(visibilityArchivalURI),
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &shared.DomainReplicationConfiguration{
@@ -152,8 +158,10 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	archivalBucket := "some random archival bucket name"
-	archivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalURI := "some random history archival uri"
+	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -177,11 +185,13 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 		Data:        data,
 	}
 	config := &p.DomainConfig{
-		Retention:      retention,
-		EmitMetric:     emitMetric,
-		ArchivalBucket: archivalBucket,
-		ArchivalStatus: archivalStatus,
-		BadBinaries:    shared.BadBinaries{},
+		Retention:                retention,
+		EmitMetric:               emitMetric,
+		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalURI:       historyArchivalURI,
+		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalURI:    visibilityArchivalURI,
+		BadBinaries:              shared.BadBinaries{},
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -203,8 +213,10 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	archivalBucket := "some random archival bucket name"
-	archivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalURI := "some random history archival uri"
+	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -228,11 +240,13 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 		Data:        data,
 	}
 	config := &p.DomainConfig{
-		Retention:      retention,
-		EmitMetric:     emitMetric,
-		ArchivalBucket: archivalBucket,
-		ArchivalStatus: archivalStatus,
-		BadBinaries:    shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		Retention:                retention,
+		EmitMetric:               emitMetric,
+		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalURI:       historyArchivalURI,
+		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalURI:    visibilityArchivalURI,
+		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -255,8 +269,10 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 			Config: &shared.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 				EmitMetric:                             common.BoolPtr(emitMetric),
-				ArchivalBucketName:                     common.StringPtr(archivalBucket),
-				ArchivalStatus:                         common.ArchivalStatusPtr(archivalStatus),
+				HistoryArchivalStatus:                  common.ArchivalStatusPtr(historyArchivalStatus),
+				HistoryArchivalURI:                     common.StringPtr(historyArchivalURI),
+				VisibilityArchivalStatus:               common.ArchivalStatusPtr(visibilityArchivalStatus),
+				VisibilityArchivalURI:                  common.StringPtr(visibilityArchivalURI),
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &shared.DomainReplicationConfiguration{
@@ -280,8 +296,10 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	archivalBucket := "some random archival bucket name"
-	archivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalURI := "some random history archival uri"
+	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
@@ -305,10 +323,12 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 		Data:        data,
 	}
 	config := &p.DomainConfig{
-		Retention:      retention,
-		EmitMetric:     emitMetric,
-		ArchivalBucket: archivalBucket,
-		ArchivalStatus: archivalStatus,
+		Retention:                retention,
+		EmitMetric:               emitMetric,
+		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalURI:       historyArchivalURI,
+		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalURI:    visibilityArchivalURI,
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,

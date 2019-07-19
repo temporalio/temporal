@@ -90,8 +90,10 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
 			EmitMetric:                             common.BoolPtr(config.EmitMetric),
-			ArchivalBucketName:                     common.StringPtr(config.ArchivalBucket),
-			ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
+			HistoryArchivalStatus:                  common.ArchivalStatusPtr(config.HistoryArchivalStatus),
+			HistoryArchivalURI:                     common.StringPtr(config.HistoryArchivalURI),
+			VisibilityArchivalStatus:               common.ArchivalStatusPtr(config.VisibilityArchivalStatus),
+			VisibilityArchivalURI:                  common.StringPtr(config.VisibilityArchivalURI),
 			BadBinaries:                            &config.BadBinaries,
 		},
 		ReplicationConfig: &shared.DomainReplicationConfiguration{

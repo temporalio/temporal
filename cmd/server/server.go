@@ -26,8 +26,7 @@ import (
 
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/blobstore/filestore"
-	"github.com/uber/cadence/common/blobstore/s3store"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -125,9 +124,6 @@ func (s *server) startService() common.Daemon {
 	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 
-	archivalStatus := dc.GetStringProperty(dynamicconfig.ArchivalStatus, s.cfg.Archival.Status)
-	enableReadFromArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromArchival, s.cfg.Archival.EnableReadFromArchival)
-
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
 
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
@@ -135,14 +131,14 @@ func (s *server) startService() common.Daemon {
 	clusterMetadata := s.cfg.ClusterMetadata
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
-		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
+		dc,
+		s.cfg.ClusterMetadata.EnableGlobalDomain,
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
-		archivalStatus(),
-		s.cfg.Archival.DefaultBucket,
-		enableReadFromArchival(),
+		s.cfg.Archival,
+		s.cfg.DomainDefaults.Archival,
 	)
 
 	if s.cfg.PublicClient.HostPort != "" {
@@ -181,28 +177,17 @@ func (s *server) startService() common.Daemon {
 	}
 	params.PublicClient = workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
-	if params.ClusterMetadata.ArchivalConfig().ConfiguredForArchival() {
-		if s.cfg.Archival.Filestore != nil && s.cfg.Archival.S3store != nil {
-			log.Fatalf("cannot config both filestore and s3store")
-		}
-		if s.cfg.Archival.Filestore == nil && s.cfg.Archival.S3store == nil {
-			log.Fatalf("cannot config archival without filestore or s3store")
-		}
-		if s.cfg.Archival.Filestore != nil {
-			filestoreClient, err := filestore.NewClient(s.cfg.Archival.Filestore)
-			if err != nil {
-				log.Fatalf("error creating file based blobstore: %v", err)
-			}
-			params.BlobstoreClient = filestoreClient
-		}
-		if s.cfg.Archival.S3store != nil {
-			s3cli, err := s3store.ClientFromConfig(s.cfg.Archival.S3store)
-			if err != nil {
-				log.Fatalf("error creating s3 blobstore: %v", err)
-			}
-			params.BlobstoreClient = s3store.NewClient(s3cli)
-		}
+	configuredForHistoryArchival := params.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival()
+	configuredForVisibilityArchival := params.ClusterMetadata.VisibilityArchivalConfig().ClusterConfiguredForArchival()
+	historyArchiverProvider := s.cfg.Archival.History.ArchiverProvider
+	visibilityArchiverProvider := s.cfg.Archival.Visibility.ArchiverProvider
+	if (configuredForHistoryArchival && historyArchiverProvider == nil) || (!configuredForHistoryArchival && historyArchiverProvider != nil) {
+		log.Fatalf("invalid history archival config")
 	}
+	if (configuredForVisibilityArchival && visibilityArchiverProvider == nil) || (!configuredForVisibilityArchival && visibilityArchiverProvider != nil) {
+		log.Fatalf("invalid visibility archival config")
+	}
+	params.ArchiverProvider = provider.NewArchiverProvider(historyArchiverProvider, visibilityArchiverProvider)
 
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 

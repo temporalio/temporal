@@ -148,11 +148,13 @@ func newHistoryReplicator(
 		},
 		getNewMutableState: func(version int64, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithReplicationState(
-				shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 				shard,
 				shard.GetEventsCache(),
 				logger,
 				version,
+				// if can see replication task, meaning that domain is
+				// global domain with > 1 target clusters
+				cache.ReplicationPolicyMultiCluster,
 			)
 		},
 	}
@@ -275,12 +277,13 @@ func (r *historyReplicator) SyncActivity(
 	timerTasks := []persistence.Task{}
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
-	timerBuilder := newTimerBuilder(r.shard.GetConfig(), r.logger, timeSource)
+	timerBuilder := newTimerBuilder(r.logger, timeSource)
 	if tt := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
 		timerTasks = append(timerTasks, tt)
 	}
 
-	return r.updateMutableStateWithTimer(context, msBuilder, now, timerTasks)
+	msBuilder.AddTimerTasks(timerTasks...)
+	return context.updateWorkflowExecutionAsPassive(now)
 }
 
 func (r *historyReplicator) ApplyRawEvents(
@@ -710,33 +713,32 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
-	lastEvent, _, newRunStateBuilder, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
+	lastEvent, _, newMutableState, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
 	if err != nil {
 		return err
-	}
-
-	// If replicated events has ContinueAsNew event, then append the new run history
-	if newRunStateBuilder != nil {
-		// Generate a transaction ID for appending events to history
-		transactionID, err := r.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
-		// continueAsNew
-		err = context.appendFirstBatchHistoryForContinueAsNew(newRunStateBuilder, transactionID)
-		if err != nil {
-			return err
-		}
 	}
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
 	case shared.EventTypeWorkflowExecutionStarted:
-		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.GetSourceCluster(), request.History, sBuilder,
-			logger)
+		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), now)
+		var newContext workflowExecutionContext
+		if newMutableState != nil {
+			newExecutionInfo := newMutableState.GetExecutionInfo()
+			newContext = newWorkflowExecutionContext(
+				newExecutionInfo.DomainID,
+				workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr(newExecutionInfo.WorkflowID),
+					RunId:      common.StringPtr(newExecutionInfo.RunID),
+				},
+				r.shard,
+				r.shard.GetExecutionManager(),
+				r.logger,
+			)
+		}
+		err = context.updateWorkflowExecutionWithNewAsPassive(now, newContext, newMutableState)
 	}
 
 	if err == nil {
@@ -751,7 +753,6 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	ctx ctx.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	sourceCluster string,
 	history *shared.History,
 	sBuilder stateBuilder,
 	logger log.Logger,
@@ -766,20 +767,21 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	firstEvent := history.Events[0]
 	incomingVersion := firstEvent.GetVersion()
 	lastEvent := history.Events[len(history.Events)-1]
-	executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
-	executionInfo.SetNextEventID(lastEvent.GetEventId() + 1)
 
-	_, _, err := context.appendFirstBatchEventsForStandby(msBuilder, history.Events)
+	now := time.Unix(0, lastEvent.GetTimestamp())
+	newWorkflow, workflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyPassive,
+	)
 	if err != nil {
 		return err
 	}
-
-	// workflow passive side logic should not generate any replication task
-	createReplicationTask := false
-	transferTasks := sBuilder.getTransferTasks()
-	var replicationTasks []persistence.Task // passive side generates no replication tasks
-	timerTasks := sBuilder.getTimerTasks()
-	now := time.Unix(0, lastEvent.GetTimestamp())
+	historySize, err := context.persistFirstWorkflowEvents(workflowEventsSeq[0])
+	if err != nil {
+		return err
+	}
+	// TODO add a check here guarantee that no replication tasks will be persisted
+	newWorkflow.ReplicationTasks = nil
 
 	deleteHistory := func() {
 		// this function should be only called when we drop start workflow execution
@@ -802,7 +804,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -835,7 +837,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		prevRunID = currentRunID
 		prevLastWriteVersion = currentLastWriteVersion
 		return context.createWorkflowExecution(
-			msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+			newWorkflow, historySize, now,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -909,7 +911,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	prevRunID = currentRunID
 	prevLastWriteVersion = currentLastWriteVersion
 	return context.createWorkflowExecution(
-		msBuilder, sourceCluster, createReplicationTask, now, transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }
@@ -1161,39 +1163,13 @@ func (r *historyReplicator) resetMutableState(
 		uuid.New(),
 		lastEventID,
 		msBuilder.GetExecutionInfo(),
+		msBuilder.GetUpdateCondition(),
 	)
 	logger.Info("Completed Resetting of workflow execution.")
 	if err != nil {
 		return nil, err
 	}
 	return msBuilder, nil
-}
-
-func (r *historyReplicator) updateMutableStateOnly(
-	context workflowExecutionContext,
-	msBuilder mutableState,
-) error {
-	return r.updateMutableStateWithTimer(context, msBuilder, time.Time{}, nil)
-}
-
-func (r *historyReplicator) updateMutableStateWithTimer(
-	context workflowExecutionContext,
-	msBuilder mutableState,
-	now time.Time,
-	timerTasks []persistence.Task,
-) error {
-
-	// Generate a transaction ID for appending events to history
-	transactionID, err := r.shard.GetNextTransferTaskID()
-	if err != nil {
-		return err
-	}
-	// we need to handcraft some of the variables
-	// since this is a persisting the buffer replication task,
-	// so nothing on the replication state should be changed
-	lastWriteVersion := msBuilder.GetLastWriteVersion()
-	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	return context.updateWorkflowExecutionForStandby(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
 }
 
 func (r *historyReplicator) deserializeBlob(
@@ -1425,27 +1401,25 @@ func (r *historyReplicator) persistWorkflowMutation(
 		if err != nil {
 			return ErrWorkflowMutationDecision
 		}
-		transferTasks = append(transferTasks, &persistence.DecisionTask{
+		msBuilder.AddTransferTasks(&persistence.DecisionTask{
 			DomainID:   executionInfo.DomainID,
 			TaskList:   di.TaskList,
 			ScheduleID: di.ScheduleID,
 		})
+
 		if msBuilder.IsStickyTaskListEnabled() {
-			tBuilder := newTimerBuilder(r.shard.GetConfig(), r.logger, r.timeSource)
+			tBuilder := newTimerBuilder(r.logger, r.timeSource)
 			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(
 				di.ScheduleID,
 				di.Attempt,
 				executionInfo.StickyScheduleToStartTimeout,
 			)
-			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+			msBuilder.AddTimerTasks(stickyTaskTimeoutTimer)
 		}
 	}
 
-	transactionID, err := r.shard.GetNextTransferTaskID()
-	if err != nil {
-		return err
-	}
-	return context.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
+	now := clock.NewRealTimeSource().Now() // this is on behalf of active logic
+	return context.updateWorkflowExecutionAsActive(now)
 }
 
 func logError(

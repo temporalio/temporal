@@ -128,8 +128,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			// this function must be called within the for loop, in case
 			// history event version changed during for loop
 			b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
-			sourceClusterName := b.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
-			b.msBuilder.UpdateReplicationStateLastEventID(sourceClusterName, lastEvent.GetVersion(), lastEvent.GetEventId())
+			b.msBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
 		} else if b.msBuilder.GetVersionHistories() != nil {
 			versionHistories := b.msBuilder.GetVersionHistories()
 			versionHistory, err := versionHistories.GetVersionHistory(versionHistories.GetCurrentBranchIndex())
@@ -148,6 +147,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		switch event.GetEventType() {
 		case shared.EventTypeWorkflowExecutionStarted:
 			attributes := event.WorkflowExecutionStartedEventAttributes
+			domainEntry, err := b.domainCache.GetDomainByID(domainID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 			var parentDomainID *string
 			if attributes.ParentWorkflowDomain != nil {
 				parentDomainEntry, err := b.domainCache.GetDomain(attributes.GetParentWorkflowDomain())
@@ -156,7 +159,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				}
 				parentDomainID = &parentDomainEntry.GetInfo().ID
 			}
-			err := b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, event)
+			err = b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainEntry, parentDomainID, execution, requestID, event)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -525,23 +528,27 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 			newRunStartedEvent := newRunHistory[0]
 			// Create mutable state updates for the new run
+			domainEntry, err := b.domainCache.GetDomainByID(domainID)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 			if b.msBuilder.GetReplicationState() != nil {
 				newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-					b.clusterMetadata.GetCurrentClusterName(),
 					b.shard,
 					b.shard.GetEventsCache(),
 					b.logger,
 					newRunStartedEvent.GetVersion(),
+					domainEntry.GetReplicationPolicy(),
 				)
 			} else if b.msBuilder.GetVersionHistories() != nil {
 				// TODO add a configuration to migrate from replication state
 				//  to version histories
 				newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
-					b.clusterMetadata.GetCurrentClusterName(),
 					b.shard,
 					b.shard.GetEventsCache(),
 					b.logger,
 					newRunStartedEvent.GetVersion(),
+					domainEntry.GetReplicationPolicy(),
 				)
 			} else {
 				return nil, nil, nil, errors.NewInternalFailureError("either replication state or version histories should be set")
@@ -553,7 +560,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				WorkflowId: execution.WorkflowId,
 				RunId:      common.StringPtr(newRunID),
 			}
-			newRunLastEvent, newRunDecisionInfo, _, err := newRunStateBuilder.applyEvents(
+			_, newRunDecisionInfo, _, err := newRunStateBuilder.applyEvents(
 				domainID,
 				uuid.New(),
 				newExecution,
@@ -566,28 +573,11 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				return nil, nil, nil, err
 			}
 
-			newRunExecutionInfo := newRunMutableStateBuilder.GetExecutionInfo()
-			newRunExecutionInfo.SetNextEventID(newRunLastEvent.GetEventId() + 1)
-			newRunExecutionInfo.SetLastFirstEventID(newRunStartedEvent.GetEventId())
-			// Set the history from replication task on the newStateBuilder
-			newRunMutableStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory, b.logger))
-			sourceClusterName := b.clusterMetadata.ClusterNameForFailoverVersion(newRunStartedEvent.GetVersion())
-			newRunMutableStateBuilder.UpdateReplicationStateLastEventID(
-				sourceClusterName,
-				newRunLastEvent.GetVersion(),
-				newRunLastEvent.GetEventId(),
-			)
-
 			b.newRunTransferTasks = append(b.newRunTransferTasks, newRunStateBuilder.getTransferTasks()...)
 			b.newRunTimerTasks = append(b.newRunTimerTasks, newRunStateBuilder.getTimerTasks()...)
 
-			domainEntry, err := b.domainCache.GetDomainByID(domainID)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-
-			err = b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEvent.GetEventId(), sourceClusterName, domainID, event,
-				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion, domainEntry.GetRetentionDays(execution.GetWorkflowId()))
+			err = b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(firstEvent.GetEventId(), domainID, event,
+				newRunStartedEvent, newRunDecisionInfo, newRunMutableStateBuilder, newRunEventStoreVersion)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -609,6 +599,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 	b.msBuilder.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
 	b.msBuilder.GetExecutionInfo().SetNextEventID(lastEvent.GetEventId() + 1)
+
+	b.msBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(history, b.logger))
+	b.msBuilder.AddTransferTasks(b.transferTasks...)
+	b.msBuilder.AddTimerTasks(b.timerTasks...)
 
 	return lastEvent, lastDecision, newRunMutableStateBuilder, nil
 }
@@ -736,7 +730,7 @@ func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBui
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)
 
-	return newTimerBuilder(b.shard.GetConfig(), b.logger, timeSource)
+	return newTimerBuilder(b.logger, timeSource)
 }
 
 func (b *stateBuilderImpl) appendTasksForFinishedExecutions(event *shared.HistoryEvent, domainID, workflowID string) error {

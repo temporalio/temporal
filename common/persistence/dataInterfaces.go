@@ -257,7 +257,6 @@ type (
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
 		SignalCount                  int32
-		HistorySize                  int64
 		DecisionVersion              int64
 		DecisionScheduleID           int64
 		DecisionStartedID            int64
@@ -290,6 +289,11 @@ type (
 		// Cron
 		CronSchedule      string
 		ExpirationSeconds int32
+	}
+
+	// ExecutionStats is the statistics about workflow execution
+	ExecutionStats struct {
+		HistorySize int64
 	}
 
 	// ReplicationState represents mutable state information for global domains.
@@ -587,6 +591,7 @@ type (
 		SignalInfos         map[int64]*SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
+		ExecutionStats      *ExecutionStats
 		ReplicationState    *ReplicationState
 		BufferedEvents      []*workflow.HistoryEvent
 		VersionHistories    *VersionHistories
@@ -625,6 +630,8 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
+		LastFailureReason  string
+		LastWorkerIdentity string
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibility int64
 	}
@@ -745,8 +752,8 @@ type (
 		Encoding common.EncodingType // optional binary encoding type
 	}
 
-	// ResetMutableStateRequest is used to reset workflow execution state for a single run
-	ResetMutableStateRequest struct {
+	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
+	ConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
 
 		// previous workflow information
@@ -787,9 +794,19 @@ type (
 		Encoding common.EncodingType // optional binary encoding type
 	}
 
+	// WorkflowEvents is used as generic workflow history events transaction container
+	WorkflowEvents struct {
+		DomainID    string
+		WorkflowID  string
+		RunID       string
+		BranchToken []byte
+		Events      []*workflow.HistoryEvent
+	}
+
 	// WorkflowMutation is used as generic workflow execution state mutation
 	WorkflowMutation struct {
 		ExecutionInfo    *WorkflowExecutionInfo
+		ExecutionStats   *ExecutionStats
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
@@ -818,6 +835,7 @@ type (
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo    *WorkflowExecutionInfo
+		ExecutionStats   *ExecutionStats
 		ReplicationState *ReplicationState
 		VersionHistories *VersionHistories
 
@@ -1085,11 +1103,13 @@ type (
 	// DomainConfig describes the domain configuration
 	DomainConfig struct {
 		// NOTE: this retention is in days, not in seconds
-		Retention      int32
-		EmitMetric     bool
-		ArchivalBucket string
-		ArchivalStatus workflow.ArchivalStatus
-		BadBinaries    workflow.BadBinaries
+		Retention                int32
+		EmitMetric               bool
+		HistoryArchivalStatus    workflow.ArchivalStatus
+		HistoryArchivalURI       string
+		VisibilityArchivalStatus workflow.ArchivalStatus
+		VisibilityArchivalURI    string
+		BadBinaries              workflow.BadBinaries
 	}
 
 	// DomainReplicationConfig describes the cross DC domain replication configuration
@@ -1390,7 +1410,7 @@ type (
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
-		ResetMutableState(request *ResetMutableStateRequest) error
+		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *ResetWorkflowExecutionRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error

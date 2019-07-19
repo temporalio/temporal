@@ -22,9 +22,9 @@ package history
 
 import (
 	ctx "context"
-	"time"
 
 	"github.com/pborman/uuid"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
@@ -159,26 +159,11 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		}
 	}
 
-	// Generate a transaction ID for appending events to history
-	transactionID, err := r.shard.GetNextTransferTaskID()
-	if err != nil {
-		return 0, err
-	}
-
-	// TODO modify the logic below for 3+DC
-	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(
-		r.mutableState.GetLastWriteVersion(),
-	)
-	if err := r.context.updateWorkflowExecutionForStandby(
-		nil,
-		nil,
-		transactionID,
-		time.Time{},
-		false,
-		nil,
-		sourceCluster,
+	if err := r.context.updateWorkflowExecutionAsPassive(
+		r.shard.GetTimeSource().Now(),
 	); err != nil {
 		return 0, err
 	}
+
 	return newIndex, nil
 }

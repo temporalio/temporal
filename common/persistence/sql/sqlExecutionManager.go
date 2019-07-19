@@ -611,25 +611,21 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	}
 
 	// 4. create the new reset workflow
-	if err := applyWorkflowSnapshotTxAsNew(tx, m.shardID, &request.NewWorkflowSnapshot); err != nil {
-		return err
-	}
-
-	return nil
+	return applyWorkflowSnapshotTxAsNew(tx, m.shardID, &request.NewWorkflowSnapshot)
 }
 
-func (m *sqlExecutionManager) ResetMutableState(
-	request *p.InternalResetMutableStateRequest,
+func (m *sqlExecutionManager) ConflictResolveWorkflowExecution(
+	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
 
-	return m.txExecuteShardLocked("ResetMutableState", request.RangeID, func(tx sqldb.Tx) error {
+	return m.txExecuteShardLocked("ConflictResolveWorkflowExecution", request.RangeID, func(tx sqldb.Tx) error {
 		return m.resetMutableStateTx(tx, request)
 	})
 }
 
 func (m *sqlExecutionManager) resetMutableStateTx(
 	tx sqldb.Tx,
-	request *p.InternalResetMutableStateRequest,
+	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
 
 	currentWorkflow := request.CurrentWorkflowMutation
@@ -672,7 +668,7 @@ func (m *sqlExecutionManager) resetMutableStateTx(
 		startVersion,
 		lastWriteVersion); err != nil {
 		return &workflow.InternalServiceError{Message: fmt.Sprintf(
-			"ResetMutableState. Failed to comare and swap the current record. Error: %v",
+			"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
 			err,
 		)}
 	}

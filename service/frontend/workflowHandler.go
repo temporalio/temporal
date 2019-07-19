@@ -38,21 +38,21 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/tokenbucket"
-	"github.com/uber/cadence/service/worker/archiver"
+	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -72,16 +72,15 @@ type (
 		tokenSerializer           common.TaskTokenSerializer
 		metricsClient             metrics.Client
 		startWG                   sync.WaitGroup
-		rateLimiter               tokenbucket.TokenBucket
+		rateLimiter               quotas.Policy
 		config                    *Config
 		blobstoreClient           blobstore.Client
 		versionChecker            *versionChecker
 		domainHandler             *domainHandlerImpl
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
-		historyBlobDownloader     archiver.HistoryBlobDownloader
-		historyArchivers          map[string]carchiver.HistoryArchiver
-		visibilityArchivers       map[string]carchiver.VisibilityArchiver
+		historyBlobDownloader     warchiver.HistoryBlobDownloader
+		archiverProvider          provider.ArchiverProvider
 		service.Service
 	}
 
@@ -153,8 +152,7 @@ var (
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
-	blobstoreClient blobstore.Client, historyArchivers map[string]carchiver.HistoryArchiver,
-	visibilityArchivers map[string]carchiver.VisibilityArchiver) *WorkflowHandler {
+	blobstoreClient blobstore.Client, archiverProvider provider.ArchiverProvider) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		config:          config,
@@ -165,7 +163,9 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		metricsClient:   sVice.GetMetricsClient(),
 		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
-		rateLimiter:     tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
+		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
+			return float64(config.RPS())
+		}),
 		blobstoreClient: blobstoreClient,
 		versionChecker:  &versionChecker{checkVersion: config.EnableClientVersionCheck()},
 		domainHandler: newDomainHandler(
@@ -175,14 +175,23 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 			sVice.GetClusterMetadata(),
 			blobstoreClient,
 			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
+			archiverProvider,
 		),
 		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(sVice.GetLogger(), config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
-		historyBlobDownloader: archiver.NewHistoryBlobDownloader(blobstoreClient),
-		historyArchivers:      historyArchivers,
-		visibilityArchivers:   visibilityArchivers,
+		historyBlobDownloader: warchiver.NewHistoryBlobDownloader(blobstoreClient),
+		archiverProvider:      archiverProvider,
 	}
+	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
+		HistoryManager:   handler.historyMgr,
+		HistoryV2Manager: handler.historyV2Mgr,
+		Logger:           sVice.GetLogger(),
+		MetricsClient:    handler.metricsClient,
+		ClusterMetadata:  sVice.GetClusterMetadata(),
+		DomainCache:      handler.domainCache,
+	}
+	archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
 	return handler
@@ -341,7 +350,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(pollRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -420,7 +429,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(pollRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -553,7 +562,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
 	if heartbeatRequest.TaskToken == nil {
@@ -634,7 +643,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeatByID")
 	domainID, err := wh.domainCache.GetDomainID(heartbeatRequest.GetDomain())
@@ -740,7 +749,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	if completeRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -822,7 +831,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	domainID, err := wh.domainCache.GetDomainID(completeRequest.GetDomain())
 	if err != nil {
@@ -930,7 +939,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	if failedRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1001,7 +1010,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	domainID, err := wh.domainCache.GetDomainID(failedRequest.GetDomain())
 	if err != nil {
@@ -1097,7 +1106,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	if cancelRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1180,7 +1189,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	domainID, err := wh.domainCache.GetDomainID(cancelRequest.GetDomain())
 	if err != nil {
@@ -1287,7 +1296,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	if completeRequest.TaskToken == nil {
 		return nil, wh.error(errTaskTokenNotSet, scope)
@@ -1365,7 +1374,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	if failedRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1435,7 +1444,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.rateLimiter.TryConsume(1)
+	wh.allow(nil)
 
 	if completeRequest.TaskToken == nil {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -1487,7 +1496,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(startRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -1630,7 +1639,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(getRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -1661,8 +1670,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
-	configuredForArchival := wh.GetClusterMetadata().ArchivalConfig().ConfiguredForArchival()
-	enableArchivalRead := wh.GetClusterMetadata().ArchivalConfig().EnableReadFromArchival()
+	configuredForArchival := wh.GetClusterMetadata().HistoryArchivalConfig().ClusterConfiguredForArchival()
+	enableArchivalRead := wh.GetClusterMetadata().HistoryArchivalConfig().EnableReadFromArchival
 	historyArchived := wh.historyArchived(ctx, getRequest, domainID)
 	if configuredForArchival && enableArchivalRead && historyArchived {
 		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
@@ -1832,7 +1841,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 		return wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(signalRequest); !ok {
 		return wh.error(createServiceBusyError(), scope)
 	}
 
@@ -1911,7 +1920,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(signalWithStartRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2069,7 +2078,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 		return wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(terminateRequest); !ok {
 		return wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2114,7 +2123,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(resetRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2159,7 +2168,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 		return wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(cancelRequest); !ok {
 		return wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2203,7 +2212,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(listRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2310,7 +2319,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(listRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2435,7 +2444,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listReque
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(listRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2495,7 +2504,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listReque
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(listRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2555,7 +2564,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countReq
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(countRequest); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2766,7 +2775,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(request); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -2811,7 +2820,7 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.De
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+	if ok := wh.allow(request); !ok {
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
@@ -3207,11 +3216,11 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	archivalBucket := entry.GetConfig().ArchivalBucket
+	archivalBucket := entry.GetConfig().HistoryArchivalURI // TODO ycyang: rewrite get archived history with archiver
 	if archivalBucket == "" {
 		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
 	}
-	downloadReq := &archiver.DownloadBlobRequest{
+	downloadReq := &warchiver.DownloadBlobRequest{
 		NextPageToken:  request.NextPageToken,
 		ArchivalBucket: archivalBucket,
 		DomainID:       domainID,
@@ -3232,21 +3241,15 @@ func (wh *WorkflowHandler) getArchivedHistory(
 func (wh *WorkflowHandler) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]gen.IndexedValueType {
 	converted := make(map[string]gen.IndexedValueType)
 	for k, v := range keys {
-		switch v {
-		case gen.IndexedValueTypeString:
-			converted[k] = gen.IndexedValueTypeString
-		case gen.IndexedValueTypeKeyword:
-			converted[k] = gen.IndexedValueTypeKeyword
-		case gen.IndexedValueTypeInt:
-			converted[k] = gen.IndexedValueTypeInt
-		case gen.IndexedValueTypeDouble:
-			converted[k] = gen.IndexedValueTypeDouble
-		case gen.IndexedValueTypeBool:
-			converted[k] = gen.IndexedValueTypeBool
-		case gen.IndexedValueTypeDatetime:
-			converted[k] = gen.IndexedValueTypeDatetime
+		switch v.(type) {
+		case float64:
+			converted[k] = gen.IndexedValueType(v.(float64))
+		case int:
+			converted[k] = gen.IndexedValueType(v.(int))
+		case gen.IndexedValueType:
+			converted[k] = v.(gen.IndexedValueType)
 		default:
-			wh.GetLogger().Error("unknown index value type", tag.Value(v))
+			wh.GetLogger().Error("unknown index value type", tag.Key(k), tag.Value(v), tag.ValueType(v))
 		}
 	}
 	return converted
@@ -3255,4 +3258,12 @@ func (wh *WorkflowHandler) convertIndexedKeyToThrift(keys map[string]interface{}
 func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, domain string) bool {
 	return wh.config.EnableReadVisibilityFromES(domain) &&
 		pageSize > int32(wh.config.ESIndexMaxResultWindow())
+}
+
+func (wh *WorkflowHandler) allow(d domainGetter) bool {
+	domain := ""
+	if d != nil {
+		domain = d.GetDomain()
+	}
+	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
 }

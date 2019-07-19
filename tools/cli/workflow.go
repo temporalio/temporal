@@ -287,13 +287,6 @@ func newWorkflowCommands() []cli.Command {
 				ResetInBatch(c)
 			},
 		},
-		{
-			Name:  "get-search-attr",
-			Usage: "get list of legal search attributes that can be used in list workflow query.",
-			Action: func(c *cli.Context) {
-				GetSearchAttributes(c)
-			},
-		},
 	}
 }
 

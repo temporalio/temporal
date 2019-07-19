@@ -82,8 +82,11 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		metricsClient:      historyEngine.metricsClient,
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
-		decisionAttrValidator: newDecisionAttrValidator(historyEngine.shard.GetDomainCache(),
-			historyEngine.config, historyEngine.logger),
+		decisionAttrValidator: newDecisionAttrValidator(
+			historyEngine.shard.GetDomainCache(),
+			historyEngine.config,
+			historyEngine.logger,
+		),
 	}
 }
 
@@ -304,6 +307,10 @@ Update_History_Loop:
 		if !msBuilder.IsWorkflowExecutionRunning() {
 			return nil, ErrWorkflowCompleted
 		}
+		executionStats, err := context.loadExecutionStats()
+		if err != nil {
+			return nil, err
+		}
 
 		executionInfo := msBuilder.GetExecutionInfo()
 		timerBuilderProvider := func() *timerBuilder {
@@ -331,12 +338,6 @@ Update_History_Loop:
 		maxResetPoints := handler.config.MaxAutoResetPoints(domainEntry.GetInfo().Name)
 		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
-			handler.throttledLogger.Warn("the number of auto-reset points is exceeding the limit, will do rotating.",
-				tag.WorkflowDomainName(domainEntry.GetInfo().Name),
-				tag.WorkflowDomainID(domainEntry.GetInfo().ID),
-				tag.WorkflowID(workflowExecution.GetWorkflowId()),
-				tag.WorkflowRunID(workflowExecution.GetRunId()),
-				tag.Number(int64(maxResetPoints)))
 		}
 		completedEvent, err := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 		if err != nil {
@@ -380,11 +381,17 @@ Update_History_Loop:
 			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
 		} else {
 
-			decisionBlobSizeChecker := newDecisionBlobSizeChecker(
-				handler.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name),
-				handler.config.BlobSizeLimitError(domainEntry.GetInfo().Name),
+			domainName := domainEntry.GetInfo().Name
+			workflowSizeChecker := newWorkflowSizeChecker(
+				handler.config.BlobSizeLimitWarn(domainName),
+				handler.config.BlobSizeLimitError(domainName),
+				handler.config.HistorySizeLimitWarn(domainName),
+				handler.config.HistorySizeLimitError(domainName),
+				handler.config.HistoryCountLimitWarn(domainName),
+				handler.config.HistoryCountLimitError(domainName),
 				completedEvent.GetEventId(),
 				msBuilder,
+				executionStats,
 				handler.metricsClient,
 				handler.throttledLogger,
 			)
@@ -396,15 +403,17 @@ Update_History_Loop:
 				domainEntry,
 				msBuilder,
 				handler.decisionAttrValidator,
-				decisionBlobSizeChecker,
+				workflowSizeChecker,
 				handler.logger,
 				timerBuilderProvider,
 				handler.domainCache,
 				handler.metricsClient,
 			)
 
-			err := decisionTaskHandler.handleDecisions(request.Decisions)
-			if err != nil {
+			if err := decisionTaskHandler.handleDecisions(
+				request.ExecutionContext,
+				request.Decisions,
+			); err != nil {
 				return nil, err
 			}
 
@@ -503,22 +512,32 @@ Update_History_Loop:
 			timerTasks = append(timerTasks, timerT)
 		}
 
-		// Generate a transaction ID for appending events to history
-		transactionID, err := handler.shard.GetNextTransferTaskID()
-		if err != nil {
-			return nil, err
-		}
+		msBuilder.AddTransferTasks(transferTasks...)
+		msBuilder.AddTimerTasks(timerTasks...)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
 		var updateErr error
 		if continueAsNewBuilder != nil {
-			continueAsNewTimerTasks = msBuilder.GetContinueAsNew().TimerTasks
-			updateErr = context.continueAsNewWorkflowExecution(request.ExecutionContext, continueAsNewBuilder,
-				transferTasks, timerTasks, transactionID)
+			continueAsNewTimerTasks = continueAsNewBuilder.GetTimerTasks()
+
+			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
+			updateErr = context.updateWorkflowExecutionWithNewAsActive(
+				handler.shard.GetTimeSource().Now(),
+				newWorkflowExecutionContext(
+					continueAsNewExecutionInfo.DomainID,
+					workflow.WorkflowExecution{
+						WorkflowId: common.StringPtr(continueAsNewExecutionInfo.WorkflowID),
+						RunId:      common.StringPtr(continueAsNewExecutionInfo.RunID),
+					},
+					handler.shard,
+					handler.shard.GetExecutionManager(),
+					handler.logger,
+				),
+				continueAsNewBuilder,
+			)
 		} else {
-			updateErr = context.updateWorkflowExecutionWithContext(request.ExecutionContext, transferTasks, timerTasks,
-				transactionID)
+			updateErr = context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
 		}
 
 		if updateErr != nil {
@@ -545,17 +564,13 @@ Update_History_Loop:
 				if err != nil {
 					return nil, err
 				}
-				tranT, timerT, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
+				transferTask, timerTask, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
 				if err != nil {
 					return nil, err
 				}
-				transferTasks = []persistence.Task{tranT}
-				timerTasks = []persistence.Task{timerT}
-				transactionID, err = handler.shard.GetNextTransferTaskID()
-				if err != nil {
-					return nil, err
-				}
-				if err := context.updateWorkflowExecutionWithContext(request.ExecutionContext, transferTasks, timerTasks, transactionID); err != nil {
+				msBuilder.AddTransferTasks(transferTask)
+				msBuilder.AddTimerTasks(timerTask)
+				if err := context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now()); err != nil {
 					return nil, err
 				}
 				handler.timerProcessor.NotifyNewTimers(handler.currentClusterName, handler.shard.GetCurrentTime(handler.currentClusterName), timerTasks)

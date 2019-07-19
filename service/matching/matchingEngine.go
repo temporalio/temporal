@@ -64,12 +64,6 @@ type matchingEngineImpl struct {
 	domainCache  cache.DomainCache
 }
 
-type taskListID struct {
-	domainID     string
-	taskListName string
-	taskType     int
-}
-
 type pollerIDCtxKey string
 type identityCtxKey string
 
@@ -91,21 +85,7 @@ var (
 
 const (
 	maxQueryWaitCount = 5
-	maxQueryLoopCount = 5
 )
-
-func (t *taskListID) String() string {
-	var r string
-	if t.taskType == persistence.TaskListTypeActivity {
-		r += "activity"
-	} else {
-		r += "decision"
-	}
-	r += " task list \""
-	r += t.taskListName
-	r += "\""
-	return r
-}
 
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
 
@@ -184,21 +164,21 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID,
 		e.taskListsLock.Unlock()
 		return result, nil
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
 	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
 	if err != nil {
 		e.taskListsLock.Unlock()
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
 		return nil, err
 	}
 	e.taskLists[*taskList] = mgr
 	e.taskListsLock.Unlock()
 	err = mgr.Start()
 	if err != nil {
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.taskListName), tag.WorkflowTaskListType(taskList.taskType))
+	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskListName(taskList.name), tag.WorkflowTaskListType(taskList.taskType))
 	return mgr, nil
 }
 
@@ -220,14 +200,24 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *m.
 	domainID := addRequest.GetDomainUUID()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := common.TaskListKindPtr(addRequest.TaskList.GetKind())
-	e.logger.Debug(fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
-		addRequest.TaskList.GetName(), addRequest.Execution.GetWorkflowId(), addRequest.Execution.GetRunId(),
-		addRequest.GetScheduleToStartTimeoutSeconds()))
-	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+
+	e.logger.Debug(
+		fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
+			addRequest.TaskList.GetName(),
+			addRequest.Execution.GetWorkflowId(),
+			addRequest.Execution.GetRunId(),
+			addRequest.GetScheduleToStartTimeoutSeconds()))
+
+	taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+	if err != nil {
+		return false, err
+	}
+
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
 		return false, err
 	}
+
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               domainID,
 		RunID:                  addRequest.Execution.GetRunId(),
@@ -248,13 +238,23 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *m.
 	sourceDomainID := addRequest.GetSourceDomainUUID()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := common.TaskListKindPtr(addRequest.TaskList.GetKind())
-	e.logger.Debug(fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
-		taskListName, addRequest.Execution.WorkflowId, addRequest.Execution.RunId))
-	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+
+	e.logger.Debug(
+		fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
+			taskListName,
+			addRequest.Execution.WorkflowId,
+			addRequest.Execution.RunId))
+
+	taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+	if err != nil {
+		return false, err
+	}
+
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
 		return false, err
 	}
+
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               sourceDomainID,
 		RunID:                  addRequest.Execution.GetRunId(),
@@ -289,7 +289,10 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+		taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+		if err != nil {
+			return nil, err
+		}
 		taskListKind := common.TaskListKindPtr(request.TaskList.GetKind())
 		task, err := e.getTask(pollerCtx, taskList, nil, taskListKind)
 		if err != nil {
@@ -300,24 +303,30 @@ pollLoop:
 			return nil, err
 		}
 
-		if task.queryInfo != nil {
+		if task.isForwarded() {
+			// forwarded tasks are already started and are matched remotely on a
+			// different matching host. So, simply forward the response
+			return task.forwarded.decisionTaskInfo, nil
+		}
+
+		if task.isQuery() {
 			task.finish(nil) // this only means query task sync match succeed.
 
 			// for query task, we don't need to update history to record decision task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this decision task.
 			mutableStateResp, err := e.historyService.GetMutableState(ctx, &h.GetMutableStateRequest{
 				DomainUUID: req.DomainUUID,
-				Execution:  &task.workflowExecution,
+				Execution:  task.workflowExecution(),
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				e.deliverQueryResult(task.queryInfo.taskID, &queryResult{err: err})
+				e.deliverQueryResult(task.query.taskID, &queryResult{err: err})
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
 			if mutableStateResp.GetPreviousStartedEventId() <= 0 {
 				// first decision task is not processed by worker yet.
-				e.deliverQueryResult(task.queryInfo.taskID,
+				e.deliverQueryResult(task.query.taskID,
 					&queryResult{err: errQueryBeforeFirstDecisionCompleted, waitNextEventID: mutableStateResp.GetNextEventId()})
 				return emptyPollForDecisionTaskResponse, nil
 			}
@@ -349,7 +358,7 @@ pollLoop:
 			switch err.(type) {
 			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
 				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
-					taskListName, task.info.TaskID))
+					taskListName, task.generic.TaskID))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -379,7 +388,11 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+		taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
+		if err != nil {
+			return nil, err
+		}
+
 		var maxDispatch *float64
 		if request.TaskListMetadata != nil {
 			maxDispatch = request.TaskListMetadata.MaxTasksPerSecond
@@ -397,12 +410,19 @@ pollLoop:
 			}
 			return nil, err
 		}
+
+		if task.isForwarded() {
+			// forwarded tasks are already started and are matched remotely on a
+			// different matching host. So, simply forward the response
+			return task.forwarded.activityTaskInfo, nil
+		}
+
 		resp, err := e.recordActivityTaskStarted(ctx, request, task)
 		if err != nil {
 			switch err.(type) {
 			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
 				e.logger.Debug(fmt.Sprintf("Duplicated activity task taskList=%v, taskID=%v",
-					taskListName, task.info.TaskID))
+					taskListName, task.generic.TaskID))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -420,8 +440,11 @@ pollLoop:
 func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWorkflowRequest) (*workflow.QueryWorkflowResponse, error) {
 	domainID := queryRequest.GetDomainUUID()
 	taskListName := queryRequest.TaskList.GetName()
-	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 	taskListKind := common.TaskListKindPtr(queryRequest.TaskList.GetKind())
+	taskList, err := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
+	if err != nil {
+		return nil, err
+	}
 
 	var lastErr error
 query_loop:
@@ -430,22 +453,19 @@ query_loop:
 		if err != nil {
 			return nil, err
 		}
-		queryTask := &queryTaskInfo{
-			queryRequest: queryRequest,
-			taskID:       uuid.New(),
-		}
-		err = tlMgr.DispatchQueryTask(ctx, queryTask)
+		taskID := uuid.New()
+		err = tlMgr.DispatchQueryTask(ctx, taskID, queryRequest)
 		if err != nil {
 			return nil, err
 		}
 
 		queryResultCh := make(chan *queryResult, 1)
 		e.queryMapLock.Lock()
-		e.queryTaskMap[queryTask.taskID] = queryResultCh
+		e.queryTaskMap[taskID] = queryResultCh
 		e.queryMapLock.Unlock()
 		defer func() {
 			e.queryMapLock.Lock()
-			delete(e.queryTaskMap, queryTask.taskID)
+			delete(e.queryTaskMap, taskID)
 			e.queryMapLock.Unlock()
 		}()
 
@@ -534,7 +554,10 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 	taskListName := request.TaskList.GetName()
 	pollerID := request.GetPollerID()
 
-	taskList := newTaskListID(domainID, taskListName, taskListType)
+	taskList, err := newTaskListID(domainID, taskListName, taskListType)
+	if err != nil {
+		return err
+	}
 	taskListKind := common.TaskListKindPtr(request.TaskList.GetKind())
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
@@ -552,8 +575,10 @@ func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *m.De
 		taskListType = persistence.TaskListTypeActivity
 	}
 	taskListName := request.DescRequest.TaskList.GetName()
-
-	taskList := newTaskListID(domainID, taskListName, taskListType)
+	taskList, err := newTaskListID(domainID, taskListName, taskListType)
+	if err != nil {
+		return nil, err
+	}
 	taskListKind := common.TaskListKindPtr(request.DescRequest.TaskList.GetKind())
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
@@ -593,33 +618,33 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 ) *m.PollForDecisionTaskResponse {
 
 	var token []byte
-	if task.queryInfo != nil {
+	if task.isQuery() {
 		// for a query task
-		queryRequest := task.queryInfo.queryRequest
+		queryRequest := task.query.queryRequest
 		taskToken := &common.QueryTaskToken{
 			DomainID: *queryRequest.DomainUUID,
 			TaskList: *queryRequest.TaskList.Name,
-			TaskID:   task.queryInfo.taskID,
+			TaskID:   task.query.taskID,
 		}
 		token, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
 		taskoken := &common.TaskToken{
-			DomainID:        task.info.DomainID,
-			WorkflowID:      task.info.WorkflowID,
-			RunID:           task.info.RunID,
+			DomainID:        task.generic.DomainID,
+			WorkflowID:      task.generic.WorkflowID,
+			RunID:           task.generic.RunID,
 			ScheduleID:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
 		token, _ = e.tokenSerializer.Serialize(taskoken)
-		if task.syncResponseCh == nil {
+		if task.responseC == nil {
 			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
-			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.info.CreatedTime))
+			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.generic.CreatedTime))
 		}
 	}
 
-	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, workflowExecutionPtr(task.workflowExecution), token)
-	if task.queryInfo != nil {
-		response.Query = task.queryInfo.queryRequest.QueryRequest.Query
+	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, task.workflowExecution(), token)
+	if task.query != nil {
+		response.Query = task.query.queryRequest.QueryRequest.Query
 	}
 	response.BacklogCountHint = common.Int64Ptr(task.backlogCountHint)
 	return response
@@ -639,9 +664,9 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	if attributes.ActivityId == nil {
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
-	if task.syncResponseCh == nil {
+	if task.responseC == nil {
 		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
-		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.info.CreatedTime))
+		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.generic.CreatedTime))
 	}
 
 	response := &workflow.PollForActivityTaskResponse{}
@@ -649,7 +674,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	response.ActivityType = attributes.ActivityType
 	response.Header = attributes.Header
 	response.Input = attributes.Input
-	response.WorkflowExecution = workflowExecutionPtr(task.workflowExecution)
+	response.WorkflowExecution = task.workflowExecution()
 	response.ScheduledTimestampOfThisAttempt = historyResponse.ScheduledTimestampOfThisAttempt
 	response.ScheduledTimestamp = common.Int64Ptr(*scheduledEvent.Timestamp)
 	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(*attributes.ScheduleToCloseTimeoutSeconds)
@@ -658,10 +683,10 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	response.HeartbeatTimeoutSeconds = common.Int32Ptr(*attributes.HeartbeatTimeoutSeconds)
 
 	token := &common.TaskToken{
-		DomainID:        task.info.DomainID,
-		WorkflowID:      task.info.WorkflowID,
-		RunID:           task.info.RunID,
-		ScheduleID:      task.info.ScheduleID,
+		DomainID:        task.generic.DomainID,
+		WorkflowID:      task.generic.WorkflowID,
+		RunID:           task.generic.RunID,
+		ScheduleID:      task.generic.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
 
@@ -679,10 +704,10 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	task *internalTask,
 ) (*h.RecordDecisionTaskStartedResponse, error) {
 	request := &h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        &task.info.DomainID,
-		WorkflowExecution: &task.workflowExecution,
-		ScheduleId:        &task.info.ScheduleID,
-		TaskId:            &task.info.TaskID,
+		DomainUUID:        &task.generic.DomainID,
+		WorkflowExecution: task.workflowExecution(),
+		ScheduleId:        &task.generic.ScheduleID,
+		TaskId:            &task.generic.TaskID,
 		RequestId:         common.StringPtr(uuid.New()),
 		PollRequest:       pollReq,
 	}
@@ -708,10 +733,10 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	task *internalTask,
 ) (*h.RecordActivityTaskStartedResponse, error) {
 	request := &h.RecordActivityTaskStartedRequest{
-		DomainUUID:        &task.info.DomainID,
-		WorkflowExecution: &task.workflowExecution,
-		ScheduleId:        &task.info.ScheduleID,
-		TaskId:            &task.info.TaskID,
+		DomainUUID:        &task.generic.DomainID,
+		WorkflowExecution: task.workflowExecution(),
+		ScheduleId:        &task.generic.ScheduleID,
+		TaskId:            &task.generic.TaskID,
 		RequestId:         common.StringPtr(uuid.New()),
 		PollRequest:       pollReq,
 	}
@@ -729,10 +754,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		return true
 	})
 	return resp, err
-}
-
-func newTaskListID(domainID, taskListName string, taskType int) *taskListID {
-	return &taskListID{domainID: domainID, taskListName: taskListName, taskType: taskType}
 }
 
 func workflowExecutionPtr(execution workflow.WorkflowExecution) *workflow.WorkflowExecution {

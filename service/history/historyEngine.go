@@ -34,7 +34,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -81,8 +81,7 @@ type (
 		config               *Config
 		archivalClient       archiver.Client
 		resetor              workflowResetor
-		historyArchivers     map[string]carchiver.HistoryArchiver
-		visibilityArchivers  map[string]carchiver.VisibilityArchiver
+		archiverProvider     provider.ArchiverProvider
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -123,8 +122,6 @@ var (
 	ErrSignalOverSize = &workflow.BadRequestError{Message: "Signal input size is over 256K."}
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
 	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "Cancellation already requested for this workflow execution."}
-	// ErrBufferedEventsLimitExceeded is the error indicating limit reached for maximum number of buffered events
-	ErrBufferedEventsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for buffered events"}
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for signal events"}
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
@@ -150,8 +147,7 @@ func NewEngineWithShardContext(
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
-	historyArchivers map[string]carchiver.HistoryArchiver,
-	visibilityArchivers map[string]carchiver.VisibilityArchiver,
+	archiverProvider provider.ArchiverProvider,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	shardWrapper := &shardContextWrapper{
@@ -181,8 +177,7 @@ func NewEngineWithShardContext(
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
 		archivalClient:       archiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS),
-		historyArchivers:     historyArchivers,
-		visibilityArchivers:  visibilityArchivers,
+		archiverProvider:     archiverProvider,
 	}
 
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
@@ -324,15 +319,14 @@ func (e *historyEngineImpl) createMutableState(
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
 		msBuilder = newMutableStateBuilderWithReplicationState(
-			clusterMetadata.GetCurrentClusterName(),
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
 			domainEntry.GetFailoverVersion(),
+			domainEntry.GetReplicationPolicy(),
 		)
 	} else {
 		msBuilder = newMutableStateBuilder(
-			clusterMetadata.GetCurrentClusterName(),
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
@@ -424,7 +418,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		}
 	}
 
-	_, err = msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
+	_, err = msBuilder.AddWorkflowExecutionStartedEvent(domainEntry, execution, startRequest)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -453,15 +447,20 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	}
 
 	context := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
-	createReplicationTask := domainEntry.CanReplicateEvent()
-	replicationTasks := []persistence.Task{}
-	var replicationTask persistence.Task
-	_, replicationTask, err = context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
+	msBuilder.AddTransferTasks(transferTasks...)
+	msBuilder.AddTimerTasks(timerTasks...)
+
+	now := e.timeSource.Now()
+	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyActive,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if replicationTask != nil {
-		replicationTasks = append(replicationTasks, replicationTask)
+	historySize, err := context.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	if err != nil {
+		return nil, err
 	}
 
 	// create as brand new
@@ -469,8 +468,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err != nil {
@@ -502,8 +500,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
-				msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
-				transferTasks, replicationTasks, timerTasks,
+				newWorkflow, historySize, now,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
 		}
@@ -760,10 +757,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				WorkflowId: common.StringPtr(executionInfo.WorkflowID),
 				RunId:      common.StringPtr(executionInfo.RunID),
 			},
-			Type:            &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
-			StartTime:       common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
-			HistoryLength:   common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
-			AutoResetPoints: executionInfo.AutoResetPoints,
+			Type:             &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
+			StartTime:        common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
+			HistoryLength:    common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
+			AutoResetPoints:  executionInfo.AutoResetPoints,
+			SearchAttributes: &workflow.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
 		},
 	}
 
@@ -829,6 +827,12 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				p.ExpirationTimestamp = common.Int64Ptr(ai.ExpirationTime.UnixNano())
 				if ai.MaximumAttempts != 0 {
 					p.MaximumAttempts = common.Int32Ptr(ai.MaximumAttempts)
+				}
+				if ai.LastFailureReason != "" {
+					p.LastFailureReason = common.StringPtr(ai.LastFailureReason)
+				}
+				if ai.LastWorkerIdentity != "" {
+					p.LastWorkerIdentity = common.StringPtr(ai.LastWorkerIdentity)
 				}
 			}
 			result.PendingActivities = append(result.PendingActivities, p)
@@ -1452,16 +1456,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 				}
 			}
-			// Generate a transaction ID for appending events to history
-			var transactionID int64
-			transactionID, err = e.shard.GetNextTransferTaskID()
-			if err != nil {
-				return nil, err
-			}
 
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 			// the history and try the operation again.
-			if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
+			msBuilder.AddTransferTasks(transferTasks...)
+			msBuilder.AddTimerTasks(timerTasks...)
+			if err := context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now()); err != nil {
 				if err == ErrConflict {
 					continue Just_Signal_Loop
 				}
@@ -1539,7 +1539,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	// Add WF start event
-	_, err = msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
+	_, err = msBuilder.AddWorkflowExecutionStartedEvent(domainEntry, execution, startRequest)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -1564,15 +1564,20 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}}
 
 	context = newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
-	createReplicationTask := domainEntry.CanReplicateEvent()
-	replicationTasks := []persistence.Task{}
-	var replicationTask persistence.Task
-	_, replicationTask, err = context.appendFirstBatchEventsForActive(msBuilder, createReplicationTask)
+	msBuilder.AddTransferTasks(transferTasks...)
+	msBuilder.AddTimerTasks(timerTasks...)
+
+	now := e.timeSource.Now()
+	newWorkflow, newWorkflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyActive,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if replicationTask != nil {
-		replicationTasks = append(replicationTasks, replicationTask)
+	historySize, err := context.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	if err != nil {
+		return nil, err
 	}
 
 	createMode := persistence.CreateWorkflowModeBrandNew
@@ -1584,8 +1589,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevLastWriteVersion = prevMutableState.GetLastWriteVersion()
 	}
 	err = context.createWorkflowExecution(
-		msBuilder, e.currentClusterName, createReplicationTask, e.timeSource.Now(),
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 
@@ -1952,15 +1956,11 @@ Update_History_Loop:
 			}
 		}
 
-		// Generate a transaction ID for appending events to history
-		transactionID, err2 := e.shard.GetNextTransferTaskID()
-		if err2 != nil {
-			return err2
-		}
-
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
+		msBuilder.AddTransferTasks(transferTasks...)
+		msBuilder.AddTimerTasks(timerTasks...)
+		if err := context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now()); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
@@ -2080,7 +2080,7 @@ func (e *historyEngineImpl) failDecision(
 	}
 
 	if _, err = msBuilder.AddDecisionTaskFailedEvent(
-		scheduleID, startedID, cause, nil, request.GetIdentity(), "", "", "", 0,
+		scheduleID, startedID, cause, details, request.GetIdentity(), "", "", "", 0,
 	); err != nil {
 		return nil, err
 	}
@@ -2094,7 +2094,7 @@ func (e *historyEngineImpl) getTimerBuilder(
 ) *timerBuilder {
 
 	log := e.logger.WithTags(tag.WorkflowID(we.GetWorkflowId()), tag.WorkflowRunID(we.GetRunId()))
-	return newTimerBuilder(e.shard.GetConfig(), log, clock.NewRealTimeSource())
+	return newTimerBuilder(log, clock.NewRealTimeSource())
 }
 
 func (s *shardContextWrapper) UpdateWorkflowExecution(

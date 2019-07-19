@@ -106,12 +106,20 @@ func newDomainCommands() []cli.Command {
 					Usage: "Security token with permission",
 				},
 				cli.StringFlag{
-					Name:  FlagArchivalStatusWithAlias,
-					Usage: "Flag to set archival status, valid values are \"disabled\" and \"enabled\"",
+					Name:  FlagHistoryArchivalStatusWithAlias,
+					Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
 				},
 				cli.StringFlag{
-					Name:  FlagArchivalBucketNameWithAlias,
-					Usage: "Optionally specify bucket (cannot be changed after first time archival is enabled)",
+					Name:  FlagHistoryArchivalURIWithAlias,
+					Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
+				},
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalStatusWithAlias,
+					Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+				},
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalURIWithAlias,
+					Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -156,12 +164,20 @@ func newDomainCommands() []cli.Command {
 					Usage: "Security token with permission ",
 				},
 				cli.StringFlag{
-					Name:  FlagArchivalStatusWithAlias,
-					Usage: "Flag to set archival status, valid values are \"disabled\" and \"enabled\"",
+					Name:  FlagHistoryArchivalStatusWithAlias,
+					Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
 				},
 				cli.StringFlag{
-					Name:  FlagArchivalBucketNameWithAlias,
-					Usage: "Optionally specify bucket (cannot be changed after first time archival is enabled)",
+					Name:  FlagHistoryArchivalURIWithAlias,
+					Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
+				},
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalStatusWithAlias,
+					Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+				},
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalURIWithAlias,
+					Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
 				},
 				cli.StringFlag{
 					Name:  FlagAddBadBinary,

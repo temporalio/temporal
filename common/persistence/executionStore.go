@@ -91,7 +91,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	newResponse.State.ExecutionInfo, err = m.DeserializeExecutionInfo(response.State.ExecutionInfo)
+	newResponse.State.ExecutionInfo, newResponse.State.ExecutionStats, err = m.DeserializeExecutionInfo(response.State.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -107,16 +107,16 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 
 func (m *executionManagerImpl) DeserializeExecutionInfo(
 	info *InternalWorkflowExecutionInfo,
-) (*WorkflowExecutionInfo, error) {
+) (*WorkflowExecutionInfo, *ExecutionStats, error) {
 
 	completionEvent, err := m.serializer.DeserializeEvent(info.CompletionEvent)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	autoResetPoints, err := m.serializer.DeserializeResetPoints(info.AutoResetPoints)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	newInfo := &WorkflowExecutionInfo{
@@ -145,7 +145,6 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		LastUpdatedTimestamp:         info.LastUpdatedTimestamp,
 		CreateRequestID:              info.CreateRequestID,
 		SignalCount:                  info.SignalCount,
-		HistorySize:                  info.HistorySize,
 		DecisionVersion:              info.DecisionVersion,
 		DecisionScheduleID:           info.DecisionScheduleID,
 		DecisionStartedID:            info.DecisionStartedID,
@@ -176,7 +175,10 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		AutoResetPoints:              autoResetPoints,
 		SearchAttributes:             info.SearchAttributes,
 	}
-	return newInfo, nil
+	newStats := &ExecutionStats{
+		HistorySize: info.HistorySize,
+	}
+	return newInfo, newStats, nil
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
@@ -285,6 +287,8 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			ExpirationTime:                 v.ExpirationTime,
 			MaximumAttempts:                v.MaximumAttempts,
 			NonRetriableErrors:             v.NonRetriableErrors,
+			LastFailureReason:              v.LastFailureReason,
+			LastWorkerIdentity:             v.LastWorkerIdentity,
 			LastHeartbeatTimeoutVisibility: v.LastHeartbeatTimeoutVisibility,
 		}
 		newInfos[k] = a
@@ -398,6 +402,8 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			ExpirationTime:                 v.ExpirationTime,
 			MaximumAttempts:                v.MaximumAttempts,
 			NonRetriableErrors:             v.NonRetriableErrors,
+			LastFailureReason:              v.LastFailureReason,
+			LastWorkerIdentity:             v.LastWorkerIdentity,
 			LastHeartbeatTimeoutVisibility: v.LastHeartbeatTimeoutVisibility,
 		}
 		newInfos = append(newInfos, i)
@@ -407,6 +413,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 
 func (m *executionManagerImpl) SerializeExecutionInfo(
 	info *WorkflowExecutionInfo,
+	stats *ExecutionStats,
 	encoding common.EncodingType,
 ) (*InternalWorkflowExecutionInfo, error) {
 
@@ -448,7 +455,6 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		LastUpdatedTimestamp:         info.LastUpdatedTimestamp,
 		CreateRequestID:              info.CreateRequestID,
 		SignalCount:                  info.SignalCount,
-		HistorySize:                  info.HistorySize,
 		DecisionVersion:              info.DecisionVersion,
 		DecisionScheduleID:           info.DecisionScheduleID,
 		DecisionStartedID:            info.DecisionStartedID,
@@ -478,11 +484,14 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		CronSchedule:                 info.CronSchedule,
 		ExpirationSeconds:            info.ExpirationSeconds,
 		SearchAttributes:             info.SearchAttributes,
+
+		// attributes which are not related to mutable state
+		HistorySize: stats.HistorySize,
 	}, nil
 }
 
-func (m *executionManagerImpl) ResetMutableState(
-	request *ResetMutableStateRequest,
+func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
+	request *ConflictResolveWorkflowExecutionRequest,
 ) error {
 
 	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot, request.Encoding)
@@ -504,7 +513,7 @@ func (m *executionManagerImpl) ResetMutableState(
 		}
 	}
 
-	newRequest := &InternalResetMutableStateRequest{
+	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		RangeID: request.RangeID,
 
 		PrevRunID:            request.PrevRunID,
@@ -517,7 +526,7 @@ func (m *executionManagerImpl) ResetMutableState(
 
 		NewWorkflowSnapshot: serializedNewWorkflowMutation,
 	}
-	return m.persistence.ResetMutableState(newRequest)
+	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
 }
 
 func (m *executionManagerImpl) ResetWorkflowExecution(
@@ -581,7 +590,11 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	encoding common.EncodingType,
 ) (*InternalWorkflowMutation, error) {
 
-	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo, encoding)
+	serializedExecutionInfo, err := m.SerializeExecutionInfo(
+		input.ExecutionInfo,
+		input.ExecutionStats,
+		encoding,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +651,11 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	encoding common.EncodingType,
 ) (*InternalWorkflowSnapshot, error) {
 
-	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo, encoding)
+	serializedExecutionInfo, err := m.SerializeExecutionInfo(
+		input.ExecutionInfo,
+		input.ExecutionStats,
+		encoding,
+	)
 	if err != nil {
 		return nil, err
 	}

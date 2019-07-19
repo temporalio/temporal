@@ -52,6 +52,10 @@ struct DomainInfo {
   38: optional map<string, string> data
   39: optional binary badBinaries
   40: optional string badBinariesEncoding
+  42: optional i16 historyArchivalStatus
+  44: optional string historyArchivalURI
+  46: optional i16 visibilityArchivalStatus
+  48: optional string visibilityArchivalURI
 }
 
 struct HistoryTreeInfo {
@@ -155,6 +159,8 @@ struct ActivityInfo {
   60: optional i64 (js.type = "Long") retryExpirationTimeNanos
   62: optional double retryBackoffCoefficient
   64: optional list<string> retryNonRetryableErrors
+  66: optional string retryLastFailureReason
+  68: optional string retryLastWorkerIdentity
 }
 
 struct ChildExecutionInfo {

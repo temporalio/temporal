@@ -24,13 +24,12 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/uber/cadence/common/definition"
-
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore/filestore"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -94,14 +93,14 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
 			logger,
-			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalDomain),
+			dynamicconfig.NewNopCollection(),
+			options.ClusterMetadata.EnableGlobalDomain,
 			options.ClusterMetadata.FailoverVersionIncrement,
 			options.ClusterMetadata.MasterClusterName,
 			options.ClusterMetadata.CurrentClusterName,
 			options.ClusterMetadata.ClusterInformation,
-			"disabled",
-			"",
-			false,
+			config.Archival{},
+			config.ArchivalDomainDefaults{},
 		)
 	}
 

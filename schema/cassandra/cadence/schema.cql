@@ -172,7 +172,9 @@ CREATE TYPE activity_info (
   expiration_time           timestamp, -- retry expiration time
   max_attempts              int,    -- max number of attempts including initial non-retry attempt
   non_retriable_errors      list<text>,
-  event_data_encoding   text, -- Protocol used for history serialization
+  last_failure_reason       text,
+  last_worker_identity      text, -- Worker that returns the last failure reason
+  event_data_encoding       text, -- Protocol used for history serialization
 );
 
 -- User timer details
@@ -247,8 +249,12 @@ CREATE TYPE domain (
 CREATE TYPE domain_config (
   retention   int,
   emit_metric boolean,
-  archival_bucket text,
-  archival_status int,
+  archival_bucket text, -- deprecated, use the two uri fields below
+  archival_status int, -- deprecated, use the two status fields below
+  history_archival_status int,
+  history_archival_uri text,
+  visibility_archival_status int,
+  visibility_archival_uri text,
   bad_binaries    blob,
   bad_binaries_encoding blob,
 );

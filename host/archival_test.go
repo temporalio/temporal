@@ -31,7 +31,6 @@ import (
 	"github.com/uber/cadence/.gen/go/admin"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -42,7 +41,7 @@ const (
 )
 
 func (s *integrationSuite) TestArchival() {
-	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
+	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-workflow-id"
@@ -62,7 +61,7 @@ func (s *integrationSuite) TestArchival() {
 }
 
 func (s *integrationSuite) TestArchival_ContinueAsNew() {
-	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
+	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-continueAsNew-workflow-id"
@@ -84,7 +83,7 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 }
 
 func (s *integrationSuite) TestArchival_MultiBlob() {
-	s.Equal(cluster.ArchivalEnabled, s.testCluster.testBase.ClusterMetadata.ArchivalConfig().GetArchivalStatus())
+	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-multi-blob-workflow-id"

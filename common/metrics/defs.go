@@ -140,8 +140,8 @@ const (
 	PersistenceGetWorkflowExecutionScope
 	// PersistenceUpdateWorkflowExecutionScope tracks UpdateWorkflowExecution calls made by service to persistence layer
 	PersistenceUpdateWorkflowExecutionScope
-	// PersistenceResetMutableStateScope tracks ResetMutableState calls made by service to persistence layer
-	PersistenceResetMutableStateScope
+	// PersistenceConflictResolveWorkflowExecutionScope tracks ConflictResolveWorkflowExecution calls made by service to persistence layer
+	PersistenceConflictResolveWorkflowExecutionScope
 	// PersistenceResetWorkflowExecutionScope tracks ResetWorkflowExecution calls made by service to persistence layer
 	PersistenceResetWorkflowExecutionScope
 	// PersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecution calls made by service to persistence layer
@@ -358,6 +358,8 @@ const (
 	FrontendClientTerminateWorkflowExecutionScope
 	// FrontendClientUpdateDomainScope tracks RPC calls to frontend service
 	FrontendClientUpdateDomainScope
+	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
+	AdminClientAddSearchAttributeScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowExecutionScope tracks RPC calls to admin service
@@ -841,6 +843,8 @@ const (
 	ArchiverArchivalWorkflowScope
 	// TaskListScavengerScope is scope used by all metrics emitted by worker.tasklist.Scavenger module
 	TaskListScavengerScope
+	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
+	BatcherScope
 
 	NumWorkerScopes
 )
@@ -873,7 +877,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceCreateWorkflowExecutionScope:                  {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:                     {operation: "GetWorkflowExecution"},
 		PersistenceUpdateWorkflowExecutionScope:                  {operation: "UpdateWorkflowExecution"},
-		PersistenceResetMutableStateScope:                        {operation: "ResetMutableState"},
+		PersistenceConflictResolveWorkflowExecutionScope:         {operation: "ConflictResolveWorkflowExecution"},
 		PersistenceResetWorkflowExecutionScope:                   {operation: "ResetWorkflowExecution"},
 		PersistenceDeleteWorkflowExecutionScope:                  {operation: "DeleteWorkflowExecution"},
 		PersistenceDeleteCurrentWorkflowExecutionScope:           {operation: "DeleteCurrentWorkflowExecution"},
@@ -999,6 +1003,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientStartWorkflowExecutionScope:           {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:       {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateDomainScope:                     {operation: "FrontendClientUpdateDomain", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		AdminClientAddSearchAttributeScope:                  {operation: "AdminClientAddSearchAttribute", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
@@ -1225,6 +1230,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverPumpScope:                   {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
+		BatcherScope:                        {operation: "batcher"},
 	},
 	// Blobstore Scope Names
 	Blobstore: {
@@ -1499,6 +1505,8 @@ const (
 	StoppedCount
 	ExecutorTasksDeferredCount
 	ExecutorTasksDroppedCount
+	BatcherProcessorSuccess
+	BatcherProcessorFailures
 	NumWorkerMetrics
 )
 
@@ -1747,6 +1755,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		StoppedCount:                                           {metricName: "stopped", metricType: Counter},
 		ExecutorTasksDeferredCount:                             {metricName: "executor_deferred", metricType: Counter},
 		ExecutorTasksDroppedCount:                              {metricName: "executor_dropped", metricType: Counter},
+		BatcherProcessorSuccess:                                {metricName: "batcher_processor_requests", metricType: Counter},
+		BatcherProcessorFailures:                               {metricName: "batcher_processor_errors", metricType: Counter},
 	},
 }
 

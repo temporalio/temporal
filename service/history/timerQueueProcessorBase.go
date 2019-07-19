@@ -515,12 +515,6 @@ func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time
 		return nil
 	}
 
-	if _, ok := err.(*workflow.LimitExceededError); ok {
-		t.metricsClient.IncCounter(scope, metrics.TaskLimitExceededCounter)
-		logger.Error("Task encounter limit exceeded error.", tag.Error(err), tag.LifeCycleProcessingFailed)
-		return err
-	}
-
 	logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
 }
@@ -541,13 +535,15 @@ func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, s
 
 func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo) log.Logger {
 	logger := t.logger.WithTags(
+		tag.ShardID(t.shard.GetShardID()),
+		tag.WorkflowDomainID(task.DomainID),
 		tag.WorkflowID(task.WorkflowID),
 		tag.WorkflowRunID(task.RunID),
-		tag.WorkflowDomainID(task.DomainID),
-		tag.ShardID(t.shard.GetShardID()),
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()))
+		tag.TaskType(task.GetTaskType()),
+		tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+	)
 	logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
 	return logger
 }
@@ -585,18 +581,18 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 		return nil
 	}
 
-	clusterArchivalStatus := t.shard.GetService().GetClusterMetadata().ArchivalConfig().GetArchivalStatus()
+	clusterArchivalStatus := t.shard.GetService().GetClusterMetadata().HistoryArchivalConfig().ClusterStatus
 	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
 	if err != nil {
 		return err
 	}
-	domainArchivalStatus := domainCacheEntry.GetConfig().ArchivalStatus
+	domainArchivalStatus := domainCacheEntry.GetConfig().HistoryArchivalStatus
 	switch clusterArchivalStatus {
 	case cluster.ArchivalDisabled:
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
 		return t.deleteWorkflow(task, msBuilder, context)
 	case cluster.ArchivalPaused:
-		// TODO: @dandrew once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
+		// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
 		return t.deleteWorkflow(task, msBuilder, context)
 	case cluster.ArchivalEnabled:
@@ -638,6 +634,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 		return err
 	}
 
+	// TODO ycyang: rewrite archiveRequest
 	req := &archiver.ArchiveRequest{
 		ShardID:              t.shard.GetShardID(),
 		DomainID:             task.DomainID,
@@ -648,7 +645,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 		BranchToken:          msBuilder.GetCurrentBranch(),
 		NextEventID:          msBuilder.GetNextEventID(),
 		CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
-		BucketName:           domainCacheEntry.GetConfig().ArchivalBucket,
+		BucketName:           domainCacheEntry.GetConfig().HistoryArchivalURI,
 	}
 
 	// send signal before deleting mutable state to make sure archival is idempotent

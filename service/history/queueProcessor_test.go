@@ -89,6 +89,7 @@ func (s *queueProcessorSuite) SetupTest() {
 	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
+		clusterMetadata:           s.mockClusterMetadata,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
@@ -219,11 +220,6 @@ func (s *queueProcessorSuite) TestHandleTaskError_DomainNotActiveError() {
 func (s *queueProcessorSuite) TestHandleTaskError_CurrentWorkflowConditionFailedError() {
 	err := &persistence.CurrentWorkflowConditionFailedError{}
 	s.Nil(s.queueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
-}
-
-func (s *queueProcessorSuite) TestHandleTaskError_LimitExceededError() {
-	err := &workflow.LimitExceededError{}
-	s.Equal(err, s.queueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
 }
 
 func (s *queueProcessorSuite) TestHandleTaskError_RandomErr() {

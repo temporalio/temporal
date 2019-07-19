@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/mocks"
@@ -54,6 +55,7 @@ type (
 		mockBlobstoreClient  *mocks.BlobstoreClient
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator DomainReplicator
+		mockArchiverProvider *provider.ArchiverProviderMock
 
 		handler *domainHandlerImpl
 	}
@@ -88,9 +90,10 @@ func (s *domainHandlerCommonSuite) SetupTest() {
 	s.mockBlobstoreClient = &mocks.BlobstoreClient{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
+	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
 
 	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
-		s.mockBlobstoreClient, s.mockDomainReplicator)
+		s.mockBlobstoreClient, s.mockDomainReplicator, s.mockArchiverProvider)
 }
 
 func (s *domainHandlerCommonSuite) TearDownTest() {
@@ -321,8 +324,10 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			Configuration: &shared.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention1),
 				EmitMetric:                             common.BoolPtr(emitMetric1),
-				ArchivalBucketName:                     common.StringPtr(""),
-				ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+				HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+				HistoryArchivalURI:                     common.StringPtr(""),
+				VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+				VisibilityArchivalURI:                  common.StringPtr(""),
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfiguration: &shared.DomainReplicationConfiguration{
@@ -344,8 +349,10 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			Configuration: &shared.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention2),
 				EmitMetric:                             common.BoolPtr(emitMetric2),
-				ArchivalBucketName:                     common.StringPtr(""),
-				ArchivalStatus:                         shared.ArchivalStatusDisabled.Ptr(),
+				HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
+				HistoryArchivalURI:                     common.StringPtr(""),
+				VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
+				VisibilityArchivalURI:                  common.StringPtr(""),
 				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 			},
 			ReplicationConfiguration: &shared.DomainReplicationConfiguration{

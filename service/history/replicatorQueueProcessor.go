@@ -187,17 +187,19 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 	replicationTask := &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
 		SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
-			DomainId:          common.StringPtr(task.DomainID),
-			WorkflowId:        common.StringPtr(task.WorkflowID),
-			RunId:             common.StringPtr(task.RunID),
-			Version:           common.Int64Ptr(activityInfo.Version),
-			ScheduledId:       common.Int64Ptr(activityInfo.ScheduleID),
-			ScheduledTime:     scheduledTime,
-			StartedId:         common.Int64Ptr(activityInfo.StartedID),
-			StartedTime:       startedTime,
-			LastHeartbeatTime: heartbeatTime,
-			Details:           activityInfo.Details,
-			Attempt:           common.Int32Ptr(activityInfo.Attempt),
+			DomainId:           common.StringPtr(task.DomainID),
+			WorkflowId:         common.StringPtr(task.WorkflowID),
+			RunId:              common.StringPtr(task.RunID),
+			Version:            common.Int64Ptr(activityInfo.Version),
+			ScheduledId:        common.Int64Ptr(activityInfo.ScheduleID),
+			ScheduledTime:      scheduledTime,
+			StartedId:          common.Int64Ptr(activityInfo.StartedID),
+			StartedTime:        startedTime,
+			LastHeartbeatTime:  heartbeatTime,
+			Details:            activityInfo.Details,
+			Attempt:            common.Int32Ptr(activityInfo.Attempt),
+			LastFailureReason:  common.StringPtr(activityInfo.LastFailureReason),
+			LastWorkerIdentity: common.StringPtr(activityInfo.LastWorkerIdentity),
 		},
 	}
 
@@ -269,8 +271,20 @@ func GenerateReplicationTask(targetClusters []string, task *persistence.Replicat
 		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
-			newRunHistory, _, err = GetAllHistory(historyMgr, historyV2Mgr, metricsClient, logger, false,
-				task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3), task.NewRunEventStoreVersion, task.NewRunBranchToken, shardID)
+			newRunHistory, _, err = GetAllHistory(
+				historyMgr,
+				historyV2Mgr,
+				metricsClient,
+				logger,
+				false,
+				task.DomainID,
+				task.WorkflowID,
+				newRunID,
+				common.FirstEventID,
+				common.FirstEventID+1, // [common.FirstEventID to common.FirstEventID+1) will get the first batch
+				task.NewRunEventStoreVersion,
+				task.NewRunBranchToken,
+				shardID)
 			if err != nil {
 				return nil, err
 			}

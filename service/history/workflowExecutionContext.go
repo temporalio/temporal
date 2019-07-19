@@ -25,14 +25,11 @@ import (
 	"fmt"
 	"time"
 
-	h "github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/locks"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -46,72 +43,74 @@ const (
 
 type (
 	workflowExecutionContext interface {
-		appendFirstBatchHistoryForContinueAsNew(
-			newStateBuilder mutableState,
-			transactionID int64,
-		) error
-		appendFirstBatchEventsForActive(
-			msBuilder mutableState,
-			createReplicationTask bool,
-		) (int, persistence.Task, error)
-		appendFirstBatchEventsForStandby(
-			msBuilder mutableState,
-			history []*workflow.HistoryEvent,
-		) (int, persistence.Task, error)
-		appendHistoryEvents(
-			history []*workflow.HistoryEvent,
-			transactionID int64,
-			doLastEventValidation bool,
-			replicateEvents bool,
-			newStateBuilder mutableState,
-		) (int, persistence.Task, error)
+		getDomainID() string
+		getExecution() *workflow.WorkflowExecution
+		getLogger() log.Logger
+
+		loadWorkflowExecution() (mutableState, error)
+		loadExecutionStats() (*persistence.ExecutionStats, error)
 		clear()
-		continueAsNewWorkflowExecution(
-			context []byte,
-			newStateBuilder mutableState,
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			transactionID int64,
-		) error
+
+		lock(ctx context.Context) error
+		unlock()
+
+		getHistorySize() int64
+		setHistorySize(size int64)
+
+		persistFirstWorkflowEvents(
+			workflowEvents *persistence.WorkflowEvents,
+		) (int64, error)
+		persistNonFirstWorkflowEvents(
+			workflowEvents *persistence.WorkflowEvents,
+		) (int64, error)
+
 		createWorkflowExecution(
-			msBuilder mutableState,
-			sourceCluster string,
-			createReplicationTask bool,
+			newWorkflow *persistence.WorkflowSnapshot,
+			historySize int64,
 			now time.Time,
-			transferTasks []persistence.Task,
-			replicationTasks []persistence.Task,
-			timerTasks []persistence.Task,
 			createMode int,
 			prevRunID string,
 			prevLastWriteVersion int64,
 		) error
-		getDomainID() string
-		getExecution() *workflow.WorkflowExecution
-		getLogger() log.Logger
-		loadWorkflowExecution() (mutableState, error)
-		lock(ctx context.Context) error
-		replicateWorkflowExecution(
-			request *h.ReplicateEventsRequest,
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			lastEventID int64,
+		conflictResolveWorkflowExecution(
 			now time.Time,
-		) error
-		resetMutableState(
 			prevRunID string,
 			prevLastWriteVersion int64,
 			prevState int,
-			replicationTasks []persistence.Task,
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			resetBuilder mutableState,
+			resetMutableState mutableState,
+			resetHistorySize int64,
 		) (mutableState, error)
+		updateWorkflowExecutionAsActive(
+			now time.Time,
+		) error
+		updateWorkflowExecutionWithNewAsActive(
+			now time.Time,
+			newContext workflowExecutionContext,
+			newMutableState mutableState,
+		) error
+		updateWorkflowExecutionAsPassive(
+			now time.Time,
+		) error
+		updateWorkflowExecutionWithNewAsPassive(
+			now time.Time,
+			newContext workflowExecutionContext,
+			newMutableState mutableState,
+		) error
+		updateWorkflowExecutionWithNew(
+			now time.Time,
+			newContext workflowExecutionContext,
+			newMutableState mutableState,
+			currentWorkflowTransactionPolicy transactionPolicy,
+			newWorkflowTransactionPolicy *transactionPolicy,
+		) error
+
 		resetWorkflowExecution(
 			currMutableState mutableState,
 			updateCurr bool,
 			closeTask persistence.Task,
 			cleanupTask persistence.Task,
 			newMutableState mutableState,
+			newHistorySize int64,
 			newTransferTasks []persistence.Task,
 			newTimerTasks []persistence.Task,
 			currentReplicationTasks []persistence.Task,
@@ -119,31 +118,6 @@ type (
 			baseRunID string,
 			baseRunNextEventID int64,
 		) (retError error)
-		scheduleNewDecision(
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-		) ([]persistence.Task, []persistence.Task, error)
-		unlock()
-		updateWorkflowExecutionForStandby(
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			transactionID int64,
-			now time.Time,
-			createReplicationTask bool,
-			standbyHistoryBuilder *historyBuilder,
-			sourceCluster string,
-		) error
-		updateWorkflowExecution(
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			transactionID int64,
-		) error
-		updateWorkflowExecutionWithContext(
-			context []byte,
-			transferTasks []persistence.Task,
-			timerTasks []persistence.Task,
-			transactionID int64,
-		) error
 	}
 )
 
@@ -158,10 +132,10 @@ type (
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
 
-		locker                locks.Mutex
-		msBuilder             mutableState
-		updateCondition       int64
-		createReplicationTask bool
+		mutex           locks.Mutex
+		msBuilder       mutableState
+		stats           *persistence.ExecutionStats
+		updateCondition int64
 	}
 )
 
@@ -194,16 +168,25 @@ func newWorkflowExecutionContext(
 		logger:            lg,
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
-		locker:            locks.NewMutex(),
+		mutex:             locks.NewMutex(),
+		stats: &persistence.ExecutionStats{
+			HistorySize: 0,
+		},
 	}
 }
 
 func (c *workflowExecutionContextImpl) lock(ctx context.Context) error {
-	return c.locker.Lock(ctx)
+	return c.mutex.Lock(ctx)
 }
 
 func (c *workflowExecutionContextImpl) unlock() {
-	c.locker.Unlock()
+	c.mutex.Unlock()
+}
+
+func (c *workflowExecutionContextImpl) clear() {
+	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
+	c.msBuilder = nil
+	c.stats = nil
 }
 
 func (c *workflowExecutionContextImpl) getDomainID() string {
@@ -216,6 +199,30 @@ func (c *workflowExecutionContextImpl) getExecution() *workflow.WorkflowExecutio
 
 func (c *workflowExecutionContextImpl) getLogger() log.Logger {
 	return c.logger
+}
+
+func (c *workflowExecutionContextImpl) getDomainName() string {
+	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+	if err != nil {
+		return ""
+	}
+	return domainEntry.GetInfo().Name
+}
+
+func (c *workflowExecutionContextImpl) getHistorySize() int64 {
+	return c.stats.HistorySize
+}
+
+func (c *workflowExecutionContextImpl) setHistorySize(size int64) {
+	c.stats.HistorySize = size
+}
+
+func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistence.ExecutionStats, error) {
+	_, err := c.loadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	return c.stats, nil
 }
 
 func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, error) {
@@ -240,54 +247,55 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 		Execution: c.workflowExecution,
 	})
 	if err != nil {
-		if common.IsPersistenceTransientError(err) {
-			c.logger.Error("Persistent store operation failure",
-				tag.StoreOperationGetWorkflowExecution,
-				tag.Error(err))
-		}
 		return err
 	}
 
-	msBuilder := newMutableStateBuilder(c.clusterMetadata.GetCurrentClusterName(), c.shard,
-		c.shard.GetEventsCache(), c.logger)
-	if response != nil && response.State != nil {
-		state := response.State
-		msBuilder.Load(state)
-		info := state.ExecutionInfo
-		c.updateCondition = info.NextEventID
-	}
+	c.msBuilder = newMutableStateBuilder(
+		c.shard,
+		c.shard.GetEventsCache(),
+		c.logger,
+	)
+	c.msBuilder.Load(response.State)
+	c.stats = response.State.ExecutionStats
+	c.updateCondition = response.State.ExecutionInfo.NextEventID
 
-	c.msBuilder = msBuilder
 	// finally emit execution and session stats
-	c.emitWorkflowExecutionStats(response.MutableStateStats, c.msBuilder.GetHistorySize())
+	emitWorkflowExecutionStats(
+		c.metricsClient,
+		c.getDomainName(),
+		response.MutableStateStats,
+		c.stats.HistorySize,
+	)
+	return nil
+}
+
+func (c *workflowExecutionContextImpl) updateVersion() error {
+	if c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && c.msBuilder.GetReplicationState() != nil {
+		if !c.msBuilder.IsWorkflowExecutionRunning() {
+			// we should not update the version on mutable state when the workflow is finished
+			return nil
+		}
+		// Support for global domains is enabled and we are performing an update for global domain
+		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+		if err != nil {
+			return err
+		}
+		c.msBuilder.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
+
+		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
+		c.msBuilder.UpdateReplicationPolicy(domainEntry.GetReplicationPolicy())
+	}
 	return nil
 }
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
-	msBuilder mutableState,
-	sourceCluster string,
-	createReplicationTask bool,
+	newWorkflow *persistence.WorkflowSnapshot,
+	historySize int64,
 	now time.Time,
-	transferTasks []persistence.Task,
-	replicationTasks []persistence.Task,
-	timerTasks []persistence.Task,
 	createMode int,
 	prevRunID string,
 	prevLastWriteVersion int64,
 ) error {
-
-	if msBuilder.GetReplicationState() != nil {
-		msBuilder.UpdateReplicationStateLastEventID(
-			sourceCluster,
-			msBuilder.GetCurrentVersion(),
-			msBuilder.GetNextEventID()-1,
-		)
-	}
-
-	executionInfo := msBuilder.GetExecutionInfo()
-	replicationState := msBuilder.GetReplicationState()
-
-	setTaskInfo(msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
 
 	createRequest := &persistence.CreateWorkflowExecutionRequest{
 		// workflow create mode & prev run ID & version
@@ -295,88 +303,499 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		PreviousRunID:            prevRunID,
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
-		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				CreateRequestID: executionInfo.CreateRequestID,
-				DomainID:        executionInfo.DomainID,
-				WorkflowID:      executionInfo.WorkflowID,
-				RunID:           executionInfo.RunID,
-
-				// parent execution
-				ParentDomainID:   executionInfo.ParentDomainID,
-				ParentWorkflowID: executionInfo.ParentWorkflowID,
-				ParentRunID:      executionInfo.ParentRunID,
-				InitiatedID:      executionInfo.InitiatedID,
-
-				TaskList:             executionInfo.TaskList,
-				WorkflowTypeName:     executionInfo.WorkflowTypeName,
-				WorkflowTimeout:      executionInfo.WorkflowTimeout,
-				DecisionTimeoutValue: executionInfo.DecisionTimeoutValue,
-				ExecutionContext:     nil,
-				LastEventTaskID:      executionInfo.LastEventTaskID,
-				NextEventID:          executionInfo.NextEventID,
-				LastProcessedEvent:   common.EmptyEventID,
-				HistorySize:          executionInfo.HistorySize,
-				DecisionVersion:      executionInfo.DecisionVersion,
-				DecisionScheduleID:   executionInfo.DecisionScheduleID,
-				DecisionStartedID:    executionInfo.DecisionStartedID,
-				DecisionTimeout:      executionInfo.DecisionTimeout,
-				State:                executionInfo.State,
-				CloseStatus:          executionInfo.CloseStatus,
-				EventStoreVersion:    executionInfo.EventStoreVersion,
-				BranchToken:          executionInfo.BranchToken,
-				CronSchedule:         executionInfo.CronSchedule,
-				SearchAttributes:     executionInfo.SearchAttributes,
-
-				// retry policy
-				HasRetryPolicy:     executionInfo.HasRetryPolicy,
-				BackoffCoefficient: executionInfo.BackoffCoefficient,
-				ExpirationSeconds:  executionInfo.ExpirationSeconds,
-				InitialInterval:    executionInfo.InitialInterval,
-				MaximumAttempts:    executionInfo.MaximumAttempts,
-				MaximumInterval:    executionInfo.MaximumInterval,
-				NonRetriableErrors: executionInfo.NonRetriableErrors,
-				ExpirationTime:     executionInfo.ExpirationTime,
-			},
-			ReplicationState: replicationState,
-			TransferTasks:    transferTasks,
-			ReplicationTasks: replicationTasks,
-			TimerTasks:       timerTasks,
-		},
+		NewWorkflowSnapshot: *newWorkflow,
 	}
 
-	_, err := c.shard.CreateWorkflowExecution(createRequest)
+	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: historySize,
+	}
+
+	_, err := c.createWorkflowExecutionWithRetry(createRequest)
 	return err
 }
 
-func (c *workflowExecutionContextImpl) resetMutableState(
+func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
+	now time.Time,
 	prevRunID string,
 	prevLastWriteVersion int64,
 	prevState int,
-	replicationTasks []persistence.Task,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	resetBuilder mutableState,
+	resetMutableState mutableState,
+	resetHistorySize int64,
 ) (mutableState, error) {
 
 	// this only resets one mutableState for a workflow
-	snapshotRequest := resetBuilder.ResetSnapshot(
-		prevRunID,
-		prevLastWriteVersion,
-		prevState,
-		replicationTasks,
-		transferTasks,
-		timerTasks,
+	resetWorkflow, workflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyPassive,
 	)
-	snapshotRequest.ResetWorkflowSnapshot.Condition = c.updateCondition
-
-	err := c.shard.ResetMutableState(snapshotRequest)
 	if err != nil {
+		return nil, err
+	}
+	if len(workflowEventsSeq) != 0 {
+		return nil, &workflow.BadRequestError{
+			Message: "reset mutable state should not generate new events",
+		}
+	}
+
+	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: resetHistorySize,
+	}
+
+	if err := c.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
+		// previous workflow information
+		PrevRunID:            prevRunID,
+		PrevLastWriteVersion: prevLastWriteVersion,
+		PrevState:            prevState,
+
+		ResetWorkflowSnapshot: *resetWorkflow,
+	}); err != nil {
 		return nil, err
 	}
 
 	c.clear()
 	return c.loadWorkflowExecution()
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
+	now time.Time,
+) error {
+
+	return c.updateWorkflowExecutionWithNew(
+		now,
+		nil,
+		nil,
+		transactionPolicyActive,
+		nil,
+	)
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsActive(
+	now time.Time,
+	newContext workflowExecutionContext,
+	newMutableState mutableState,
+) error {
+
+	return c.updateWorkflowExecutionWithNew(
+		now,
+		newContext,
+		newMutableState,
+		transactionPolicyActive,
+		transactionPolicyActive.ptr(),
+	)
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsPassive(
+	now time.Time,
+) error {
+
+	return c.updateWorkflowExecutionWithNew(
+		now,
+		nil,
+		nil,
+		transactionPolicyPassive,
+		nil,
+	)
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsPassive(
+	now time.Time,
+	newContext workflowExecutionContext,
+	newMutableState mutableState,
+) error {
+
+	return c.updateWorkflowExecutionWithNew(
+		now,
+		newContext,
+		newMutableState,
+		transactionPolicyPassive,
+		transactionPolicyPassive.ptr(),
+	)
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
+	now time.Time,
+	newContext workflowExecutionContext,
+	newMutableState mutableState,
+	currentWorkflowTransactionPolicy transactionPolicy,
+	newWorkflowTransactionPolicy *transactionPolicy,
+) (retError error) {
+
+	defer func() {
+		if retError != nil {
+			c.clear()
+		}
+	}()
+
+	currentWorkflow, workflowEventsSeq, err := c.msBuilder.CloseTransactionAsMutation(now, currentWorkflowTransactionPolicy)
+	if err != nil {
+		return err
+	}
+	currentWorkflowSize := c.getHistorySize()
+	for _, workflowEvents := range workflowEventsSeq {
+		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		if err != nil {
+			return err
+		}
+		currentWorkflowSize += eventsSize
+	}
+	c.setHistorySize(currentWorkflowSize)
+	currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: currentWorkflowSize,
+	}
+
+	var newWorkflow *persistence.WorkflowSnapshot
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		defer func() {
+			if retError != nil {
+				newContext.clear()
+			}
+		}()
+
+		newWorkflow, workflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(now, *newWorkflowTransactionPolicy)
+		if err != nil {
+			return err
+		}
+
+		newWorkflowSizeSize := newContext.getHistorySize()
+		eventsSize, err := c.persistFirstWorkflowEvents(workflowEventsSeq[0])
+		if err != nil {
+			return err
+		}
+		newWorkflowSizeSize += eventsSize
+
+		newContext.setHistorySize(currentWorkflowSize)
+		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
+			HistorySize: currentWorkflowSize,
+		}
+	}
+
+	if err := c.mergeContinueAsNewReplicationTasks(
+		currentWorkflow,
+		newWorkflow,
+	); err != nil {
+		return err
+	}
+
+	resp, err := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
+		// RangeID , this is set by shard context
+		UpdateWorkflowMutation: *currentWorkflow,
+		NewWorkflowSnapshot:    newWorkflow,
+		// Encoding, this is set by shard context
+	})
+	if err != nil {
+		return err
+	}
+
+	// TODO remove updateCondition in favor of condition in mutable state
+	c.updateCondition = currentWorkflow.ExecutionInfo.NextEventID
+
+	// for any change in the workflow, send a event
+	_ = c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(
+		c.domainID,
+		&c.workflowExecution,
+		c.msBuilder.GetLastFirstEventID(),
+		c.msBuilder.GetNextEventID(),
+		c.msBuilder.GetPreviousStartedEventID(),
+		c.msBuilder.IsWorkflowExecutionRunning(),
+	))
+
+	// finally emit session stats
+	domainName := c.getDomainName()
+	emitWorkflowHistoryStats(
+		c.metricsClient,
+		domainName,
+		int(c.stats.HistorySize),
+		int(c.msBuilder.GetNextEventID()-1),
+	)
+	emitSessionUpdateStats(
+		c.metricsClient,
+		domainName,
+		resp.MutableStateUpdateSessionStats,
+	)
+
+	// emit workflow completion stats if any
+	if currentWorkflow.ExecutionInfo.State == persistence.WorkflowStateCompleted {
+		if event, ok := c.msBuilder.GetCompletionEvent(); ok {
+			emitWorkflowCompletionStats(
+				c.metricsClient,
+				domainName,
+				event,
+			)
+		}
+	}
+
+	return nil
+}
+
+func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
+	currentWorkflowMutation *persistence.WorkflowMutation,
+	newWorkflowSnapshot *persistence.WorkflowSnapshot,
+) error {
+	if currentWorkflowMutation.ExecutionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
+		return nil
+	}
+
+	// current workflow is doing continue as new
+
+	// it is possible that continue as new is done as part of passive logic
+	if len(currentWorkflowMutation.ReplicationTasks) == 0 {
+		return nil
+	}
+
+	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.ReplicationTasks) != 1 {
+		return &workflow.InternalServiceError{
+			Message: "unable to find replication task from new workflow for continue as new replication",
+		}
+	}
+
+	// merge the new run first event batch replication task
+	// to current event batch replication task
+	newRunTask := newWorkflowSnapshot.ReplicationTasks[0].(*persistence.HistoryReplicationTask)
+	newWorkflowSnapshot.ReplicationTasks = nil
+
+	newRunBranchToken := newRunTask.BranchToken
+	newRunEventStoreVersion := newRunTask.EventStoreVersion
+	taskUpdated := false
+	for _, replicationTask := range currentWorkflowMutation.ReplicationTasks {
+		if task, ok := replicationTask.(*persistence.HistoryReplicationTask); ok {
+			taskUpdated = true
+			task.NewRunBranchToken = newRunBranchToken
+			task.NewRunEventStoreVersion = newRunEventStoreVersion
+		}
+	}
+	if !taskUpdated {
+		return &workflow.InternalServiceError{
+			Message: "unable to find replication task from current workflow for continue as new replication",
+		}
+	}
+	return nil
+}
+
+func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
+	workflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+
+	if len(workflowEvents.Events) == 0 {
+		return 0, &workflow.InternalServiceError{
+			Message: "cannot persist first workflow events with empty events",
+		}
+	}
+
+	domainID := workflowEvents.DomainID
+	workflowID := workflowEvents.WorkflowID
+	runID := workflowEvents.RunID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowEvents.WorkflowID),
+		RunId:      common.StringPtr(workflowEvents.RunID),
+	}
+	branchToken := workflowEvents.BranchToken
+	events := workflowEvents.Events
+	firstEvent := events[0]
+
+	if len(branchToken) == 0 {
+		size, err := c.appendHistoryEventsWithRetry(&persistence.AppendHistoryEventsRequest{
+			DomainID:          domainID,
+			Execution:         execution,
+			FirstEventID:      firstEvent.GetEventId(),
+			EventBatchVersion: firstEvent.GetVersion(),
+			Events:            events,
+			// TransactionID is set by shard context
+		})
+		return int64(size), err
+	}
+
+	size, err := c.appendHistoryV2EventsWithRetry(
+		domainID,
+		execution,
+		&persistence.AppendHistoryNodesRequest{
+			IsNewBranch: true,
+			Info:        historyGarbageCleanupInfo(domainID, workflowID, runID),
+			BranchToken: branchToken,
+			Events:      events,
+			// TransactionID is set by shard context
+		},
+	)
+	return int64(size), err
+}
+
+func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
+	workflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+
+	if len(workflowEvents.Events) == 0 {
+		return 0, nil // allow update workflow without events
+	}
+
+	domainID := workflowEvents.DomainID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowEvents.WorkflowID),
+		RunId:      common.StringPtr(workflowEvents.RunID),
+	}
+	branchToken := workflowEvents.BranchToken
+	events := workflowEvents.Events
+	firstEvent := events[0]
+
+	if len(branchToken) == 0 {
+		size, err := c.appendHistoryEventsWithRetry(&persistence.AppendHistoryEventsRequest{
+			DomainID:          domainID,
+			Execution:         execution,
+			FirstEventID:      firstEvent.GetEventId(),
+			EventBatchVersion: firstEvent.GetVersion(),
+			Events:            events,
+			// TransactionID is set by shard context
+		})
+		return int64(size), err
+	}
+
+	size, err := c.appendHistoryV2EventsWithRetry(
+		domainID,
+		execution,
+		&persistence.AppendHistoryNodesRequest{
+			IsNewBranch: false,
+			BranchToken: branchToken,
+			Events:      events,
+			// TransactionID is set by shard context
+		},
+	)
+	return int64(size), err
+}
+
+func (c *workflowExecutionContextImpl) appendHistoryEventsWithRetry(
+	request *persistence.AppendHistoryEventsRequest,
+) (int64, error) {
+
+	resp := 0
+	op := func() error {
+		var err error
+		resp, err = c.shard.AppendHistoryEvents(request)
+		return err
+	}
+
+	err := backoff.Retry(
+		op,
+		persistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	return int64(resp), err
+}
+
+func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
+	domainID string,
+	execution workflow.WorkflowExecution,
+	request *persistence.AppendHistoryNodesRequest,
+) (int64, error) {
+
+	resp := 0
+	op := func() error {
+		var err error
+		resp, err = c.shard.AppendHistoryV2Events(request, domainID, execution)
+		return err
+	}
+
+	err := backoff.Retry(
+		op,
+		persistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	return int64(resp), err
+}
+
+func (c *workflowExecutionContextImpl) createWorkflowExecutionWithRetry(
+	request *persistence.CreateWorkflowExecutionRequest,
+) (*persistence.CreateWorkflowExecutionResponse, error) {
+
+	var resp *persistence.CreateWorkflowExecutionResponse
+	op := func() error {
+		var err error
+		resp, err = c.shard.CreateWorkflowExecution(request)
+		return err
+	}
+
+	err := backoff.Retry(
+		op,
+		persistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	switch err.(type) {
+	case nil:
+		return resp, nil
+	case *persistence.WorkflowExecutionAlreadyStartedError:
+		// it is possible that workflow already exists and caller need to apply
+		// workflow ID reuse policy
+		return nil, err
+	default:
+		c.logger.Error(
+			"Persistent store operation failure",
+			tag.StoreOperationCreateWorkflowExecution,
+			tag.Error(err),
+		)
+		return nil, err
+	}
+}
+
+func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.GetWorkflowExecutionResponse, error) {
+
+	var resp *persistence.GetWorkflowExecutionResponse
+	op := func() error {
+		var err error
+		resp, err = c.executionManager.GetWorkflowExecution(request)
+
+		return err
+	}
+
+	err := backoff.Retry(
+		op,
+		persistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	switch err.(type) {
+	case nil:
+		return resp, nil
+	case *workflow.EntityNotExistsError:
+		// it is possible that workflow does not exists
+		return nil, err
+	default:
+		c.logger.Error(
+			"Persistent fetch operation failure",
+			tag.StoreOperationGetWorkflowExecution,
+			tag.Error(err),
+		)
+		return nil, err
+	}
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
+
+	var resp *persistence.UpdateWorkflowExecutionResponse
+	op := func() error {
+		var err error
+		resp, err = c.shard.UpdateWorkflowExecution(request)
+		return err
+	}
+
+	err := backoff.Retry(
+		op, persistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	switch err.(type) {
+	case nil:
+		return resp, nil
+	case *persistence.ConditionFailedError:
+		// TODO get rid of ErrConflict
+		return nil, ErrConflict
+	default:
+		c.logger.Error(
+			"Persistent store operation failure",
+			tag.StoreOperationUpdateWorkflowExecution,
+			tag.Error(err),
+			tag.Number(c.updateCondition),
+		)
+		return nil, err
+	}
 }
 
 // this reset is more complex than "resetMutableState", it involes currentMutableState and newMutableState:
@@ -389,6 +808,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	closeTask persistence.Task,
 	cleanupTask persistence.Task,
 	newMutableState mutableState,
+	newHistorySize int64,
 	newTransferTasks []persistence.Task,
 	newTimerTasks []persistence.Task,
 	currReplicationTasks []persistence.Task,
@@ -408,11 +828,6 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	}
 	setTaskInfo(currMutableState.GetCurrentVersion(), now, currTransferTasks, currTimerTasks)
 	setTaskInfo(newMutableState.GetCurrentVersion(), now, newTransferTasks, newTimerTasks)
-
-	transactionID, retError := c.shard.GetNextTransferTaskID()
-	if retError != nil {
-		return retError
-	}
 
 	// Since we always reset to decision task, there shouldn't be any buffered events.
 	// Therefore currently ResetWorkflowExecution persistence API doesn't implement setting buffered events.
@@ -436,34 +851,55 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 
 	if updateCurr {
 		hBuilder := currMutableState.GetHistoryBuilder()
-		var size int
+		var size int64
 		// TODO workflow execution reset logic generates replication tasks in its own business logic
-		// should use append history events in the future
-		size, _, retError = c.appendHistoryEvents(hBuilder.GetHistory().GetEvents(), transactionID, true, false, nil)
+		currentExecutionInfo := currMutableState.GetExecutionInfo()
+		size, retError = c.persistNonFirstWorkflowEvents(&persistence.WorkflowEvents{
+			DomainID:    currentExecutionInfo.DomainID,
+			WorkflowID:  currentExecutionInfo.WorkflowID,
+			RunID:       currentExecutionInfo.RunID,
+			BranchToken: currMutableState.GetCurrentBranch(),
+			Events:      hBuilder.GetHistory().GetEvents(),
+		})
 		if retError != nil {
 			return
 		}
-		currMutableState.IncrementHistorySize(size)
+		c.stats.HistorySize += int64(size)
 	}
 
-	// Note: we already made sure that newMutableState is using eventsV2
-	hBuilder := newMutableState.GetHistoryBuilder()
-	size, retError := c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
-		IsNewBranch:   false,
-		BranchToken:   newMutableState.GetCurrentBranch(),
-		Events:        hBuilder.GetHistory().GetEvents(),
-		TransactionID: transactionID,
-	}, c.domainID, c.workflowExecution)
-	if retError != nil {
-		return
+	// TODO refactor resetWorkflowExecution to use CloseTransactionAsSnapshot
+	//  and CloseTransactionAsMutation correctly
+	resetWorkflow, workflowEventsSeq, err := newMutableState.CloseTransactionAsSnapshot(
+		c.shard.GetTimeSource().Now(),
+		// the reason to use passive policy is because this resetWorkflowExecution function
+		// mostly handcraft all parameters to be persisted
+		transactionPolicyPassive,
+	)
+	if err != nil {
+		return err
 	}
-	newMutableState.IncrementHistorySize(size)
+	if len(workflowEventsSeq) != 1 {
+		return &workflow.InternalServiceError{
+			Message: "reset workflow execution should generate exactly 1 event batch",
+		}
+	}
+	for _, workflowEvents := range workflowEventsSeq {
+		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		if err != nil {
+			return err
+		}
+		newHistorySize += eventsSize
+	}
+	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
+		HistorySize: newHistorySize,
+	}
+	resetWorkflow.TransferTasks = newTransferTasks
+	resetWorkflow.ReplicationTasks = newReplicationTasks
+	resetWorkflow.TimerTasks = newTimerTasks
 
-	// ResetSnapshot function used here really does rely on inputs below
-	snapshotRequest := newMutableState.ResetSnapshot("", 0, 0, nil, nil, nil)
-	if len(snapshotRequest.ResetWorkflowSnapshot.ChildExecutionInfos) > 0 ||
-		len(snapshotRequest.ResetWorkflowSnapshot.SignalInfos) > 0 ||
-		len(snapshotRequest.ResetWorkflowSnapshot.SignalRequestedIDs) > 0 {
+	if len(resetWorkflow.ChildExecutionInfos) > 0 ||
+		len(resetWorkflow.SignalInfos) > 0 ||
+		len(resetWorkflow.SignalRequestedIDs) > 0 {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("something went wrong, we shouldn't see any pending childWF, sending Signal or signal requested"),
 		}
@@ -478,26 +914,15 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 
 		CurrentWorkflowMutation: nil,
 
-		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo:    newMutableState.GetExecutionInfo(),
-			ReplicationState: newMutableState.GetReplicationState(),
-
-			ActivityInfos:       snapshotRequest.ResetWorkflowSnapshot.ActivityInfos,
-			TimerInfos:          snapshotRequest.ResetWorkflowSnapshot.TimerInfos,
-			ChildExecutionInfos: snapshotRequest.ResetWorkflowSnapshot.ChildExecutionInfos,
-			RequestCancelInfos:  snapshotRequest.ResetWorkflowSnapshot.RequestCancelInfos,
-			SignalInfos:         snapshotRequest.ResetWorkflowSnapshot.SignalInfos,
-			SignalRequestedIDs:  snapshotRequest.ResetWorkflowSnapshot.SignalRequestedIDs,
-
-			TransferTasks:    newTransferTasks,
-			ReplicationTasks: newReplicationTasks,
-			TimerTasks:       newTimerTasks,
-		},
+		NewWorkflowSnapshot: *resetWorkflow,
 	}
 
 	if updateCurr {
 		resetWFReq.CurrentWorkflowMutation = &persistence.WorkflowMutation{
-			ExecutionInfo:    currMutableState.GetExecutionInfo(),
+			ExecutionInfo: currMutableState.GetExecutionInfo(),
+			ExecutionStats: &persistence.ExecutionStats{
+				HistorySize: c.stats.HistorySize,
+			},
 			ReplicationState: currMutableState.GetReplicationState(),
 
 			UpsertActivityInfos:       []*persistence.ActivityInfo{},
@@ -524,987 +949,4 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	}
 
 	return c.shard.ResetWorkflowExecution(resetWFReq)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithContext(
-	context []byte,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-) error {
-
-	c.msBuilder.GetExecutionInfo().ExecutionContext = context
-	return c.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewRunAndContext(
-	context []byte,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-	newStateBuilder mutableState,
-) error {
-
-	c.msBuilder.GetExecutionInfo().ExecutionContext = context
-	return c.updateWorkflowExecutionForActive(transferTasks, timerTasks, transactionID, newStateBuilder)
-}
-
-func (c *workflowExecutionContextImpl) replicateWorkflowExecution(
-	request *h.ReplicateEventsRequest,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	lastEventID int64,
-	now time.Time,
-) error {
-
-	transactionID, err := c.shard.GetNextTransferTaskID()
-	if err != nil {
-		return err
-	}
-
-	nextEventID := lastEventID + 1
-	c.msBuilder.GetExecutionInfo().SetNextEventID(nextEventID)
-
-	standbyHistoryBuilder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
-	return c.updateWorkflowExecutionForStandby(
-		transferTasks,
-		timerTasks,
-		transactionID,
-		now,
-		false,
-		standbyHistoryBuilder,
-		request.GetSourceCluster(),
-	)
-}
-
-func (c *workflowExecutionContextImpl) updateVersion() error {
-	if c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && c.msBuilder.GetReplicationState() != nil {
-		if !c.msBuilder.IsWorkflowExecutionRunning() {
-			// we should not update the version on mutable state when the workflow is finished
-			return nil
-		}
-		// Support for global domains is enabled and we are performing an update for global domain
-		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
-		if err != nil {
-			return err
-		}
-		c.msBuilder.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
-
-		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
-		c.createReplicationTask = domainEntry.CanReplicateEvent()
-	}
-	return nil
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionForActive(
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-	newStateBuilder mutableState,
-) error {
-
-	if c.msBuilder.GetReplicationState() != nil {
-		currentVersion := c.msBuilder.GetCurrentVersion()
-
-		activeCluster := c.clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
-		currentCluster := c.clusterMetadata.GetCurrentClusterName()
-		if activeCluster != currentCluster {
-			domainID := c.msBuilder.GetExecutionInfo().DomainID
-			c.clear()
-			return errors.NewDomainNotActiveError(domainID, currentCluster, activeCluster)
-		}
-
-		// Handling mutable state turn from standby to active, while having a decision on the fly
-		if di, ok := c.msBuilder.GetInFlightDecisionTask(); ok && c.msBuilder.IsWorkflowExecutionRunning() {
-			if di.Version < currentVersion {
-				// we have a decision on the fly with a lower version, fail it
-				if _, err := c.msBuilder.AddDecisionTaskFailedEvent(
-					di.ScheduleID,
-					di.StartedID,
-					workflow.DecisionTaskFailedCauseFailoverCloseDecision,
-					nil,
-					identityHistoryService,
-					"",
-					"",
-					"",
-					0,
-				); err != nil {
-					return err
-				}
-
-				var transT, timerT []persistence.Task
-				transT, timerT, err := c.scheduleNewDecision(transT, timerT)
-				if err != nil {
-					return err
-				}
-				transferTasks = append(transferTasks, transT...)
-				timerTasks = append(timerTasks, timerT...)
-			}
-		}
-	}
-
-	if !c.createReplicationTask {
-		c.logger.Debug(fmt.Sprintf(
-			"Skipping replication task creation: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
-			c.domainID,
-			c.workflowExecution.GetWorkflowId(),
-			c.workflowExecution.GetRunId(),
-			c.msBuilder.GetExecutionInfo().LastFirstEventID,
-			c.msBuilder.GetExecutionInfo().NextEventID),
-		)
-	}
-
-	// compare with bad binaries and schedule a reset task
-	if len(c.msBuilder.GetPendingChildExecutionInfos()) == 0 {
-		// only schedule reset task if current doesn't have childWFs.
-		// TODO: This will be removed once our reset allows childWFs
-
-		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
-		if err != nil {
-			return err
-		}
-		_, pt := FindAutoResetPoint(c.timeSource, &domainEntry.GetConfig().BadBinaries, c.msBuilder.GetExecutionInfo().AutoResetPoints)
-		if pt != nil {
-			transferTasks = append(transferTasks, &persistence.ResetWorkflowTask{})
-			c.logger.Info("Auto-Reset task is scheduled",
-				tag.WorkflowDomainName(domainEntry.GetInfo().Name),
-				tag.WorkflowID(c.msBuilder.GetExecutionInfo().WorkflowID),
-				tag.WorkflowRunID(c.msBuilder.GetExecutionInfo().RunID),
-				tag.WorkflowResetBaseRunID(pt.GetRunId()),
-				tag.WorkflowEventID(pt.GetFirstDecisionCompletedId()),
-				tag.WorkflowBinaryChecksum(pt.GetBinaryChecksum()))
-		}
-	}
-
-	now := c.timeSource.Now()
-	return c.update(
-		transferTasks,
-		timerTasks,
-		transactionID,
-		now,
-		c.createReplicationTask,
-		nil,
-		"",
-		newStateBuilder,
-	)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecution(
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-) error {
-	return c.updateWorkflowExecutionForActive(transferTasks, timerTasks, transactionID, nil)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionForStandby(
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-	now time.Time,
-	createReplicationTask bool,
-	standbyHistoryBuilder *historyBuilder,
-	sourceCluster string,
-) (errRet error) {
-
-	return c.update(
-		transferTasks,
-		timerTasks,
-		transactionID,
-		now,
-		createReplicationTask,
-		standbyHistoryBuilder,
-		sourceCluster,
-		nil,
-	)
-}
-
-func (c *workflowExecutionContextImpl) update(
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-	now time.Time,
-	createReplicationTask bool,
-	standbyHistoryBuilder *historyBuilder,
-	sourceCluster string,
-	newStateBuilder mutableState,
-) (errRet error) {
-
-	defer func() {
-		if errRet != nil {
-			// Clear all cached state in case of error
-			c.clear()
-		}
-	}()
-
-	// Take a snapshot of all updates we have accumulated for this execution
-	updates, err := c.msBuilder.CloseUpdateSession()
-	if err != nil {
-		if err == ErrBufferedEventsLimitExceeded {
-			if err1 := c.failInflightDecision(); err1 != nil {
-				return err1
-			}
-
-			// Buffered events are flushed, we want upper layer to retry
-			return ErrConflict
-		}
-		return err
-	}
-
-	executionInfo := c.msBuilder.GetExecutionInfo()
-
-	// this builder has events generated locally
-	hasNewStandbyHistoryEvents := standbyHistoryBuilder != nil && len(standbyHistoryBuilder.history) > 0
-	activeHistoryBuilder := updates.newEventsBuilder
-	hasNewActiveHistoryEvents := len(activeHistoryBuilder.history) > 0
-
-	if hasNewStandbyHistoryEvents && hasNewActiveHistoryEvents {
-		c.logger.Fatal("Both standby and active history builder has events.",
-			tag.WorkflowID(executionInfo.WorkflowID),
-			tag.WorkflowRunID(executionInfo.RunID),
-			tag.WorkflowDomainID(executionInfo.DomainID),
-			tag.WorkflowFirstEventID(executionInfo.LastFirstEventID),
-			tag.WorkflowNextEventID(executionInfo.NextEventID),
-			tag.ReplicationState(c.msBuilder.GetReplicationState()),
-		)
-	}
-
-	// Replication state should only be updated after the UpdateSession is closed.  IDs for certain events are only
-	// generated on CloseSession as they could be buffered events.  The value for NextEventID will be wrong on
-	// mutable state if read before flushing the buffered events.
-	crossDCEnabled := c.msBuilder.GetReplicationState() != nil
-	if crossDCEnabled {
-		// always standby history first
-		if hasNewStandbyHistoryEvents {
-			lastEvent := standbyHistoryBuilder.history[len(standbyHistoryBuilder.history)-1]
-			c.msBuilder.UpdateReplicationStateLastEventID(
-				sourceCluster,
-				lastEvent.GetVersion(),
-				lastEvent.GetEventId(),
-			)
-		}
-
-		if hasNewActiveHistoryEvents {
-			c.msBuilder.UpdateReplicationStateLastEventID(
-				c.clusterMetadata.GetCurrentClusterName(),
-				c.msBuilder.GetCurrentVersion(),
-				executionInfo.NextEventID-1,
-			)
-		}
-	}
-
-	newHistorySize := 0
-	var replicationTasks []persistence.Task
-
-	// always standby history first
-	if hasNewStandbyHistoryEvents {
-		firstEvent := standbyHistoryBuilder.GetFirstEvent()
-		// Note: standby events has no transient decision events
-		newHistorySize, _, err = c.appendHistoryEvents(standbyHistoryBuilder.history, transactionID, true, false, nil)
-		if err != nil {
-			return err
-		}
-
-		executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
-	}
-
-	// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
-	if hasNewActiveHistoryEvents {
-		var newReplicationTask persistence.Task
-
-		// Transient decision events need to be written as a separate batch
-		if activeHistoryBuilder.HasTransientEvents() {
-			// transient decision events batch should not perform last event check
-			newHistorySize, newReplicationTask, err = c.appendHistoryEvents(activeHistoryBuilder.transientHistory, transactionID, false, createReplicationTask, newStateBuilder)
-			if err != nil {
-				return err
-			}
-			if newReplicationTask != nil {
-				replicationTasks = append(replicationTasks, newReplicationTask)
-			}
-			executionInfo.SetLastFirstEventID(activeHistoryBuilder.transientHistory[0].GetEventId())
-		}
-
-		var size int
-		size, newReplicationTask, err = c.appendHistoryEvents(activeHistoryBuilder.history, transactionID, true, createReplicationTask, newStateBuilder)
-		if err != nil {
-			return err
-		}
-		if newReplicationTask != nil {
-			replicationTasks = append(replicationTasks, newReplicationTask)
-		}
-
-		executionInfo.SetLastFirstEventID(activeHistoryBuilder.history[0].GetEventId())
-		newHistorySize += size
-
-		// enforce history size/count limit (only on active side)
-		config := c.shard.GetConfig()
-		sizeLimitWarn := config.HistorySizeLimitWarn(executionInfo.DomainID)
-		countLimitWarn := config.HistoryCountLimitWarn(executionInfo.DomainID)
-		historyCount := int(c.msBuilder.GetNextEventID()) - 1
-		historySize := int(c.msBuilder.GetHistorySize()) + newHistorySize
-
-		// All execution stats are emitted under emitWorkflowExecutionStats which is only invoked when the mutableState
-		// is loaded.  Looks like MutableStateStats are returned by persistence layer when mutableState is loaded from DB.
-		// It is much better to emit the entire execution stats on each update.  So for now we are explicitly emitting
-		// historySize and historyCount metric for execution on each update explicitly.
-		domain := ""
-		if entry, err := c.shard.GetDomainCache().GetDomainByID(executionInfo.DomainID); err == nil && entry != nil && entry.GetInfo() != nil {
-			domain = entry.GetInfo().Name
-		}
-		domainSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domain))
-		domainCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domain))
-		domainSizeScope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
-		domainCountScope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
-
-		if historySize > sizeLimitWarn || historyCount > countLimitWarn {
-			// emit warning
-			c.logger.Warn("history size exceeds limit.",
-				tag.WorkflowID(executionInfo.WorkflowID),
-				tag.WorkflowRunID(executionInfo.RunID),
-				tag.WorkflowDomainID(executionInfo.DomainID),
-				tag.WorkflowHistorySize(historySize),
-				tag.WorkflowEventCount(historyCount))
-
-			sizeLimitError := config.HistorySizeLimitError(executionInfo.DomainID)
-			countLimitError := config.HistoryCountLimitError(executionInfo.DomainID)
-			if (historySize > sizeLimitError || historyCount > countLimitError) && c.msBuilder.IsWorkflowExecutionRunning() {
-				// hard terminate workflow if it is still running
-				c.clear()                            // discard pending changes
-				_, err1 := c.loadWorkflowExecution() // reload mutable state
-				if err1 != nil {
-					return err1
-				}
-
-				if _, err = c.msBuilder.AddWorkflowExecutionTerminatedEvent(
-					common.TerminateReasonSizeExceedsLimit,
-					nil,
-					"cadence-history-server",
-				); err != nil {
-					return err
-				}
-
-				updates, err = c.msBuilder.CloseUpdateSession()
-				if err != nil {
-					return err
-				}
-
-				executionInfo = c.msBuilder.GetExecutionInfo()
-				activeHistoryBuilder = updates.newEventsBuilder
-				newStateBuilder = nil // since we terminate current workflow execution, so ignore new executions
-
-				if crossDCEnabled {
-					c.msBuilder.UpdateReplicationStateLastEventID(
-						c.clusterMetadata.GetCurrentClusterName(),
-						c.msBuilder.GetCurrentVersion(),
-						executionInfo.NextEventID-1,
-					)
-				}
-
-				terminateTransactionID, err1 := c.shard.GetNextTransferTaskID()
-				if err1 != nil {
-					return err1
-				}
-				newHistorySize, newReplicationTask, err = c.appendHistoryEvents(activeHistoryBuilder.history, terminateTransactionID, true, createReplicationTask, newStateBuilder)
-				if err != nil {
-					return err
-				}
-				if newReplicationTask != nil {
-					replicationTasks = []persistence.Task{newReplicationTask}
-				}
-				executionInfo.SetLastFirstEventID(activeHistoryBuilder.GetFirstEvent().GetEventId())
-
-				// add clean up tasks
-				tranT, timerT, err := getWorkflowHistoryCleanupTasksFromShard(c.shard, executionInfo.DomainID, executionInfo.WorkflowID, nil)
-				if err != nil {
-					return err
-				}
-				// TODO since this is a force termination, should clear existing tx / timer tasks?
-				transferTasks = append(transferTasks, tranT)
-				timerTasks = append(timerTasks, timerT)
-			} // end of hard terminate workflow
-		} // end of enforce history size/count limit
-
-	} // end of update history events for active builder
-
-	if executionInfo.State == persistence.WorkflowStateCompleted {
-		// clear stickyness
-		c.msBuilder.ClearStickyness()
-	}
-
-	if createReplicationTask {
-		replicationTasks = append(replicationTasks, updates.syncActivityTasks...)
-	}
-	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
-
-	// Update history size on mutableState before calling UpdateWorkflowExecution
-	c.msBuilder.IncrementHistorySize(newHistorySize)
-
-	var resp *persistence.UpdateWorkflowExecutionResponse
-	var err1 error
-	if resp, err1 = c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
-		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:             executionInfo,
-			ReplicationState:          c.msBuilder.GetReplicationState(),
-			TransferTasks:             transferTasks,
-			ReplicationTasks:          replicationTasks,
-			TimerTasks:                timerTasks,
-			Condition:                 c.updateCondition,
-			UpsertActivityInfos:       updates.updateActivityInfos,
-			DeleteActivityInfos:       updates.deleteActivityInfos,
-			UpsertTimerInfos:          updates.updateTimerInfos,
-			DeleteTimerInfos:          updates.deleteTimerInfos,
-			UpsertChildExecutionInfos: updates.updateChildExecutionInfos,
-			DeleteChildExecutionInfo:  updates.deleteChildExecutionInfo,
-			UpsertRequestCancelInfos:  updates.updateCancelExecutionInfos,
-			DeleteRequestCancelInfo:   updates.deleteCancelExecutionInfo,
-			UpsertSignalInfos:         updates.updateSignalInfos,
-			DeleteSignalInfo:          updates.deleteSignalInfo,
-			UpsertSignalRequestedIDs:  updates.updateSignalRequestedIDs,
-			DeleteSignalRequestedID:   updates.deleteSignalRequestedID,
-			NewBufferedEvents:         updates.newBufferedEvents,
-			ClearBufferedEvents:       updates.clearBufferedEvents,
-		},
-		NewWorkflowSnapshot: updates.continueAsNew,
-	}); err1 != nil {
-		switch err1.(type) {
-		case *persistence.ConditionFailedError:
-			return ErrConflict
-		}
-
-		c.logger.Error("Persistent store operation failure",
-			tag.StoreOperationUpdateWorkflowExecution,
-			tag.Error(err), tag.Number(c.updateCondition))
-		return err1
-	}
-
-	// Update went through so update the condition for new updates
-	c.updateCondition = c.msBuilder.GetNextEventID()
-	c.msBuilder.GetExecutionInfo().LastUpdatedTimestamp = c.timeSource.Now()
-
-	// for any change in the workflow, send a event
-	c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(
-		c.domainID,
-		&c.workflowExecution,
-		c.msBuilder.GetLastFirstEventID(),
-		c.msBuilder.GetNextEventID(),
-		c.msBuilder.GetPreviousStartedEventID(),
-		c.msBuilder.IsWorkflowExecutionRunning(),
-	))
-
-	// finally emit session stats
-	if resp != nil {
-		c.emitSessionUpdateStats(resp.MutableStateUpdateSessionStats)
-	}
-
-	// emit workflow completion stats if any
-	if executionInfo.State == persistence.WorkflowStateCompleted {
-		if event, ok := c.msBuilder.GetCompletionEvent(); ok {
-			c.emitWorkflowCompletionStats(event)
-		}
-	}
-
-	return nil
-}
-
-func (c *workflowExecutionContextImpl) appendFirstBatchEventsForActive(
-	msBuilder mutableState,
-	createReplicationTask bool,
-) (int, persistence.Task, error) {
-
-	// call FlushBufferedEvents to assign task id to event
-	// as well as update last event task id in mutable state builder
-	err := msBuilder.FlushBufferedEvents()
-	if err != nil {
-		return 0, nil, err
-	}
-	events := msBuilder.GetHistoryBuilder().GetHistory().Events
-	return c.appendFirstBatchEvents(msBuilder, events, createReplicationTask)
-}
-
-func (c *workflowExecutionContextImpl) appendFirstBatchEventsForStandby(
-	msBuilder mutableState,
-	history []*workflow.HistoryEvent,
-) (int, persistence.Task, error) {
-
-	return c.appendFirstBatchEvents(msBuilder, history, false)
-}
-
-func (c *workflowExecutionContextImpl) appendFirstBatchEvents(
-	msBuilder mutableState,
-	history []*workflow.HistoryEvent,
-	replicateEvents bool,
-) (int, persistence.Task, error) {
-
-	firstEvent := history[0]
-	lastEvent := history[len(history)-1]
-	var historySize int
-	var err error
-
-	if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-		historySize, err = c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
-			IsNewBranch: true,
-			Info: historyGarbageCleanupInfo(
-				c.domainID,
-				c.workflowExecution.GetWorkflowId(),
-				c.workflowExecution.GetRunId(),
-			),
-			BranchToken: msBuilder.GetCurrentBranch(),
-			Events:      history,
-			// It is ok to use 0 for TransactionID because RunID is unique so there are
-			// no potential duplicates to override.
-			TransactionID: 0,
-		}, c.domainID, c.workflowExecution)
-	} else {
-		historySize, err = c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-			DomainID:  c.domainID,
-			Execution: c.workflowExecution,
-			// It is ok to use 0 for TransactionID because RunID is unique so there are
-			// no potential duplicates to override.
-			TransactionID:     0,
-			FirstEventID:      firstEvent.GetEventId(),
-			EventBatchVersion: firstEvent.GetVersion(),
-			Events:            history,
-		})
-	}
-
-	var replicationTask persistence.Task
-	if err == nil {
-		msBuilder.IncrementHistorySize(historySize)
-		if replicateEvents && msBuilder.GetReplicationState() != nil {
-			replicationTask = &persistence.HistoryReplicationTask{
-				FirstEventID:            firstEvent.GetEventId(),
-				NextEventID:             lastEvent.GetEventId() + 1,
-				Version:                 firstEvent.GetVersion(),
-				LastReplicationInfo:     msBuilder.GetReplicationState().LastReplicationInfo,
-				EventStoreVersion:       msBuilder.GetEventStoreVersion(),
-				BranchToken:             msBuilder.GetCurrentBranch(),
-				NewRunEventStoreVersion: 0,   // no new run
-				NewRunBranchToken:       nil, // no new run
-			}
-		}
-	}
-	return historySize, replicationTask, err
-}
-
-func (c *workflowExecutionContextImpl) appendHistoryEvents(
-	history []*workflow.HistoryEvent,
-	transactionID int64,
-	doLastEventValidation bool,
-	replicateEvents bool,
-	newStateBuilder mutableState,
-) (int, persistence.Task, error) {
-
-	if doLastEventValidation {
-		if err := c.validateNoEventsAfterWorkflowFinish(history); err != nil {
-			return 0, nil, err
-		}
-	}
-
-	firstEvent := history[0]
-	lastEvent := history[len(history)-1]
-	var historySize int
-	var err error
-
-	if c.msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-		historySize, err = c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
-			IsNewBranch:   false,
-			BranchToken:   c.msBuilder.GetCurrentBranch(),
-			Events:        history,
-			TransactionID: transactionID,
-		}, c.domainID, c.workflowExecution)
-	} else {
-		historySize, err = c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-			DomainID:          c.domainID,
-			Execution:         c.workflowExecution,
-			TransactionID:     transactionID,
-			FirstEventID:      firstEvent.GetEventId(),
-			EventBatchVersion: firstEvent.GetVersion(),
-			Events:            history,
-		})
-	}
-
-	if err != nil {
-		switch err.(type) {
-		case *persistence.ConditionFailedError:
-			return historySize, nil, ErrConflict
-		}
-
-		c.logger.Error("Persistent store operation failure",
-			tag.StoreOperationUpdateWorkflowExecution,
-			tag.Error(err),
-			tag.Number(c.updateCondition))
-		return historySize, nil, err
-	}
-
-	var replicationTask persistence.Task
-	if replicateEvents && c.msBuilder.GetReplicationState() != nil {
-		var newRunEventStoreVersion int32
-		var newRunBranchToken []byte
-		if newStateBuilder != nil {
-			newRunEventStoreVersion = newStateBuilder.GetEventStoreVersion()
-			newRunBranchToken = newStateBuilder.GetCurrentBranch()
-		}
-
-		replicationTask = &persistence.HistoryReplicationTask{
-			FirstEventID:            firstEvent.GetEventId(),
-			NextEventID:             lastEvent.GetEventId() + 1,
-			Version:                 firstEvent.GetVersion(),
-			LastReplicationInfo:     c.msBuilder.GetReplicationState().LastReplicationInfo,
-			EventStoreVersion:       c.msBuilder.GetEventStoreVersion(),
-			BranchToken:             c.msBuilder.GetCurrentBranch(),
-			NewRunEventStoreVersion: newRunEventStoreVersion,
-			NewRunBranchToken:       newRunBranchToken,
-		}
-	}
-	return historySize, replicationTask, nil
-}
-
-func (c *workflowExecutionContextImpl) continueAsNewWorkflowExecution(
-	context []byte,
-	newStateBuilder mutableState,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	transactionID int64,
-) error {
-
-	err1 := c.appendFirstBatchHistoryForContinueAsNew(newStateBuilder, transactionID)
-	if err1 != nil {
-		return err1
-	}
-
-	err2 := c.updateWorkflowExecutionWithNewRunAndContext(context, transferTasks, timerTasks, transactionID, newStateBuilder)
-	if err2 != nil {
-		// TODO: Delete new execution if update fails due to conflict or shard being lost
-	}
-
-	return err2
-}
-
-func (c *workflowExecutionContextImpl) appendFirstBatchHistoryForContinueAsNew(
-	newStateBuilder mutableState,
-	transactionID int64,
-) error {
-
-	executionInfo := newStateBuilder.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	newExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(executionInfo.WorkflowID),
-		RunId:      common.StringPtr(executionInfo.RunID),
-	}
-
-	firstEvent := newStateBuilder.GetHistoryBuilder().history[0]
-	history := newStateBuilder.GetHistoryBuilder().GetHistory()
-	var historySize int
-	var err error
-	if newStateBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-		historySize, err = c.shard.AppendHistoryV2Events(&persistence.AppendHistoryNodesRequest{
-			IsNewBranch:   true,
-			Info:          historyGarbageCleanupInfo(domainID, newExecution.GetWorkflowId(), newExecution.GetRunId()),
-			BranchToken:   newStateBuilder.GetCurrentBranch(),
-			Events:        history.Events,
-			TransactionID: transactionID,
-		}, newStateBuilder.GetExecutionInfo().DomainID, newExecution)
-	} else {
-		historySize, err = c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-			DomainID:          domainID,
-			Execution:         newExecution,
-			TransactionID:     transactionID,
-			FirstEventID:      firstEvent.GetEventId(),
-			EventBatchVersion: firstEvent.GetVersion(),
-			Events:            history.Events,
-		})
-	}
-
-	if err == nil {
-		// History update for new run succeeded, update the history size on both mutableState for current and new run
-		c.msBuilder.SetNewRunSize(historySize)
-		newStateBuilder.IncrementHistorySize(historySize)
-	}
-
-	return err
-}
-
-func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
-	request *persistence.GetWorkflowExecutionRequest,
-) (*persistence.GetWorkflowExecutionResponse, error) {
-
-	var response *persistence.GetWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		response, err = c.executionManager.GetWorkflowExecution(request)
-
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
-	request *persistence.UpdateWorkflowExecutionRequest,
-) (*persistence.UpdateWorkflowExecutionResponse, error) {
-
-	resp := &persistence.UpdateWorkflowExecutionResponse{}
-	op := func() error {
-		var err error
-		resp, err = c.shard.UpdateWorkflowExecution(request)
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	return resp, err
-}
-
-func (c *workflowExecutionContextImpl) clear() {
-	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
-	c.msBuilder = nil
-}
-
-// scheduleNewDecision is helper method which has the logic for scheduling new decision for a workflow execution.
-// This function takes in a slice of transferTasks and timerTasks already scheduled for the current transaction
-// and may append more tasks to it.  It also returns back the slice with new tasks appended to it.  It is expected
-// caller to assign returned slice to original passed in slices.  For this reason we return the original slices
-// even if the method fails due to an error on loading workflow execution.
-func (c *workflowExecutionContextImpl) scheduleNewDecision(
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-) ([]persistence.Task, []persistence.Task, error) {
-
-	msBuilder, err := c.loadWorkflowExecution()
-	if err != nil {
-		return transferTasks, timerTasks, err
-	}
-
-	executionInfo := msBuilder.GetExecutionInfo()
-	if !msBuilder.HasPendingDecisionTask() {
-		di, err := msBuilder.AddDecisionTaskScheduledEvent()
-		if err != nil {
-			return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
-		}
-		transferTasks = append(transferTasks, &persistence.DecisionTask{
-			DomainID:   executionInfo.DomainID,
-			TaskList:   di.TaskList,
-			ScheduleID: di.ScheduleID,
-		})
-		if msBuilder.IsStickyTaskListEnabled() {
-			tBuilder := newTimerBuilder(c.shard.GetConfig(), c.logger, clock.NewRealTimeSource())
-			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-				executionInfo.StickyScheduleToStartTimeout)
-			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
-		}
-	}
-
-	return transferTasks, timerTasks, nil
-}
-
-func (c *workflowExecutionContextImpl) failInflightDecision() error {
-	c.clear()
-
-	// Reload workflow execution so we can apply the decision task failure event
-	msBuilder, err := c.loadWorkflowExecution()
-	if err != nil {
-		return err
-	}
-
-	if di, ok := msBuilder.GetInFlightDecisionTask(); ok {
-		if _, err := msBuilder.AddDecisionTaskFailedEvent(
-			di.ScheduleID,
-			di.StartedID,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
-			nil,
-			identityHistoryService,
-			"",
-			"",
-			"",
-			0,
-		); err != nil {
-			return err
-		}
-
-		var transT, timerT []persistence.Task
-		transT, timerT, err = c.scheduleNewDecision(transT, timerT)
-		if err != nil {
-			return err
-		}
-
-		// Generate a transaction ID for appending events to history
-		transactionID, err := c.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
-		err = c.updateWorkflowExecution(transT, timerT, transactionID)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(
-	stats *persistence.MutableStateStats,
-	executionInfoHistorySize int64,
-) {
-
-	if stats == nil {
-		return
-	}
-
-	domain := ""
-	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-		domain = entry.GetInfo().Name
-	}
-
-	domainSizeScope := c.metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domain))
-	domainCountScope := c.metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domain))
-	emitWorkflowExecutionStats(domainSizeScope, domainCountScope, stats, executionInfoHistorySize)
-}
-
-func (c *workflowExecutionContextImpl) emitSessionUpdateStats(
-	stats *persistence.MutableStateUpdateSessionStats,
-) {
-
-	if stats == nil {
-		return
-	}
-
-	domain := ""
-	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-		domain = entry.GetInfo().Name
-	}
-
-	domainSizeScope := c.metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(domain))
-	domainCountScope := c.metricsClient.Scope(metrics.SessionCountStatsScope, metrics.DomainTag(domain))
-	emitSessionUpdateStats(domainSizeScope, domainCountScope, stats)
-}
-
-func (c *workflowExecutionContextImpl) emitWorkflowCompletionStats(
-	event *workflow.HistoryEvent,
-) {
-
-	domain := ""
-	if entry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-		domain = entry.GetInfo().Name
-	}
-
-	domainScope := c.metricsClient.Scope(metrics.WorkflowCompletionStatsScope, metrics.DomainTag(domain))
-	emitWorkflowCompletionStats(domainScope, event)
-}
-
-func emitWorkflowExecutionStats(
-	sizeScope metrics.Scope,
-	countScope metrics.Scope,
-	stats *persistence.MutableStateStats,
-	executionInfoHistorySize int64,
-) {
-
-	sizeScope.RecordTimer(metrics.HistorySize, time.Duration(executionInfoHistorySize))
-	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
-	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.MutableStateSize))
-	sizeScope.RecordTimer(metrics.ActivityInfoSize, time.Duration(stats.ActivityInfoSize))
-	sizeScope.RecordTimer(metrics.TimerInfoSize, time.Duration(stats.TimerInfoSize))
-	sizeScope.RecordTimer(metrics.ChildInfoSize, time.Duration(stats.ChildInfoSize))
-	sizeScope.RecordTimer(metrics.SignalInfoSize, time.Duration(stats.SignalInfoSize))
-	sizeScope.RecordTimer(metrics.BufferedEventsSize, time.Duration(stats.BufferedEventsSize))
-
-	countScope.RecordTimer(metrics.ActivityInfoCount, time.Duration(stats.ActivityInfoCount))
-	countScope.RecordTimer(metrics.TimerInfoCount, time.Duration(stats.TimerInfoCount))
-	countScope.RecordTimer(metrics.ChildInfoCount, time.Duration(stats.ChildInfoCount))
-	countScope.RecordTimer(metrics.SignalInfoCount, time.Duration(stats.SignalInfoCount))
-	countScope.RecordTimer(metrics.RequestCancelInfoCount, time.Duration(stats.RequestCancelInfoCount))
-	countScope.RecordTimer(metrics.BufferedEventsCount, time.Duration(stats.BufferedEventsCount))
-}
-
-func emitSessionUpdateStats(
-	sizeScope metrics.Scope,
-	countScope metrics.Scope,
-	stats *persistence.MutableStateUpdateSessionStats,
-) {
-
-	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
-	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.ExecutionInfoSize))
-	sizeScope.RecordTimer(metrics.ActivityInfoSize, time.Duration(stats.ActivityInfoSize))
-	sizeScope.RecordTimer(metrics.TimerInfoSize, time.Duration(stats.TimerInfoSize))
-	sizeScope.RecordTimer(metrics.ChildInfoSize, time.Duration(stats.ChildInfoSize))
-	sizeScope.RecordTimer(metrics.SignalInfoSize, time.Duration(stats.SignalInfoSize))
-	sizeScope.RecordTimer(metrics.BufferedEventsSize, time.Duration(stats.BufferedEventsSize))
-
-	countScope.RecordTimer(metrics.ActivityInfoCount, time.Duration(stats.ActivityInfoCount))
-	countScope.RecordTimer(metrics.TimerInfoCount, time.Duration(stats.TimerInfoCount))
-	countScope.RecordTimer(metrics.ChildInfoCount, time.Duration(stats.ChildInfoCount))
-	countScope.RecordTimer(metrics.SignalInfoCount, time.Duration(stats.SignalInfoCount))
-	countScope.RecordTimer(metrics.RequestCancelInfoCount, time.Duration(stats.RequestCancelInfoCount))
-	countScope.RecordTimer(metrics.DeleteActivityInfoCount, time.Duration(stats.DeleteActivityInfoCount))
-	countScope.RecordTimer(metrics.DeleteTimerInfoCount, time.Duration(stats.DeleteTimerInfoCount))
-	countScope.RecordTimer(metrics.DeleteChildInfoCount, time.Duration(stats.DeleteChildInfoCount))
-	countScope.RecordTimer(metrics.DeleteSignalInfoCount, time.Duration(stats.DeleteSignalInfoCount))
-	countScope.RecordTimer(metrics.DeleteRequestCancelInfoCount, time.Duration(stats.DeleteRequestCancelInfoCount))
-}
-
-func emitWorkflowCompletionStats(
-	scope metrics.Scope,
-	event *workflow.HistoryEvent,
-) {
-
-	if event.EventType == nil {
-		return
-	}
-	switch *event.EventType {
-	case shared.EventTypeWorkflowExecutionCompleted:
-		scope.IncCounter(metrics.WorkflowSuccessCount)
-	case shared.EventTypeWorkflowExecutionCanceled:
-		scope.IncCounter(metrics.WorkflowCancelCount)
-	case shared.EventTypeWorkflowExecutionFailed:
-		scope.IncCounter(metrics.WorkflowFailedCount)
-	case shared.EventTypeWorkflowExecutionTimedOut:
-		scope.IncCounter(metrics.WorkflowTimeoutCount)
-	case shared.EventTypeWorkflowExecutionTerminated:
-		scope.IncCounter(metrics.WorkflowTerminateCount)
-	}
-}
-
-// validateNoEventsAfterWorkflowFinish perform check on history event batch
-// NOTE: do not apply this check on every batch, since transient
-// decision && workflow finish will be broken (the first batch)
-func (c *workflowExecutionContextImpl) validateNoEventsAfterWorkflowFinish(
-	input []*workflow.HistoryEvent,
-) error {
-
-	if len(input) == 0 {
-		return nil
-	}
-
-	// if workflow is still running, no check is necessary
-	if c.msBuilder.IsWorkflowExecutionRunning() {
-		return nil
-	}
-
-	// workflow close
-	// this will perform check on the last event of last batch
-	// NOTE: do not apply this check on every batch, since transient
-	// decision && workflow finish will be broken (the first batch)
-	lastEvent := input[len(input)-1]
-	switch lastEvent.GetEventType() {
-	case workflow.EventTypeWorkflowExecutionCompleted,
-		workflow.EventTypeWorkflowExecutionFailed,
-		workflow.EventTypeWorkflowExecutionTimedOut,
-		workflow.EventTypeWorkflowExecutionTerminated,
-		workflow.EventTypeWorkflowExecutionContinuedAsNew,
-		workflow.EventTypeWorkflowExecutionCanceled:
-
-		return nil
-
-	default:
-		c.logger.Error("encounter case where events appears after workflow finish.",
-			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowDomainID(c.domainID))
-
-		return ErrEventsAterWorkflowFinish
-	}
-
 }

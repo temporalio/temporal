@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -47,6 +48,7 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		GetHistoryV2Manager() persistence.HistoryV2Manager
 		GetDomainCache() cache.DomainCache
+		GetClusterMetadata() cluster.Metadata
 		GetNextTransferTaskID() (int64, error)
 		GetTransferTaskIDs(number int) ([]int64, error)
 		GetTransferMaxReadLevel() int64
@@ -71,7 +73,7 @@ type (
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
-		ResetMutableState(request *persistence.ResetMutableStateRequest) error
+		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
 		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error)
@@ -91,7 +93,7 @@ type (
 	shardContextImpl struct {
 		shardItem        *historyShardsItem
 		shardID          int
-		currentCluster   string
+		clusterMetadata  cluster.Metadata
 		service          service.Service
 		rangeID          int64
 		shardManager     persistence.ShardManager
@@ -151,6 +153,10 @@ func (s *shardContextImpl) GetHistoryV2Manager() persistence.HistoryV2Manager {
 
 func (s *shardContextImpl) GetDomainCache() cache.DomainCache {
 	return s.domainCache
+}
+
+func (s *shardContextImpl) GetClusterMetadata() cluster.Metadata {
+	return s.clusterMetadata
 }
 
 func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
@@ -628,7 +634,7 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
+func (s *shardContextImpl) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error {
 
 	domainID := request.ResetWorkflowSnapshot.ExecutionInfo.DomainID
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowID
@@ -675,7 +681,7 @@ Reset_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
-		err := s.executionManager.ResetMutableState(request)
+		err := s.executionManager.ConflictResolveWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
@@ -723,8 +729,18 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	if err != nil {
 		return 0, err
 	}
+
+	// NOTE: do not use getNextTransferTaskIDLocked since
+	// getNextTransferTaskIDLocked is not guarded by lock
+	transactionID, err := s.GetNextTransferTaskID()
+	if err != nil {
+		return 0, err
+	}
+
 	request.Encoding = s.getDefaultEncoding(domainEntry)
 	request.ShardID = common.IntPtr(s.shardID)
+	request.TransactionID = transactionID
+
 	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
@@ -754,7 +770,16 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	if err != nil {
 		return 0, err
 	}
+
+	// NOTE: do not use getNextTransferTaskIDLocked since
+	// getNextTransferTaskIDLocked is not guarded by lock
+	transactionID, err := s.GetNextTransferTaskID()
+	if err != nil {
+		return 0, err
+	}
+
 	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.TransactionID = transactionID
 
 	size := 0
 	defer func() {
@@ -807,7 +832,6 @@ func (s *shardContextImpl) NotifyNewHistoryEvent(event *historyEventNotification
 func (s *shardContextImpl) GetConfig() *Config {
 	return s.config
 }
-
 func (s *shardContextImpl) GetEventsCache() eventsCache {
 	return s.eventsCache
 }
@@ -941,8 +965,10 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 }
 
 func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
-	minTransferLevel := s.shardInfo.ClusterTransferAckLevel[s.currentCluster]
-	maxTransferLevel := s.shardInfo.ClusterTransferAckLevel[s.currentCluster]
+	currentCluster := s.clusterMetadata.GetCurrentClusterName()
+
+	minTransferLevel := s.shardInfo.ClusterTransferAckLevel[currentCluster]
+	maxTransferLevel := s.shardInfo.ClusterTransferAckLevel[currentCluster]
 	for _, v := range s.shardInfo.ClusterTransferAckLevel {
 		if v < minTransferLevel {
 			minTransferLevel = v
@@ -953,8 +979,8 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	}
 	diffTransferLevel := maxTransferLevel - minTransferLevel
 
-	minTimerLevel := s.shardInfo.ClusterTimerAckLevel[s.currentCluster]
-	maxTimerLevel := s.shardInfo.ClusterTimerAckLevel[s.currentCluster]
+	minTimerLevel := s.shardInfo.ClusterTimerAckLevel[currentCluster]
+	maxTimerLevel := s.shardInfo.ClusterTimerAckLevel[currentCluster]
 	for _, v := range s.shardInfo.ClusterTimerAckLevel {
 		if v.Before(minTimerLevel) {
 			minTimerLevel = v
@@ -1017,14 +1043,10 @@ func (s *shardContextImpl) allocateTaskIDsLocked(
 		transferMaxReadLevel); err != nil {
 		return err
 	}
-	if err := s.allocateTimerIDsLocked(
+	return s.allocateTimerIDsLocked(
 		domainEntry,
 		workflowID,
-		timerTasks); err != nil {
-		return err
-	}
-
-	return nil
+		timerTasks)
 }
 
 func (s *shardContextImpl) allocateTransferIDsLocked(
@@ -1054,16 +1076,16 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 ) error {
 
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
-	cluster := s.currentCluster
+	currentCluster := s.clusterMetadata.GetCurrentClusterName()
 	for _, task := range timerTasks {
 		ts := task.GetVisibilityTimestamp()
 		if task.GetVersion() != common.EmptyVersion {
 			// cannot use version to determine the corresponding cluster for timer task
 			// this is because during failover, timer task should be created as active
 			// or otherwise, failover + active processing logic may not pick up the task.
-			cluster = domainEntry.GetReplicationConfig().ActiveClusterName
+			currentCluster = domainEntry.GetReplicationConfig().ActiveClusterName
 		}
-		readCursorTS := s.timerMaxReadLevelMap[cluster]
+		readCursorTS := s.timerMaxReadLevelMap[currentCluster]
 		if ts.Before(readCursorTS) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
@@ -1073,7 +1095,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),
 				tag.ValueShardAllocateTimerBeforeRead)
-			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
+			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[currentCluster].Add(time.Millisecond))
 		}
 
 		seqNum, err := s.getNextTransferTaskIDLocked()
@@ -1186,7 +1208,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	context := &shardContextImpl{
 		shardItem:                 shardItem,
 		shardID:                   shardItem.shardID,
-		currentCluster:            shardItem.service.GetClusterMetadata().GetCurrentClusterName(),
+		clusterMetadata:           shardItem.service.GetClusterMetadata(),
 		service:                   shardItem.service,
 		shardManager:              shardItem.shardMgr,
 		historyMgr:                shardItem.historyMgr,

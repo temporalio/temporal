@@ -4,4 +4,20 @@ system.enableVisibilityToKafka:
   - value: true
 system.enableReadVisibilityFromES:
   - value: true
-
+frontend.validSearchAttributes:
+  - value:
+      DomainID: 1
+      WorkflowID: 1
+      RunID: 1
+      WorkflowType: 1
+      StartTime: 2
+      ExecutionTime: 2
+      CloseTime: 2
+      CloseStatus: 2
+      HistoryLength: 2
+      CustomStringField: 0
+      CustomKeywordField: 1
+      CustomIntField: 2
+      CustomBoolField: 3
+      CustomDoubleField: 4
+      CustomDatetimeField: 5

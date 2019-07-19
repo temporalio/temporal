@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -41,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -101,6 +103,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
 		historyMgr:                s.mockHistoryMgr,
+		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
@@ -195,18 +198,25 @@ func (s *conflictResolverSuite) TestGetHistory() {
 }
 
 func (s *conflictResolverSuite) TestReset() {
+	s.mockShard.config.EnableVisibilityToKafka = dynamicconfig.GetBoolPropertyFn(true)
+
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
 	prevState := persistence.WorkflowStateRunning
-	sourceCluster := "some random source cluster"
+
+	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
+	version := int64(12)
+
 	domainID := s.mockContext.domainID
 	execution := s.mockContext.workflowExecution
 	nextEventID := int64(2)
+	branchToken := []byte("some random branch token")
+	eventStoreVersion := int32(persistence.EventStoreVersionV2)
 
 	event1 := &shared.HistoryEvent{
 		EventId: common.Int64Ptr(1),
-		Version: common.Int64Ptr(12),
+		Version: common.Int64Ptr(version),
 		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr("some random workflow type")},
 			TaskList:                            &shared.TaskList{Name: common.StringPtr("some random workflow type")},
@@ -221,18 +231,19 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{},
 	}
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
-	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID:      domainID,
-		Execution:     execution,
-		FirstEventID:  common.FirstEventID,
-		NextEventID:   nextEventID,
+	historySize := int64(1234567)
+	s.mockHistoryV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    nextEventID,
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-	}).Return(&persistence.GetWorkflowExecutionHistoryResponse{
-		History:          &shared.History{Events: []*shared.HistoryEvent{event1, event2}},
+		ShardID:       common.IntPtr(s.mockShard.GetShardID()),
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents:    []*shared.HistoryEvent{event1, event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
+		Size:             int(historySize),
 	}, nil)
 
 	s.mockContext.updateCondition = int64(59)
@@ -265,52 +276,73 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionAttempt:          0,
 		DecisionStartedTimestamp: 0,
 		CreateRequestID:          createRequestID,
+		BranchToken:              branchToken,
+		EventStoreVersion:        eventStoreVersion,
 	}
 	// this is only a shallow test, meaning
 	// the mutable state only has the minimal information
 	// so we can test the conflict resolver
-	s.mockExecutionMgr.On("ResetMutableState", &persistence.ResetMutableStateRequest{
-		RangeID:              s.mockShard.shardInfo.RangeID,
-		PrevRunID:            prevRunID,
-		PrevLastWriteVersion: prevLastWriteVersion,
-		PrevState:            prevState,
-		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo: executionInfo,
-			ReplicationState: &persistence.ReplicationState{
-				CurrentVersion:   event1.GetVersion(),
-				StartVersion:     event1.GetVersion(),
-				LastWriteVersion: event1.GetVersion(),
-				LastWriteEventID: event1.GetEventId(),
-				LastReplicationInfo: map[string]*persistence.ReplicationInfo{
-					sourceCluster: &persistence.ReplicationInfo{
-						Version:     event1.GetVersion(),
-						LastEventID: event1.GetEventId(),
+	s.mockExecutionMgr.On("ConflictResolveWorkflowExecution", mock.MatchedBy(func(input *persistence.ConflictResolveWorkflowExecutionRequest) bool {
+		transferTasks := input.ResetWorkflowSnapshot.TransferTasks
+		if len(transferTasks) != 1 {
+			return false
+		}
+		s.IsType(&persistence.UpsertWorkflowSearchAttributesTask{}, transferTasks[0])
+		input.ResetWorkflowSnapshot.TransferTasks = nil
+
+		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
+			RangeID:              s.mockShard.shardInfo.RangeID,
+			PrevRunID:            prevRunID,
+			PrevLastWriteVersion: prevLastWriteVersion,
+			PrevState:            prevState,
+			ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
+				ExecutionInfo: executionInfo,
+				ExecutionStats: &persistence.ExecutionStats{
+					HistorySize: historySize,
+				},
+				ReplicationState: &persistence.ReplicationState{
+					CurrentVersion:   event1.GetVersion(),
+					StartVersion:     event1.GetVersion(),
+					LastWriteVersion: event1.GetVersion(),
+					LastWriteEventID: event1.GetEventId(),
+					LastReplicationInfo: map[string]*persistence.ReplicationInfo{
+						sourceCluster: &persistence.ReplicationInfo{
+							Version:     event1.GetVersion(),
+							LastEventID: event1.GetEventId(),
+						},
 					},
 				},
+				ActivityInfos:       []*persistence.ActivityInfo{},
+				TimerInfos:          []*persistence.TimerInfo{},
+				ChildExecutionInfos: []*persistence.ChildExecutionInfo{},
+				RequestCancelInfos:  []*persistence.RequestCancelInfo{},
+				SignalInfos:         []*persistence.SignalInfo{},
+				SignalRequestedIDs:  []string{},
+				TransferTasks:       nil,
+				ReplicationTasks:    nil,
+				TimerTasks:          nil,
+				Condition:           s.mockContext.updateCondition,
 			},
-			ActivityInfos:       []*persistence.ActivityInfo{},
-			TimerInfos:          []*persistence.TimerInfo{},
-			ChildExecutionInfos: []*persistence.ChildExecutionInfo{},
-			RequestCancelInfos:  []*persistence.RequestCancelInfo{},
-			SignalInfos:         []*persistence.SignalInfo{},
-			SignalRequestedIDs:  []string{},
-			ReplicationTasks:    nil,
-			TransferTasks:       nil,
-			TimerTasks:          nil,
-			Condition:           s.mockContext.updateCondition,
-		},
-		Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
-	}).Return(nil).Once()
+			Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
+		}, input)
+		return true
+	})).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,
 		Execution: execution,
-	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once() // return empty resoonse since we are not testing the load
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistence.WorkflowMutableState{
+			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},
+			ExecutionStats: &persistence.ExecutionStats{},
+		},
+	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{}, nil, "", nil,
+		&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil,
 	), nil)
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
-	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo)
+	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, s.mockContext.updateCondition)
 	s.Nil(err)
 }

@@ -154,8 +154,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	// process this decision will trigger history exceed limit error
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.NotNil(err)
-	s.Equal(&workflow.EntityNotExistsError{Message: "Workflow execution already completed."}, err)
+	s.Nil(err)
 
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
@@ -168,10 +167,9 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	s.Nil(err)
 	history := historyResponse.History
 	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(workflow.EventTypeWorkflowExecutionTerminated, lastEvent.GetEventType())
-	terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
-	s.Equal(common.TerminateReasonSizeExceedsLimit, terminateEventAttributes.GetReason())
-	s.Equal("cadence-history-server", terminateEventAttributes.GetIdentity())
+	s.Equal(workflow.EventTypeWorkflowExecutionFailed, lastEvent.GetEventType())
+	failedEventAttributes := lastEvent.WorkflowExecutionFailedEventAttributes
+	s.Equal(common.FailureReasonSizeExceedsLimit, failedEventAttributes.GetReason())
 
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false

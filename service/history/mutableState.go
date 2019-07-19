@@ -88,10 +88,9 @@ type (
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input []byte, identity string) (*workflow.HistoryEvent, error)
-		AddWorkflowExecutionStartedEvent(workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
+		AddWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(reason string, details []byte, identity string) (*workflow.HistoryEvent, error)
 		ClearStickyness()
-		CloseUpdateSession() (*mutableStateSessionUpdates, error)
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
 		CreateActivityRetryTimer(*persistence.ActivityInfo, string) persistence.Task
@@ -114,14 +113,12 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
 		GetStartEvent() (*workflow.HistoryEvent, bool)
-		GetContinueAsNew() *persistence.WorkflowSnapshot
 		GetCurrentBranch() []byte
 		GetVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetEventStoreVersion() int32
 		GetHistoryBuilder() *historyBuilder
-		GetHistorySize() int64
 		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastWriteVersion() int64
@@ -148,7 +145,6 @@ type (
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool
 		HasProcessedOrPendingDecisionTask() bool
-		IncrementHistorySize(int)
 		IsCancelRequested() (bool, string)
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool
@@ -189,23 +185,32 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32, int32) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*workflow.HistoryEvent) error
-		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
+		ReplicateWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *workflow.HistoryEvent) error
-		ResetSnapshot(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task) *persistence.ResetMutableStateRequest
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
-		SetNewRunSize(size int)
 		SetVersionHistories(*persistence.VersionHistories) error
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
+		UpdateReplicationPolicy(cache.ReplicationPolicy)
 		UpdateDecision(*decisionInfo)
 		UpdateReplicationStateVersion(int64, bool)
-		UpdateReplicationStateLastEventID(string, int64, int64)
+		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
 		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
+
+		AddTransferTasks(transferTasks ...persistence.Task)
+		AddTimerTasks(timerTasks ...persistence.Task)
+		GetTransferTasks() []persistence.Task
+		GetTimerTasks() []persistence.Task
+		SetUpdateCondition(int64)
+		GetUpdateCondition() int64
+
+		CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
+		CloseTransactionAsSnapshot(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}
 )

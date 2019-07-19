@@ -27,7 +27,6 @@ import (
 	"github.com/uber/cadence/common/log"
 
 	"github.com/stretchr/testify/mock"
-	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -39,122 +38,8 @@ type mockWorkflowExecutionContext struct {
 
 var _ workflowExecutionContext = (*mockWorkflowExecutionContext)(nil)
 
-func (_m *mockWorkflowExecutionContext) appendFirstBatchEventsForActive(_a0 mutableState, _a1 bool) (int, persistence.Task, error) {
-	ret := _m.Called(_a0, _a1)
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func(mutableState, bool) int); ok {
-		r0 = rf(_a0, _a1)
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	var r1 persistence.Task
-	if rf, ok := ret.Get(1).(func(mutableState, bool) persistence.Task); ok {
-		r1 = rf(_a0, _a1)
-	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(persistence.Task)
-		}
-	}
-
-	var r2 error
-	if rf, ok := ret.Get(2).(func(mutableState, bool) error); ok {
-		r2 = rf(_a0, _a1)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
-}
-
-func (_m *mockWorkflowExecutionContext) appendFirstBatchEventsForStandby(_a0 mutableState, _a1 []*workflow.HistoryEvent) (int, persistence.Task, error) {
-	ret := _m.Called(_a0, _a1)
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func(mutableState, []*workflow.HistoryEvent) int); ok {
-		r0 = rf(_a0, _a1)
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	var r1 persistence.Task
-	if rf, ok := ret.Get(1).(func(mutableState, []*workflow.HistoryEvent) persistence.Task); ok {
-		r1 = rf(_a0, _a1)
-	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(persistence.Task)
-		}
-	}
-
-	var r2 error
-	if rf, ok := ret.Get(2).(func(mutableState, []*workflow.HistoryEvent) error); ok {
-		r2 = rf(_a0, _a1)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
-}
-
-func (_m *mockWorkflowExecutionContext) appendHistoryEvents(_a0 []*workflow.HistoryEvent, _a1 int64, _a2 bool, _a3 bool, _a4 mutableState) (int, persistence.Task, error) {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func([]*workflow.HistoryEvent, int64, bool, bool, mutableState) int); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	var r1 persistence.Task
-	if rf, ok := ret.Get(1).(func([]*workflow.HistoryEvent, int64, bool, bool, mutableState) persistence.Task); ok {
-		r1 = rf(_a0, _a1, _a2, _a3, _a4)
-	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(persistence.Task)
-		}
-	}
-
-	var r2 error
-	if rf, ok := ret.Get(2).(func([]*workflow.HistoryEvent, int64, bool, bool, mutableState) error); ok {
-		r2 = rf(_a0, _a1, _a2, _a3, _a4)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
-}
-
 func (_m *mockWorkflowExecutionContext) clear() {
 	_m.Called()
-}
-
-func (_m *mockWorkflowExecutionContext) continueAsNewWorkflowExecution(_a0 []byte, _a1 mutableState, _a2 []persistence.Task, _a3 []persistence.Task, _a4 int64) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func([]byte, mutableState, []persistence.Task, []persistence.Task, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-func (_m *mockWorkflowExecutionContext) createWorkflowExecution(_a0 mutableState, _a1 string, _a2 bool, _a3 time.Time, _a4 []persistence.Task, _a5 []persistence.Task, _a6 []persistence.Task, _a7 int, _a8 string, _a9 int64) error {
-
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(mutableState, string, bool, time.Time, []persistence.Task, []persistence.Task, []persistence.Task, int, string, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
 }
 
 func (_m *mockWorkflowExecutionContext) getDomainID() string {
@@ -202,6 +87,40 @@ func (_m *mockWorkflowExecutionContext) getLogger() log.Logger {
 	return r0
 }
 
+func (_m *mockWorkflowExecutionContext) lock(_a0 context.Context) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) unlock() {
+	_m.Called()
+}
+
+func (_m *mockWorkflowExecutionContext) getHistorySize() int64 {
+	ret := _m.Called()
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) setHistorySize(_a0 int64) {
+	_m.Called(_a0)
+}
+
 func (_m *mockWorkflowExecutionContext) loadWorkflowExecution() (mutableState, error) {
 	ret := _m.Called()
 
@@ -224,11 +143,81 @@ func (_m *mockWorkflowExecutionContext) loadWorkflowExecution() (mutableState, e
 	return r0, r1
 }
 
-func (_m *mockWorkflowExecutionContext) lock(_a0 context.Context) error {
+func (_m *mockWorkflowExecutionContext) loadExecutionStats() (*persistence.ExecutionStats, error) {
+	ret := _m.Called()
+
+	var r0 *persistence.ExecutionStats
+	if rf, ok := ret.Get(0).(func() *persistence.ExecutionStats); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.ExecutionStats)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+func (_m *mockWorkflowExecutionContext) conflictResolveWorkflowExecution(_a0 time.Time, _a1 string, _a2 int64, _a3 int, _a4 mutableState, _a5 int64) (mutableState, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
+
+	var r0 mutableState
+	if rf, ok := ret.Get(0).(func(time.Time, string, int64, int, mutableState, int64) mutableState); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(mutableState)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(time.Time, string, int64, int, mutableState, int64) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+func (_m *mockWorkflowExecutionContext) resetWorkflowExecution(_a0 mutableState, _a1 bool, _a2, _a3 persistence.Task, _a4 mutableState, _a5 int64, _a6, _a7, _a8, _a9 []persistence.Task, _a10 string, _a11 int64) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9, _a10, _a11)
+	var r0 error
+	if rf, ok := ret.Get(1).(func(mutableState, bool, persistence.Task, persistence.Task, mutableState, int64, []persistence.Task, []persistence.Task, []persistence.Task, []persistence.Task, string, int64) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8, _a9, _a10, _a11)
+	} else {
+		r0 = ret.Error(1)
+	}
+
+	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) createWorkflowExecution(_a0 *persistence.WorkflowSnapshot, _a1 int64, _a2 time.Time, _a3 int, _a4 string, _a5 int64) error {
+
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowSnapshot, int64, time.Time, int, string, int64) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionAsActive(_a0 time.Time) error {
 	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+	if rf, ok := ret.Get(0).(func(time.Time) error); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
@@ -237,119 +226,11 @@ func (_m *mockWorkflowExecutionContext) lock(_a0 context.Context) error {
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) appendFirstBatchHistoryForContinueAsNew(_a0 mutableState, _a1 int64) error {
-	ret := _m.Called(_a0, _a1)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(mutableState, int64) error); ok {
-		r0 = rf(_a0, _a1)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-func (_m *mockWorkflowExecutionContext) replicateWorkflowExecution(_a0 *h.ReplicateEventsRequest, _a1 []persistence.Task, _a2 []persistence.Task, _a3 int64, _a4 time.Time) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*h.ReplicateEventsRequest, []persistence.Task, []persistence.Task, int64, time.Time) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-func (_m *mockWorkflowExecutionContext) resetMutableState(_a0 string, _a1 int64, _a2 int, _a3 []persistence.Task, _a4 []persistence.Task, _a5 []persistence.Task, _a6 mutableState) (mutableState, error) {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
-
-	var r0 mutableState
-	if rf, ok := ret.Get(0).(func(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task, mutableState) mutableState); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(mutableState)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(string, int64, int, []persistence.Task, []persistence.Task, []persistence.Task, mutableState) error); ok {
-		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-func (_m *mockWorkflowExecutionContext) resetWorkflowExecution(_a0 mutableState, _a1 bool, _a2, _a3 persistence.Task, _a4 mutableState, _a5, _a6, _a7, _a7_0 []persistence.Task, _a8 string, _a9 int64) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a7_0, _a8, _a9)
-	var r0 error
-	if rf, ok := ret.Get(1).(func(mutableState, bool, persistence.Task, persistence.Task, mutableState, []persistence.Task, []persistence.Task, []persistence.Task, []persistence.Task, string, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a7_0, _a8, _a9)
-	} else {
-		r0 = ret.Error(1)
-	}
-
-	return r0
-}
-
-func (_m *mockWorkflowExecutionContext) scheduleNewDecision(_a0 []persistence.Task, _a1 []persistence.Task) ([]persistence.Task, []persistence.Task, error) {
-	ret := _m.Called(_a0, _a1)
-
-	var r0 []persistence.Task
-	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task) []persistence.Task); ok {
-		r0 = rf(_a0, _a1)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]persistence.Task)
-		}
-	}
-
-	var r1 []persistence.Task
-	if rf, ok := ret.Get(1).(func([]persistence.Task, []persistence.Task) []persistence.Task); ok {
-		r1 = rf(_a0, _a1)
-	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).([]persistence.Task)
-		}
-	}
-
-	var r2 error
-	if rf, ok := ret.Get(2).(func([]persistence.Task, []persistence.Task) error); ok {
-		r2 = rf(_a0, _a1)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
-}
-
-func (_m *mockWorkflowExecutionContext) unlock() {
-	_m.Called()
-}
-
-func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionForStandby(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64, _a3 time.Time, _a4 bool, _a5 *historyBuilder, _a6 string) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task, int64, time.Time, bool, *historyBuilder, string) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-func (_m *mockWorkflowExecutionContext) updateWorkflowExecution(_a0 []persistence.Task, _a1 []persistence.Task, _a2 int64) error {
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithNewAsActive(_a0 time.Time, _a1 workflowExecutionContext, _a2 mutableState) error {
 	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]persistence.Task, []persistence.Task, int64) error); ok {
+	if rf, ok := ret.Get(0).(func(time.Time, workflowExecutionContext, mutableState) error); ok {
 		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Error(0)
@@ -358,15 +239,81 @@ func (_m *mockWorkflowExecutionContext) updateWorkflowExecution(_a0 []persistenc
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithContext(_a0 []byte, _a1 []persistence.Task, _a2 []persistence.Task, _a3 int64) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3)
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionAsPassive(_a0 time.Time) error {
+	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]byte, []persistence.Task, []persistence.Task, int64) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3)
+	if rf, ok := ret.Get(0).(func(time.Time) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
 
 	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithNewAsPassive(_a0 time.Time, _a1 workflowExecutionContext, _a2 mutableState) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(time.Time, workflowExecutionContext, mutableState) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithNew(_a0 time.Time, _a1 workflowExecutionContext, _a2 mutableState, _a3 transactionPolicy, _a4 *transactionPolicy) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(time.Time, workflowExecutionContext, mutableState, transactionPolicy, *transactionPolicy) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+func (_m *mockWorkflowExecutionContext) persistFirstWorkflowEvents(_a0 *persistence.WorkflowEvents) (int64, error) {
+	ret := _m.Called(_a0)
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowEvents) int64); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.WorkflowEvents) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+func (_m *mockWorkflowExecutionContext) persistNonFirstWorkflowEvents(_a0 *persistence.WorkflowEvents) (int64, error) {
+	ret := _m.Called(_a0)
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowEvents) int64); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.WorkflowEvents) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }

@@ -32,7 +32,7 @@ ignored = ["github.com/uber/cadence/.gen"]
 
 [[constraint]]
   name = "github.com/apache/thrift"
-  version = "0.9.3"
+  version = "0.10.0"
 
 [[constraint]]
   name = "github.com/cactus/go-statsd-client"

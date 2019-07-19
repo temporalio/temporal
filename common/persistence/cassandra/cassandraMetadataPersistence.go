@@ -23,10 +23,9 @@ package cassandra
 import (
 	"fmt"
 
-	"github.com/uber/cadence/common"
-
 	"github.com/gocql/gocql"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
@@ -48,6 +47,10 @@ const (
 		`emit_metric: ?, ` +
 		`archival_bucket: ?, ` +
 		`archival_status: ?,` +
+		`history_archival_status: ?, ` +
+		`history_archival_uri: ?, ` +
+		`visibility_archival_status: ?, ` +
+		`visibility_archival_uri: ?, ` +
 		`bad_binaries: ?,` +
 		`bad_binaries_encoding: ?` +
 		`}`
@@ -71,7 +74,10 @@ const (
 
 	templateGetDomainByNameQuery = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, config.bad_binaries, config.bad_binaries_encoding,` +
+		`config.archival_bucket, config.archival_status, ` +
+		`config.history_archival_status, config.history_archival_uri, ` +
+		`config.visibility_archival_status, config.visibility_archival_uri, ` +
+		`config.bad_binaries, config.bad_binaries_encoding, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -162,6 +168,10 @@ func (m *cassandraMetadataPersistence) CreateDomain(request *p.InternalCreateDom
 		request.Config.EmitMetric,
 		request.Config.ArchivalBucket,
 		request.Config.ArchivalStatus,
+		request.Config.HistoryArchivalStatus,
+		request.Config.HistoryArchivalURI,
+		request.Config.VisibilityArchivalStatus,
+		request.Config.VisibilityArchivalURI,
 		request.Config.BadBinaries.Data,
 		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
@@ -261,6 +271,10 @@ func (m *cassandraMetadataPersistence) GetDomain(request *p.GetDomainRequest) (*
 		&config.EmitMetric,
 		&config.ArchivalBucket,
 		&config.ArchivalStatus,
+		&config.HistoryArchivalStatus,
+		&config.HistoryArchivalURI,
+		&config.VisibilityArchivalStatus,
+		&config.VisibilityArchivalURI,
 		&badBinariesData,
 		&badBinariesDataEncoding,
 		&replicationConfig.ActiveClusterName,
@@ -313,6 +327,10 @@ func (m *cassandraMetadataPersistence) UpdateDomain(request *p.InternalUpdateDom
 		request.Config.EmitMetric,
 		request.Config.ArchivalBucket,
 		request.Config.ArchivalStatus,
+		request.Config.HistoryArchivalStatus,
+		request.Config.HistoryArchivalURI,
+		request.Config.VisibilityArchivalStatus,
+		request.Config.VisibilityArchivalURI,
 		request.Config.BadBinaries.Data,
 		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
@@ -356,7 +374,7 @@ func (m *cassandraMetadataPersistence) DeleteDomain(request *p.DeleteDomainReque
 func (m *cassandraMetadataPersistence) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQuery, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil

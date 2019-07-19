@@ -27,8 +27,13 @@ import (
 const (
 	// Version is the controlled version string. It should be updated every time
 	// before we release a new version.
-	Version = "0.6.3"
+	Version = "0.6.4"
 )
+
+// SetFactory is used to set the ClientFactory global
+func SetFactory(factory ClientFactory) {
+	cFactory = factory
+}
 
 // NewCliApp instantiates a new instance of the CLI application.
 func NewCliApp() *cli.App {
@@ -115,7 +120,19 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on taskList",
 					Subcommands: newAdminTaskListCommands(),
 				},
+				{
+					Name:        "cluster",
+					Aliases:     []string{"cl"},
+					Usage:       "Run admin operation on cluster",
+					Subcommands: newAdminClusterCommands(),
+				},
 			},
+		},
+		{
+			Name:        "cluster",
+			Aliases:     []string{"cl"},
+			Usage:       "Operate cadence cluster",
+			Subcommands: newClusterCommands(),
 		},
 	}
 

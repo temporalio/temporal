@@ -99,11 +99,13 @@ func newNDCHistoryReplicator(
 		},
 		getNewMutableState: func(version int64, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithVersionHistories(
-				shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 				shard,
 				shard.GetEventsCache(),
 				logger,
 				version,
+				// if can see replication task, meaning that domain is
+				// global domain with > 1 target clusters
+				cache.ReplicationPolicyMultiCluster,
 			)
 		},
 	}
@@ -218,18 +220,22 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 		return err
 	}
 
-	_, _, err = context.appendFirstBatchEventsForStandby(msBuilder, task.getEvents())
+	now := time.Unix(0, task.getLastEvent().GetTimestamp())
+	newWorkflow, workflowEventsSeq, err := msBuilder.CloseTransactionAsSnapshot(
+		now,
+		transactionPolicyPassive,
+	)
+	if err != nil {
+		return err
+	}
+	historySize, err := context.persistFirstWorkflowEvents(workflowEventsSeq[0])
 	if err != nil {
 		return err
 	}
 
-	// workflow passive side logic should not generate any replication task
-	var replicationTasks []persistence.Task // passive side generates no replication tasks
-	transferTasks := stateBuilder.getTransferTasks()
-	timerTasks := stateBuilder.getTimerTasks()
 	defer func() {
 		if retError == nil {
-			r.notify(task.getSourceCluster(), task.getEventTime(), transferTasks, timerTasks)
+			r.notify(task.getSourceCluster(), task.getEventTime(), newWorkflow.TransferTasks, newWorkflow.TimerTasks)
 		}
 	}()
 
@@ -238,8 +244,7 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = context.createWorkflowExecution(
-		msBuilder, task.getSourceCluster(), nDCCreateReplicationTask, task.getEventTime(),
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 	if err == nil {
@@ -271,9 +276,8 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 		if err := r.convertWorkflowToZombie(msBuilder.GetExecutionInfo()); err != nil {
 			return err
 		}
-		return context.createWorkflowExecution(
-			msBuilder, task.getSourceCluster(), nDCCreateReplicationTask, task.getEventTime(),
-			transferTasks, replicationTasks, timerTasks,
+		err = context.createWorkflowExecution(
+			newWorkflow, historySize, now,
 			createMode, prevRunID, prevLastWriteVersion,
 		)
 	}
@@ -285,9 +289,8 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 			if err := r.convertWorkflowToZombie(msBuilder.GetExecutionInfo()); err != nil {
 				return err
 			}
-			return context.createWorkflowExecution(
-				msBuilder, task.getSourceCluster(), nDCCreateReplicationTask, task.getEventTime(),
-				transferTasks, replicationTasks, timerTasks,
+			err = context.createWorkflowExecution(
+				newWorkflow, historySize, now,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
 		}
@@ -309,8 +312,7 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 	prevRunID = currentRunID
 	prevLastWriteVersion = task.getVersion()
 	return context.createWorkflowExecution(
-		msBuilder, task.getSourceCluster(), nDCCreateReplicationTask, task.getEventTime(),
-		transferTasks, replicationTasks, timerTasks,
+		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
 }
@@ -426,7 +428,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToCurrentBranch(
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.getNewStateBuilder(mutableState, task.getLogger())
-	_, _, newRunMutableState, err := stateBuilder.applyEvents(
+	_, _, newMutableState, err := stateBuilder.applyEvents(
 		task.getDomainID(),
 		requestID,
 		task.getExecution(),
@@ -486,26 +488,22 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToCurrentBranch(
 	// TODO need to handle compare and swap current record
 
 	// TODO logic below is placeholder ONLY
-	if newRunMutableState != nil {
-		// Generate a transaction ID for appending events to history
-		transactionID, err := r.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
-		// continueAsNew
-		err = context.appendFirstBatchHistoryForContinueAsNew(newRunMutableState, transactionID)
-		if err != nil {
-			return err
-		}
+	now := time.Unix(0, task.getLastEvent().GetTimestamp())
+	var newContext workflowExecutionContext
+	if newMutableState != nil {
+		newExecutionInfo := newMutableState.GetExecutionInfo()
+		newContext = newWorkflowExecutionContext(
+			newExecutionInfo.DomainID,
+			shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(newExecutionInfo.WorkflowID),
+				RunId:      common.StringPtr(newExecutionInfo.RunID),
+			},
+			r.shard,
+			r.shard.GetExecutionManager(),
+			r.logger,
+		)
 	}
-
-	err = context.replicateWorkflowExecution(
-		task.getRequest(),
-		stateBuilder.getTransferTasks(),
-		stateBuilder.getTimerTasks(),
-		task.getLastEvent().GetEventId(),
-		task.getEventTime(),
-	)
+	err = context.updateWorkflowExecutionWithNewAsPassive(now, newContext, newMutableState)
 	if err == nil {
 		r.notify(task.getSourceCluster(), task.getEventTime(), stateBuilder.getTransferTasks(), stateBuilder.getTimerTasks())
 	}
@@ -521,20 +519,6 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToNoneCurrentBranch(
 ) error {
 
 	// TODO handle continue as new
-	transactionID, err := r.shard.GetNextTransferTaskID()
-	if err != nil {
-		return err
-	}
-	doLastEventValidation := true
-	if _, _, err = context.appendHistoryEvents(
-		task.getEvents(),
-		transactionID,
-		doLastEventValidation,
-		nDCCreateReplicationTask,
-		nil,
-	); err != nil {
-		return err
-	}
 
 	versionHistoryItem := persistence.NewVersionHistoryItem(
 		task.getLastEvent().GetEventId(),
@@ -548,8 +532,20 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToNoneCurrentBranch(
 		return err
 	}
 
-	// TODO persist mutable state by bypassing current record
-	panic("")
+	executionInfo := mutableState.GetExecutionInfo()
+	if _, err = context.persistNonFirstWorkflowEvents(&persistence.WorkflowEvents{
+		DomainID:    executionInfo.DomainID,
+		WorkflowID:  executionInfo.WorkflowID,
+		RunID:       executionInfo.RunID,
+		BranchToken: versionHistory.GetBranchToken(),
+		Events:      task.getEvents(),
+	}); err != nil {
+		return err
+	}
+
+	return context.updateWorkflowExecutionAsPassive(
+		r.shard.GetTimeSource().Now(),
+	)
 }
 
 func (r *nDCHistoryReplicator) applyNonStartEventsMissingMutableState(

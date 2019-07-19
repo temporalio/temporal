@@ -174,7 +174,7 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 			false,
 			map[string]interface{}{
 				"key4": true,
-				"key5": 2.0,
+				"key5": 2.1,
 			},
 		},
 	}
@@ -306,4 +306,43 @@ func (s *fileBasedClientSuite) TestMatch() {
 		matched := match(tc.v, tc.filters)
 		s.Equal(tc.matched, matched)
 	}
+}
+
+func (s *fileBasedClientSuite) TestUpdateConfig() {
+	client := s.client.(*fileBasedClient)
+	key := ValidSearchAttributes
+
+	// pre-check existing config
+	current, err := client.GetMapValue(key, nil, nil)
+	s.NoError(err)
+	currentDomainVal, ok := current["DomainID"]
+	s.True(ok)
+	s.Equal(1, currentDomainVal)
+	_, ok = current["WorkflowID"]
+	s.False(ok)
+
+	// update config
+	v := map[string]interface{}{
+		"WorkflowID": 1,
+		"DomainID":   2,
+	}
+	err = client.UpdateValue(key, v)
+	s.NoError(err)
+
+	// verify update result
+	current, err = client.GetMapValue(key, nil, nil)
+	s.NoError(err)
+	currentDomainVal, ok = current["DomainID"]
+	s.True(ok)
+	s.Equal(2, currentDomainVal)
+	currentWorkflowIDVal, ok := current["WorkflowID"]
+	s.True(ok)
+	s.Equal(1, currentWorkflowIDVal)
+
+	// revert test file back
+	v = map[string]interface{}{
+		"DomainID": 1,
+	}
+	err = client.UpdateValue(key, v)
+	s.NoError(err)
 }

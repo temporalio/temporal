@@ -493,12 +493,11 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
-	sortField := definition.StartTime
 	token := &esVisibilityPageToken{From: 0}
 
 	// test for empty hits
 	searchHits := &elastic.SearchHits{}
-	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, 1)
+	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -519,14 +518,14 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Sort:   []interface{}{1547596872371000000, "e481009e-14b3-45ae-91af-dce6e2a88365"},
 	}
 	searchHits.Hits = []*elastic.SearchHit{searchHit}
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, 1)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&esVisibilityPageToken{From: 1})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, 2)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 2, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
@@ -539,7 +538,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchHits.Hits = append(searchHits.Hits, searchHit)
 	}
 	numOfHits := len(searchHits.Hits)
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, numOfHits)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, numOfHits, nil)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -550,7 +549,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.TieBreaker)
 	s.Equal(0, nextPageToken.From)
 	// for last page
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, sortField, numOfHits+1)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, numOfHits+1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
@@ -674,94 +673,81 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	v := s.visibilityStore
 
 	request.Query = ""
-	dsl, sortField, err := v.getESQueryDSL(request, token)
+	dsl, err := v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = "invaild query"
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.NotNil(err)
-	s.Equal("", sortField)
 	s.Equal("", dsl)
 
 	request.Query = `WorkflowID = 'wid'`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' or WorkflowID = 'another-wid'`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' and CloseTime = missing`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}],"must_not":{"exists":{"field":"CloseTime"}}}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `CloseTime = missing order by CloseTime desc`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.CloseTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[],"must_not":{"exists":{"field":"CloseTime"}}}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000 or ExecutionTime > 2000`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `order by ExecutionTime desc`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.ExecutionTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"ExecutionTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `order by StartTime desc, CloseTime desc`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Equal(errors.New("only one field can be used to sort"), err)
 
 	request.Query = `order by CustomStringField desc`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Equal(errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field"), err)
 
 	request.Query = `order by CustomIntField asc`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.CustomIntField, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"CustomIntField":"asc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < "unable to parse"`
-	_, _, err = v.getESQueryDSL(request, token)
+	_, err = v.getESQueryDSL(request, token)
 	s.Error(err)
 
 	token = s.getTokenHelper(1)
 	request.Query = `WorkflowID = 'wid'`
-	dsl, sortField, err = v.getESQueryDSL(request, token)
+	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(definition.StartTime, sortField)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}],"search_after":[1,"t"]}`, dsl)
 }
 

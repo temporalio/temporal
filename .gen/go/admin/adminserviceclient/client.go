@@ -36,6 +36,12 @@ import (
 
 // Interface is a client for the AdminService service.
 type Interface interface {
+	AddSearchAttribute(
+		ctx context.Context,
+		Request *admin.AddSearchAttributeRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	DescribeHistoryHost(
 		ctx context.Context,
 		Request *shared.DescribeHistoryHostRequest,
@@ -77,6 +83,29 @@ func init() {
 
 type client struct {
 	c thrift.Client
+}
+
+func (c client) AddSearchAttribute(
+	ctx context.Context,
+	_Request *admin.AddSearchAttributeRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_AddSearchAttribute_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_AddSearchAttribute_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_AddSearchAttribute_Helper.UnwrapResponse(&result)
+	return
 }
 
 func (c client) DescribeHistoryHost(
