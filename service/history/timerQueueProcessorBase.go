@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -38,8 +39,8 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/tokenbucket"
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -72,7 +73,7 @@ type (
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        TimerGate
 		timeSource       clock.TimeSource
-		rateLimiter      tokenbucket.TokenBucket
+		rateLimiter      quotas.Limiter
 		startDelay       dynamicconfig.DurationPropertyFn
 		retryPolicy      backoff.RetryPolicy
 
@@ -121,9 +122,13 @@ func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *h
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
 		lastPollTime:            time.Time{},
-		rateLimiter:             tokenbucket.NewDynamicTokenBucket(maxPollRPS, clock.NewRealTimeSource()),
-		startDelay:              startDelay,
-		retryPolicy:             common.CreatePersistanceRetryPolicy(),
+		rateLimiter: quotas.NewDynamicRateLimiter(
+			func() float64 {
+				return float64(maxPollRPS())
+			},
+		),
+		startDelay:  startDelay,
+		retryPolicy: common.CreatePersistanceRetryPolicy(),
 	}
 
 	return base
@@ -360,10 +365,13 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
-	if !t.rateLimiter.Consume(1, loadTimerTaskThrottleRetryDelay) {
+	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
+	if err := t.rateLimiter.Wait(ctx); err != nil {
+		cancel()
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, nil
 	}
+	cancel()
 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()

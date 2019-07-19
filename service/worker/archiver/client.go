@@ -27,12 +27,11 @@ import (
 	"math/rand"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/tokenbucket"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	cclient "go.uber.org/cadence/client"
 )
@@ -62,7 +61,7 @@ type (
 		logger        log.Logger
 		cadenceClient cclient.Client
 		numWorkflows  dynamicconfig.IntPropertyFn
-		rateLimiter   tokenbucket.TokenBucket
+		rateLimiter   quotas.Limiter
 	}
 )
 
@@ -81,7 +80,11 @@ func NewClient(
 		logger:        logger,
 		cadenceClient: cclient.NewClient(publicClient, common.SystemLocalDomainName, &cclient.Options{}),
 		numWorkflows:  numWorkflows,
-		rateLimiter:   tokenbucket.NewDynamicTokenBucket(requestRPS, clock.NewRealTimeSource()),
+		rateLimiter: quotas.NewDynamicRateLimiter(
+			func() float64 {
+				return float64(requestRPS())
+			},
+		),
 	}
 }
 
@@ -89,7 +92,7 @@ func NewClient(
 func (c *client) Archive(request *ArchiveRequest) error {
 	c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceRequests)
 
-	if ok, _ := c.rateLimiter.TryConsume(1); !ok {
+	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
 		c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceErrServiceBusyCounter)
 		return errors.New(tooManyRequestsErrMsg)

@@ -36,15 +36,14 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/tokenbucket"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc/yarpcerrors"
 )
@@ -70,7 +69,7 @@ type (
 		config                *Config
 		historyEventNotifier  historyEventNotifier
 		publisher             messaging.Producer
-		rateLimiter           tokenbucket.TokenBucket
+		rateLimiter           quotas.Limiter
 		archiverProvider      provider.ArchiverProvider
 		service.Service
 	}
@@ -107,9 +106,13 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		visibilityMgr:       visibilityMgr,
 		executionMgrFactory: executionMgrFactory,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
-		rateLimiter:         tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
-		publicClient:        publicClient,
-		archiverProvider:    archiverProvider,
+		rateLimiter: quotas.NewDynamicRateLimiter(
+			func() float64 {
+				return float64(config.RPS())
+			},
+		),
+		publicClient:     publicClient,
+		archiverProvider: archiverProvider,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -213,7 +216,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -261,7 +264,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, workflowID)
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, workflowID)
 	}
 
@@ -301,7 +304,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, workflowID)
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, workflowID)
 	}
 
@@ -344,7 +347,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -390,7 +393,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -436,7 +439,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -482,7 +485,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -534,7 +537,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -586,7 +589,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -688,7 +691,7 @@ func (h *Handler) GetMutableState(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -721,7 +724,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *hist.D
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -755,7 +758,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -797,7 +800,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -836,7 +839,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -872,7 +875,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -908,7 +911,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context,
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -944,7 +947,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context,
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -981,7 +984,7 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *hist.Schedu
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -1020,7 +1023,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -1064,7 +1067,7 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.Re
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -1097,7 +1100,7 @@ func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.Re
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -1131,7 +1134,7 @@ func (h *Handler) ReplicateRawEvents(ctx context.Context, replicateRequest *hist
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
@@ -1160,7 +1163,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, syncShardStatusRequest *h
 	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, "", "")
 	}
 
@@ -1205,7 +1208,7 @@ func (h *Handler) SyncActivity(ctx context.Context, syncActivityRequest *hist.Sy
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 

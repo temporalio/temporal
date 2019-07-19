@@ -23,14 +23,14 @@ package persistence
 import (
 	"sync"
 
-	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/quotas"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/persistence/sql"
 	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/tokenbucket"
 )
 
 type (
@@ -83,7 +83,7 @@ type (
 	// Datastore represents a datastore
 	Datastore struct {
 		factory   DataStoreFactory
-		ratelimit tokenbucket.TokenBucket
+		ratelimit quotas.Limiter
 	}
 	factoryImpl struct {
 		sync.RWMutex
@@ -296,7 +296,7 @@ func (f *factoryImpl) getCassandraConfig() *config.Cassandra {
 	return cfg.DataStores[cfg.VisibilityStore].Cassandra
 }
 
-func (f *factoryImpl) init(clusterName string, limiters map[string]tokenbucket.TokenBucket) {
+func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limiter) {
 	f.datastores = make(map[storeType]Datastore, len(storeTypes))
 	defaultCfg := f.config.DataStores[f.config.DefaultStore]
 	defaultDataStore := Datastore{ratelimit: limiters[f.config.DefaultStore]}
@@ -329,8 +329,8 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]tokenbucket.T
 	f.datastores[storeTypeVisibility] = visibilityDataStore
 }
 
-func buildRatelimiters(cfg *config.Persistence) map[string]tokenbucket.TokenBucket {
-	result := make(map[string]tokenbucket.TokenBucket, len(cfg.DataStores))
+func buildRatelimiters(cfg *config.Persistence) map[string]quotas.Limiter {
+	result := make(map[string]quotas.Limiter, len(cfg.DataStores))
 	for dsName, ds := range cfg.DataStores {
 		qps := 0
 		if ds.Cassandra != nil {
@@ -340,7 +340,7 @@ func buildRatelimiters(cfg *config.Persistence) map[string]tokenbucket.TokenBuck
 			qps = ds.SQL.MaxQPS
 		}
 		if qps > 0 {
-			result[dsName] = tokenbucket.New(qps, clock.NewRealTimeSource())
+			result[dsName] = quotas.NewSimpleRateLimiter(qps)
 		}
 	}
 	return result

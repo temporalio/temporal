@@ -72,7 +72,7 @@ type (
 		tokenSerializer           common.TaskTokenSerializer
 		metricsClient             metrics.Client
 		startWG                   sync.WaitGroup
-		rateLimiter               quotas.Policy
+		rateLimiter               quotas.Limiter
 		config                    *Config
 		blobstoreClient           blobstore.Client
 		versionChecker            *versionChecker
@@ -255,8 +255,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 }
 
 // ListDomains returns the information and configuration for a registered domain.
-func (wh *WorkflowHandler) ListDomains(ctx context.Context,
-	listRequest *gen.ListDomainsRequest) (response *gen.ListDomainsResponse, retError error) {
+func (wh *WorkflowHandler) ListDomains(
+	ctx context.Context,
+	listRequest *gen.ListDomainsRequest,
+) (response *gen.ListDomainsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
@@ -274,8 +276,10 @@ func (wh *WorkflowHandler) ListDomains(ctx context.Context,
 }
 
 // DescribeDomain returns the information and configuration for a registered domain.
-func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
-	describeRequest *gen.DescribeDomainRequest) (response *gen.DescribeDomainResponse, retError error) {
+func (wh *WorkflowHandler) DescribeDomain(
+	ctx context.Context,
+	describeRequest *gen.DescribeDomainRequest,
+) (response *gen.DescribeDomainResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
@@ -293,8 +297,10 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
-func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
-	updateRequest *gen.UpdateDomainRequest) (resp *gen.UpdateDomainResponse, retError error) {
+func (wh *WorkflowHandler) UpdateDomain(
+	ctx context.Context,
+	updateRequest *gen.UpdateDomainRequest,
+) (resp *gen.UpdateDomainResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
@@ -334,7 +340,8 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 // PollForActivityTask - Poll for an activity task.
 func (wh *WorkflowHandler) PollForActivityTask(
 	ctx context.Context,
-	pollRequest *gen.PollForActivityTaskRequest) (resp *gen.PollForActivityTaskResponse, retError error) {
+	pollRequest *gen.PollForActivityTaskRequest,
+) (resp *gen.PollForActivityTaskResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	callTime := time.Now()
@@ -413,7 +420,8 @@ func (wh *WorkflowHandler) PollForActivityTask(
 // PollForDecisionTask - Poll for a decision task.
 func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx context.Context,
-	pollRequest *gen.PollForDecisionTaskRequest) (resp *gen.PollForDecisionTaskResponse, retError error) {
+	pollRequest *gen.PollForDecisionTaskRequest,
+) (resp *gen.PollForDecisionTaskResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	callTime := time.Now()
@@ -547,7 +555,8 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	ctx context.Context,
-	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
+	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest,
+) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRecordActivityTaskHeartbeatScope)
@@ -628,7 +637,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 // RecordActivityTaskHeartbeatByID - Record Activity Task Heart beat.
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 	ctx context.Context,
-	heartbeatRequest *gen.RecordActivityTaskHeartbeatByIDRequest) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
+	heartbeatRequest *gen.RecordActivityTaskHeartbeatByIDRequest,
+) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRecordActivityTaskHeartbeatByIDScope)
@@ -734,7 +744,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 // RespondActivityTaskCompleted - response to an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx context.Context,
-	completeRequest *gen.RespondActivityTaskCompletedRequest) (retError error) {
+	completeRequest *gen.RespondActivityTaskCompletedRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCompletedScope)
@@ -816,7 +827,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 // RespondActivityTaskCompletedByID - response to an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 	ctx context.Context,
-	completeRequest *gen.RespondActivityTaskCompletedByIDRequest) (retError error) {
+	completeRequest *gen.RespondActivityTaskCompletedByIDRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCompletedByIDScope)
@@ -924,7 +936,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 // RespondActivityTaskFailed - response to an activity task failure
 func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx context.Context,
-	failedRequest *gen.RespondActivityTaskFailedRequest) (retError error) {
+	failedRequest *gen.RespondActivityTaskFailedRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskFailedScope)
@@ -995,7 +1008,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 // RespondActivityTaskFailedByID - response to an activity task failure
 func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 	ctx context.Context,
-	failedRequest *gen.RespondActivityTaskFailedByIDRequest) (retError error) {
+	failedRequest *gen.RespondActivityTaskFailedByIDRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskFailedByIDScope)
@@ -1091,7 +1105,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 // RespondActivityTaskCanceled - called to cancel an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	ctx context.Context,
-	cancelRequest *gen.RespondActivityTaskCanceledRequest) (retError error) {
+	cancelRequest *gen.RespondActivityTaskCanceledRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCanceledScope)
@@ -1174,7 +1189,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 // RespondActivityTaskCanceledByID - called to cancel an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 	ctx context.Context,
-	cancelRequest *gen.RespondActivityTaskCanceledByIDRequest) (retError error) {
+	cancelRequest *gen.RespondActivityTaskCanceledByIDRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCanceledScope)
@@ -1281,7 +1297,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 // RespondDecisionTaskCompleted - response to a decision task
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx context.Context,
-	completeRequest *gen.RespondDecisionTaskCompletedRequest) (resp *gen.RespondDecisionTaskCompletedResponse, retError error) {
+	completeRequest *gen.RespondDecisionTaskCompletedRequest,
+) (resp *gen.RespondDecisionTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondDecisionTaskCompletedScope)
@@ -1359,7 +1376,8 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 // RespondDecisionTaskFailed - failed response to a decision task
 func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	ctx context.Context,
-	failedRequest *gen.RespondDecisionTaskFailedRequest) (retError error) {
+	failedRequest *gen.RespondDecisionTaskFailedRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondDecisionTaskFailedScope)
@@ -1429,7 +1447,8 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 // RespondQueryTaskCompleted - response to a query task
 func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	ctx context.Context,
-	completeRequest *gen.RespondQueryTaskCompletedRequest) (retError error) {
+	completeRequest *gen.RespondQueryTaskCompletedRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRespondQueryTaskCompletedScope)
@@ -1482,7 +1501,8 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 // StartWorkflowExecution - Creates a new workflow execution
 func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx context.Context,
-	startRequest *gen.StartWorkflowExecutionRequest) (resp *gen.StartWorkflowExecutionResponse, retError error) {
+	startRequest *gen.StartWorkflowExecutionRequest,
+) (resp *gen.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendStartWorkflowExecutionScope, startRequest)
@@ -1625,7 +1645,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 // GetWorkflowExecutionHistory - retrieves the history of workflow execution
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx context.Context,
-	getRequest *gen.GetWorkflowExecutionHistoryRequest) (resp *gen.GetWorkflowExecutionHistoryResponse, retError error) {
+	getRequest *gen.GetWorkflowExecutionHistoryRequest,
+) (resp *gen.GetWorkflowExecutionHistoryResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendGetWorkflowExecutionHistoryScope, getRequest)
@@ -1826,8 +1847,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 // WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
-func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
-	signalRequest *gen.SignalWorkflowExecutionRequest) (retError error) {
+func (wh *WorkflowHandler) SignalWorkflowExecution(
+	ctx context.Context,
+	signalRequest *gen.SignalWorkflowExecutionRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWorkflowExecutionScope, signalRequest)
@@ -1905,8 +1928,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 // and a decision task being created for the execution.
 // If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
 // event recorded in history, and a decision task being created for the execution
-func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
-	signalWithStartRequest *gen.SignalWithStartWorkflowExecutionRequest) (resp *gen.StartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(
+	ctx context.Context,
+	signalWithStartRequest *gen.SignalWithStartWorkflowExecutionRequest,
+) (resp *gen.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWithStartWorkflowExecutionScope, signalWithStartRequest)
@@ -2063,8 +2088,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
-func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
-	terminateRequest *gen.TerminateWorkflowExecutionRequest) (retError error) {
+func (wh *WorkflowHandler) TerminateWorkflowExecution(
+	ctx context.Context,
+	terminateRequest *gen.TerminateWorkflowExecutionRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendTerminateWorkflowExecutionScope, terminateRequest)
@@ -2108,8 +2135,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 
 // ResetWorkflowExecution reset an existing workflow execution to the nextFirstEventID
 // in the history and immediately terminating the current execution instance.
-func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
-	resetRequest *gen.ResetWorkflowExecutionRequest) (resp *gen.ResetWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) ResetWorkflowExecution(
+	ctx context.Context,
+	resetRequest *gen.ResetWorkflowExecutionRequest,
+) (resp *gen.ResetWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetWorkflowExecutionScope, resetRequest)
@@ -2154,7 +2183,8 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context,
 // RequestCancelWorkflowExecution - requests to cancel a workflow execution
 func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	ctx context.Context,
-	cancelRequest *gen.RequestCancelWorkflowExecutionRequest) (retError error) {
+	cancelRequest *gen.RequestCancelWorkflowExecutionRequest,
+) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRequestCancelWorkflowExecutionScope, cancelRequest)
@@ -2197,8 +2227,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 }
 
 // ListOpenWorkflowExecutions - retrieves info for open workflow executions in a domain
-func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
-	listRequest *gen.ListOpenWorkflowExecutionsRequest) (resp *gen.ListOpenWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
+	ctx context.Context,
+	listRequest *gen.ListOpenWorkflowExecutionsRequest,
+) (resp *gen.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListOpenWorkflowExecutionsScope, listRequest)
@@ -2304,8 +2336,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 }
 
 // ListClosedWorkflowExecutions - retrieves info for closed workflow executions in a domain
-func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
-	listRequest *gen.ListClosedWorkflowExecutionsRequest) (resp *gen.ListClosedWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
+	ctx context.Context,
+	listRequest *gen.ListClosedWorkflowExecutionsRequest,
+) (resp *gen.ListClosedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListClosedWorkflowExecutionsScope, listRequest)
@@ -2430,7 +2464,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 }
 
 // ListWorkflowExecutions - retrieves info for workflow executions in a domain
-func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listRequest *gen.ListWorkflowExecutionsRequest) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListWorkflowExecutions(
+	ctx context.Context,
+	listRequest *gen.ListWorkflowExecutionsRequest,
+) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListWorkflowExecutionsScope, listRequest)
@@ -2490,7 +2527,10 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, listReque
 }
 
 // ScanWorkflowExecutions - retrieves info for large amount of workflow executions in a domain without order
-func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listRequest *gen.ListWorkflowExecutionsRequest) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ScanWorkflowExecutions(
+	ctx context.Context,
+	listRequest *gen.ListWorkflowExecutionsRequest,
+) (resp *gen.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendScanWorkflowExecutionsScope, listRequest)
@@ -2550,7 +2590,10 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, listReque
 }
 
 // CountWorkflowExecutions - count number of workflow executions in a domain
-func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, countRequest *gen.CountWorkflowExecutionsRequest) (resp *gen.CountWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) CountWorkflowExecutions(
+	ctx context.Context,
+	countRequest *gen.CountWorkflowExecutionsRequest,
+) (resp *gen.CountWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendCountWorkflowExecutionsScope, countRequest)
@@ -2617,7 +2660,10 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context) (resp *gen.G
 }
 
 // ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
-func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest *gen.ResetStickyTaskListRequest) (resp *gen.ResetStickyTaskListResponse, retError error) {
+func (wh *WorkflowHandler) ResetStickyTaskList(
+	ctx context.Context,
+	resetRequest *gen.ResetStickyTaskListRequest,
+) (resp *gen.ResetStickyTaskListResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetStickyTaskListScope, resetRequest)
@@ -2644,9 +2690,6 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest
 		return nil, wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(resetRequest.GetDomain()))
-
 	_, err = wh.history.ResetStickyTaskList(ctx, &h.ResetStickyTaskListRequest{
 		DomainUUID: common.StringPtr(domainID),
 		Execution:  resetRequest.Execution,
@@ -2658,8 +2701,10 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
-func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
-	queryRequest *gen.QueryWorkflowRequest) (resp *gen.QueryWorkflowResponse, retError error) {
+func (wh *WorkflowHandler) QueryWorkflow(
+	ctx context.Context,
+	queryRequest *gen.QueryWorkflowRequest,
+) (resp *gen.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendQueryWorkflowScope, queryRequest)
@@ -2761,7 +2806,10 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
-func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, request *gen.DescribeWorkflowExecutionRequest) (resp *gen.DescribeWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) DescribeWorkflowExecution(
+	ctx context.Context,
+	request *gen.DescribeWorkflowExecutionRequest,
+) (resp *gen.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeWorkflowExecutionScope, request)
@@ -2806,7 +2854,10 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
 // pollers which polled this tasklist in last few minutes. If includeTaskListStatus field is true,
 // it will also return status of tasklist's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.DescribeTaskListRequest) (resp *gen.DescribeTaskListResponse, retError error) {
+func (wh *WorkflowHandler) DescribeTaskList(
+	ctx context.Context,
+	request *gen.DescribeTaskListRequest,
+) (resp *gen.DescribeTaskListResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeTaskListScope, request)
@@ -3261,9 +3312,5 @@ func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, domain 
 }
 
 func (wh *WorkflowHandler) allow(d domainGetter) bool {
-	domain := ""
-	if d != nil {
-		domain = d.GetDomain()
-	}
-	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
+	return wh.rateLimiter.Allow()
 }

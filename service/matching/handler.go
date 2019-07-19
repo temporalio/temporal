@@ -32,12 +32,11 @@ import (
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/tokenbucket"
 )
 
 var _ matchingserviceserver.Interface = (*Handler)(nil)
@@ -51,7 +50,7 @@ type Handler struct {
 	metricsClient   metrics.Client
 	startWG         sync.WaitGroup
 	domainCache     cache.DomainCache
-	rateLimiter     tokenbucket.TokenBucket
+	rateLimiter     quotas.Limiter
 	service.Service
 }
 
@@ -66,7 +65,9 @@ func NewHandler(sVice service.Service, config *Config, taskPersistence persisten
 		taskPersistence: taskPersistence,
 		metadataMgr:     metadataMgr,
 		config:          config,
-		rateLimiter:     tokenbucket.NewDynamicTokenBucket(config.RPS, clock.NewRealTimeSource()),
+		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
+			return float64(config.RPS())
+		}),
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)
@@ -125,7 +126,7 @@ func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivity
 	sw := h.startRequestProfile("AddActivityTask", scope)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
 
@@ -145,7 +146,7 @@ func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecision
 	sw := h.startRequestProfile("AddDecisionTask", scope)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
 
@@ -165,7 +166,7 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForActivityTask", scope)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
@@ -186,7 +187,7 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForDecisionTask", scope)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
@@ -206,7 +207,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context,
 	sw := h.startRequestProfile("QueryWorkflow", scope)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
@@ -222,7 +223,7 @@ func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.Resp
 	defer sw.Stop()
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	h.rateLimiter.TryConsume(1)
+	h.rateLimiter.Allow()
 
 	err := h.engine.RespondQueryTaskCompleted(ctx, request)
 	return h.handleErr(err, scope)
@@ -237,7 +238,7 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	defer sw.Stop()
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	h.rateLimiter.TryConsume(1)
+	h.rateLimiter.Allow()
 
 	err := h.engine.CancelOutstandingPoll(ctx, request)
 	return h.handleErr(err, scope)
@@ -252,7 +253,7 @@ func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskL
 	sw := h.startRequestProfile("DescribeTaskList", scope)
 	defer sw.Stop()
 
-	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
