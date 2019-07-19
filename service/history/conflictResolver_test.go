@@ -48,21 +48,24 @@ import (
 type (
 	conflictResolverSuite struct {
 		suite.Suite
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryMgr      *mocks.HistoryManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMetadataMgr     *mocks.MetadataManager
-		mockMessagingClient messaging.Client
-		mockService         service.Service
-		mockShard           *shardContextImpl
-		mockContext         *workflowExecutionContextImpl
-		mockDomainCache     *cache.DomainCacheMock
-		mockClientBean      *client.MockClientBean
-		mockEventsCache     *MockEventsCache
+		logger                   log.Logger
+		mockExecutionMgr         *mocks.ExecutionManager
+		mockHistoryMgr           *mocks.HistoryManager
+		mockHistoryV2Mgr         *mocks.HistoryV2Manager
+		mockShardManager         *mocks.ShardManager
+		mockClusterMetadata      *mocks.ClusterMetadata
+		mockProducer             *mocks.KafkaProducer
+		mockMetadataMgr          *mocks.MetadataManager
+		mockMessagingClient      messaging.Client
+		mockService              service.Service
+		mockShard                *shardContextImpl
+		mockContext              *workflowExecutionContextImpl
+		mockDomainCache          *cache.DomainCacheMock
+		mockClientBean           *client.MockClientBean
+		mockEventsCache          *MockEventsCache
+		mockTxProcessor          *MockTransferQueueProcessor
+		mockReplicationProcessor *mockQueueProcessor
+		mockTimerProcessor       *MockTimerQueueProcessor
 
 		conflictResolver *conflictResolverImpl
 	}
@@ -109,16 +112,34 @@ func (s *conflictResolverSuite) SetupTest() {
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		domainCache:               s.mockDomainCache,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		eventsCache:               s.mockEventsCache,
 		timeSource:                clock.NewRealTimeSource(),
 	}
+
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockTxProcessor = &MockTransferQueueProcessor{}
+	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
+	s.mockReplicationProcessor = &mockQueueProcessor{}
+	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockTimerProcessor = &MockTimerQueueProcessor{}
+	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
+	h := &historyEngineImpl{
+		shard:                s.mockShard,
+		clusterMetadata:      s.mockClusterMetadata,
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		txProcessor:          s.mockTxProcessor,
+		replicatorProcessor:  s.mockReplicationProcessor,
+		timerProcessor:       s.mockTimerProcessor,
+	}
+	s.mockShard.SetEngine(h)
+
 	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(validRunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger)
+
 }
 
 func (s *conflictResolverSuite) TearDownTest() {
@@ -131,6 +152,9 @@ func (s *conflictResolverSuite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())
+	s.mockTxProcessor.AssertExpectations(s.T())
+	s.mockReplicationProcessor.AssertExpectations(s.T())
+	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
 func (s *conflictResolverSuite) TestGetHistory() {

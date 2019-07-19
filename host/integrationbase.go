@@ -236,9 +236,7 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: currentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{
-					ClusterName: currentClusterName,
-				},
+				{ClusterName: currentClusterName},
 			},
 		},
 		IsGlobalDomain:  false,

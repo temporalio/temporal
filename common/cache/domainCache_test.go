@@ -90,8 +90,8 @@ func (s *domainCacheSuite) TestListDomain() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		FailoverNotificationVersion: 0,
@@ -109,8 +109,8 @@ func (s *domainCacheSuite) TestListDomain() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		FailoverNotificationVersion: 0,
@@ -128,8 +128,8 @@ func (s *domainCacheSuite) TestListDomain() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		FailoverNotificationVersion: 0,
@@ -204,8 +204,8 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		TableVersion: persistence.DomainTableVersionV1,
@@ -235,8 +235,8 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByID() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		TableVersion: persistence.DomainTableVersionV1,
@@ -264,8 +264,8 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:               10,
@@ -285,8 +285,8 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:               20,
@@ -348,8 +348,8 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:               10,
@@ -369,8 +369,8 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:               20,
@@ -400,8 +400,8 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName, // only this changed
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:               domainRecord2Old.ConfigVersion,
@@ -418,8 +418,8 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:               domainRecord1Old.ConfigVersion + 1,
@@ -486,8 +486,8 @@ func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		TableVersion: persistence.DomainTableVersionV1,
@@ -503,8 +503,8 @@ func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion: domainRecordOld.ConfigVersion + 1,
@@ -552,8 +552,8 @@ func (s *domainCacheSuite) TestGetUpdateCache_ConcurrentAccess() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		ConfigVersion:   0,

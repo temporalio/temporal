@@ -237,7 +237,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			FailoverVersion: version,
@@ -320,7 +320,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			FailoverVersion: version,
@@ -421,7 +421,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			FailoverVersion: version,

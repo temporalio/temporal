@@ -26,7 +26,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	gohistory "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/persistence"
 )
+
+var _ Engine = (*MockHistoryEngine)(nil)
 
 // MockHistoryEngine is used as mock implementation for HistoryEngine
 type MockHistoryEngine struct {
@@ -493,4 +496,22 @@ func (_m *MockHistoryEngine) SyncActivity(ctx context.Context, request *gohistor
 	return r0
 }
 
-var _ Engine = (*MockHistoryEngine)(nil)
+// NotifyNewHistoryEvent is mock implementation for NotifyNewHistoryEvent of HistoryEngine
+func (_m *MockHistoryEngine) NotifyNewHistoryEvent(event *historyEventNotification) {
+	_m.Called(event)
+}
+
+// NotifyNewTransferTasks is mock implementation for NotifyNewTransferTasks of HistoryEngine
+func (_m *MockHistoryEngine) NotifyNewTransferTasks(tasks []persistence.Task) {
+	_m.Called(tasks)
+}
+
+// NotifyNewReplicationTasks is mock implementation for NotifyNewReplicationTasks of HistoryEngine
+func (_m *MockHistoryEngine) NotifyNewReplicationTasks(tasks []persistence.Task) {
+	_m.Called(tasks)
+}
+
+// NotifyNewTimerTasks is mock implementation for SyncActivity of HistoryEngine
+func (_m *MockHistoryEngine) NotifyNewTimerTasks(tasks []persistence.Task) {
+	_m.Called(tasks)
+}

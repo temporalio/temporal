@@ -551,7 +551,7 @@ func (e *mutableStateBuilder) assignTaskIDToEvents() error {
 	// first transient events
 	numTaskIDs := len(e.hBuilder.transientHistory)
 	if numTaskIDs > 0 {
-		taskIDs, err := e.shard.GetTransferTaskIDs(numTaskIDs)
+		taskIDs, err := e.shard.GenerateTransferTaskIDs(numTaskIDs)
 		if err != nil {
 			return err
 		}
@@ -568,7 +568,7 @@ func (e *mutableStateBuilder) assignTaskIDToEvents() error {
 	// then normal events
 	numTaskIDs = len(e.hBuilder.history)
 	if numTaskIDs > 0 {
-		taskIDs, err := e.shard.GetTransferTaskIDs(numTaskIDs)
+		taskIDs, err := e.shard.GenerateTransferTaskIDs(numTaskIDs)
 		if err != nil {
 			return err
 		}
@@ -3380,20 +3380,12 @@ func (e *mutableStateBuilder) AddTransferTasks(
 	e.insertTransferTasks = append(e.insertTransferTasks, transferTasks...)
 }
 
-func (e *mutableStateBuilder) GetTransferTasks() []persistence.Task {
-	return e.insertTransferTasks
-}
-
 // TODO convert AddTransferTasks to prepareTimerTasks
 func (e *mutableStateBuilder) AddTimerTasks(
 	timerTasks ...persistence.Task,
 ) {
 
 	e.insertTimerTasks = append(e.insertTimerTasks, timerTasks...)
-}
-
-func (e *mutableStateBuilder) GetTimerTasks() []persistence.Task {
-	return e.insertTimerTasks
 }
 
 func (e *mutableStateBuilder) SetUpdateCondition(condition int64) {

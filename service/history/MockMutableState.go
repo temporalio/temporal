@@ -2700,41 +2700,9 @@ func (_m *mockMutableState) AddTransferTasks(_a0 ...persistence.Task) {
 	_m.Called(_a0)
 }
 
-// GetTransferTasks provides a mock function with given fields:
-func (_m *mockMutableState) GetTransferTasks() []persistence.Task {
-	ret := _m.Called()
-
-	var r0 []persistence.Task
-	if rf, ok := ret.Get(0).(func() []persistence.Task); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]persistence.Task)
-		}
-	}
-
-	return r0
-}
-
 // AddTimerTasks provides a mock function with given fields: _a0
 func (_m *mockMutableState) AddTimerTasks(_a0 ...persistence.Task) {
 	_m.Called(_a0)
-}
-
-// GetTimerTasks provides a mock function with given fields:
-func (_m *mockMutableState) GetTimerTasks() []persistence.Task {
-	ret := _m.Called()
-
-	var r0 []persistence.Task
-	if rf, ok := ret.Get(0).(func() []persistence.Task); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]persistence.Task)
-		}
-	}
-
-	return r0
 }
 
 // SetUpdateCondition provides a mock function with given fields:

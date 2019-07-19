@@ -57,27 +57,31 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		mockHistoryEngine   *historyEngineImpl
-		mockMatchingClient  *mocks.MatchingClient
-		mockArchivalClient  *archiver.ClientMock
-		mockHistoryClient   *mocks.HistoryClient
-		mockMetadataMgr     *mocks.MetadataManager
-		mockVisibilityMgr   *mocks.VisibilityManager
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryMgr      *mocks.HistoryManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockClientBean      *client.MockClientBean
-		mockEventsCache     *MockEventsCache
-		mockMessagingClient messaging.Client
-		mockService         service.Service
-		mockMetricClient    metrics.Client
-		shardClosedCh       chan int
-		eventsCache         eventsCache
-		config              *Config
-		logger              log.Logger
+		mockHistoryEngine        *historyEngineImpl
+		mockMatchingClient       *mocks.MatchingClient
+		mockArchivalClient       *archiver.ClientMock
+		mockHistoryClient        *mocks.HistoryClient
+		mockMetadataMgr          *mocks.MetadataManager
+		mockVisibilityMgr        *mocks.VisibilityManager
+		mockExecutionMgr         *mocks.ExecutionManager
+		mockHistoryMgr           *mocks.HistoryManager
+		mockHistoryV2Mgr         *mocks.HistoryV2Manager
+		mockShardManager         *mocks.ShardManager
+		mockClusterMetadata      *mocks.ClusterMetadata
+		mockProducer             *mocks.KafkaProducer
+		mockClientBean           *client.MockClientBean
+		mockEventsCache          *MockEventsCache
+		mockMessagingClient      messaging.Client
+		mockService              service.Service
+		mockMetricClient         metrics.Client
+		mockTxProcessor          *MockTransferQueueProcessor
+		mockReplicationProcessor *mockQueueProcessor
+		mockTimerProcessor       *MockTimerQueueProcessor
+
+		shardClosedCh chan int
+		eventsCache   eventsCache
+		config        *Config
+		logger        log.Logger
 	}
 )
 
@@ -120,8 +124,6 @@ func (s *engineSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.mockEventsCache = &MockEventsCache{}
 
 	historyEventNotifier := newHistoryEventNotifier(
@@ -132,6 +134,7 @@ func (s *engineSuite) SetupTest() {
 		},
 	)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.mockMetricClient, s.logger)
+	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	mockShard := &shardContextImpl{
 		service:                   s.mockService,
 		clusterMetadata:           s.mockClusterMetadata,
@@ -146,42 +149,50 @@ func (s *engineSuite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.eventsCache = newEventsCache(mockShard)
 	mockShard.eventsCache = s.eventsCache
-	currentClusterName := s.mockService.GetClusterMetadata().GetCurrentClusterName()
-	shardContextWrapper := &shardContextWrapper{
-		currentClusterName:   currentClusterName,
-		ShardContext:         mockShard,
-		historyEventNotifier: historyEventNotifier,
-	}
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
+	s.mockTxProcessor = &MockTransferQueueProcessor{}
+	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
+	s.mockReplicationProcessor = &mockQueueProcessor{}
+	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockTimerProcessor = &MockTimerQueueProcessor{}
+	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
-	historyCache := newHistoryCache(shardContextWrapper)
+	historyCache := newHistoryCache(mockShard)
 	// this is used by shard context, not relevant to this test, so we do not care how many times "GetCurrentClusterName" os called
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	h := &historyEngineImpl{
-		currentClusterName:   currentClusterName,
-		shard:                shardContextWrapper,
+		currentClusterName:   s.mockService.GetClusterMetadata().GetCurrentClusterName(),
+		shard:                mockShard,
+		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
 		historyMgr:           s.mockHistoryMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
-		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:        metricsClient,
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		historyEventNotifier: historyEventNotifier,
 		config:               NewDynamicConfigForTest(),
 		archivalClient:       s.mockArchivalClient,
+		txProcessor:          s.mockTxProcessor,
+		replicatorProcessor:  s.mockReplicationProcessor,
+		timerProcessor:       s.mockTimerProcessor,
 	}
-	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
-	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.mockMatchingClient, s.logger)
+	mockShard.SetEngine(h)
 	h.decisionHandler = newDecisionHandler(h)
+
 	h.historyEventNotifier.Start()
-	shardContextWrapper.txProcessor = h.txProcessor
+
 	s.mockHistoryEngine = h
 }
 
@@ -196,6 +207,9 @@ func (s *engineSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
+	s.mockTxProcessor.AssertExpectations(s.T())
+	s.mockReplicationProcessor.AssertExpectations(s.T())
+	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
 func (s *engineSuite) TestGetMutableStateSync() {

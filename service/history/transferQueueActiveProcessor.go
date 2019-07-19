@@ -1262,16 +1262,11 @@ Update_History_Loop:
 		// the history and try the operation again.
 		msBuilder.AddTransferTasks(transferTasks...)
 		msBuilder.AddTimerTasks(timerTasks...)
-		if err := context.updateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now()); err != nil {
-			if err == ErrConflict {
-				continue Update_History_Loop
-			}
-			return err
+		err := context.updateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now())
+		if err == ErrConflict {
+			continue Update_History_Loop
 		}
-
-		t.historyService.timerProcessor.NotifyNewTimers(t.currentClusterName, t.shard.GetCurrentTime(t.currentClusterName), timerTasks)
-
-		return nil
+		return err
 	}
 
 	return ErrMaxAttemptsExceeded

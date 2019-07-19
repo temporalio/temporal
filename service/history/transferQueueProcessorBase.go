@@ -51,7 +51,11 @@ type (
 	}
 )
 
-const defaultDomainName = "defaultDomainName"
+const (
+	secondsInDay = int32(24 * time.Hour / time.Second)
+
+	defaultDomainName = "defaultDomainName"
+)
 
 func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
 	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,

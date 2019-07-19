@@ -201,8 +201,6 @@ type (
 
 		AddTransferTasks(transferTasks ...persistence.Task)
 		AddTimerTasks(timerTasks ...persistence.Task)
-		GetTransferTasks() []persistence.Task
-		GetTimerTasks() []persistence.Task
 		SetUpdateCondition(int64)
 		GetUpdateCondition() int64
 

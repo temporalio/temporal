@@ -743,7 +743,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	if err == nil {
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		notify(r.shard, r.historyEngine, request.GetSourceCluster(), now, sBuilder.getTransferTasks(), sBuilder.getTimerTasks())
+		notify(r.shard, request.GetSourceCluster(), now)
 	}
 
 	return err
@@ -1449,15 +1449,10 @@ func newRetryTaskErrorWithHint(
 
 func notify(
 	shard ShardContext,
-	historyEngine *historyEngineImpl,
 	clusterName string,
 	now time.Time,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
 ) {
 
 	now = now.Add(-shard.GetConfig().StandbyClusterDelay())
 	shard.SetCurrentTime(clusterName, now)
-	historyEngine.txProcessor.NotifyNewTask(clusterName, transferTasks)
-	historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
 }

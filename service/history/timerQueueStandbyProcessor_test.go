@@ -49,20 +49,23 @@ type (
 	timerQueueStandbyProcessorSuite struct {
 		suite.Suite
 
-		mockShardManager        *mocks.ShardManager
-		mockHistoryEngine       *historyEngineImpl
-		mockMetadataMgr         *mocks.MetadataManager
-		mockVisibilityMgr       *mocks.VisibilityManager
-		mockExecutionMgr        *mocks.ExecutionManager
-		mockHistoryMgr          *mocks.HistoryManager
-		mockShard               ShardContext
-		mockClusterMetadata     *mocks.ClusterMetadata
-		mockMessagingClient     messaging.Client
-		mocktimerQueueAckMgr    *MockTimerQueueAckMgr
-		mockService             service.Service
-		mockClientBean          *client.MockClientBean
-		mockHistoryRereplicator *xdc.MockHistoryRereplicator
-		logger                  log.Logger
+		mockShardManager         *mocks.ShardManager
+		mockHistoryEngine        *historyEngineImpl
+		mockMetadataMgr          *mocks.MetadataManager
+		mockVisibilityMgr        *mocks.VisibilityManager
+		mockExecutionMgr         *mocks.ExecutionManager
+		mockHistoryMgr           *mocks.HistoryManager
+		mockShard                ShardContext
+		mockClusterMetadata      *mocks.ClusterMetadata
+		mockMessagingClient      messaging.Client
+		mocktimerQueueAckMgr     *MockTimerQueueAckMgr
+		mockService              service.Service
+		mockClientBean           *client.MockClientBean
+		mockHistoryRereplicator  *xdc.MockHistoryRereplicator
+		logger                   log.Logger
+		mockTxProcessor          *MockTransferQueueProcessor
+		mockReplicationProcessor *mockQueueProcessor
+		mockTimerProcessor       *MockTimerQueueProcessor
 
 		domainID                   string
 		domainEntry                *cache.DomainCacheEntry
@@ -98,8 +101,8 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
 			IsGlobalDomain: true,
@@ -107,8 +110,6 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		},
 		nil,
 	)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
@@ -127,25 +128,40 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		config:                    config,
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	shardContext.eventsCache = newEventsCache(shardContext)
 	s.mockShard = shardContext
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
+	s.mockTxProcessor = &MockTransferQueueProcessor{}
+	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
+	s.mockReplicationProcessor = &mockQueueProcessor{}
+	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockTimerProcessor = &MockTimerQueueProcessor{}
+	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
-		historyMgr:         s.mockHistoryMgr,
-		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		currentClusterName:   s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:                s.mockShard,
+		clusterMetadata:      s.mockClusterMetadata,
+		historyMgr:           s.mockHistoryMgr,
+		executionManager:     s.mockExecutionMgr,
+		historyCache:         historyCache,
+		logger:               s.logger,
+		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		metricsClient:        s.mockShard.GetMetricsClient(),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		txProcessor:          s.mockTxProcessor,
+		replicatorProcessor:  s.mockReplicationProcessor,
+		timerProcessor:       s.mockTimerProcessor,
 	}
+	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(s.mockShard, h, s.clusterName, newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.logger)
@@ -164,6 +180,9 @@ func (s *timerQueueStandbyProcessorSuite) TearDownTest() {
 	s.mocktimerQueueAckMgr.AssertExpectations(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
+	s.mockTxProcessor.AssertExpectations(s.T())
+	s.mockReplicationProcessor.AssertExpectations(s.T())
+	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
 func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Pending() {

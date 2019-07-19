@@ -764,8 +764,7 @@ Update_History_Loop:
 
 		executionInfo := context.getExecution()
 		tBuilder := t.historyService.getTimerBuilder(executionInfo)
-		var transferTasks, timerTasks []persistence.Task
-		tranT, timerT, err := getWorkflowHistoryCleanupTasksFromShard(
+		transferTask, timerTask, err := getWorkflowHistoryCleanupTasksFromShard(
 			t.shard,
 			domainID,
 			executionInfo.GetWorkflowId(),
@@ -773,13 +772,9 @@ Update_History_Loop:
 		if err != nil {
 			return err
 		}
-		transferTasks = append(transferTasks, tranT)
-		timerTasks = append(timerTasks, timerT)
 
-		timersToNotify := append(timerTasks, newMutableState.GetTimerTasks()...)
-
-		msBuilder.AddTransferTasks(transferTasks...)
-		msBuilder.AddTimerTasks(timerTasks...)
+		msBuilder.AddTransferTasks(transferTask)
+		msBuilder.AddTimerTasks(timerTask)
 
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		err = context.updateWorkflowExecutionWithNewAsActive(
@@ -796,12 +791,8 @@ Update_History_Loop:
 			),
 			newMutableState,
 		)
-		if err != nil {
-			if err == ErrConflict {
-				continue Update_History_Loop
-			}
-		} else {
-			t.historyService.timerProcessor.NotifyNewTimers(t.currentClusterName, t.shard.GetCurrentTime(t.currentClusterName), timersToNotify)
+		if err == ErrConflict {
+			continue Update_History_Loop
 		}
 		return err
 	}
@@ -850,6 +841,5 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 		return err
 	}
 
-	t.historyService.timerProcessor.NotifyNewTimers(t.currentClusterName, t.shard.GetCurrentTime(t.currentClusterName), timerTasks)
 	return nil
 }
