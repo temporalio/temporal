@@ -48,7 +48,6 @@ type (
 		config               *Config
 		logger               log.Logger
 		metadataMgr          persistence.MetadataManager
-		mockBlobstoreClient  *mocks.BlobstoreClient
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator DomainReplicator
 		mockArchiverProvider *provider.ArchiverProviderMock
@@ -81,18 +80,16 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
 	s.config = NewConfig(dc.NewCollection(dc.NewNopClient(), logger), numHistoryShards, false)
 	s.metadataMgr = s.TestBase.MetadataProxy
-	s.mockBlobstoreClient = &mocks.BlobstoreClient{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
 	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
 
 	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
-		s.mockBlobstoreClient, s.mockDomainReplicator, s.mockArchiverProvider)
+		s.mockDomainReplicator, s.mockArchiverProvider)
 }
 
 func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockBlobstoreClient.AssertExpectations(s.T())
 }
 
 func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDomain_LocalDomain_InvalidCluster() {

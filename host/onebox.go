@@ -33,8 +33,8 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
@@ -60,8 +60,6 @@ import (
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 )
-
-const archivalBlobSize = 5 * 1024 // 5KB
 
 // Cadence hosts all of cadence services in one process
 type Cadence interface {
@@ -100,7 +98,7 @@ type (
 		clientWorker        archiver.ClientWorker
 		indexer             *indexer.Indexer
 		enableEventsV2      bool
-		blobstoreClient     blobstore.Client
+		archiverProvider    provider.ArchiverProvider
 		historyConfig       *HistoryConfig
 		esConfig            *elasticsearch.Config
 		esClient            elasticsearch.Client
@@ -132,7 +130,7 @@ type (
 		Logger                        log.Logger
 		ClusterNo                     int
 		EnableEventsV2                bool
-		Blobstore                     blobstore.Client
+		archiverProvider              provider.ArchiverProvider
 		EnableReadHistoryFromArchival bool
 		HistoryConfig                 *HistoryConfig
 		ESConfig                      *elasticsearch.Config
@@ -167,7 +165,7 @@ func NewCadence(params *CadenceParams) Cadence {
 		enableEventsV2:      params.EnableEventsV2,
 		esConfig:            params.ESConfig,
 		esClient:            params.ESClient,
-		blobstoreClient:     params.Blobstore,
+		archiverProvider:    params.archiverProvider,
 		historyConfig:       params.HistoryConfig,
 		workerConfig:        params.WorkerConfig,
 	}
@@ -397,10 +395,10 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
 	params.MessagingClient = c.messagingClient
-	params.BlobstoreClient = c.blobstoreClient
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.ArchiverProvider = c.archiverProvider
 
 	// TODO when cross DC is public, remove this temporary override
 	var kafkaProducer messaging.Producer
@@ -423,9 +421,21 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, c.logger)
 	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.workerConfig.EnableIndexer)
+	domainCache := cache.NewDomainCache(c.metadataMgr, c.clusterMetadata, c.frontEndService.GetMetricsClient(), c.logger)
+
+	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
+		HistoryManager:   c.historyMgr,
+		HistoryV2Manager: c.historyV2Mgr,
+		Logger:           c.logger,
+		MetricsClient:    c.frontEndService.GetMetricsClient(),
+		ClusterMetadata:  c.clusterMetadata,
+		DomainCache:      domainCache,
+	}
+	c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
-		c.visibilityMgr, kafkaProducer, params.BlobstoreClient, provider.NewArchiverProvider(nil, nil))
+		c.visibilityMgr, kafkaProducer, domainCache, c.archiverProvider)
 	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 
@@ -475,14 +485,27 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)
 		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)
+		historyConfig.TimerProcessorHistoryArchivalSizeLimit = dynamicconfig.GetIntPropertyFn(5 * 1024)
 		if hConfig.HistoryCountLimitWarn != 0 {
 			historyConfig.HistoryCountLimitWarn = dynamicconfig.GetIntPropertyFilteredByDomain(hConfig.HistoryCountLimitWarn)
 		}
 		if hConfig.HistoryCountLimitError != 0 {
 			historyConfig.HistoryCountLimitError = dynamicconfig.GetIntPropertyFilteredByDomain(hConfig.HistoryCountLimitError)
 		}
+		domainCache := cache.NewDomainCache(c.metadataMgr, c.clusterMetadata, service.GetMetricsClient(), c.logger)
+
+		historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
+			HistoryManager:   c.historyMgr,
+			HistoryV2Manager: c.historyV2Mgr,
+			Logger:           c.logger,
+			MetricsClient:    service.GetMetricsClient(),
+			ClusterMetadata:  c.clusterMetadata,
+			DomainCache:      domainCache,
+		}
+		c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
-			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, params.PublicClient, nil)
+			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, domainCache, params.PublicClient, c.archiverProvider)
 		handler.RegisterHandler()
 
 		service.Start()
@@ -605,23 +628,27 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 }
 
 func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, service service.Service, domainCache cache.DomainCache) {
-	blobstoreClient := blobstore.NewRetryableClient(
-		blobstore.NewMetricClient(c.blobstoreClient, service.GetMetricsClient()),
-		c.blobstoreClient.GetRetryPolicy(),
-		c.blobstoreClient.IsRetryableError)
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	workerConfig.ArchiverConfig.TargetArchivalBlobSize = dynamicconfig.GetIntPropertyFilteredByDomain(archivalBlobSize)
+	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
+		HistoryManager:   c.historyMgr,
+		HistoryV2Manager: c.historyV2Mgr,
+		Logger:           c.logger,
+		MetricsClient:    service.GetMetricsClient(),
+		ClusterMetadata:  c.clusterMetadata,
+		DomainCache:      domainCache,
+	}
+	c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     params.PublicClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
-		ClusterMetadata:  service.GetClusterMetadata(),
 		HistoryManager:   c.historyMgr,
 		HistoryV2Manager: c.historyV2Mgr,
-		Blobstore:        blobstoreClient,
 		DomainCache:      domainCache,
 		Config:           workerConfig.ArchiverConfig,
+		ArchiverProvider: c.archiverProvider,
 	}
 	c.clientWorker = archiver.NewClientWorker(bc)
 	if err := c.clientWorker.Start(); err != nil {

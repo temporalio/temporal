@@ -26,9 +26,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -57,30 +55,18 @@ type (
 		PublicClient     workflowserviceclient.Interface
 		MetricsClient    metrics.Client
 		Logger           log.Logger
-		ClusterMetadata  cluster.Metadata
 		HistoryManager   persistence.HistoryManager
 		HistoryV2Manager persistence.HistoryV2Manager
-		Blobstore        blobstore.Client
 		DomainCache      cache.DomainCache
 		Config           *Config
 		ArchiverProvider provider.ArchiverProvider
-
-		// the following are only set in testing code
-		HistoryBlobReader     HistoryBlobReader
-		HistorySizeEstimator  SizeEstimator
-		HistoryBlobDownloader HistoryBlobDownloader
 	}
 
 	// Config for ClientWorker
 	Config struct {
-		EnableArchivalCompression                 dynamicconfig.BoolPropertyFnWithDomainFilter
-		HistoryPageSize                           dynamicconfig.IntPropertyFnWithDomainFilter
-		TargetArchivalBlobSize                    dynamicconfig.IntPropertyFnWithDomainFilter
-		ArchiverConcurrency                       dynamicconfig.IntPropertyFn
-		ArchivalsPerIteration                     dynamicconfig.IntPropertyFn
-		DeterministicConstructionCheckProbability dynamicconfig.FloatPropertyFn
-		BlobIntegrityCheckProbability             dynamicconfig.FloatPropertyFn
-		TimeLimitPerArchivalIteration             dynamicconfig.DurationPropertyFn
+		ArchiverConcurrency           dynamicconfig.IntPropertyFn
+		ArchivalsPerIteration         dynamicconfig.IntPropertyFn
+		TimeLimitPerArchivalIteration dynamicconfig.DurationPropertyFn
 	}
 
 	contextKey int
@@ -107,7 +93,6 @@ var (
 func init() {
 	workflow.RegisterWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
 	activity.RegisterWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
-	activity.RegisterWithOptions(deleteBlobActivity, activity.RegisterOptions{Name: deleteBlobActivityFnName})
 	activity.RegisterWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
 }
 

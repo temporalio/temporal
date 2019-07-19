@@ -643,6 +643,16 @@ func TokenLastEventVersion(version int64) Tag {
 ///////////////////  Archival tags defined here: archival- ///////////////////
 // archival request tags
 
+// ArchivalCallerServiceName returns tag for the service name calling archival client
+func ArchivalCallerServiceName(callerServiceName string) Tag {
+	return newStringTag("archival-caller-service-name", callerServiceName)
+}
+
+// ArchivalArchiveInline returns tag for whether archival is done inline or a signal is sent
+func ArchivalArchiveInline(archiveInline bool) Tag {
+	return newBoolTag("archival-archive-inline", archiveInline)
+}
+
 // ArchivalRequestDomainID returns tag for RequestDomainID
 func ArchivalRequestDomainID(requestDomainID string) Tag {
 	return newStringTag("archival-request-domain-id", requestDomainID)
@@ -683,24 +693,9 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) Tag 
 	return newInt64("archival-request-close-failover-version", requestCloseFailoverVersion)
 }
 
-// ArchivalBucket returns tag for Bucket
-func ArchivalBucket(bucket string) Tag {
-	return newStringTag("archival-bucket", bucket)
-}
-
 // ArchivalURI returns tag for Archival URI
 func ArchivalURI(URI string) Tag {
 	return newStringTag("archival-URI", URI)
-}
-
-// ArchivalBlobKey returns tag for BlobKey
-func ArchivalBlobKey(blobKey string) Tag {
-	return newStringTag("archival-blob-key", blobKey)
-}
-
-// ArchivalClusterArchivalStatus returns tag for ClusterArchivalStatus
-func ArchivalClusterArchivalStatus(clusterArchivalStatus interface{}) Tag {
-	return newObjectTag("archival-cluster-archival-status", clusterArchivalStatus)
 }
 
 // ArchivalArchiveFailReason returns tag for ArchivalArchiveFailReason
@@ -708,14 +703,22 @@ func ArchivalArchiveFailReason(archiveFailReason string) Tag {
 	return newStringTag("archival-archive-fail-reason", archiveFailReason)
 }
 
-// ArchivalUploadFailReason returns tag for ArchivalUploadFailReason
-func ArchivalUploadFailReason(uploadFailReason string) Tag {
-	return newStringTag("archival-upload-fail-reason", uploadFailReason)
-}
-
 // ArchivalDeleteHistoryFailReason returns tag for ArchivalDeleteHistoryFailReason
 func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) Tag {
 	return newStringTag("archival-delete-history-fail-reason", deleteHistoryFailReason)
+}
+
+// The following logger tags are only used by internal archiver implemention.
+// TODO: move them to internal repo once cadence plugin model is in place.
+
+// ArchivalBlobKey returns tag for BlobKey
+func ArchivalBlobKey(blobKey string) Tag {
+	return newStringTag("archival-blob-key", blobKey)
+}
+
+// ArchivalUploadFailReason returns tag for ArchivalUploadFailReason
+func ArchivalUploadFailReason(uploadFailReason string) Tag {
+	return newStringTag("archival-upload-fail-reason", uploadFailReason)
 }
 
 // ArchivalDeleteBlobsFailReason returns tag for ArchivalDeleteBlobsFailReason

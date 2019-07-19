@@ -23,12 +23,10 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber/cadence/.gen/go/admin"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log/tag"
@@ -40,16 +38,16 @@ const (
 	retryBackoffTime = 200 * time.Millisecond
 )
 
-func (s *integrationSuite) TestArchival() {
+func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
-	workflowID := "archival-workflow-id"
-	workflowType := "archival-workflow-type"
-	taskList := "archival-task-list"
+	workflowID := "archival-timer-queue-processor-workflow-id"
+	workflowType := "archival-timer-queue-processor-type"
+	taskList := "archival-timer-queue-processor-task-list"
 	numActivities := 1
 	numRuns := 1
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns, false)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)[0]
 
 	execution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
@@ -69,7 +67,7 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	taskList := "archival-continueAsNew-task-list"
 	numActivities := 1
 	numRuns := 5
-	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns, false)
+	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)
 
 	for _, runID := range runIDs {
 		execution := &workflow.WorkflowExecution{
@@ -82,15 +80,15 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	}
 }
 
-func (s *integrationSuite) TestArchival_MultiBlob() {
+func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
-	workflowID := "archival-multi-blob-workflow-id"
-	workflowType := "archival-multi-blob-workflow-type"
-	taskList := "archival-multi-blob-task-list"
+	workflowID := "archival-archiver-worker-workflow-id"
+	workflowType := "archival-archiver-worker-workflow-type"
+	taskList := "archival-archiver-worker-task-list"
 	numActivities := 10
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, 1, true)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, 1)[0]
 
 	execution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
@@ -176,63 +174,7 @@ func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *wor
 	return false
 }
 
-func (s *integrationSuite) isMultiBlobHistory(domain, domainID string, execution *workflow.WorkflowExecution) bool {
-	historySize := 0
-	pageSize := 100
-	var err error
-
-	if !s.testClusterConfig.EnableEventsV2 {
-		req := &persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID:     domainID,
-			Execution:    *execution,
-			FirstEventID: common.FirstEventID,
-			NextEventID:  common.EndEventID,
-			PageSize:     pageSize,
-		}
-		resp := &persistence.GetWorkflowExecutionHistoryResponse{}
-		for historySize == 0 || len(resp.NextPageToken) != 0 {
-			resp, err = s.testCluster.testBase.HistoryMgr.GetWorkflowExecutionHistory(req)
-			s.Nil(err)
-			historySize += resp.Size
-			req.NextPageToken = resp.NextPageToken
-		}
-		return historySize > archivalBlobSize
-	}
-
-	wfResp, err := s.adminClient.DescribeWorkflowExecution(createContext(), &admin.DescribeWorkflowExecutionRequest{
-		Domain:    common.StringPtr(domain),
-		Execution: execution,
-	})
-	s.Nil(err)
-	s.NotNil(wfResp)
-	s.NotNil(wfResp.MutableStateInDatabase)
-
-	msStr := wfResp.GetMutableStateInDatabase()
-	ms := persistence.WorkflowMutableState{}
-	err = json.Unmarshal([]byte(msStr), &ms)
-	s.Nil(err)
-	s.NotNil(ms.ExecutionInfo)
-	branchToken := ms.ExecutionInfo.BranchToken
-
-	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, s.testClusterConfig.HistoryConfig.NumHistoryShards)
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken: branchToken,
-		MinEventID:  common.FirstEventID,
-		MaxEventID:  common.EndEventID,
-		PageSize:    pageSize,
-		ShardID:     common.IntPtr(shardID),
-	}
-	var nextPageToken []byte
-	for historySize == 0 || len(nextPageToken) != 0 {
-		_, pageSize, nextPageToken, err = persistence.ReadFullPageV2Events(s.testCluster.testBase.HistoryV2Mgr, req)
-		s.Nil(err)
-		historySize += pageSize
-		req.NextPageToken = nextPageToken
-	}
-	return historySize > archivalBlobSize
-}
-
-func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID string, numActivities, numRuns int, checkMultiBlob bool) []string {
+func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID string, numActivities, numRuns int) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
 	workflowType := &workflow.WorkflowType{
@@ -356,13 +298,6 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 			}
 			s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 			s.Nil(err)
-		}
-
-		if run == numRuns-1 && checkMultiBlob {
-			s.True(s.isMultiBlobHistory(domain, domainID, &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(id),
-				RunId:      common.StringPtr(runIDs[run]),
-			}))
 		}
 
 		_, err = poller.PollAndProcessDecisionTask(true, false)

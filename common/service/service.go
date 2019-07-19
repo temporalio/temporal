@@ -30,7 +30,6 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	es "github.com/uber/cadence/common/elasticsearch"
@@ -74,7 +73,6 @@ type (
 		ESConfig            *es.Config
 		DynamicConfig       dynamicconfig.Client
 		DispatcherProvider  client.DispatcherProvider
-		BlobstoreClient     blobstore.Client
 		DCRedirectionPolicy config.DCRedirectionPolicy
 		PublicClient        workflowserviceclient.Interface
 		ArchiverProvider    provider.ArchiverProvider

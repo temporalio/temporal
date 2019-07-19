@@ -41,7 +41,6 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/elasticsearch/validator"
@@ -52,7 +51,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -74,12 +72,10 @@ type (
 		startWG                   sync.WaitGroup
 		rateLimiter               quotas.Limiter
 		config                    *Config
-		blobstoreClient           blobstore.Client
 		versionChecker            *versionChecker
 		domainHandler             *domainHandlerImpl
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
-		historyBlobDownloader     warchiver.HistoryBlobDownloader
 		archiverProvider          provider.ArchiverProvider
 		service.Service
 	}
@@ -152,7 +148,7 @@ var (
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
-	blobstoreClient blobstore.Client, archiverProvider provider.ArchiverProvider) *WorkflowHandler {
+	domainCache cache.DomainCache, archiverProvider provider.ArchiverProvider) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		config:          config,
@@ -162,26 +158,23 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		visibilityMgr:   visibilityMgr,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		metricsClient:   sVice.GetMetricsClient(),
-		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
+		domainCache:     domainCache,
 		rateLimiter: quotas.NewDynamicRateLimiter(func() float64 {
 			return float64(config.RPS())
 		}),
-		blobstoreClient: blobstoreClient,
-		versionChecker:  &versionChecker{checkVersion: config.EnableClientVersionCheck()},
+		versionChecker: &versionChecker{checkVersion: config.EnableClientVersionCheck()},
 		domainHandler: newDomainHandler(
 			config,
 			sVice.GetLogger(),
 			metadataMgr,
 			sVice.GetClusterMetadata(),
-			blobstoreClient,
 			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 			archiverProvider,
 		),
 		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(sVice.GetLogger(), config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
-		historyBlobDownloader: warchiver.NewHistoryBlobDownloader(blobstoreClient),
-		archiverProvider:      archiverProvider,
+		archiverProvider: archiverProvider,
 	}
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
 		HistoryManager:   handler.historyMgr,
@@ -3267,23 +3260,39 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	archivalBucket := entry.GetConfig().HistoryArchivalURI // TODO ycyang: rewrite get archived history with archiver
-	if archivalBucket == "" {
+
+	archivalURI := entry.GetConfig().HistoryArchivalURI
+	if archivalURI == "" {
 		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
 	}
-	downloadReq := &warchiver.DownloadBlobRequest{
-		NextPageToken:  request.NextPageToken,
-		ArchivalBucket: archivalBucket,
-		DomainID:       domainID,
-		WorkflowID:     request.GetExecution().GetWorkflowId(),
-		RunID:          request.GetExecution().GetRunId(),
-	}
-	resp, err := wh.historyBlobDownloader.DownloadBlob(ctx, downloadReq)
+
+	scheme, err := common.GetArchivalScheme(archivalURI)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
+
+	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(scheme, common.FrontendServiceName)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	resp, err := historyArchiver.Get(ctx, archivalURI, &archiver.GetHistoryRequest{
+		DomainID:      domainID,
+		WorkflowID:    request.GetExecution().GetWorkflowId(),
+		RunID:         request.GetExecution().GetRunId(),
+		NextPageToken: request.GetNextPageToken(),
+		PageSize:      int(request.GetMaximumPageSize()),
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	history := &shared.History{}
+	for _, batch := range resp.HistoryBatches {
+		history.Events = append(history.Events, batch.Events...)
+	}
 	return &gen.GetWorkflowExecutionHistoryResponse{
-		History:       resp.HistoryBlob.Body,
+		History:       history,
 		NextPageToken: resp.NextPageToken,
 		Archived:      common.BoolPtr(true),
 	}, nil

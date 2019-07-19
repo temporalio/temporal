@@ -24,13 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/archiver/provider"
-
-	"github.com/uber/cadence/service/worker/batcher"
-
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/blobstore"
+	carchiver "github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
@@ -43,6 +40,7 @@ import (
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
+	"github.com/uber/cadence/service/worker/batcher"
 	"github.com/uber/cadence/service/worker/indexer"
 	"github.com/uber/cadence/service/worker/replicator"
 	"github.com/uber/cadence/service/worker/scanner"
@@ -103,14 +101,9 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			ReplicationTaskMaxRetryDuration:    dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskMaxRetryDuration, 15*time.Minute),
 		},
 		ArchiverConfig: &archiver.Config{
-			EnableArchivalCompression:                 dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchivalCompression, true),
-			HistoryPageSize:                           dc.GetIntPropertyFilteredByDomain(dynamicconfig.WorkerHistoryPageSize, 250),
-			TargetArchivalBlobSize:                    dc.GetIntPropertyFilteredByDomain(dynamicconfig.WorkerTargetArchivalBlobSize, 2*1024*1024), // 2MB
-			ArchiverConcurrency:                       dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
-			ArchivalsPerIteration:                     dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
-			DeterministicConstructionCheckProbability: dc.GetFloat64Property(dynamicconfig.WorkerDeterministicConstructionCheckProbability, 0.002),
-			BlobIntegrityCheckProbability:             dc.GetFloat64Property(dynamicconfig.WorkerBlobIntegrityCheckProbability, 0.002),
-			TimeLimitPerArchivalIteration:             dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
+			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
+			ArchivalsPerIteration:         dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
+			TimeLimitPerArchivalIteration: dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
 		},
 		IndexerCfg: &indexer.Config{
 			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 1000),
@@ -269,20 +262,22 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 	}
 	domainCache := cache.NewDomainCache(metadataMgr, s.params.ClusterMetadata, s.metricsClient, s.logger)
 	domainCache.Start()
-
-	blobstoreClient := blobstore.NewRetryableClient(
-		blobstore.NewMetricClient(s.params.BlobstoreClient, s.metricsClient),
-		s.params.BlobstoreClient.GetRetryPolicy(),
-		s.params.BlobstoreClient.IsRetryableError)
+	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
+		HistoryManager:   historyManager,
+		HistoryV2Manager: historyV2Manager,
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		ClusterMetadata:  base.GetClusterMetadata(),
+		DomainCache:      domainCache,
+	}
+	archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     publicClient,
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
-		ClusterMetadata:  base.GetClusterMetadata(),
 		HistoryManager:   historyManager,
 		HistoryV2Manager: historyV2Manager,
-		Blobstore:        blobstoreClient,
 		DomainCache:      domainCache,
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: archiverProvider,

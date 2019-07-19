@@ -46,7 +46,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/worker/archiver"
+	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 )
 
@@ -79,9 +79,8 @@ type (
 		logger               log.Logger
 		throttledLogger      log.Logger
 		config               *Config
-		archivalClient       archiver.Client
+		archivalClient       warchiver.Client
 		resetor              workflowResetor
-		archiverProvider     provider.ArchiverProvider
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -176,8 +175,7 @@ func NewEngineWithShardContext(
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
-		archivalClient:       archiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS),
-		archiverProvider:     archiverProvider,
+		archivalClient:       warchiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS, archiverProvider),
 	}
 
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)

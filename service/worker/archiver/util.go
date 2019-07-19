@@ -24,12 +24,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence"
@@ -76,7 +73,7 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestNextEventID(request.NextEventID),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
-		tag.ArchivalBucket(request.BucketName),
+		tag.ArchivalURI(request.URI),
 	)
 }
 
@@ -94,62 +91,6 @@ func contextExpired(ctx context.Context) bool {
 	default:
 		return false
 	}
-}
-
-func shouldRun(probability float64) bool {
-	if probability <= 0 {
-		return false
-	}
-	if probability >= 1.0 {
-		return true
-	}
-	return rand.Intn(int(1.0/probability)) == 0
-}
-
-func historyMutated(historyBlob *HistoryBlob, request *ArchiveRequest) bool {
-	lastFailoverVersion := common.Int64Default(historyBlob.Header.LastFailoverVersion)
-	if lastFailoverVersion > request.CloseFailoverVersion {
-		return true
-	}
-
-	if !common.BoolDefault(historyBlob.Header.IsLast) {
-		return false
-	}
-
-	lastEventID := common.Int64Default(historyBlob.Header.LastEventID)
-	return lastFailoverVersion != request.CloseFailoverVersion || lastEventID+1 != request.NextEventID
-}
-
-func validateArchivalRequest(request *ArchiveRequest) error {
-	if len(request.BucketName) == 0 {
-		// this should not be able to occur, if domain enables archival bucket should always be set
-		return cadence.NewCustomError(errInvalidRequest, errEmptyBucket)
-	}
-	return nil
-}
-
-func getUploadHistoryActivityResponse(uploadedBlobs []string, err error) (*uploadResult, error) {
-	if err == nil {
-		return nil, nil
-	}
-
-	fatalError := map[string]bool{
-		errGetDomainByID:  true,
-		errInvalidRequest: true,
-	}
-	errReason := err.Error()
-	if _, ok := fatalError[errReason]; ok {
-		return nil, err
-	}
-
-	errorWithDetails := errReason
-	if details := errorDetails(err); details != "" {
-		errorWithDetails = fmt.Sprintf("%v: %v", errReason, details)
-	}
-	return &uploadResult{
-		BlobsToDelete:    uploadedBlobs,
-		ErrorWithDetails: errorWithDetails,
-	}, nil
 }
 
 func errorDetails(err error) string {

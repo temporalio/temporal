@@ -42,51 +42,6 @@
   version = "0.10.0"
 
 [[projects]]
-  digest = "1:7543a21f990a34c585c6e3e046051ac526de79ca41370bbda83fad554c8caf95"
-  name = "github.com/aws/aws-sdk-go"
-  packages = [
-    "aws",
-    "aws/awserr",
-    "aws/awsutil",
-    "aws/client",
-    "aws/client/metadata",
-    "aws/corehandlers",
-    "aws/credentials",
-    "aws/credentials/ec2rolecreds",
-    "aws/credentials/endpointcreds",
-    "aws/credentials/processcreds",
-    "aws/credentials/stscreds",
-    "aws/csm",
-    "aws/defaults",
-    "aws/ec2metadata",
-    "aws/endpoints",
-    "aws/request",
-    "aws/session",
-    "aws/signer/v4",
-    "internal/ini",
-    "internal/s3err",
-    "internal/sdkio",
-    "internal/sdkrand",
-    "internal/sdkuri",
-    "internal/shareddefaults",
-    "private/protocol",
-    "private/protocol/eventstream",
-    "private/protocol/eventstream/eventstreamapi",
-    "private/protocol/json/jsonutil",
-    "private/protocol/query",
-    "private/protocol/query/queryutil",
-    "private/protocol/rest",
-    "private/protocol/restxml",
-    "private/protocol/xml/xmlutil",
-    "service/s3",
-    "service/s3/s3iface",
-    "service/sts",
-  ]
-  pruneopts = ""
-  revision = "471204b4ff86c9c417adb58cec55079c06d16213"
-  version = "v1.20.15"
-
-[[projects]]
   branch = "master"
   digest = "1:afaa6de27e2d86b66cf71d55096f00e32b2ef40ec3349b535555aa81c77bc7d3"
   name = "github.com/benbjohnson/clock"
@@ -346,13 +301,6 @@
   pruneopts = ""
   revision = "c6ca198ec95c841fdb89fc0de7496fed11ab854e"
   version = "v1.4.0"
-
-[[projects]]
-  digest = "1:13fe471d0ed891e8544eddfeeb0471fd3c9f2015609a1c000aefdedf52a19d40"
-  name = "github.com/jmespath/go-jmespath"
-  packages = ["."]
-  pruneopts = ""
-  revision = "c2b33e84"
 
 [[projects]]
   branch = "batch"
@@ -1157,12 +1105,6 @@
   input-imports = [
     "github.com/Shopify/sarama",
     "github.com/apache/thrift/lib/go/thrift",
-    "github.com/aws/aws-sdk-go/aws",
-    "github.com/aws/aws-sdk-go/aws/awserr",
-    "github.com/aws/aws-sdk-go/aws/request",
-    "github.com/aws/aws-sdk-go/aws/session",
-    "github.com/aws/aws-sdk-go/service/s3",
-    "github.com/aws/aws-sdk-go/service/s3/s3iface",
     "github.com/bsm/sarama-cluster",
     "github.com/cactus/go-statsd-client/statsd",
     "github.com/cch123/elasticsql",
