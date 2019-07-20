@@ -1263,6 +1263,8 @@ const (
 	HistoryArchiverRunningBlobIntegrityCheckCount
 	HistoryArchiverBlobIntegrityCheckFailedCount
 	HistoryArchiverCouldNotRunBlobIntegrityCheckCount
+	HistoryArchiverUploadNonRetryableErrorCount
+	HistoryArchiverCleanupFailedCount
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1524,6 +1526,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverRunningBlobIntegrityCheckCount:                 {metricName: "history_archiver_running_blob_integrity_check", metricType: Counter},
 		HistoryArchiverBlobIntegrityCheckFailedCount:                  {metricName: "history_archiver_blob_integrity_check_failed", metricType: Counter},
 		HistoryArchiverCouldNotRunBlobIntegrityCheckCount:             {metricName: "history_archiver_could_not_run_blob_integrity_check", metricType: Counter},
+		HistoryArchiverUploadNonRetryableErrorCount:                   {metricName: "history_archiver_upload_non_retryable_error", metricType: Counter},
+		HistoryArchiverCleanupFailedCount:                             {metricName: "history_archiver_cleanup_failed", metricType: Counter},
 	},
 	Frontend: {},
 	History: {

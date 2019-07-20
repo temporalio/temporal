@@ -721,9 +721,9 @@ func ArchivalUploadFailReason(uploadFailReason string) Tag {
 	return newStringTag("archival-upload-fail-reason", uploadFailReason)
 }
 
-// ArchivalDeleteBlobsFailReason returns tag for ArchivalDeleteBlobsFailReason
-func ArchivalDeleteBlobsFailReason(deleteBlobsFailReason string) Tag {
-	return newStringTag("archival-delete-blobs-fail-reason", deleteBlobsFailReason)
+// ArchivalCleanUpFailReason returns tag for ArchivalCleanUpFailReason
+func ArchivalCleanUpFailReason(cleanUpFailReason string) Tag {
+	return newStringTag("archival-clean-up-fail-reason", cleanUpFailReason)
 }
 
 // ArchivalDeterministicConstructionCheckFailReason returns tag for ArchivalDeterministicConstructionCheckFailReason
