@@ -1335,12 +1335,12 @@ func (s *TestBase) validateTimeRange(t time.Time, expectedDuration time.Duration
 	return true
 }
 
-// GetTransferTaskID helper
+// GenerateTransferTaskID helper
 func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&g.seqNum, 1), nil
 }
 
-// GetTransferTaskIDs helper
+// GenerateTransferTaskIDs helper
 func (g *TestTransferTaskIDGenerator) GenerateTransferTaskIDs(number int) ([]int64, error) {
 	result := []int64{}
 	for i := 0; i < number; i++ {

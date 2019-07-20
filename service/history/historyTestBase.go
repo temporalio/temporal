@@ -181,22 +181,22 @@ func (s *TestShardContext) GetEventsCache() eventsCache {
 	return s.eventsCache
 }
 
-// GetEventsCache test implementation
+// GetEngine test implementation
 func (s *TestShardContext) GetEngine() Engine {
 	return s.engine
 }
 
-// GetEventsCache test implementation
+// SetEngine test implementation
 func (s *TestShardContext) SetEngine(engine Engine) {
 	s.engine = engine
 }
 
-// GetTransferTaskID test implementation
+// GenerateTransferTaskID test implementation
 func (s *TestShardContext) GenerateTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&s.transferSequenceNumber, 1), nil
 }
 
-// GetTransferTaskIDs test implementation
+// GenerateTransferTaskIDs test implementation
 func (s *TestShardContext) GenerateTransferTaskIDs(number int) ([]int64, error) {
 	result := []int64{}
 	for i := 0; i < number; i++ {
