@@ -72,14 +72,6 @@ func TestScopeDefsMapped(t *testing.T) {
 			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
 		}
 	}
-	for i := NumWorkerScopes; i < NumBlobstoreScopes; i++ {
-		key, ok := ScopeDefs[Blobstore][i]
-		require.True(t, ok)
-		require.NotEmpty(t, key)
-		for tag := range key.tags {
-			assert.True(t, IsMetric(tag), "metric tags should conform to regex")
-		}
-	}
 }
 
 func TestMetricDefsMapped(t *testing.T) {

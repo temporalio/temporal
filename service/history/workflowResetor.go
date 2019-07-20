@@ -138,11 +138,6 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 		baseMutableState.GetNextEventID(),
 	)
 
-	if retError == nil {
-		w.eng.txProcessor.NotifyNewTask(w.eng.currentClusterName, newTransferTasks)
-		w.eng.timerProcessor.NotifyNewTimers(w.eng.currentClusterName, w.eng.shard.GetCurrentTime(w.eng.currentClusterName), newTimerTasks)
-	}
-
 	return response, retError
 }
 
@@ -813,7 +808,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		return retError
 	}
 	now := time.Unix(0, lastEvent.GetTimestamp())
-	notify(w.eng.shard, w.eng, request.GetSourceCluster(), now, newRunTransferTasks, newRunTimerTasks)
+	notify(w.eng.shard, request.GetSourceCluster(), now)
 	return nil
 }
 

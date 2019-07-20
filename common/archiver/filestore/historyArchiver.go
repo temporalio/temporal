@@ -54,7 +54,7 @@ import (
 
 const (
 	// URIScheme is the scheme for the filestore implementation
-	URIScheme = "file://"
+	URIScheme = "file"
 
 	errEncodeHistory = "failed to encode history batches"
 	errMakeDirectory = "failed to make directory"
@@ -218,7 +218,7 @@ func (h *historyArchiver) Get(
 			return nil, err
 		}
 		token = &getHistoryToken{
-			CloseFailoverVersion: highestVersion,
+			CloseFailoverVersion: *highestVersion,
 			NextBatchIdx:         0,
 		}
 	}
@@ -269,7 +269,7 @@ func (h *historyArchiver) Get(
 }
 
 func (h *historyArchiver) ValidateURI(URI string) error {
-	if !strings.HasPrefix(URI, URIScheme) {
+	if !strings.HasPrefix(URI, URIScheme+"://") {
 		return archiver.ErrInvalidURIScheme
 	}
 
@@ -294,21 +294,24 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 	return historyBlob, nil
 }
 
-func getHighestVersion(dirPath string, request *archiver.GetHistoryRequest) (int64, error) {
+func getHighestVersion(dirPath string, request *archiver.GetHistoryRequest) (*int64, error) {
 	filenames, err := listFilesByPrefix(dirPath, constructFilenamePrefix(request.DomainID, request.WorkflowID, request.RunID))
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 
-	highestVersion := int64(-1)
+	var highestVersion *int64
 	for _, filename := range filenames {
 		version, err := extractCloseFailoverVersion(filename)
 		if err != nil {
-			return -1, err
+			continue
 		}
-		if version > highestVersion {
-			highestVersion = version
+		if highestVersion == nil || version > *highestVersion {
+			highestVersion = &version
 		}
+	}
+	if highestVersion == nil {
+		return nil, archiver.ErrHistoryNotExist
 	}
 	return highestVersion, nil
 }

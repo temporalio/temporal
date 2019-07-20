@@ -55,23 +55,29 @@ type (
 		config           *Config
 		logger           log.Logger
 
-		mockHistoryEngine   *historyEngineImpl
-		mockMatchingClient  *mocks.MatchingClient
-		mockMetadataMgr     *mocks.MetadataManager
-		mockVisibilityMgr   *mocks.VisibilityManager
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryMgr      *mocks.HistoryManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShard           ShardContext
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockClientBean      *client.MockClientBean
-		mockMessagingClient messaging.Client
-		mockService         service.Service
-		mockEventsCache     *MockEventsCache
+		mockHistoryEngine        *historyEngineImpl
+		mockMatchingClient       *mocks.MatchingClient
+		mockMetadataMgr          *mocks.MetadataManager
+		mockVisibilityMgr        *mocks.VisibilityManager
+		mockExecutionMgr         *mocks.ExecutionManager
+		mockHistoryMgr           *mocks.HistoryManager
+		mockHistoryV2Mgr         *mocks.HistoryV2Manager
+		mockShard                ShardContext
+		mockClusterMetadata      *mocks.ClusterMetadata
+		mockProducer             *mocks.KafkaProducer
+		mockClientBean           *client.MockClientBean
+		mockMessagingClient      messaging.Client
+		mocktimerQueueAckMgr     *MockTimerQueueAckMgr
+		mockService              service.Service
+		mockEventsCache          *MockEventsCache
+		mockTxProcessor          *MockTransferQueueProcessor
+		mockReplicationProcessor *mockQueueProcessor
+		mockTimerProcessor       *MockTimerQueueProcessor
 
-		domainID    string
-		domainEntry *cache.DomainCacheEntry
+		domainID                  string
+		domainEntry               *cache.DomainCacheEntry
+		clusterName               string
+		timerQueueActiveProcessor *timerQueueActiveProcessorImpl
 	}
 )
 
@@ -105,7 +111,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
 			TableVersion: persistence.DomainTableVersionV1,
@@ -136,31 +142,46 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		logger:                    s.logger,
 		domainCache:               domainCache,
 		eventsCache:               s.mockEventsCache,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	historyCache := newHistoryCache(s.mockShard)
 	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
+	s.mockTxProcessor = &MockTransferQueueProcessor{}
+	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
+	s.mockReplicationProcessor = &mockQueueProcessor{}
+	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockTimerProcessor = &MockTimerQueueProcessor{}
+	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 	s.mockClusterMetadata.On("IsArchivalEnabled").Return(false)
+
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
-		historyMgr:         s.mockHistoryMgr,
-		historyV2Mgr:       s.mockHistoryV2Mgr,
-		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		currentClusterName:   s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:                s.mockShard,
+		clusterMetadata:      s.mockClusterMetadata,
+		historyMgr:           s.mockHistoryMgr,
+		historyV2Mgr:         s.mockHistoryV2Mgr,
+		executionManager:     s.mockExecutionMgr,
+		historyCache:         historyCache,
+		logger:               s.logger,
+		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		metricsClient:        s.mockShard.GetMetricsClient(),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		txProcessor:          s.mockTxProcessor,
+		replicatorProcessor:  s.mockReplicationProcessor,
+		timerProcessor:       s.mockTimerProcessor,
 	}
-	h.txProcessor = newTransferQueueProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, s.logger)
-	h.timerProcessor = newTimerQueueProcessor(s.mockShard, h, s.mockMatchingClient, s.logger)
+	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
+	s.clusterName = cluster.TestCurrentClusterName
+	s.timerQueueActiveProcessor = newTimerQueueActiveProcessor(s.mockShard, h, s.mockMatchingClient, newTaskAllocator(s.mockShard), s.logger)
+	s.mocktimerQueueAckMgr = &MockTimerQueueAckMgr{}
+	s.timerQueueActiveProcessor.timerQueueAckMgr = s.mocktimerQueueAckMgr
 
 	s.domainID = testDomainActiveID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
@@ -176,6 +197,9 @@ func (s *timerQueueProcessor2Suite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())
+	s.mockTxProcessor.AssertExpectations(s.T())
+	s.mockReplicationProcessor.AssertExpectations(s.T())
+	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
@@ -242,18 +266,16 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	}).Once()
 
 	// Start timer Processor.
-	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
+	s.timerQueueActiveProcessor.Start()
 
-	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
-		cluster.TestCurrentClusterName,
-		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),
+	s.timerQueueActiveProcessor.notifyNewTimers(
 		[]persistence.Task{&persistence.DecisionTimeoutTask{
 			VisibilityTimestamp: timerTask.VisibilityTimestamp,
 			EventID:             timerTask.EventID,
 		}})
 
 	<-waitCh
-	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
+	s.timerQueueActiveProcessor.Stop()
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
@@ -317,21 +339,19 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
 		waitCh <- struct{}{}
 	}).Once() // for lookAheadTask
-	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
+	s.timerQueueActiveProcessor.Start()
 	<-waitCh
 	<-waitCh
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil) // for lookAheadTask
-	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
-		cluster.TestCurrentClusterName,
-		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),
+	s.timerQueueActiveProcessor.notifyNewTimers(
 		[]persistence.Task{&persistence.WorkflowTimeoutTask{
 			VisibilityTimestamp: timerTask.VisibilityTimestamp,
 		}})
 
 	<-waitCh
-	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
+	s.timerQueueActiveProcessor.Stop()
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
@@ -403,19 +423,17 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
 		waitCh <- struct{}{}
 	}).Once() // for lookAheadTask
-	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
+	s.timerQueueActiveProcessor.Start()
 	<-waitCh
 	<-waitCh
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil) // for lookAheadTask
-	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
-		cluster.TestCurrentClusterName,
-		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),
+	s.timerQueueActiveProcessor.notifyNewTimers(
 		[]persistence.Task{&persistence.WorkflowTimeoutTask{
 			VisibilityTimestamp: timerTask.VisibilityTimestamp,
 		}})
 
 	<-waitCh
-	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
+	s.timerQueueActiveProcessor.Stop()
 }

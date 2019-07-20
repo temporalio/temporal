@@ -337,7 +337,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalDomain() {
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
 			},
 		},
 		IsGlobalDomain: false,
@@ -355,7 +355,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneR
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		IsGlobalDomain: true,
@@ -377,8 +377,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoR
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: activeCluster,
 			Clusters: []*persistence.ClusterReplicationConfig{
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-				&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
 		IsGlobalDomain: true,

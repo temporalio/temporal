@@ -23,17 +23,16 @@ package loggerimpl
 import (
 	"sync/atomic"
 
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/tokenbucket"
 )
 
 type throttledLogger struct {
-	rps int32
-	tb  tokenbucket.TokenBucket
-	log log.Logger
+	rps     int32
+	limiter quotas.Limiter
+	log     log.Logger
 }
 
 var _ log.Logger = (*throttledLogger)(nil)
@@ -59,11 +58,13 @@ func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) log.
 	}
 
 	rate := rps()
-	tb := tokenbucket.NewDynamicTokenBucket(rps, clock.NewRealTimeSource())
+	limiter := quotas.NewDynamicRateLimiter(func() float64 {
+		return float64(rps())
+	})
 	tl := &throttledLogger{
-		tb:  tb,
-		rps: int32(rate),
-		log: log,
+		limiter: limiter,
+		rps:     int32(rate),
+		log:     log,
 	}
 	return tl
 }
@@ -101,15 +102,15 @@ func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
 func (tl *throttledLogger) WithTags(tags ...tag.Tag) log.Logger {
 	result := &throttledLogger{
-		rps: atomic.LoadInt32(&tl.rps),
-		tb:  tl.tb,
-		log: tl.log.WithTags(tags...),
+		rps:     atomic.LoadInt32(&tl.rps),
+		limiter: tl.limiter,
+		log:     tl.log.WithTags(tags...),
 	}
 	return result
 }
 
 func (tl *throttledLogger) rateLimit(f func()) {
-	if ok, _ := tl.tb.TryConsume(1); ok {
+	if ok := tl.limiter.Allow(); ok {
 		f()
 	}
 }

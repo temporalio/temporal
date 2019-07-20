@@ -46,7 +46,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/worker/archiver"
+	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 )
 
@@ -63,6 +63,7 @@ type (
 		shard                ShardContext
 		timeSource           clock.TimeSource
 		decisionHandler      decisionHandler
+		clusterMetadata      cluster.Metadata
 		historyMgr           persistence.HistoryManager
 		historyV2Mgr         persistence.HistoryV2Manager
 		executionManager     persistence.ExecutionManager
@@ -79,19 +80,8 @@ type (
 		logger               log.Logger
 		throttledLogger      log.Logger
 		config               *Config
-		archivalClient       archiver.Client
+		archivalClient       warchiver.Client
 		resetor              workflowResetor
-		archiverProvider     provider.ArchiverProvider
-	}
-
-	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
-	// TODO: use to notify timerQueueProcessor as well.
-	shardContextWrapper struct {
-		currentClusterName string
-		ShardContext
-		txProcessor          transferQueueProcessor
-		replicatorProcessor  queueProcessor
-		historyEventNotifier historyEventNotifier
 	}
 )
 
@@ -150,12 +140,7 @@ func NewEngineWithShardContext(
 	archiverProvider provider.ArchiverProvider,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
-	shardWrapper := &shardContextWrapper{
-		currentClusterName:   currentClusterName,
-		ShardContext:         shard,
-		historyEventNotifier: historyEventNotifier,
-	}
-	shard = shardWrapper
+
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
@@ -164,6 +149,7 @@ func NewEngineWithShardContext(
 	historyEngImpl := &historyEngineImpl{
 		currentClusterName:   currentClusterName,
 		shard:                shard,
+		clusterMetadata:      shard.GetClusterMetadata(),
 		timeSource:           shard.GetTimeSource(),
 		historyMgr:           historyManager,
 		historyV2Mgr:         historyV2Manager,
@@ -176,25 +162,23 @@ func NewEngineWithShardContext(
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
-		archivalClient:       archiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS),
-		archiverProvider:     archiverProvider,
+		archivalClient:       warchiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS, archiverProvider),
 	}
 
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.txProcessor = txProcessor
-	shardWrapper.txProcessor = txProcessor
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
 		replicatorProcessor := newReplicatorQueueProcessor(shard, historyEngImpl.historyCache, publisher, executionManager, historyManager, historyV2Manager, logger)
 		historyEngImpl.replicatorProcessor = replicatorProcessor
-		shardWrapper.replicatorProcessor = replicatorProcessor
 		historyEngImpl.replicator = newHistoryReplicator(shard, clock.NewRealTimeSource(), historyEngImpl, historyCache, shard.GetDomainCache(), historyManager, historyV2Manager,
 			logger)
 	}
 	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
+	shard.SetEngine(historyEngImpl)
 
 	return historyEngImpl
 }
@@ -301,7 +285,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				fakeDecisionTask := []persistence.Task{&persistence.DecisionTask{}}
 				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeDecisionTask)
-				e.timerProcessor.NotifyNewTimers(e.currentClusterName, now, fakeDecisionTimeoutTask)
+				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
 			}
 
 			e.shard.UpdateDomainNotificationVersion(nextDomains[len(nextDomains)-1].GetNotificationVersion() + 1)
@@ -506,7 +490,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		}
 	}
 
-	e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 	if err != nil {
 		return nil, err
 	}
@@ -1467,7 +1450,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				}
 				return nil, err
 			}
-			e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 			return &workflow.StartWorkflowExecutionResponse{RunId: context.getExecution().RunId}, nil
 		} // end for Just_Signal_Loop
 		if attempt == conditionalRetryCount {
@@ -1604,7 +1586,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 	if err != nil {
 		return nil, err
 	}
@@ -1763,7 +1744,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
 	e.txProcessor.NotifyNewTask(clusterName, []persistence.Task{})
-	e.timerProcessor.NotifyNewTimers(clusterName, now, []persistence.Task{})
+	e.timerProcessor.NotifyNewTimers(clusterName, []persistence.Task{})
 	return nil
 }
 
@@ -1960,14 +1941,11 @@ Update_History_Loop:
 		// the history and try the operation again.
 		msBuilder.AddTransferTasks(transferTasks...)
 		msBuilder.AddTimerTasks(timerTasks...)
-		if err := context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now()); err != nil {
-			if err == ErrConflict {
-				continue Update_History_Loop
-			}
-			return err
+		err = context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now())
+		if err == ErrConflict {
+			continue Update_History_Loop
 		}
-		e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
-		return nil
+		return err
 	}
 	return ErrMaxAttemptsExceeded
 }
@@ -2097,41 +2075,42 @@ func (e *historyEngineImpl) getTimerBuilder(
 	return newTimerBuilder(log, clock.NewRealTimeSource())
 }
 
-func (s *shardContextWrapper) UpdateWorkflowExecution(
-	request *persistence.UpdateWorkflowExecutionRequest,
-) (*persistence.UpdateWorkflowExecutionResponse, error) {
-
-	resp, err := s.ShardContext.UpdateWorkflowExecution(request)
-	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, request.UpdateWorkflowMutation.TransferTasks)
-		if len(request.UpdateWorkflowMutation.ReplicationTasks) > 0 {
-			s.replicatorProcessor.notifyNewTask()
-		}
-	}
-	return resp, err
-}
-
-func (s *shardContextWrapper) CreateWorkflowExecution(
-	request *persistence.CreateWorkflowExecutionRequest,
-) (*persistence.CreateWorkflowExecutionResponse, error) {
-
-	resp, err := s.ShardContext.CreateWorkflowExecution(request)
-	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, request.NewWorkflowSnapshot.TransferTasks)
-		if len(request.NewWorkflowSnapshot.ReplicationTasks) > 0 {
-			s.replicatorProcessor.notifyNewTask()
-		}
-	}
-	return resp, err
-}
-
-func (s *shardContextWrapper) NotifyNewHistoryEvent(
+func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	event *historyEventNotification,
-) error {
+) {
 
-	s.historyEventNotifier.NotifyNewHistoryEvent(event)
-	err := s.ShardContext.NotifyNewHistoryEvent(event)
-	return err
+	e.historyEventNotifier.NotifyNewHistoryEvent(event)
+}
+
+func (e *historyEngineImpl) NotifyNewTransferTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 {
+		task := tasks[0]
+		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		e.txProcessor.NotifyNewTask(clusterName, tasks)
+	}
+}
+
+func (e *historyEngineImpl) NotifyNewReplicationTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 {
+		e.replicatorProcessor.notifyNewTask()
+	}
+}
+
+func (e *historyEngineImpl) NotifyNewTimerTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 {
+		task := tasks[0]
+		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		e.timerProcessor.NotifyNewTimers(clusterName, tasks)
+	}
 }
 
 func validateStartWorkflowExecutionRequest(

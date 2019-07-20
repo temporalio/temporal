@@ -30,11 +30,6 @@ import (
 )
 
 type (
-	// Factory is an interface mainly used for injecting mock implementation of TokenBucket for unit testing
-	Factory interface {
-		CreateTokenBucket(rps int, timeSource clock.TimeSource) TokenBucket
-	}
-
 	// TokenBucket is the interface for any implementation of a token bucket rate limiter
 	TokenBucket interface {
 		// TryConsume attempts to take count tokens from the

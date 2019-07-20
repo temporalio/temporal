@@ -49,22 +49,25 @@ type (
 	transferQueueStandbyProcessorSuite struct {
 		suite.Suite
 
-		mockShardManager        *mocks.ShardManager
-		mockHistoryEngine       *historyEngineImpl
-		mockMetadataMgr         *mocks.MetadataManager
-		mockVisibilityMgr       *mocks.VisibilityManager
-		mockMatchingClient      *mocks.MatchingClient
-		mockExecutionMgr        *mocks.ExecutionManager
-		mockHistoryMgr          *mocks.HistoryManager
-		mockShard               ShardContext
-		mockClusterMetadata     *mocks.ClusterMetadata
-		mockProducer            *mocks.KafkaProducer
-		mockClientBean          *client.MockClientBean
-		mockMessagingClient     messaging.Client
-		mockQueueAckMgr         *MockQueueAckMgr
-		mockService             service.Service
-		mockHistoryRereplicator *xdc.MockHistoryRereplicator
-		logger                  log.Logger
+		mockShardManager         *mocks.ShardManager
+		mockHistoryEngine        *historyEngineImpl
+		mockMetadataMgr          *mocks.MetadataManager
+		mockVisibilityMgr        *mocks.VisibilityManager
+		mockMatchingClient       *mocks.MatchingClient
+		mockExecutionMgr         *mocks.ExecutionManager
+		mockHistoryMgr           *mocks.HistoryManager
+		mockShard                ShardContext
+		mockClusterMetadata      *mocks.ClusterMetadata
+		mockProducer             *mocks.KafkaProducer
+		mockClientBean           *client.MockClientBean
+		mockMessagingClient      messaging.Client
+		mockQueueAckMgr          *MockQueueAckMgr
+		mockService              service.Service
+		mockHistoryRereplicator  *xdc.MockHistoryRereplicator
+		logger                   log.Logger
+		mockTxProcessor          *MockTransferQueueProcessor
+		mockReplicationProcessor *mockQueueProcessor
+		mockTimerProcessor       *MockTimerQueueProcessor
 
 		domainID                      string
 		domainEntry                   *cache.DomainCacheEntry
@@ -101,8 +104,8 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 			ReplicationConfig: &persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
-					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
 			IsGlobalDomain: true,
@@ -110,8 +113,6 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		},
 		nil,
 	)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockProducer = &mocks.KafkaProducer{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
@@ -132,25 +133,40 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		config:                    config,
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	shardContext.eventsCache = newEventsCache(shardContext)
 	s.mockShard = shardContext
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
+	s.mockTxProcessor = &MockTransferQueueProcessor{}
+	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
+	s.mockReplicationProcessor = &mockQueueProcessor{}
+	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockTimerProcessor = &MockTimerQueueProcessor{}
+	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
-		historyMgr:         s.mockHistoryMgr,
-		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		currentClusterName:   s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:                s.mockShard,
+		clusterMetadata:      s.mockClusterMetadata,
+		historyMgr:           s.mockHistoryMgr,
+		executionManager:     s.mockExecutionMgr,
+		historyCache:         historyCache,
+		logger:               s.logger,
+		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		metricsClient:        s.mockShard.GetMetricsClient(),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		txProcessor:          s.mockTxProcessor,
+		replicatorProcessor:  s.mockReplicationProcessor,
+		timerProcessor:       s.mockTimerProcessor,
 	}
+	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.transferQueueStandbyProcessor = newTransferQueueStandbyProcessor(
@@ -172,6 +188,9 @@ func (s *transferQueueStandbyProcessorSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
+	s.mockTxProcessor.AssertExpectations(s.T())
+	s.mockReplicationProcessor.AssertExpectations(s.T())
+	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
 func (s *transferQueueStandbyProcessorSuite) TestProcessActivityTask_Pending() {

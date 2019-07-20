@@ -31,7 +31,6 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -44,7 +43,6 @@ type (
 		logger              log.Logger
 		metadataMgr         persistence.MetadataManager
 		clusterMetadata     cluster.Metadata
-		blobstoreClient     blobstore.Client
 		domainReplicator    DomainReplicator
 		domainAttrValidator *domainAttrValidatorImpl
 		archiverProvider    provider.ArchiverProvider
@@ -56,7 +54,6 @@ func newDomainHandler(config *Config,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
-	blobstoreClient blobstore.Client,
 	domainReplicator DomainReplicator,
 	archiverProvider provider.ArchiverProvider,
 ) *domainHandlerImpl {
@@ -65,7 +62,6 @@ func newDomainHandler(config *Config,
 		logger:              logger,
 		metadataMgr:         metadataMgr,
 		clusterMetadata:     clusterMetadata,
-		blobstoreClient:     blobstoreClient,
 		domainReplicator:    domainReplicator,
 		domainAttrValidator: newDomainAttrValidator(clusterMetadata, int32(config.MinRetentionDays())),
 		archiverProvider:    archiverProvider,

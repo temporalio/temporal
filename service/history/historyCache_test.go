@@ -96,7 +96,7 @@ func (s *historyCacheSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.cache = newHistoryCache(s.mockShard)

@@ -353,7 +353,6 @@ Update_History_Loop:
 			transferTasks               []persistence.Task
 			timerTasks                  []persistence.Task
 			continueAsNewBuilder        mutableState
-			continueAsNewTimerTasks     []persistence.Task
 
 			tBuilder           *timerBuilder
 			hasUnhandledEvents bool
@@ -519,8 +518,6 @@ Update_History_Loop:
 		// the history and try the operation again.
 		var updateErr error
 		if continueAsNewBuilder != nil {
-			continueAsNewTimerTasks = continueAsNewBuilder.GetTimerTasks()
-
 			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
 			updateErr = context.updateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
@@ -573,15 +570,10 @@ Update_History_Loop:
 				if err := context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now()); err != nil {
 					return nil, err
 				}
-				handler.timerProcessor.NotifyNewTimers(handler.currentClusterName, handler.shard.GetCurrentTime(handler.currentClusterName), timerTasks)
 			}
+
 			return nil, updateErr
 		}
-
-		// add continueAsNewTimerTask
-		timerTasks = append(timerTasks, continueAsNewTimerTasks...)
-		// Inform timer about the new ones.
-		handler.timerProcessor.NotifyNewTimers(handler.currentClusterName, handler.shard.GetCurrentTime(handler.currentClusterName), timerTasks)
 
 		resp = &h.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {

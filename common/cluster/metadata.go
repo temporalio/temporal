@@ -23,6 +23,7 @@ package cluster
 import (
 	"fmt"
 
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -218,6 +219,10 @@ func (metadata *metadataImpl) GetAllClusterInfo() map[string]config.ClusterInfor
 
 // ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int64) string {
+	if failoverVersion == common.EmptyVersion {
+		return metadata.currentClusterName
+	}
+
 	initialFailoverVersion := failoverVersion % metadata.failoverVersionIncrement
 	clusterName, ok := metadata.versionToClusterName[initialFailoverVersion]
 	if !ok {

@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -38,8 +39,8 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/tokenbucket"
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -72,7 +73,7 @@ type (
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        TimerGate
 		timeSource       clock.TimeSource
-		rateLimiter      tokenbucket.TokenBucket
+		rateLimiter      quotas.Limiter
 		startDelay       dynamicconfig.DurationPropertyFn
 		retryPolicy      backoff.RetryPolicy
 
@@ -121,9 +122,13 @@ func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *h
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
 		lastPollTime:            time.Time{},
-		rateLimiter:             tokenbucket.NewDynamicTokenBucket(maxPollRPS, clock.NewRealTimeSource()),
-		startDelay:              startDelay,
-		retryPolicy:             common.CreatePersistanceRetryPolicy(),
+		rateLimiter: quotas.NewDynamicRateLimiter(
+			func() float64 {
+				return float64(maxPollRPS())
+			},
+		),
+		startDelay:  startDelay,
+		retryPolicy: common.CreatePersistanceRetryPolicy(),
 	}
 
 	return base
@@ -360,10 +365,13 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
-	if !t.rateLimiter.Consume(1, loadTimerTaskThrottleRetryDelay) {
+	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
+	if err := t.rateLimiter.Wait(ctx); err != nil {
+		cancel()
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, nil
 	}
+	cancel()
 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
@@ -628,50 +636,56 @@ func (t *timerQueueProcessorBase) deleteWorkflow(task *persistence.TimerTaskInfo
 	return nil
 }
 
-func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInfo, msBuilder mutableState, context workflowExecutionContext) error {
+func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInfo, msBuilder mutableState, workflowContext workflowExecutionContext) error {
 	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
 	if err != nil {
 		return err
 	}
 
-	// TODO ycyang: rewrite archiveRequest
-	req := &archiver.ArchiveRequest{
-		ShardID:              t.shard.GetShardID(),
-		DomainID:             task.DomainID,
-		DomainName:           domainCacheEntry.GetInfo().Name,
-		WorkflowID:           task.WorkflowID,
-		RunID:                task.RunID,
-		EventStoreVersion:    msBuilder.GetEventStoreVersion(),
-		BranchToken:          msBuilder.GetCurrentBranch(),
-		NextEventID:          msBuilder.GetNextEventID(),
-		CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
-		BucketName:           domainCacheEntry.GetConfig().HistoryArchivalURI,
-	}
-
-	// send signal before deleting mutable state to make sure archival is idempotent
-	if err := t.historyService.archivalClient.Archive(req); err != nil {
-		t.logger.Error("failed to initiate archival", tag.Error(err),
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.WorkflowDomainID(task.DomainID),
-			tag.ShardID(t.shard.GetShardID()),
-			tag.TaskID(task.GetTaskID()),
-			tag.FailoverVersion(task.GetVersion()),
-			tag.TaskType(task.GetTaskType()))
+	executionStats, err := workflowContext.loadExecutionStats()
+	if err != nil {
 		return err
 	}
+	archiveInline := executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorHistoryArchivalTimeLimit())
+	defer cancel()
+	req := &archiver.ClientRequest{
+		ArchiveRequest: &archiver.ArchiveRequest{
+			ShardID:              t.shard.GetShardID(),
+			DomainID:             task.DomainID,
+			DomainName:           domainCacheEntry.GetInfo().Name,
+			WorkflowID:           task.WorkflowID,
+			RunID:                task.RunID,
+			EventStoreVersion:    msBuilder.GetEventStoreVersion(),
+			BranchToken:          msBuilder.GetCurrentBranch(),
+			NextEventID:          msBuilder.GetNextEventID(),
+			CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
+			URI:                  domainCacheEntry.GetConfig().HistoryArchivalURI,
+		},
+		CallerService: common.HistoryServiceName,
+		ArchiveInline: archiveInline,
+	}
+	if err := t.historyService.archivalClient.Archive(ctx, req); err != nil {
+		return err
+	}
+
 	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
 		return err
 	}
 	if err := t.deleteWorkflowExecution(task); err != nil {
 		return err
 	}
+	if archiveInline {
+		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
+			return err
+		}
+	}
 	if err := t.deleteWorkflowVisibility(task); err != nil {
 		return err
 	}
 	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
-	context.clear()
+	workflowContext.clear()
 	return nil
 }
 

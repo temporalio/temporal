@@ -137,7 +137,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimers - Notify the processor about the new active / standby timer arrival.
 // This should be called each time new timer arrives, otherwise timers maybe fired unexpected.
-func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTime time.Time, timerTasks []persistence.Task) {
+func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, timerTasks []persistence.Task) {
 	if clusterName == t.currentClusterName {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
@@ -147,7 +147,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 	if !ok {
 		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 	}
-	standbyTimerProcessor.setCurrentTime(currentTime)
+	standbyTimerProcessor.setCurrentTime(t.shard.GetCurrentTime(clusterName))
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
 	standbyTimerProcessor.retryTasks()
 }

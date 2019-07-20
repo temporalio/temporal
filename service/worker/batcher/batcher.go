@@ -113,7 +113,7 @@ func (s *Batcher) Start() error {
 		BackgroundActivityContext: context.WithValue(context.Background(), batcherContextKey, s),
 		Tracer:                    opentracing.GlobalTracer(),
 	}
-	worker := worker.New(s.svcClient, common.SystemGlobalDomainName, batcherTaskListName, workerOpts)
+	worker := worker.New(s.svcClient, common.SystemGlobalDomainName, BatcherTaskListName, workerOpts)
 	return worker.Start()
 }
 

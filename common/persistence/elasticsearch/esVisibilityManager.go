@@ -21,14 +21,13 @@
 package elasticsearch
 
 import (
-	"github.com/uber/cadence/common/clock"
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/tokenbucket"
 )
 
 // NewESVisibilityManager create a visibility manager for ElasticSearch
@@ -43,7 +42,11 @@ func NewESVisibilityManager(indexName string, esClient es.Client, config *config
 	if config != nil {
 		// wrap with rate limiter
 		if config.MaxQPS() != 0 {
-			esRateLimiter := tokenbucket.NewDynamicTokenBucket(config.MaxQPS, clock.NewRealTimeSource())
+			esRateLimiter := quotas.NewDynamicRateLimiter(
+				func() float64 {
+					return float64(config.MaxQPS())
+				},
+			)
 			visibilityFromES = p.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
 		}
 		// wrap with advanced rate limit for list

@@ -21,7 +21,6 @@
 package archiver
 
 import (
-	"errors"
 	"time"
 
 	"github.com/uber/cadence/common/log"
@@ -115,56 +114,14 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)
 	uploadSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
-	var result *uploadResult
-	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, &result)
-	if err == nil && result != nil {
-		err = errors.New(result.ErrorWithDetails)
-	}
+	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, nil)
 	if err != nil {
-		logger.Error("failed to upload history, will delete all uploaded blobs and moving on to deleting history without archiving", tag.Error(err))
+		logger.Error("failed to archive history, will move on to deleting history without archiving", tag.Error(err))
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
 	}
 	uploadSW.Stop()
-
-	var blobsToDelete []string
-	if result != nil {
-		blobsToDelete = result.BlobsToDelete
-	}
-	if timeoutErr, ok := err.(*workflow.TimeoutError); ok {
-		// In the case of timeout, activity is not able to return any information.
-		// We need to get what blobs has been uploaded from the last heartbeat details.
-		progress := uploadProgress{}
-		if timeoutErr.HasDetails() {
-			if err := timeoutErr.Details(&progress); err != nil {
-				logger.Error("failed to get upload progress from timeout error details", tag.Error(err))
-			} else {
-				blobsToDelete = progress.UploadedBlobs
-			}
-		}
-	}
-	if len(blobsToDelete) != 0 {
-		ao := workflow.ActivityOptions{
-			ScheduleToStartTimeout: 2 * time.Minute,
-			StartToCloseTimeout:    2 * time.Minute,
-			RetryPolicy: &cadence.RetryPolicy{
-				InitialInterval:          time.Second,
-				BackoffCoefficient:       2.0,
-				ExpirationInterval:       4 * time.Minute,
-				NonRetriableErrorReasons: deleteBlobActivityNonRetryableErrors,
-			},
-		}
-		actCtx := workflow.WithActivityOptions(ctx, ao)
-		deleteBlobSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteBlobWithRetriesLatency)
-		if err := workflow.ExecuteActivity(actCtx, deleteBlobActivityFnName, request, blobsToDelete).Get(actCtx, nil); err != nil {
-			logger.Error("failed to delete uploaded blobs", tag.Error(err))
-			metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteBlobFailedAllRetriesCount)
-		} else {
-			metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteBlobSuccessCount)
-		}
-		deleteBlobSW.Stop()
-	}
 
 	lao := workflow.LocalActivityOptions{
 		ScheduleToCloseTimeout: 1 * time.Minute,

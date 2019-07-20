@@ -21,9 +21,8 @@
 package history
 
 import (
-	"time"
-
 	"github.com/stretchr/testify/mock"
+
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -48,8 +47,8 @@ func (_m *MockTimerQueueProcessor) FailoverDomain(domainIDs map[string]struct{})
 }
 
 // NotifyNewTimers is mock implementation for NotifyNewTimers of Processor
-func (_m *MockTimerQueueProcessor) NotifyNewTimers(clusterName string, currentTime time.Time, timerTask []persistence.Task) {
-	_m.Called(clusterName, currentTime, timerTask)
+func (_m *MockTimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []persistence.Task) {
+	_m.Called(clusterName, timerTask)
 }
 
 // LockTaskPrrocessing is mock implementation for LockTaskPrrocessing of Processor

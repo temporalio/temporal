@@ -57,8 +57,16 @@ type (
 	}
 )
 
-func newTransferQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, visibilityMgr persistence.VisibilityManager,
-	matchingClient matching.Client, historyClient history.Client, taskAllocator taskAllocator, logger log.Logger) *transferQueueActiveProcessorImpl {
+func newTransferQueueActiveProcessor(
+	shard ShardContext,
+	historyService *historyEngineImpl,
+	visibilityMgr persistence.VisibilityManager,
+	matchingClient matching.Client,
+	historyClient history.Client,
+	taskAllocator taskAllocator,
+	logger log.Logger,
+) *transferQueueActiveProcessorImpl {
+
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorStartDelay,
@@ -115,10 +123,20 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 	return processor
 }
 
-func newTransferQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,
-	historyClient history.Client, domainIDs map[string]struct{}, standbyClusterName string,
-	minLevel int64, maxLevel int64, taskAllocator taskAllocator, logger log.Logger) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
+func newTransferQueueFailoverProcessor(
+	shard ShardContext,
+	historyService *historyEngineImpl,
+	visibilityMgr persistence.VisibilityManager,
+	matchingClient matching.Client,
+	historyClient history.Client,
+	domainIDs map[string]struct{},
+	standbyClusterName string,
+	minLevel int64,
+	maxLevel int64,
+	taskAllocator taskAllocator,
+	logger log.Logger,
+) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
+
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorFailoverStartDelay,
@@ -198,7 +216,11 @@ func (t *transferQueueActiveProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
 }
 
-func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo, shouldProcessTask bool) (int, error) {
+func (t *transferQueueActiveProcessorImpl) process(
+	qTask queueTaskInfo,
+	shouldProcessTask bool,
+) (int, error) {
+
 	task, ok := qTask.(*persistence.TransferTaskInfo)
 	if !ok {
 		return metrics.TransferActiveQueueProcessorScope, errUnexpectedQueueTask
@@ -265,7 +287,9 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo, shouldPr
 	}
 }
 
-func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processActivityTask(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
 
 	var err error
 	execution := workflow.WorkflowExecution{
@@ -305,7 +329,10 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 	return t.pushActivity(task, timeout)
 }
 
-func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processDecisionTask(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
+
 	var err error
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
@@ -364,7 +391,9 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	return t.pushDecision(task, tasklist, decisionTimeout)
 }
 
-func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processCloseExecution(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
 
 	var err error
 	domainID := task.DomainID
@@ -459,7 +488,9 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	return err
 }
 
-func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processCancelExecution(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
 
 	var err error
 	domainID := task.DomainID
@@ -579,7 +610,9 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persiste
 	return err
 }
 
-func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processSignalExecution(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
 
 	var err error
 	domainID := task.DomainID
@@ -708,7 +741,9 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 	return err
 }
 
-func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
 
 	var err error
 	domainID := task.DomainID
@@ -845,15 +880,25 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 	return err
 }
 
-func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
+
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, true)
 }
 
-func (t *transferQueueActiveProcessorImpl) processUpsertWorkflowSearchAttributes(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processUpsertWorkflowSearchAttributes(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
+
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, false)
 }
 
-func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(task *persistence.TransferTaskInfo, isRecordStart bool) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(
+	task *persistence.TransferTaskInfo,
+	isRecordStart bool,
+) (retError error) {
+
 	var err error
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
@@ -910,7 +955,10 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 		workflowTimeout, task.GetTaskID(), visibilityMemo, searchAttr)
 }
 
-func copySearchAttributes(input map[string][]byte) map[string][]byte {
+func copySearchAttributes(
+	input map[string][]byte,
+) map[string][]byte {
+
 	if input == nil {
 		return nil
 	}
@@ -924,7 +972,10 @@ func copySearchAttributes(input map[string][]byte) map[string][]byte {
 	return result
 }
 
-func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistence.TransferTaskInfo) (retError error) {
+func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
+	task *persistence.TransferTaskInfo,
+) (retError error) {
+
 	var err error
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
@@ -952,7 +1003,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 		return nil
 	}
 	if !currMutableState.IsWorkflowExecutionRunning() {
-		//it means this this might not be current anymore, we need to check
+		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
 		resp, retError = t.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 			DomainID:   task.DomainID,
@@ -1050,9 +1101,12 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(task *persistenc
 	return nil
 }
 
-func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *persistence.TransferTaskInfo,
-	context workflowExecutionContext, initiatedAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes,
-	runID string) error {
+func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(
+	task *persistence.TransferTaskInfo,
+	context workflowExecutionContext,
+	initiatedAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes,
+	runID string,
+) error {
 
 	return t.updateWorkflowExecution(task.DomainID, context, true,
 		func(msBuilder mutableState) error {
@@ -1082,9 +1136,11 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(task *per
 		})
 }
 
-func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(task *persistence.TransferTaskInfo,
+func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(
+	task *persistence.TransferTaskInfo,
 	context workflowExecutionContext,
-	initiatedAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes) error {
+	initiatedAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes,
+) error {
 
 	return t.updateWorkflowExecution(task.DomainID, context, true,
 		func(msBuilder mutableState) error {
@@ -1107,8 +1163,11 @@ func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(task 
 
 // createFirstDecisionTask is used by StartChildExecution transfer task to create the first decision task for
 // child execution.
-func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(domainID string,
-	execution *workflow.WorkflowExecution) error {
+func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(
+	domainID string,
+	execution *workflow.WorkflowExecution,
+) error {
+
 	err := t.historyClient.ScheduleDecisionTask(nil, &h.ScheduleDecisionTaskRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: execution,
@@ -1126,8 +1185,11 @@ func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(domainID stri
 	return err
 }
 
-func (t *transferQueueActiveProcessorImpl) requestCancelCompleted(task *persistence.TransferTaskInfo,
-	context workflowExecutionContext, request *h.RequestCancelWorkflowExecutionRequest) error {
+func (t *transferQueueActiveProcessorImpl) requestCancelCompleted(
+	task *persistence.TransferTaskInfo,
+	context workflowExecutionContext,
+	request *h.RequestCancelWorkflowExecutionRequest,
+) error {
 
 	return t.updateWorkflowExecution(task.DomainID, context, true,
 		func(msBuilder mutableState) error {
@@ -1152,9 +1214,11 @@ func (t *transferQueueActiveProcessorImpl) requestCancelCompleted(task *persiste
 		})
 }
 
-func (t *transferQueueActiveProcessorImpl) requestSignalCompleted(task *persistence.TransferTaskInfo,
+func (t *transferQueueActiveProcessorImpl) requestSignalCompleted(
+	task *persistence.TransferTaskInfo,
 	context workflowExecutionContext,
-	request *h.SignalWorkflowExecutionRequest) error {
+	request *h.SignalWorkflowExecutionRequest,
+) error {
 
 	return t.updateWorkflowExecution(task.DomainID, context, true,
 		func(msBuilder mutableState) error {
@@ -1179,8 +1243,11 @@ func (t *transferQueueActiveProcessorImpl) requestSignalCompleted(task *persiste
 		})
 }
 
-func (t *transferQueueActiveProcessorImpl) requestCancelFailed(task *persistence.TransferTaskInfo,
-	context workflowExecutionContext, request *h.RequestCancelWorkflowExecutionRequest) error {
+func (t *transferQueueActiveProcessorImpl) requestCancelFailed(
+	task *persistence.TransferTaskInfo,
+	context workflowExecutionContext,
+	request *h.RequestCancelWorkflowExecutionRequest,
+) error {
 
 	return t.updateWorkflowExecution(task.DomainID, context, true,
 		func(msBuilder mutableState) error {
@@ -1206,9 +1273,11 @@ func (t *transferQueueActiveProcessorImpl) requestCancelFailed(task *persistence
 		})
 }
 
-func (t *transferQueueActiveProcessorImpl) requestSignalFailed(task *persistence.TransferTaskInfo,
+func (t *transferQueueActiveProcessorImpl) requestSignalFailed(
+	task *persistence.TransferTaskInfo,
 	context workflowExecutionContext,
-	request *h.SignalWorkflowExecutionRequest) error {
+	request *h.SignalWorkflowExecutionRequest,
+) error {
 
 	return t.updateWorkflowExecution(task.DomainID, context, true,
 		func(msBuilder mutableState) error {
@@ -1235,49 +1304,43 @@ func (t *transferQueueActiveProcessorImpl) requestSignalFailed(task *persistence
 		})
 }
 
-func (t *transferQueueActiveProcessorImpl) updateWorkflowExecution(domainID string, context workflowExecutionContext,
-	createDecisionTask bool, action func(builder mutableState) error) error {
-Update_History_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
+func (t *transferQueueActiveProcessorImpl) updateWorkflowExecution(
+	domainID string,
+	context workflowExecutionContext,
+	createDecisionTask bool,
+	action func(builder mutableState) error,
+) error {
 
-		var transferTasks []persistence.Task
-		var timerTasks []persistence.Task
-		if err := action(msBuilder); err != nil {
-			return err
-		}
-
-		if createDecisionTask {
-			// Create a transfer task to schedule a decision task
-			err := scheduleDecision(msBuilder, t.shard.GetTimeSource(), t.logger)
-			if err != nil {
-				return err
-			}
-		}
-
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
-		// the history and try the operation again.
-		msBuilder.AddTransferTasks(transferTasks...)
-		msBuilder.AddTimerTasks(timerTasks...)
-		if err := context.updateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now()); err != nil {
-			if err == ErrConflict {
-				continue Update_History_Loop
-			}
-			return err
-		}
-
-		t.historyService.timerProcessor.NotifyNewTimers(t.currentClusterName, t.shard.GetCurrentTime(t.currentClusterName), timerTasks)
-
-		return nil
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		return err
 	}
 
-	return ErrMaxAttemptsExceeded
+	var transferTasks []persistence.Task
+	var timerTasks []persistence.Task
+	if err := action(msBuilder); err != nil {
+		return err
+	}
+
+	if createDecisionTask {
+		// Create a transfer task to schedule a decision task
+		err := scheduleDecision(msBuilder, t.shard.GetTimeSource(), t.logger)
+		if err != nil {
+			return err
+		}
+	}
+
+	// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
+	// the history and try the operation again.
+	msBuilder.AddTransferTasks(transferTasks...)
+	msBuilder.AddTimerTasks(timerTasks...)
+	return context.updateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now())
 }
 
-func (t *transferQueueActiveProcessorImpl) SignalExecutionWithRetry(signalRequest *h.SignalWorkflowExecutionRequest) error {
+func (t *transferQueueActiveProcessorImpl) SignalExecutionWithRetry(
+	signalRequest *h.SignalWorkflowExecutionRequest,
+) error {
+
 	op := func() error {
 		return t.historyClient.SignalWorkflowExecution(nil, signalRequest)
 	}
@@ -1285,7 +1348,10 @@ func (t *transferQueueActiveProcessorImpl) SignalExecutionWithRetry(signalReques
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func getWorkflowExecutionCloseStatus(status int) workflow.WorkflowExecutionCloseStatus {
+func getWorkflowExecutionCloseStatus(
+	status int,
+) workflow.WorkflowExecutionCloseStatus {
+
 	switch status {
 	case persistence.WorkflowCloseStatusCompleted:
 		return workflow.WorkflowExecutionCloseStatusCompleted

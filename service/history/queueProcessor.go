@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -35,8 +36,8 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/tokenbucket"
 )
 
 type (
@@ -62,7 +63,7 @@ type (
 		processor     processor
 		logger        log.Logger
 		metricsClient metrics.Client
-		rateLimiter   tokenbucket.TokenBucket // Read rate limiter
+		rateLimiter   quotas.Limiter // Read rate limiter
 		ackMgr        queueAckMgr
 		retryPolicy   backoff.RetryPolicy
 
@@ -92,12 +93,16 @@ func newQueueProcessorBase(clusterName string, shard ShardContext, options *Queu
 	}
 
 	p := &queueProcessorBase{
-		clusterName:             clusterName,
-		shard:                   shard,
-		timeSource:              shard.GetTimeSource(),
-		options:                 options,
-		processor:               processor,
-		rateLimiter:             tokenbucket.NewDynamicTokenBucket(options.MaxPollRPS, clock.NewRealTimeSource()),
+		clusterName: clusterName,
+		shard:       shard,
+		timeSource:  shard.GetTimeSource(),
+		options:     options,
+		processor:   processor,
+		rateLimiter: quotas.NewDynamicRateLimiter(
+			func() float64 {
+				return float64(options.MaxPollRPS())
+			},
+		),
 		workerNotificationChans: workerNotificationChans,
 		status:                  common.DaemonStatusInitialized,
 		notifyCh:                make(chan struct{}, 1),
@@ -213,10 +218,13 @@ processorPumpLoop:
 
 func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 
-	if !p.rateLimiter.Consume(1, loadQueueTaskThrottleRetryDelay) {
+	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
+	if err := p.rateLimiter.Wait(ctx); err != nil {
+		cancel()
 		p.notifyNewTask() // re-enqueue the event
 		return
 	}
+	cancel()
 
 	p.lastPollTime = p.timeSource.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()

@@ -30,7 +30,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const _defaultRPSTTL = 60 * time.Second
+const (
+	_defaultRPSTTL   = 60 * time.Second
+	_burstMultiplier = 2
+)
 
 // RateLimiter is a wrapper around the golang rate limiter handling dynamic
 // configuration updates of the max dispatch per second. This has comparable
@@ -46,6 +49,13 @@ type RateLimiter struct {
 	ttlTimer *time.Timer
 	ttl      time.Duration
 	minBurst int
+}
+
+// NewSimpleRateLimiter returns a new rate limiter backed by the golang rate
+// limiter
+func NewSimpleRateLimiter(rps int) *RateLimiter {
+	initialRps := float64(rps)
+	return NewRateLimiter(&initialRps, _defaultRPSTTL, _burstMultiplier*rps)
 }
 
 // NewRateLimiter returns a new rate limiter that can handle dynamic
@@ -134,20 +144,21 @@ type DynamicRateLimiter struct {
 // NewDynamicRateLimiter returns a rate limiter which handles dynamic config
 func NewDynamicRateLimiter(rps RPSFunc) *DynamicRateLimiter {
 	initialRps := rps()
-	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, 5*int(rps()))
+	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, _burstMultiplier*int(rps()))
 	return &DynamicRateLimiter{rps, rl}
 }
 
 // Allow immediately returns with true or false indicating if a rate limit
 // token is available or not
-func (d *DynamicRateLimiter) Allow(info Info) bool {
-	return d.allow()
-}
-
-// Allow immediately returns with true or false indicating if a rate limit
-// token is available or not
-func (d *DynamicRateLimiter) allow() bool {
+func (d *DynamicRateLimiter) Allow() bool {
 	rps := float64(d.rps())
 	d.rl.UpdateMaxDispatch(&rps)
 	return d.rl.Allow()
+}
+
+// Wait waits up till deadline for a rate limit token
+func (d *DynamicRateLimiter) Wait(ctx context.Context) error {
+	rps := float64(d.rps())
+	d.rl.UpdateMaxDispatch(&rps)
+	return d.rl.Wait(ctx)
 }

@@ -21,14 +21,10 @@
 package archiver
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common"
-	"go.uber.org/cadence"
 )
 
 type UtilSuite struct {
@@ -89,145 +85,5 @@ func (s *UtilSuite) TestHashesEqual() {
 
 	for _, tc := range testCases {
 		s.Equal(tc.equal, hashesEqual(tc.a, tc.b))
-	}
-}
-
-func (s *UtilSuite) TestHistoryMutated() {
-	testCases := []struct {
-		historyBlob *HistoryBlob
-		request     *ArchiveRequest
-		isMutated   bool
-	}{
-		{
-			historyBlob: &HistoryBlob{
-				Header: &HistoryBlobHeader{
-					LastFailoverVersion: common.Int64Ptr(15),
-				},
-			},
-			request: &ArchiveRequest{
-				CloseFailoverVersion: 3,
-			},
-			isMutated: true,
-		},
-		{
-			historyBlob: &HistoryBlob{
-				Header: &HistoryBlobHeader{
-					LastFailoverVersion: common.Int64Ptr(10),
-					LastEventID:         common.Int64Ptr(50),
-					IsLast:              common.BoolPtr(true),
-				},
-			},
-			request: &ArchiveRequest{
-				CloseFailoverVersion: 10,
-				NextEventID:          34,
-			},
-			isMutated: true,
-		},
-		{
-			historyBlob: &HistoryBlob{
-				Header: &HistoryBlobHeader{
-					LastFailoverVersion: common.Int64Ptr(9),
-					IsLast:              common.BoolPtr(true),
-				},
-			},
-			request: &ArchiveRequest{
-				CloseFailoverVersion: 10,
-			},
-			isMutated: true,
-		},
-		{
-			historyBlob: &HistoryBlob{
-				Header: &HistoryBlobHeader{
-					LastFailoverVersion: common.Int64Ptr(10),
-					LastEventID:         common.Int64Ptr(33),
-					IsLast:              common.BoolPtr(true),
-				},
-			},
-			request: &ArchiveRequest{
-				CloseFailoverVersion: 10,
-				NextEventID:          34,
-			},
-			isMutated: false,
-		},
-	}
-	for _, tc := range testCases {
-		s.Equal(tc.isMutated, historyMutated(tc.historyBlob, tc.request))
-	}
-}
-
-func (s *UtilSuite) TestValidateRequest() {
-	testCases := []struct {
-		request     *ArchiveRequest
-		expectedErr error
-	}{
-		{
-			request:     &ArchiveRequest{},
-			expectedErr: cadence.NewCustomError(errInvalidRequest, errEmptyBucket),
-		},
-		{
-			request:     &ArchiveRequest{BucketName: "some random bucket name"},
-			expectedErr: nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Equal(tc.expectedErr, validateArchivalRequest(tc.request))
-	}
-}
-
-func (s *UtilSuite) TestGetUploadResponse() {
-	testErrReason := "some random reason"
-	testCustomErr := cadence.NewCustomError(testErrReason, testErrDetails)
-	testCases := []struct {
-		uploadedBlobs     []string
-		inputErr          error
-		expectedResult    *uploadResult
-		expectedOutputErr error
-	}{
-		{
-			uploadedBlobs: []string{"key 1", "key 2"},
-			inputErr:      testCustomErr,
-			expectedResult: &uploadResult{
-				BlobsToDelete:    []string{"key 1", "key 2"},
-				ErrorWithDetails: fmt.Sprintf("%v: %v", testErrReason, testErrDetails),
-			},
-			expectedOutputErr: nil,
-		},
-		{
-			uploadedBlobs: []string{"key 1"},
-			inputErr:      errContextTimeout,
-			expectedResult: &uploadResult{
-				BlobsToDelete:    []string{"key 1"},
-				ErrorWithDetails: errContextTimeout.Error(),
-			},
-			expectedOutputErr: nil,
-		},
-		{
-			uploadedBlobs:     []string{"key 1"},
-			inputErr:          errors.New(errGetDomainByID),
-			expectedResult:    nil,
-			expectedOutputErr: errors.New(errGetDomainByID),
-		},
-		{
-			uploadedBlobs:     []string{"key 1"},
-			inputErr:          errors.New(errInvalidRequest),
-			expectedResult:    nil,
-			expectedOutputErr: errors.New(errInvalidRequest),
-		},
-		{
-			uploadedBlobs: []string{"key 1"},
-			inputErr:      errors.New(testErrReason),
-			expectedResult: &uploadResult{
-				BlobsToDelete:    []string{"key 1"},
-				ErrorWithDetails: testErrReason,
-			},
-			expectedOutputErr: nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		actualResult, actualOutputErr := getUploadHistoryActivityResponse(tc.uploadedBlobs, tc.inputErr)
-		s.Equal(tc.expectedResult, actualResult)
-		s.Equal(tc.expectedOutputErr, actualOutputErr)
 	}
 }

@@ -55,23 +55,26 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		historyEngine       *historyEngineImpl
-		mockMatchingClient  *mocks.MatchingClient
-		mockArchivalClient  *archiver.ClientMock
-		mockHistoryClient   *mocks.HistoryClient
-		mockMetadataMgr     *mocks.MetadataManager
-		mockVisibilityMgr   *mocks.VisibilityManager
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryMgr      *mocks.HistoryManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockClientBean      *client.MockClientBean
-		mockMessagingClient messaging.Client
-		mockService         service.Service
-		mockDomainCache     *cache.DomainCacheMock
-		mockEventsCache     *MockEventsCache
+		historyEngine            *historyEngineImpl
+		mockMatchingClient       *mocks.MatchingClient
+		mockArchivalClient       *archiver.ClientMock
+		mockHistoryClient        *mocks.HistoryClient
+		mockMetadataMgr          *mocks.MetadataManager
+		mockVisibilityMgr        *mocks.VisibilityManager
+		mockExecutionMgr         *mocks.ExecutionManager
+		mockHistoryMgr           *mocks.HistoryManager
+		mockHistoryV2Mgr         *mocks.HistoryV2Manager
+		mockShardManager         *mocks.ShardManager
+		mockClusterMetadata      *mocks.ClusterMetadata
+		mockProducer             *mocks.KafkaProducer
+		mockClientBean           *client.MockClientBean
+		mockMessagingClient      messaging.Client
+		mockService              service.Service
+		mockDomainCache          *cache.DomainCacheMock
+		mockEventsCache          *MockEventsCache
+		mockTxProcessor          *MockTransferQueueProcessor
+		mockReplicationProcessor *mockQueueProcessor
+		mockTimerProcessor       *MockTimerQueueProcessor
 
 		shardClosedCh chan int
 		config        *Config
@@ -113,9 +116,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: validDomainID}, &p.DomainConfig{}, "", nil,
@@ -138,29 +139,43 @@ func (s *engine2Suite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		eventsCache:               s.mockEventsCache,
 		timeSource:                clock.NewRealTimeSource(),
 	}
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
+	s.mockTxProcessor = &MockTransferQueueProcessor{}
+	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
+	s.mockReplicationProcessor = &mockQueueProcessor{}
+	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockTimerProcessor = &MockTimerQueueProcessor{}
+	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
 	historyCache := newHistoryCache(mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:              mockShard,
-		executionManager:   s.mockExecutionMgr,
-		historyMgr:         s.mockHistoryMgr,
-		historyV2Mgr:       s.mockHistoryV2Mgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		config:             s.config,
-		archivalClient:     s.mockArchivalClient,
-		timeSource:         mockShard.timeSource,
+		currentClusterName:   mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard:                mockShard,
+		clusterMetadata:      s.mockClusterMetadata,
+		executionManager:     s.mockExecutionMgr,
+		historyMgr:           s.mockHistoryMgr,
+		historyV2Mgr:         s.mockHistoryV2Mgr,
+		historyCache:         historyCache,
+		logger:               s.logger,
+		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
+		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		config:               s.config,
+		archivalClient:       s.mockArchivalClient,
+		timeSource:           mockShard.timeSource,
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		txProcessor:          s.mockTxProcessor,
+		replicatorProcessor:  s.mockReplicationProcessor,
+		timerProcessor:       s.mockTimerProcessor,
 	}
-	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
-	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockMatchingClient, s.logger)
+	mockShard.SetEngine(h)
 	h.decisionHandler = newDecisionHandler(h)
+
 	s.historyEngine = h
 }
 
@@ -174,6 +189,9 @@ func (s *engine2Suite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
+	s.mockTxProcessor.AssertExpectations(s.T())
+	s.mockReplicationProcessor.AssertExpectations(s.T())
+	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {

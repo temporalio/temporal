@@ -235,7 +235,7 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 
 	defer func() {
 		if retError == nil {
-			r.notify(task.getSourceCluster(), task.getEventTime(), newWorkflow.TransferTasks, newWorkflow.TimerTasks)
+			r.notify(task.getSourceCluster(), task.getEventTime())
 		}
 	}()
 
@@ -505,7 +505,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToCurrentBranch(
 	}
 	err = context.updateWorkflowExecutionWithNewAsPassive(now, newContext, newMutableState)
 	if err == nil {
-		r.notify(task.getSourceCluster(), task.getEventTime(), stateBuilder.getTransferTasks(), stateBuilder.getTimerTasks())
+		r.notify(task.getSourceCluster(), task.getEventTime())
 	}
 	return err
 }
@@ -752,13 +752,8 @@ func (r *nDCHistoryReplicator) getWorkflowContextMutableState(
 func (r *nDCHistoryReplicator) notify(
 	clusterName string,
 	now time.Time,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
 ) {
 
 	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
-
 	r.shard.SetCurrentTime(clusterName, now)
-	r.historyEngine.txProcessor.NotifyNewTask(clusterName, transferTasks)
-	r.historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
 }

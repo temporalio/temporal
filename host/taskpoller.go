@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/service/history"
@@ -43,13 +42,6 @@ type (
 		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
 	queryHandler func(task *workflow.PollForDecisionTaskResponse) ([]byte, error)
-
-	// BlobstoreBase is a base struct for blobstore being used in integration tests
-	BlobstoreBase struct {
-		client         blobstore.Client
-		storeDirectory string
-		bucketName     string
-	}
 
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
