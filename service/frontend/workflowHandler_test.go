@@ -1247,28 +1247,26 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 	wh := s.getWorkflowHandlerHelper()
 	m := map[string]interface{}{
-		"key1":        float64(0),
-		"key2":        float64(1),
-		"key3":        float64(2),
-		"key4":        float64(3),
-		"key5":        float64(4),
-		"key6":        float64(5),
-		"key1i":       0,
-		"key2i":       1,
-		"key3i":       2,
-		"key4i":       3,
-		"key5i":       4,
-		"key6i":       5,
-		"key1t":       gen.IndexedValueTypeString,
-		"key2t":       gen.IndexedValueTypeKeyword,
-		"key3t":       gen.IndexedValueTypeInt,
-		"key4t":       gen.IndexedValueTypeDouble,
-		"key5t":       gen.IndexedValueTypeBool,
-		"key6t":       gen.IndexedValueTypeDatetime,
-		"invalidType": "invalid",
+		"key1":  float64(0),
+		"key2":  float64(1),
+		"key3":  float64(2),
+		"key4":  float64(3),
+		"key5":  float64(4),
+		"key6":  float64(5),
+		"key1i": 0,
+		"key2i": 1,
+		"key3i": 2,
+		"key4i": 3,
+		"key5i": 4,
+		"key6i": 5,
+		"key1t": gen.IndexedValueTypeString,
+		"key2t": gen.IndexedValueTypeKeyword,
+		"key3t": gen.IndexedValueTypeInt,
+		"key4t": gen.IndexedValueTypeDouble,
+		"key5t": gen.IndexedValueTypeBool,
+		"key6t": gen.IndexedValueTypeDatetime,
 	}
 	result := wh.convertIndexedKeyToThrift(m)
-	s.Equal(len(m)-1, len(result))
 	s.Equal(gen.IndexedValueTypeString, result["key1"])
 	s.Equal(gen.IndexedValueTypeKeyword, result["key2"])
 	s.Equal(gen.IndexedValueTypeInt, result["key3"])
@@ -1287,6 +1285,11 @@ func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 	s.Equal(gen.IndexedValueTypeDouble, result["key4t"])
 	s.Equal(gen.IndexedValueTypeBool, result["key5t"])
 	s.Equal(gen.IndexedValueTypeDatetime, result["key6t"])
+	s.Panics(func() {
+		wh.convertIndexedKeyToThrift(map[string]interface{}{
+			"invalidType": "unknown",
+		})
+	})
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
