@@ -113,6 +113,7 @@ type (
 			baseRunID string,
 			baseRunNextEventID int64,
 		) (retError error)
+		getWorkflowWatcher() WorkflowWatcher
 	}
 )
 
@@ -131,6 +132,7 @@ type (
 		msBuilder       mutableState
 		stats           *persistence.ExecutionStats
 		updateCondition int64
+		watcher         WorkflowWatcher
 	}
 )
 
@@ -167,6 +169,7 @@ func newWorkflowExecutionContext(
 		stats: &persistence.ExecutionStats{
 			HistorySize: 0,
 		},
+		watcher: NewWorkflowWatcher(),
 	}
 }
 
@@ -499,7 +502,12 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	// TODO remove updateCondition in favor of condition in mutable state
 	c.updateCondition = currentWorkflow.ExecutionInfo.NextEventID
 
+	c.watcher.Publish(&WatcherSnapshot{
+		CloseStatus: c.msBuilder.GetExecutionInfo().CloseStatus,
+	})
+
 	// for any change in the workflow, send a event
+	// TODO: @andrewjdawson2016 remove historyEventNotifier once plumbing for MutableStatePubSub is finished
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.domainID,
 		&c.workflowExecution,
@@ -1000,4 +1008,8 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		)
 	}
 	return nil
+}
+
+func (c *workflowExecutionContextImpl) getWorkflowWatcher() WorkflowWatcher {
+	return c.watcher
 }

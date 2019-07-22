@@ -317,3 +317,18 @@ func (_m *mockWorkflowExecutionContext) persistNonFirstWorkflowEvents(_a0 *persi
 
 	return r0, r1
 }
+
+func (_m *mockWorkflowExecutionContext) getWorkflowWatcher() WorkflowWatcher {
+	ret := _m.Called()
+
+	var r0 WorkflowWatcher
+	if rf, ok := ret.Get(0).(func() WorkflowWatcher); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(WorkflowWatcher)
+		}
+	}
+
+	return r0
+}
