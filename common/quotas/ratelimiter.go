@@ -31,8 +31,8 @@ import (
 )
 
 const (
-	_defaultRPSTTL   = 60 * time.Second
-	_burstMultiplier = 2
+	_defaultRPSTTL = 60 * time.Second
+	_burstSize     = 1
 )
 
 // RateLimiter is a wrapper around the golang rate limiter handling dynamic
@@ -55,7 +55,7 @@ type RateLimiter struct {
 // limiter
 func NewSimpleRateLimiter(rps int) *RateLimiter {
 	initialRps := float64(rps)
-	return NewRateLimiter(&initialRps, _defaultRPSTTL, _burstMultiplier*rps)
+	return NewRateLimiter(&initialRps, _defaultRPSTTL, _burstSize)
 }
 
 // NewRateLimiter returns a new rate limiter that can handle dynamic
@@ -144,7 +144,7 @@ type DynamicRateLimiter struct {
 // NewDynamicRateLimiter returns a rate limiter which handles dynamic config
 func NewDynamicRateLimiter(rps RPSFunc) *DynamicRateLimiter {
 	initialRps := rps()
-	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, _burstMultiplier*int(rps()))
+	rl := NewRateLimiter(&initialRps, _defaultRPSTTL, _burstSize)
 	return &DynamicRateLimiter{rps, rl}
 }
 
