@@ -378,17 +378,21 @@ func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 }
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history
-func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.StartWorkflowExecutionRequest) *h.StartWorkflowExecutionRequest {
+func CreateHistoryStartWorkflowRequest(
+	domainID string,
+	startRequest *workflow.StartWorkflowExecutionRequest,
+) *h.StartWorkflowExecutionRequest {
+	now := time.Now()
 	histRequest := &h.StartWorkflowExecutionRequest{
 		DomainUUID:   StringPtr(domainID),
 		StartRequest: startRequest,
 	}
 	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
 		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()
-		deadline := time.Now().Add(time.Second * time.Duration(expirationInSeconds))
+		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
 		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), time.Now(), time.Now()))
+	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now))
 	return histRequest
 }
 

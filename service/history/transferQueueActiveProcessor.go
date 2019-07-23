@@ -808,6 +808,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	initiatedEvent, ok := msBuilder.GetChildExecutionInitiatedEvent(initiatedEventID)
 	if ok && ci.StartedID == common.EmptyEventID {
 		attributes := initiatedEvent.StartChildWorkflowExecutionInitiatedEventAttributes
+		now := t.timeSource.Now()
 		// Found pending child execution and it is not marked as started
 		// Let's try and start the child execution
 		startRequest := &h.StartWorkflowExecutionRequest{
@@ -837,7 +838,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 				},
 				InitiatedId: common.Int64Ptr(initiatedEventID),
 			},
-			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), t.timeSource.Now(), t.timeSource.Now())),
+			FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now)),
 		}
 
 		var startResponse *workflow.StartWorkflowExecutionResponse
