@@ -766,7 +766,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
 	if len(info.CronSchedule) == 0 {
 		return backoff.NoBackoff
 	}
-	return backoff.GetBackoffForNextSchedule(info.CronSchedule, e.timeSource.Now())
+	return backoff.GetBackoffForNextSchedule(info.CronSchedule, e.executionInfo.StartTimestamp, e.timeSource.Now())
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.
