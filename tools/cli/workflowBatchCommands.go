@@ -124,7 +124,7 @@ func ListBatchJobs(c *cli.Context) {
 	prettyPrintJSONObject(output)
 }
 
-// DescribeBatchJob describe the status of the batch job
+// StartBatchJob starts a batch job
 func StartBatchJob(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	query := getRequiredOption(c, FlagListQuery)

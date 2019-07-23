@@ -48,10 +48,13 @@ const (
 	InfiniteDuration = 20 * 365 * 24 * time.Hour
 	pageSize         = 1000
 
-	// below are default values for BatchParams
-	DefaultRPS                      = 50
-	DefaultConcurrency              = 5
+	// DefaultRPS is the default RPS
+	DefaultRPS = 50
+	// DefaultConcurrency is the default concurrency
+	DefaultConcurrency = 5
+	// DefaultAttemptsOnRetryableError is the default value for AttemptsOnRetryableError
 	DefaultAttemptsOnRetryableError = 50
+	// DefaultActivityHeartBeatTimeout is the default value for ActivityHeartBeatTimeout
 	DefaultActivityHeartBeatTimeout = time.Second * 10
 )
 
