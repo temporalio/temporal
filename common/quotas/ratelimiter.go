@@ -162,3 +162,10 @@ func (d *DynamicRateLimiter) Wait(ctx context.Context) error {
 	d.rl.UpdateMaxDispatch(&rps)
 	return d.rl.Wait(ctx)
 }
+
+// Reserve reserves a rate limit token
+func (d *DynamicRateLimiter) Reserve() *rate.Reservation {
+	rps := float64(d.rps())
+	d.rl.UpdateMaxDispatch(&rps)
+	return d.rl.Reserve()
+}
