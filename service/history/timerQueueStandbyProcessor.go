@@ -540,7 +540,7 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(timerTask *persi
 
 func (t *timerQueueStandbyProcessorImpl) discardTask(timerTask *persistence.TimerTaskInfo) bool {
 	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
-	// so discard will be true if task is delayed by 2*t.shard.GetConfig().StandbyClusterDelay()
+	// so discard will be true if task is delayed by 4*t.shard.GetConfig().StandbyClusterDelay()
 	now := t.shard.GetCurrentTime(t.clusterName)
-	return now.Sub(timerTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
+	return now.Sub(timerTask.GetVisibilityTimestamp()) > 3*t.shard.GetConfig().StandbyClusterDelay()
 }

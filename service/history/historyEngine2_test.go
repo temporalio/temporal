@@ -137,7 +137,7 @@ func (s *engine2Suite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:             metricsClient,
 		eventsCache:               s.mockEventsCache,
 		timeSource:                clock.NewRealTimeSource(),
 	}
@@ -151,7 +151,8 @@ func (s *engine2Suite) SetupTest() {
 		historyV2Mgr:       s.mockHistoryV2Mgr,
 		historyCache:       historyCache,
 		logger:             s.logger,
-		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
+		throttledLogger:    s.logger,
+		metricsClient:      metricsClient,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		config:             s.config,
 		archivalClient:     s.mockArchivalClient,

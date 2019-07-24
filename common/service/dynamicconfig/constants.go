@@ -61,6 +61,7 @@ var keys = map[Key]string{
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
 	MinRetentionDays:                    "system.minRetentionDays",
+	MaxDecisionStartToCloseSeconds:      "system.maxDecisionStartToCloseSeconds",
 	EnableBatcher:                       "worker.enableBatcher",
 
 	// size limit
@@ -82,7 +83,6 @@ var keys = map[Key]string{
 	FrontendHistoryMaxPageSize:        "frontend.historyMaxPageSize",
 	FrontendRPS:                       "frontend.rps",
 	FrontendHistoryMgrNumConns:        "frontend.historyMgrNumConns",
-	MaxDecisionStartToCloseTimeout:    "frontend.maxDecisionStartToCloseTimeout",
 	DisableListVisibilityByFilter:     "frontend.disableListVisibilityByFilter",
 	FrontendThrottledLogRPS:           "frontend.throttledLogRPS",
 	EnableClientVersionCheck:          "frontend.enableClientVersionCheck",
@@ -245,6 +245,8 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for domain
 	MinRetentionDays
+	// MaxDecisionStartToCloseSeconds is the minimal allowed decision start to close timeout in seconds
+	MaxDecisionStartToCloseSeconds
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
@@ -283,8 +285,6 @@ const (
 	FrontendHistoryMgrNumConns
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS
-	// MaxDecisionStartToCloseTimeout is max decision timeout in seconds
-	MaxDecisionStartToCloseTimeout
 	// EnableClientVersionCheck enables client version check for frontend
 	EnableClientVersionCheck
 	// FrontendMaxBadBinaries is the max number of bad binaries in domain config
