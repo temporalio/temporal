@@ -629,7 +629,7 @@ func (t *transferQueueStandbyProcessorImpl) discardTask(
 ) bool {
 
 	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
-	// so discard will be true if task is delayed by 2*t.shard.GetConfig().StandbyClusterDelay()
+	// so discard will be true if task is delayed by 4*t.shard.GetConfig().StandbyClusterDelay()
 	now := t.shard.GetCurrentTime(t.clusterName)
-	return now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
+	return now.Sub(transferTask.GetVisibilityTimestamp()) > 3*t.shard.GetConfig().StandbyClusterDelay()
 }

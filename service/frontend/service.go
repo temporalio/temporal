@@ -59,8 +59,7 @@ type Config struct {
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
 
-	MaxDecisionStartToCloseTimeout dynamicconfig.IntPropertyFnWithDomainFilter
-	MaxBadBinaries                 dynamicconfig.IntPropertyFnWithDomainFilter
+	MaxBadBinaries dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// security protection settings
 	EnableAdminProtection         dynamicconfig.BoolPropertyFn
@@ -101,7 +100,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableVisibil
 		DomainRPS:                           dc.GetIntProperty(dynamicconfig.FrontendDomainRPS, 1200),
 		MaxIDLengthLimit:                    dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		HistoryMgrNumConns:                  dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
-		MaxDecisionStartToCloseTimeout:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
 		MaxBadBinaries:                      dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendMaxBadBinaries, 10),
 		EnableAdminProtection:               dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
 		AdminOperationToken:                 dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),

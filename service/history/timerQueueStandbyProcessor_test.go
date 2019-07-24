@@ -247,7 +247,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Pending() 
 	_, err = s.timerQueueStandbyProcessor.process(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,
@@ -438,7 +438,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
 	_, err = s.timerQueueStandbyProcessor.process(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,
@@ -680,7 +680,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 	_, err = s.timerQueueStandbyProcessor.process(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,
@@ -809,7 +809,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Pendin
 	_, err = s.timerQueueStandbyProcessor.process(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,
@@ -913,7 +913,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
 	_, err = s.timerQueueStandbyProcessor.process(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		timerTask.DomainID, timerTask.WorkflowID,
 		timerTask.RunID, nextEventID,

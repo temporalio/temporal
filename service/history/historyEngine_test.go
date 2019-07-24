@@ -149,6 +149,7 @@ func (s *engineSuite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
+		throttledLogger:           s.logger,
 		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
 	}

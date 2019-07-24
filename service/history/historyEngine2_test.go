@@ -163,6 +163,7 @@ func (s *engine2Suite) SetupTest() {
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
+		throttledLogger:      s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,

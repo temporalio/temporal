@@ -1579,30 +1579,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(err, scope)
 	}
 
-	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(domainName))
-	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
-	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() {
-		wh.Service.GetThrottledLogger().Warn("Decision timeout is larger than workflow timeout",
-			tag.WorkflowDecisionTimeoutSeconds(startRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(domainName),
-			tag.WorkflowID(startRequest.GetWorkflowId()),
-			tag.WorkflowType(startRequest.GetWorkflowType().GetName()))
-		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(startRequest.GetExecutionStartToCloseTimeoutSeconds())
-	}
-	if startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
-		wh.Service.GetThrottledLogger().Warn("Decision timeout is too large",
-			tag.WorkflowDecisionTimeoutSeconds(startRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(domainName),
-			tag.WorkflowID(startRequest.GetWorkflowId()),
-			tag.WorkflowType(startRequest.GetWorkflowType().GetName()))
-		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
-	}
-	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() ||
-		startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
-		return nil, wh.error(&gen.BadRequestError{
-			Message: fmt.Sprintf("TaskStartToCloseTimeoutSeconds is larger than ExecutionStartToCloseTimeout or MaxDecisionStartToCloseTimeout (%ds).", maxDecisionTimeout)}, scope)
-	}
-
 	wh.Service.GetLogger().Debug("Start workflow execution request domain", tag.WorkflowDomainName(domainName))
 	domainID, err := wh.domainCache.GetDomainID(domainName)
 	if err != nil {
@@ -2008,30 +1984,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(
 
 	if err := wh.searchAttributesValidator.ValidateSearchAttributes(signalWithStartRequest.SearchAttributes, domainName); err != nil {
 		return nil, wh.error(err, scope)
-	}
-
-	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(domainName))
-	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
-	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() {
-		wh.Service.GetThrottledLogger().Warn("Decision timeout is larger than workflow timeout",
-			tag.WorkflowDecisionTimeoutSeconds(signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(domainName),
-			tag.WorkflowID(signalWithStartRequest.GetWorkflowId()),
-			tag.WorkflowType(signalWithStartRequest.GetWorkflowType().GetName()))
-		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds())
-	}
-	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
-		wh.Service.GetThrottledLogger().Warn("Decision timeout is too large",
-			tag.WorkflowDecisionTimeoutSeconds(signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds()),
-			tag.WorkflowDomainName(domainName),
-			tag.WorkflowID(signalWithStartRequest.GetWorkflowId()),
-			tag.WorkflowType(signalWithStartRequest.GetWorkflowType().GetName()))
-		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
-	}
-	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() ||
-		signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
-		return nil, wh.error(&gen.BadRequestError{
-			Message: fmt.Sprintf("TaskStartToCloseTimeoutSeconds is larger than ExecutionStartToCloseTimeout or MaxDecisionStartToCloseTimeout (%ds).", maxDecisionTimeout)}, scope)
 	}
 
 	domainID, err := wh.domainCache.GetDomainID(domainName)
