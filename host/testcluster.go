@@ -164,7 +164,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		EnableEventsV2:      options.EnableEventsV2,
 		ESConfig:            &options.ESConfig,
 		ESClient:            esClient,
-		archiverProvider:    archiverBase.provider,
+		ArchiverProvider:    archiverBase.provider,
 		HistoryConfig:       options.HistoryConfig,
 		WorkerConfig:        options.WorkerConfig,
 	}

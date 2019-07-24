@@ -130,7 +130,7 @@ type (
 		Logger                        log.Logger
 		ClusterNo                     int
 		EnableEventsV2                bool
-		archiverProvider              provider.ArchiverProvider
+		ArchiverProvider              provider.ArchiverProvider
 		EnableReadHistoryFromArchival bool
 		HistoryConfig                 *HistoryConfig
 		ESConfig                      *elasticsearch.Config
@@ -165,7 +165,7 @@ func NewCadence(params *CadenceParams) Cadence {
 		enableEventsV2:      params.EnableEventsV2,
 		esConfig:            params.ESConfig,
 		esClient:            params.ESClient,
-		archiverProvider:    params.archiverProvider,
+		archiverProvider:    params.ArchiverProvider,
 		historyConfig:       params.HistoryConfig,
 		workerConfig:        params.WorkerConfig,
 	}
