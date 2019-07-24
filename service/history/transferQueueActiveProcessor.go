@@ -828,6 +828,8 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 				ChildPolicy:           attributes.ChildPolicy,
 				RetryPolicy:           attributes.RetryPolicy,
 				CronSchedule:          attributes.CronSchedule,
+				Memo:                  attributes.Memo,
+				SearchAttributes:      attributes.SearchAttributes,
 			},
 			ParentExecutionInfo: &h.ParentExecutionInfo{
 				DomainUUID: common.StringPtr(domainID),

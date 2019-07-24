@@ -1632,6 +1632,19 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 
+	memoInfo, _ := json.Marshal("memo")
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{
+			"Info": memoInfo,
+		},
+	}
+	attrValBytes, _ := json.Marshal("attrVal")
+	searchAttr := &workflow.SearchAttributes{
+		IndexedFields: map[string][]byte{
+			"CustomKeywordField": attrValBytes,
+		},
+	}
+
 	// Parent Decider Logic
 	dtHandlerParent := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
@@ -1655,6 +1668,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
 						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 						Control:                             nil,
+						Memo:                                memo,
+						SearchAttributes:                    searchAttr,
 					},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -1746,6 +1761,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 	s.Equal(header, startedEvent.ChildWorkflowExecutionStartedEventAttributes.Header)
 	s.Equal(header, childStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
+	s.Equal(memo, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetMemo())
+	s.Equal(searchAttr, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetSearchAttributes())
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
@@ -1757,8 +1774,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(childID, *completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, *completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
-
-	s.Logger.Info("Parent Workflow Execution History: ")
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
