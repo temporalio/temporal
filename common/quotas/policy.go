@@ -28,14 +28,14 @@ import (
 type MultiStageRateLimiter struct {
 	sync.RWMutex
 	rps            RPSFunc
-	domainRPS      RPSFunc
+	domainRPS      RPSKeyFunc
 	domainLimiters map[string]*DynamicRateLimiter
 	globalLimiter  *DynamicRateLimiter
 }
 
 // NewMultiStageRateLimiter returns a new domain quota rate limiter. This is about
 // an order of magnitude slower than
-func NewMultiStageRateLimiter(rps RPSFunc, domainRps RPSFunc) *MultiStageRateLimiter {
+func NewMultiStageRateLimiter(rps RPSFunc, domainRps RPSKeyFunc) *MultiStageRateLimiter {
 	rl := &MultiStageRateLimiter{
 		rps:            rps,
 		domainRPS:      domainRps,
@@ -62,7 +62,11 @@ func (d *MultiStageRateLimiter) Allow(info Info) bool {
 
 	if !ok {
 		// create a new limiter
-		domainLimiter := NewDynamicRateLimiter(d.domainRPS)
+		domainLimiter := NewDynamicRateLimiter(
+			func() float64 {
+				return d.domainRPS(domain)
+			},
+		)
 
 		// verify that it is needed and add to map
 		d.Lock()

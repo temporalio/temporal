@@ -25,6 +25,9 @@ import "context"
 // RPSFunc returns a float64 as the RPS
 type RPSFunc func() float64
 
+// RPSKeyFunc returns a float64 as the RPS for the given key
+type RPSKeyFunc func(key string) float64
+
 // Info corresponds to information required to determine rate limits
 type Info struct {
 	Domain string

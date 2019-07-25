@@ -170,8 +170,8 @@ func NewWorkflowHandler(
 			func() float64 {
 				return float64(config.RPS())
 			},
-			func() float64 {
-				return float64(config.DomainRPS())
+			func(domain string) float64 {
+				return float64(config.DomainRPS(domain))
 			},
 		),
 		versionChecker: &versionChecker{checkVersion: config.EnableClientVersionCheck()},
