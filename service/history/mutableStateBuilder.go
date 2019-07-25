@@ -107,6 +107,7 @@ type (
 		config          *Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
+		domainName      string
 	}
 )
 
@@ -116,6 +117,7 @@ func newMutableStateBuilder(
 	shard ShardContext,
 	eventsCache eventsCache,
 	logger log.Logger,
+	domainName string,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:             make(map[*persistence.ActivityInfo]struct{}),
@@ -153,6 +155,7 @@ func newMutableStateBuilder(
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
+		domainName:      domainName,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		DecisionVersion:    common.EmptyVersion,
@@ -177,8 +180,9 @@ func newMutableStateBuilderWithReplicationState(
 	logger log.Logger,
 	version int64,
 	replicationPolicy cache.ReplicationPolicy,
+	domainName string,
 ) *mutableStateBuilder {
-	s := newMutableStateBuilder(shard, eventsCache, logger)
+	s := newMutableStateBuilder(shard, eventsCache, logger, domainName)
 	s.replicationState = &persistence.ReplicationState{
 		StartVersion:        version,
 		CurrentVersion:      version,
@@ -586,7 +590,14 @@ func (e *mutableStateBuilder) assignTaskIDToEvents() error {
 }
 
 func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
-	return len(e.executionInfo.StickyTaskList) > 0
+	if e.executionInfo.StickyTaskList == "" {
+		return false
+	}
+	maxDu := e.config.StickyTTL(e.domainName)
+	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(maxDu)) {
+		return false
+	}
+	return true
 }
 
 func (e *mutableStateBuilder) CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent {
@@ -2886,9 +2897,10 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 			e.logger,
 			e.GetCurrentVersion(),
 			e.replicationPolicy,
+			e.domainName,
 		)
 	} else {
-		newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger)
+		newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainName)
 	}
 	domainID := domainEntry.GetInfo().ID
 	startedEvent, err := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainEntry, parentInfo, newExecution, e, attributes, firstRunID)

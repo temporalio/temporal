@@ -520,6 +520,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 				b.logger,
 				newRunStartedEvent.GetVersion(),
 				domainEntry.GetReplicationPolicy(),
+				domainEntry.GetInfo().Name,
 			)
 			newRunStateBuilder := newStateBuilder(b.shard, newRunMutableStateBuilder, b.logger)
 

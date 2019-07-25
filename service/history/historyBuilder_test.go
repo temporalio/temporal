@@ -76,7 +76,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger)
+		s.logger, "")
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
 }
 

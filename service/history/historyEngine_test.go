@@ -5126,7 +5126,7 @@ func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int
 func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilder(shard, eventsCache, logger)
+	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, "")
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5135,7 +5135,7 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, version int64, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, version, cache.ReplicationPolicyOneCluster)
+	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, version, cache.ReplicationPolicyOneCluster, "")
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder

@@ -581,6 +581,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		s.logger,
 		newRunStartedEvent.GetVersion(),
 		cache.ReplicationPolicyMultiCluster,
+		domainName,
 	)
 	err = expectedNewRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(
 		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),
@@ -911,6 +912,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		s.logger,
 		newRunStartedEvent.GetVersion(),
 		cache.ReplicationPolicyMultiCluster,
+		domainName,
 	)
 	err = expectedNewRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(
 		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),

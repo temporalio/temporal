@@ -306,12 +306,14 @@ func (e *historyEngineImpl) createMutableState(
 			e.logger,
 			domainEntry.GetFailoverVersion(),
 			domainEntry.GetReplicationPolicy(),
+			domainEntry.GetInfo().Name,
 		)
 	} else {
 		msBuilder = newMutableStateBuilder(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
+			domainEntry.GetInfo().Name,
 		)
 	}
 
@@ -592,22 +594,24 @@ func (e *historyEngineImpl) getMutableState(
 	executionInfo := msBuilder.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
 	retResp = &h.GetMutableStateResponse{
-		Execution:                            &execution,
-		WorkflowType:                         &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
-		LastFirstEventId:                     common.Int64Ptr(msBuilder.GetLastFirstEventID()),
-		NextEventId:                          common.Int64Ptr(msBuilder.GetNextEventID()),
-		PreviousStartedEventId:               common.Int64Ptr(msBuilder.GetPreviousStartedEventID()),
-		TaskList:                             &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
-		StickyTaskList:                       &workflow.TaskList{Name: common.StringPtr(executionInfo.StickyTaskList)},
-		ClientLibraryVersion:                 common.StringPtr(executionInfo.ClientLibraryVersion),
-		ClientFeatureVersion:                 common.StringPtr(executionInfo.ClientFeatureVersion),
-		ClientImpl:                           common.StringPtr(executionInfo.ClientImpl),
-		IsWorkflowRunning:                    common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
-		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
-		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
-		BranchToken:                          msBuilder.GetCurrentBranch(),
+		Execution:              &execution,
+		WorkflowType:           &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
+		LastFirstEventId:       common.Int64Ptr(msBuilder.GetLastFirstEventID()),
+		NextEventId:            common.Int64Ptr(msBuilder.GetNextEventID()),
+		PreviousStartedEventId: common.Int64Ptr(msBuilder.GetPreviousStartedEventID()),
+		TaskList:               &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
+		ClientLibraryVersion:   common.StringPtr(executionInfo.ClientLibraryVersion),
+		ClientFeatureVersion:   common.StringPtr(executionInfo.ClientFeatureVersion),
+		ClientImpl:             common.StringPtr(executionInfo.ClientImpl),
+		IsWorkflowRunning:      common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
+		EventStoreVersion:      common.Int32Ptr(msBuilder.GetEventStoreVersion()),
+		BranchToken:            msBuilder.GetCurrentBranch(),
 	}
 
+	if msBuilder.IsStickyTaskListEnabled() {
+		retResp.StickyTaskList = &workflow.TaskList{Name: common.StringPtr(executionInfo.StickyTaskList)}
+		retResp.StickyTaskListScheduleToStartTimeout = common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout)
+	}
 	replicationState := msBuilder.GetReplicationState()
 	if replicationState != nil {
 		retResp.ReplicationInfo = map[string]*workflow.ReplicationInfo{}

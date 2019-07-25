@@ -38,6 +38,7 @@ import (
 
 type (
 	workflowExecutionContext interface {
+		getDomainName() string
 		getDomainID() string
 		getExecution() *workflow.WorkflowExecution
 		getLogger() log.Logger
@@ -252,6 +253,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
 		c.shard,
 		c.shard.GetEventsCache(),
 		c.logger,
+		c.getDomainName(),
 	)
 	c.msBuilder.Load(response.State)
 	c.stats = response.State.ExecutionStats

@@ -52,7 +52,7 @@ var (
 type (
 	conflictResolverProvider func(context workflowExecutionContext, logger log.Logger) conflictResolver
 	stateBuilderProvider     func(msBuilder mutableState, logger log.Logger) stateBuilder
-	mutableStateProvider     func(version int64, logger log.Logger) mutableState
+	mutableStateProvider     func(version int64, logger log.Logger, domainName string) mutableState
 
 	historyReplicator struct {
 		shard             ShardContext
@@ -146,7 +146,7 @@ func newHistoryReplicator(
 		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
 		},
-		getNewMutableState: func(version int64, logger log.Logger) mutableState {
+		getNewMutableState: func(version int64, logger log.Logger, domainName string) mutableState {
 			return newMutableStateBuilderWithReplicationState(
 				shard,
 				shard.GetEventsCache(),
@@ -155,6 +155,7 @@ func newHistoryReplicator(
 				// if can see replication task, meaning that domain is
 				// global domain with > 1 target clusters
 				cache.ReplicationPolicyMultiCluster,
+				domainName,
 			)
 		},
 	}
@@ -435,7 +436,7 @@ func (r *historyReplicator) ApplyStartEvent(
 	logger log.Logger,
 ) error {
 
-	msBuilder := r.getNewMutableState(request.GetVersion(), logger)
+	msBuilder := r.getNewMutableState(request.GetVersion(), logger, context.getDomainName())
 	err := r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
 	return err
 }

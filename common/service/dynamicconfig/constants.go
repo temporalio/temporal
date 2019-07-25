@@ -180,6 +180,7 @@ var keys = map[Key]string{
 	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
+	StickyTTL:                                             "history.stickyTTL",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -480,6 +481,8 @@ const (
 	EnableEventsV2
 	// HistoryThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	HistoryThrottledLogRPS
+	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	StickyTTL
 
 	// key for worker
 

@@ -72,7 +72,7 @@ func (s *mutableStateSuite) SetupTest() {
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger)
+		s.logger, "")
 }
 
 func (s *mutableStateSuite) TearDownTest() {
