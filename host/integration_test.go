@@ -865,14 +865,6 @@ func (s *integrationSuite) TestCronWorkflow() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
 		CronSchedule:                        common.StringPtr("@every 3s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
-		RetryPolicy: &workflow.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			MaximumAttempts:             common.Int32Ptr(5),
-			MaximumIntervalInSeconds:    common.Int32Ptr(1),
-			NonRetriableErrorReasons:    []string{"cron-test-error"},
-			BackoffCoefficient:          common.Float64Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(100),
-		},
 	}
 
 	startWorkflowTS := time.Now()
@@ -961,9 +953,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 			WorkflowId: common.StringPtr(id),
 		},
 	})
-
-	fmt.Printf("terminate_err: %v\n", terminateErr)
-
+	s.NoError(terminateErr)
 	events := s.getHistory(s.domainName, executions[0])
 	lastEvent := events[len(events)-1]
 	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
@@ -1007,11 +997,17 @@ func (s *integrationSuite) TestCronWorkflow() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-	for i := 0; i != 4; i++ {
+	// The first execution is the termination execution. It verified below.
+	firstExecutionTime := closedExecutions[0].GetExecutionTime()
+	for i := 1; i != 4; i++ {
 		executionInfo := closedExecutions[i]
-		s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
-	}
+		executionTime := executionInfo.GetExecutionTime()
+		// The delta of the first execution time and the current execution time should be able to divided by 3
+		// because the cron schedule interval is 3 seconds.
+		// The precision of the time is second so the time should be round up to seconds
+		s.Equal(int(0), int(executionTime/1000000000-firstExecutionTime/1000000000)%3)
 
+	}
 	dweResponse, err := s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(s.domainName),
 		Execution: &workflow.WorkflowExecution{
@@ -1973,10 +1969,15 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-	for i := 0; i != 4; i++ {
+	firstExecutionTime := closedExecutions[0].GetExecutionTime()
+	for i := 1; i != 4; i++ {
 		executionInfo := closedExecutions[i]
 		if executionInfo.GetExecution().GetWorkflowId() == childID {
-			s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
+			executionTime := executionInfo.GetExecutionTime()
+			// The delta of the first execution time and the current execution time should be able to divided by 3
+			// because the cron schedule interval is 3 seconds.
+			// The precision of the time is second so the time should be round up to seconds
+			s.Equal(int(0), int(executionTime/1000000000-firstExecutionTime/1000000000)%3)
 		} else {
 			s.Equal(executionInfo.GetExecutionTime(), executionInfo.GetStartTime())
 		}
