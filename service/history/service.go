@@ -361,7 +361,10 @@ func (s *Service) Start() {
 		ClusterMetadata:  base.GetClusterMetadata(),
 		DomainCache:      domainCache,
 	}
-	params.ArchiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	err = params.ArchiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
+	}
 
 	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, domainCache, params.PublicClient, params.ArchiverProvider)
 	handler.RegisterHandler()

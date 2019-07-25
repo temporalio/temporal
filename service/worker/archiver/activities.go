@@ -48,9 +48,11 @@ const (
 )
 
 var (
-	uploadHistoryActivityNonRetryableErrors = []string{errActivityPanic, carchiver.ErrArchiveNonRetriable.Error(), errTimeoutStartToClose, errTimeoutHeartbeat}
+	errUploadNonRetriable = errors.New("upload non-retriable error")
+	errContextTimeout     = errors.New("activity aborted because context timed out")
+
+	uploadHistoryActivityNonRetryableErrors = []string{errActivityPanic, errUploadNonRetriable.Error(), errTimeoutStartToClose, errTimeoutHeartbeat}
 	deleteHistoryActivityNonRetryableErrors = []string{errDeleteHistoryV1, errDeleteHistoryV2}
-	errContextTimeout                       = errors.New("activity aborted because context timed out")
 )
 
 // uploadHistoryActivity is used to archive a workflow execution history.
@@ -63,17 +65,17 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		}
 	}()
 	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
-	scheme, err := common.GetArchivalScheme(request.URI)
+	URI, err := carchiver.NewURI(request.URI)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to extract archival scheme"), tag.ArchivalURI(request.URI))
-		return carchiver.ErrArchiveNonRetriable
+		return errUploadNonRetriable
 	}
-	historyArchiver, err := container.ArchiverProvider.GetHistoryArchiver(scheme, common.WorkerServiceName)
+	historyArchiver, err := container.ArchiverProvider.GetHistoryArchiver(URI.Scheme(), common.WorkerServiceName)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archiver"), tag.Error(err))
-		return carchiver.ErrArchiveNonRetriable
+		return errUploadNonRetriable
 	}
-	return historyArchiver.Archive(ctx, request.URI, &carchiver.ArchiveHistoryRequest{
+	return historyArchiver.Archive(ctx, URI, &carchiver.ArchiveHistoryRequest{
 		ShardID:              request.ShardID,
 		DomainID:             request.DomainID,
 		DomainName:           request.DomainName,
@@ -83,7 +85,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		BranchToken:          request.BranchToken,
 		NextEventID:          request.NextEventID,
 		CloseFailoverVersion: request.CloseFailoverVersion,
-	}, carchiver.GetHeartbeatArchiveOption())
+	}, carchiver.GetHeartbeatArchiveOption(), carchiver.GetNonRetriableErrorOption(errUploadNonRetriable))
 }
 
 // deleteHistoryActivity deletes workflow execution history from persistence.

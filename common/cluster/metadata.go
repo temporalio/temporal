@@ -132,30 +132,32 @@ func NewMetadata(
 		panic("Cluster info initial versions have duplicates")
 	}
 
+	// Dynamic archival config is accessed once on cluster startup than never accessed again.
+	// This is done so as to keep archival status and and the initialization of archiver.Provider in sync.
+	// TODO: Once archival pause is implemented archival config can be made truly dynamic.
 	clusterHistoryArchivalStatus := dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, archivalClusterConfig.History.Status)()
-	enableReadFromHistoryArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, archivalClusterConfig.History.EnableReadFromArchival)()
-	clusterVisibilityArchivalStatus := dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, archivalClusterConfig.Visibility.Status)()
-	enableReadFromVisibilityArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, archivalClusterConfig.Visibility.EnableReadFromArchival)()
-
+	enableReadFromHistoryArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, archivalClusterConfig.History.EnableRead)()
 	clusterStatus, err := getClusterArchivalStatus(clusterHistoryArchivalStatus)
 	if err != nil {
 		panic(err)
 	}
-	domainStatus, err := getDomainArchivalStatus(archivalDomainDefault.History.DefaultStatus)
+	domainStatus, err := getDomainArchivalStatus(archivalDomainDefault.History.Status)
 	if err != nil {
 		panic(err)
 	}
-	historyArchivalConfig := NewArchivalConfig(clusterStatus, enableReadFromHistoryArchival, domainStatus, archivalDomainDefault.History.DefaultURI)
+	historyArchivalConfig := NewArchivalConfig(clusterStatus, enableReadFromHistoryArchival, domainStatus, archivalDomainDefault.History.URI)
 
+	clusterVisibilityArchivalStatus := dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, archivalClusterConfig.Visibility.Status)()
+	enableReadFromVisibilityArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, archivalClusterConfig.Visibility.EnableRead)()
 	clusterStatus, err = getClusterArchivalStatus(clusterVisibilityArchivalStatus)
 	if err != nil {
 		panic(err)
 	}
-	domainStatus, err = getDomainArchivalStatus(archivalDomainDefault.Visibility.DefaultStatus)
+	domainStatus, err = getDomainArchivalStatus(archivalDomainDefault.Visibility.Status)
 	if err != nil {
 		panic(err)
 	}
-	visibilityArchivalConfig := NewArchivalConfig(clusterStatus, enableReadFromVisibilityArchival, domainStatus, archivalDomainDefault.Visibility.DefaultURI)
+	visibilityArchivalConfig := NewArchivalConfig(clusterStatus, enableReadFromVisibilityArchival, domainStatus, archivalDomainDefault.Visibility.URI)
 
 	return &metadataImpl{
 		logger:                   logger,

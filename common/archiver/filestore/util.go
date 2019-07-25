@@ -134,7 +134,7 @@ func decodeHistoryBatches(data []byte) ([]*shared.History, error) {
 	return historyBatches, nil
 }
 
-func tagLoggerWithArchiveHistoryRequest(logger log.Logger, request *archiver.ArchiveHistoryRequest) log.Logger {
+func tagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *archiver.ArchiveHistoryRequest, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ShardID(request.ShardID),
 		tag.ArchivalRequestDomainID(request.DomainID),
@@ -145,6 +145,7 @@ func tagLoggerWithArchiveHistoryRequest(logger log.Logger, request *archiver.Arc
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestNextEventID(request.NextEventID),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
+		tag.ArchivalURI(URI),
 	)
 }
 
@@ -155,10 +156,6 @@ func contextExpired(ctx context.Context) bool {
 	default:
 		return false
 	}
-}
-
-func getDirPathFromURI(URI string) string {
-	return URI[len(URIScheme+"://"):]
 }
 
 func validateDirPath(dirPath string) error {

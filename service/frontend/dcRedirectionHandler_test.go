@@ -100,7 +100,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
 
 	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
-	s.mockArchiverProvider.On("RegisterBootstrapContainer", common.FrontendServiceName, mock.Anything, mock.Anything)
+	s.mockArchiverProvider.On("RegisterBootstrapContainer", common.FrontendServiceName, mock.Anything, mock.Anything).Return(nil)
 
 	s.domainCache = cache.NewDomainCache(s.mockMetadataMgr, s.service.GetClusterMetadata(), s.service.GetMetricsClient(), s.service.GetLogger())
 	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, s.domainCache, s.mockArchiverProvider)

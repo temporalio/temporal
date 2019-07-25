@@ -35,6 +35,8 @@ var (
 	ErrBootstrapContainerNotFound = errors.New("unable to find bootstrap container for the given service name")
 	// ErrArchiverConfigNotFound is the error for unable to find the config for an archiver given scheme
 	ErrArchiverConfigNotFound = errors.New("unable to find archiver config for the given scheme")
+	// ErrBootstrapContainerAlreadyRegistered is the error for registering multiple containers for the same serviceName
+	ErrBootstrapContainerAlreadyRegistered = errors.New("bootstrap container has already been registered")
 )
 
 type (
@@ -45,9 +47,9 @@ type (
 			serviceName string,
 			historyContainer *archiver.HistoryBootstrapContainer,
 			visibilityContainter *archiver.VisibilityBootstrapContainer,
-		)
-		GetHistoryArchiver(scheme string, serviceName string) (archiver.HistoryArchiver, error)
-		GetVisibilityArchiver(scheme string, serviceName string) (archiver.VisibilityArchiver, error)
+		) error
+		GetHistoryArchiver(scheme, serviceName string) (archiver.HistoryArchiver, error)
+		GetVisibilityArchiver(scheme, serviceName string) (archiver.VisibilityArchiver, error)
 	}
 
 	archiverProvider struct {
@@ -82,15 +84,27 @@ func NewArchiverProvider(
 // RegisterBootstrapContainer stores the given bootstrap container given the serviceName
 // The container should be registered when a service starts up and before GetArchiver() is ever called.
 // Later calls to GetArchiver() will used the registered container to initialize new archivers.
-// If this method is called multiple times for one serviceName, later calls will overwrite the container
-// given in previous calls.
+// If the container for a service has already registered, and this method is invoked for that service again
+// with an non-nil container, an error will be returned.
 func (p *archiverProvider) RegisterBootstrapContainer(
 	serviceName string,
 	historyContainer *archiver.HistoryBootstrapContainer,
 	visibilityContainter *archiver.VisibilityBootstrapContainer,
-) {
-	p.historyContainers[serviceName] = historyContainer
-	p.visibilityContainers[serviceName] = visibilityContainter
+) error {
+	if _, ok := p.historyContainers[serviceName]; ok && historyContainer != nil {
+		return ErrBootstrapContainerAlreadyRegistered
+	}
+	if _, ok := p.visibilityContainers[serviceName]; ok && visibilityContainter != nil {
+		return ErrBootstrapContainerAlreadyRegistered
+	}
+
+	if historyContainer != nil {
+		p.historyContainers[serviceName] = historyContainer
+	}
+	if visibilityContainter != nil {
+		p.visibilityContainers[serviceName] = visibilityContainter
+	}
+	return nil
 }
 
 func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (archiver.HistoryArchiver, error) {

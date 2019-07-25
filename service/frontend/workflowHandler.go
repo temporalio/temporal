@@ -145,10 +145,17 @@ var (
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
-func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
-	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
-	visibilityMgr persistence.VisibilityManager, kafkaProducer messaging.Producer,
-	domainCache cache.DomainCache, archiverProvider provider.ArchiverProvider) *WorkflowHandler {
+func NewWorkflowHandler(
+	sVice service.Service,
+	config *Config,
+	metadataMgr persistence.MetadataManager,
+	historyMgr persistence.HistoryManager,
+	historyV2Mgr persistence.HistoryV2Manager,
+	visibilityMgr persistence.VisibilityManager,
+	kafkaProducer messaging.Producer,
+	domainCache cache.DomainCache,
+	archiverProvider provider.ArchiverProvider,
+) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		config:          config,
@@ -181,15 +188,6 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
 		archiverProvider: archiverProvider,
 	}
-	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryManager:   handler.historyMgr,
-		HistoryV2Manager: handler.historyV2Mgr,
-		Logger:           sVice.GetLogger(),
-		MetricsClient:    handler.metricsClient,
-		ClusterMetadata:  sVice.GetClusterMetadata(),
-		DomainCache:      handler.domainCache,
-	}
-	archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
 	return handler
@@ -1666,7 +1664,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	}
 
 	configuredForArchival := wh.GetClusterMetadata().HistoryArchivalConfig().ClusterConfiguredForArchival()
-	enableArchivalRead := wh.GetClusterMetadata().HistoryArchivalConfig().EnableReadFromArchival
+	enableArchivalRead := wh.GetClusterMetadata().HistoryArchivalConfig().EnableRead
 	historyArchived := wh.historyArchived(ctx, getRequest, domainID)
 	if configuredForArchival && enableArchivalRead && historyArchived {
 		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
@@ -3218,22 +3216,22 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	archivalURI := entry.GetConfig().HistoryArchivalURI
-	if archivalURI == "" {
+	URIString := entry.GetConfig().HistoryArchivalURI
+	if URIString == "" {
 		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
 	}
 
-	scheme, err := common.GetArchivalScheme(archivalURI)
+	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(scheme, common.FrontendServiceName)
+	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := historyArchiver.Get(ctx, archivalURI, &archiver.GetHistoryRequest{
+	resp, err := historyArchiver.Get(ctx, URI, &archiver.GetHistoryRequest{
 		DomainID:      domainID,
 		WorkflowID:    request.GetExecution().GetWorkflowId(),
 		RunID:         request.GetExecution().GetRunId(),

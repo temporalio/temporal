@@ -270,7 +270,10 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 		ClusterMetadata:  base.GetClusterMetadata(),
 		DomainCache:      domainCache,
 	}
-	archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	err = archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		s.logger.Fatal("failed to register archiver bootstrap container", tag.Error(err))
+	}
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     publicClient,

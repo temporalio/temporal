@@ -31,12 +31,13 @@ type (
 	// ArchivalStatus represents the archival status of the cluster
 	ArchivalStatus int
 
-	// ArchivalConfig is an immutable representation of the current archival configuration of the cluster
+	// ArchivalConfig is an immutable representation of the archival configuration of the cluster
+	// This config is determined at cluster startup time
 	ArchivalConfig struct {
-		ClusterStatus          ArchivalStatus
-		EnableReadFromArchival bool
-		DomainDefaultStatus    shared.ArchivalStatus
-		DomainDefaultURI       string
+		ClusterStatus       ArchivalStatus
+		EnableRead          bool
+		DomainDefaultStatus shared.ArchivalStatus
+		DomainDefaultURI    string
 	}
 )
 
@@ -44,6 +45,7 @@ const (
 	// ArchivalDisabled means this cluster is not configured to handle archival
 	ArchivalDisabled ArchivalStatus = iota
 	// ArchivalPaused means this cluster is configured to handle archival but is currently not archiving
+	// This state is not yet implemented, as of now ArchivalPaused is treated the same way as ArchivalDisabled
 	ArchivalPaused
 	// ArchivalEnabled means this cluster is currently archiving
 	ArchivalEnabled
@@ -52,15 +54,15 @@ const (
 // NewArchivalConfig constructs a new valid ArchivalConfig
 func NewArchivalConfig(
 	clusterStatus ArchivalStatus,
-	enableReadFromArchival bool,
+	enableRead bool,
 	domainDefaultStatus shared.ArchivalStatus,
 	domainDefaultURI string,
 ) *ArchivalConfig {
 	ac := &ArchivalConfig{
-		ClusterStatus:          clusterStatus,
-		EnableReadFromArchival: enableReadFromArchival,
-		DomainDefaultStatus:    domainDefaultStatus,
-		DomainDefaultURI:       domainDefaultURI,
+		ClusterStatus:       clusterStatus,
+		EnableRead:          enableRead,
+		DomainDefaultStatus: domainDefaultStatus,
+		DomainDefaultURI:    domainDefaultURI,
 	}
 	if !ac.isValid() {
 		panic("invalid cluster level archival configuration")
@@ -68,15 +70,14 @@ func NewArchivalConfig(
 	return ac
 }
 
-// ClusterConfiguredForArchival returns true if cluster is configured to handle archival, false otherwise.
+// ClusterConfiguredForArchival returns true if cluster is configured to handle archival, false otherwise
 func (a *ArchivalConfig) ClusterConfiguredForArchival() bool {
 	return a.ClusterStatus == ArchivalEnabled
 }
 
 func (a *ArchivalConfig) isValid() bool {
 	URISet := len(a.DomainDefaultURI) != 0
-	disabled := a.ClusterStatus == ArchivalDisabled
-	return (!URISet && disabled) || (URISet && !disabled)
+	return (URISet && a.ClusterConfiguredForArchival()) || (!URISet && !a.ClusterConfiguredForArchival())
 }
 
 func getClusterArchivalStatus(str string) (ArchivalStatus, error) {

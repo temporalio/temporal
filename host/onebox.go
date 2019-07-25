@@ -431,7 +431,10 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		ClusterMetadata:  c.clusterMetadata,
 		DomainCache:      domainCache,
 	}
-	c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	err = c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		c.logger.Fatal("Failed to register archiver bootstrap container for frontend service", tag.Error(err))
+	}
 
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
@@ -502,7 +505,10 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 			ClusterMetadata:  c.clusterMetadata,
 			DomainCache:      domainCache,
 		}
-		c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+		err = c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+		if err != nil {
+			c.logger.Fatal("Failed to register archiver bootstrap container for history service", tag.Error(err))
+		}
 
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
 			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, domainCache, params.PublicClient, c.archiverProvider)
@@ -638,7 +644,10 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 		ClusterMetadata:  c.clusterMetadata,
 		DomainCache:      domainCache,
 	}
-	c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	err := c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		c.logger.Fatal("Failed to register archiver bootstrap container for worker service", tag.Error(err))
+	}
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     params.PublicClient,

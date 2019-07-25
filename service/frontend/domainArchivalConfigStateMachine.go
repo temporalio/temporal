@@ -24,15 +24,14 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 )
 
-// domainArchivalConfigStateMachine is only used by workflowHandler.
+// domainArchivalConfigStateMachine is only used by domainHandler.
 // It is simply meant to simplify the logic around archival domain state changes.
-// Logically this class can be thought of as part of workflowHandler.
+// Logically this class can be thought of as part of domainHandler.
 
 type (
 	// archivalState represents the state of archival config
 	// the only invalid state is {URI="", status=enabled}
 	// once URI is set it is immutable
-	// the initial state is {URI="", status=disabled}, this is what all domains initially default to
 	archivalState struct {
 		status shared.ArchivalStatus
 		URI    string

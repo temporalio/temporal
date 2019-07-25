@@ -88,22 +88,22 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enabl
 	if enableArchival {
 		archivalClusterConfig = config.Archival{
 			History: config.HistoryArchival{
-				Status:                 "enabled",
-				EnableReadFromArchival: true,
+				Status:     "enabled",
+				EnableRead: true,
 			},
 			Visibility: config.VisibilityArchival{
-				Status:                 "enabled",
-				EnableReadFromArchival: true,
+				Status:     "enabled",
+				EnableRead: true,
 			},
 		}
 		archivalDomainDefaults = config.ArchivalDomainDefaults{
 			History: config.HistoryArchivalDomainDefaults{
-				DefaultStatus: "enabled",
-				DefaultURI:    "testScheme://test/archive/path",
+				Status: "enabled",
+				URI:    "testScheme://test/archive/path",
 			},
 			Visibility: config.VisibilityArchivalDomainDefaults{
-				DefaultStatus: "enabled",
-				DefaultURI:    "testScheme://test/archive/path",
+				Status: "enabled",
+				URI:    "testScheme://test/archive/path",
 			},
 		}
 	}

@@ -210,7 +210,10 @@ func (s *Service) Start() {
 		ClusterMetadata:  base.GetClusterMetadata(),
 		DomainCache:      domainCache,
 	}
-	params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	err = params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
+	}
 
 	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, domainCache, params.ArchiverProvider)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)

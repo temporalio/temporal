@@ -305,12 +305,13 @@ func DescribeDomain(c *cli.Context) {
 		formatStr = formatStr + "HistoryArchivalURI: %v\n"
 		descValues = append(descValues, resp.Configuration.GetHistoryArchivalURI())
 	}
-	formatStr = formatStr + "VisibilityArchivalStatus: %v\n"
-	descValues = append(descValues, resp.Configuration.GetVisibilityArchivalStatus().String())
-	if resp.Configuration.GetVisibilityArchivalURI() != "" {
-		formatStr = formatStr + "VisibilityArchivalURI: %v\n"
-		descValues = append(descValues, resp.Configuration.GetVisibilityArchivalURI())
-	}
+	// TODO ycyang: uncomment once visibility archival is implemented
+	// formatStr = formatStr + "VisibilityArchivalStatus: %v\n"
+	// descValues = append(descValues, resp.Configuration.GetVisibilityArchivalStatus().String())
+	// if resp.Configuration.GetVisibilityArchivalURI() != "" {
+	// 	formatStr = formatStr + "VisibilityArchivalURI: %v\n"
+	// 	descValues = append(descValues, resp.Configuration.GetVisibilityArchivalURI())
+	// }
 	fmt.Printf(formatStr, descValues...)
 	if resp.Configuration.BadBinaries != nil {
 		fmt.Println("Bad binaries to reset:")

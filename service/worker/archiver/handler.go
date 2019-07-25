@@ -31,13 +31,13 @@ import (
 )
 
 type (
-	// Archiver is used to process archival requests
-	Archiver interface {
+	// Handler is used to process archival requests
+	Handler interface {
 		Start()
 		Finished() []uint64
 	}
 
-	archiver struct {
+	handler struct {
 		ctx           workflow.Context
 		logger        log.Logger
 		metricsClient metrics.Client
@@ -47,15 +47,15 @@ type (
 	}
 )
 
-// NewArchiver returns a new Archiver
-func NewArchiver(
+// NewHandler returns a new Handler
+func NewHandler(
 	ctx workflow.Context,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	concurrency int,
 	requestCh workflow.Channel,
-) Archiver {
-	return &archiver{
+) Handler {
+	return &handler{
 		ctx:           ctx,
 		logger:        logger,
 		metricsClient: metricsClient,
@@ -66,36 +66,36 @@ func NewArchiver(
 }
 
 // Start spawns concurrency count of coroutine to handle archivals (does not block).
-func (a *archiver) Start() {
-	a.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStartedCount)
-	for i := 0; i < a.concurrency; i++ {
-		workflow.Go(a.ctx, func(ctx workflow.Context) {
-			a.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStartedCount)
+func (h *handler) Start() {
+	h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStartedCount)
+	for i := 0; i < h.concurrency; i++ {
+		workflow.Go(h.ctx, func(ctx workflow.Context) {
+			h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStartedCount)
 			var handledHashes []uint64
 			for {
 				var request ArchiveRequest
-				if more := a.requestCh.Receive(ctx, &request); !more {
+				if more := h.requestCh.Receive(ctx, &request); !more {
 					break
 				}
-				handleRequest(ctx, a.logger, a.metricsClient, request)
+				handleRequest(ctx, h.logger, h.metricsClient, request)
 				handledHashes = append(handledHashes, hash(request))
 			}
-			a.resultCh.Send(ctx, handledHashes)
-			a.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount)
+			h.resultCh.Send(ctx, handledHashes)
+			h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount)
 		})
 	}
 }
 
 // Finished will block until all work has been finished.
 // Returns hashes of requests handled.
-func (a *archiver) Finished() []uint64 {
+func (h *handler) Finished() []uint64 {
 	var handledHashes []uint64
-	for i := 0; i < a.concurrency; i++ {
+	for i := 0; i < h.concurrency; i++ {
 		var subResult []uint64
-		a.resultCh.Receive(a.ctx, &subResult)
+		h.resultCh.Receive(h.ctx, &subResult)
 		handledHashes = append(handledHashes, subResult...)
 	}
-	a.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStoppedCount)
+	h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStoppedCount)
 	return handledHashes
 }
 

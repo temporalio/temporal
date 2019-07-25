@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -773,26 +774,30 @@ func (d *domainHandlerImpl) toArchivalUpdateEvent(
 	return event, nil
 }
 
-func (d *domainHandlerImpl) validateHistoryArchivalURI(URI string) error {
-	scheme, err := common.GetArchivalScheme(URI)
+func (d *domainHandlerImpl) validateHistoryArchivalURI(URIString string) error {
+	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
 	}
-	archiver, err := d.archiverProvider.GetHistoryArchiver(scheme, common.FrontendServiceName)
+
+	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
 	if err != nil {
 		return err
 	}
+
 	return archiver.ValidateURI(URI)
 }
 
-func (d *domainHandlerImpl) validateVisibilityArchivalURI(URI string) error {
-	scheme, err := common.GetArchivalScheme(URI)
+func (d *domainHandlerImpl) validateVisibilityArchivalURI(URIString string) error {
+	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
 	}
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(scheme, common.FrontendServiceName)
+
+	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), common.FrontendServiceName)
 	if err != nil {
 		return err
 	}
+
 	return archiver.ValidateURI(URI)
 }

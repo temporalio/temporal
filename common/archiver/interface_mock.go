@@ -30,20 +30,20 @@ type HistoryArchiverMock struct {
 	mock.Mock
 }
 
-// Archive provides a mock function with given fields: ctx, URI, request, opts
-func (_m *HistoryArchiverMock) Archive(ctx context.Context, URI string, request *ArchiveHistoryRequest, opts ...ArchiveOption) error {
+// Archive provides a mock function with given fields: ctx, uri, request, opts
+func (_m *HistoryArchiverMock) Archive(ctx context.Context, uri URI, request *ArchiveHistoryRequest, opts ...ArchiveOption) error {
 	_va := make([]interface{}, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
 	var _ca []interface{}
-	_ca = append(_ca, ctx, URI, request)
+	_ca = append(_ca, ctx, uri, request)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *ArchiveHistoryRequest, ...ArchiveOption) error); ok {
-		r0 = rf(ctx, URI, request, opts...)
+	if rf, ok := ret.Get(0).(func(context.Context, URI, *ArchiveHistoryRequest, ...ArchiveOption) error); ok {
+		r0 = rf(ctx, uri, request, opts...)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -51,13 +51,13 @@ func (_m *HistoryArchiverMock) Archive(ctx context.Context, URI string, request 
 	return r0
 }
 
-// Get provides a mock function with given fields: ctx, URI, request
-func (_m *HistoryArchiverMock) Get(ctx context.Context, URI string, request *GetHistoryRequest) (*GetHistoryResponse, error) {
-	ret := _m.Called(ctx, URI, request)
+// Get provides a mock function with given fields: ctx, uri, request
+func (_m *HistoryArchiverMock) Get(ctx context.Context, uri URI, request *GetHistoryRequest) (*GetHistoryResponse, error) {
+	ret := _m.Called(ctx, uri, request)
 
 	var r0 *GetHistoryResponse
-	if rf, ok := ret.Get(0).(func(context.Context, string, *GetHistoryRequest) *GetHistoryResponse); ok {
-		r0 = rf(ctx, URI, request)
+	if rf, ok := ret.Get(0).(func(context.Context, URI, *GetHistoryRequest) *GetHistoryResponse); ok {
+		r0 = rf(ctx, uri, request)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*GetHistoryResponse)
@@ -65,8 +65,8 @@ func (_m *HistoryArchiverMock) Get(ctx context.Context, URI string, request *Get
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, *GetHistoryRequest) error); ok {
-		r1 = rf(ctx, URI, request)
+	if rf, ok := ret.Get(1).(func(context.Context, URI, *GetHistoryRequest) error); ok {
+		r1 = rf(ctx, uri, request)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -74,13 +74,13 @@ func (_m *HistoryArchiverMock) Get(ctx context.Context, URI string, request *Get
 	return r0, r1
 }
 
-// ValidateURI provides a mock function with given fields: URI
-func (_m *HistoryArchiverMock) ValidateURI(URI string) error {
-	ret := _m.Called(URI)
+// ValidateURI provides a mock function with given fields: uri
+func (_m *HistoryArchiverMock) ValidateURI(uri URI) error {
+	ret := _m.Called(uri)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string) error); ok {
-		r0 = rf(URI)
+	if rf, ok := ret.Get(0).(func(URI) error); ok {
+		r0 = rf(uri)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -93,57 +93,13 @@ type VisibilityArchiverMock struct {
 	mock.Mock
 }
 
-// Archive provides a mock function with given fields: ctx, URI, request, opts
-func (_m *VisibilityArchiverMock) Archive(ctx context.Context, URI string, request *ArchiveVisibilityRequest, opts ...ArchiveOption) error {
-	_va := make([]interface{}, len(opts))
-	for _i := range opts {
-		_va[_i] = opts[_i]
-	}
-	var _ca []interface{}
-	_ca = append(_ca, ctx, URI, request)
-	_ca = append(_ca, _va...)
-	ret := _m.Called(_ca...)
+// ValidateURI provides a mock function with given fields: uri
+func (_m *VisibilityArchiverMock) ValidateURI(uri URI) error {
+	ret := _m.Called(uri)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *ArchiveVisibilityRequest, ...ArchiveOption) error); ok {
-		r0 = rf(ctx, URI, request, opts...)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// Get provides a mock function with given fields: ctx, URI, request
-func (_m *VisibilityArchiverMock) Get(ctx context.Context, URI string, request *GetVisibilityRequest) (*GetVisibilityResponse, error) {
-	ret := _m.Called(ctx, URI, request)
-
-	var r0 *GetVisibilityResponse
-	if rf, ok := ret.Get(0).(func(context.Context, string, *GetVisibilityRequest) *GetVisibilityResponse); ok {
-		r0 = rf(ctx, URI, request)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*GetVisibilityResponse)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, *GetVisibilityRequest) error); ok {
-		r1 = rf(ctx, URI, request)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// ValidateURI provides a mock function with given fields: URI
-func (_m *VisibilityArchiverMock) ValidateURI(URI string) error {
-	ret := _m.Called(URI)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(string) error); ok {
-		r0 = rf(URI)
+	if rf, ok := ret.Get(0).(func(URI) error); ok {
+		r0 = rf(uri)
 	} else {
 		r0 = ret.Error(0)
 	}

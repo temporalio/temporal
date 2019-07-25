@@ -292,10 +292,10 @@ type (
 	HistoryArchival struct {
 		// Status is the status of history archival either: enabled, disabled, or paused
 		Status string `yaml:"status"`
-		// EnableReadFromArchival whether history can be read from archival
-		EnableReadFromArchival bool `yaml:"enableReadFromArchival"`
-		// ArchiverProvider contains the config for all history archivers
-		ArchiverProvider *HistoryArchiverProvider `yaml:"archiverProvider"`
+		// EnableRead whether history can be read from archival
+		EnableRead bool `yaml:"enableRead"`
+		// Provider contains the config for all history archivers
+		Provider *HistoryArchiverProvider `yaml:"provider"`
 	}
 
 	// HistoryArchiverProvider contains the config for all history archivers
@@ -313,10 +313,10 @@ type (
 	VisibilityArchival struct {
 		// Status is the status of visibility archival either: enabled, disabled, or paused
 		Status string `yaml:"status"`
-		// EnableReadFromArchival whether visibility can be read from archival
-		EnableReadFromArchival bool `yaml:"enableReadFromArchival"`
-		// ArchiverProvider contains the config for all visibility archivers
-		ArchiverProvider *VisibilityArchiverProvider `yaml:"archiverProvider"`
+		// EnableRead whether visibility can be read from archival
+		EnableRead bool `yaml:"enableRead"`
+		// Provider contains the config for all visibility archivers
+		Provider *VisibilityArchiverProvider `yaml:"provider"`
 	}
 
 	// VisibilityArchiverProvider contains the config for all visibility archivers
@@ -351,18 +351,18 @@ type (
 
 	// HistoryArchivalDomainDefaults is the default history archival config for each domain
 	HistoryArchivalDomainDefaults struct {
-		// DefaultStatus is the domain default status of history archival: enabled or disabled
-		DefaultStatus string `yaml:"defaultStatus"`
-		// DefaultURI is the domain default URI for history archiver
-		DefaultURI string `yaml:"defaultURI"`
+		// Status is the domain default status of history archival: enabled or disabled
+		Status string `yaml:"status"`
+		// URI is the domain default URI for history archiver
+		URI string `yaml:"URI"`
 	}
 
 	// VisibilityArchivalDomainDefaults is the default visibility archival config for each domain
 	VisibilityArchivalDomainDefaults struct {
-		// DefaultStatus is the domain default status of visibility archival: enabled or disabled
-		DefaultStatus string `yaml:"defaultStatus"`
-		// DefaultURI is the domain default URI for visibility archiver
-		DefaultURI string `yaml:"defaultURI"`
+		// Status is the domain default status of visibility archival: enabled or disabled
+		Status string `yaml:"status"`
+		// URI is the domain default URI for visibility archiver
+		URI string `yaml:"URI"`
 	}
 
 	// BootstrapMode is an enum type for ringpop bootstrap mode

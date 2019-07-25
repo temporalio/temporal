@@ -123,7 +123,6 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	s.mockArchiverProvider.On("RegisterBootstrapContainer", common.FrontendServiceName, mock.Anything, mock.Anything)
 	domainCache := cache.NewDomainCache(
 		s.mockMetadataMgr,
 		s.mockService.GetClusterMetadata(),
@@ -477,7 +476,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 
 func (s *workflowHandlerSuite) getWorkflowHandlerWithParams(mService cs.Service, config *Config,
 	mMetadataManager persistence.MetadataManager) *WorkflowHandler {
-	s.mockArchiverProvider.On("RegisterBootstrapContainer", common.FrontendServiceName, mock.Anything, mock.Anything)
 	domainCache := cache.NewDomainCache(mMetadataManager, mService.GetClusterMetadata(), mService.GetMetricsClient(), mService.GetLogger())
 	return NewWorkflowHandler(mService, config, mMetadataManager, s.mockHistoryMgr, s.mockHistoryV2Mgr,
 		s.mockVisibilityMgr, s.mockProducer, domainCache, s.mockArchiverProvider)
@@ -510,9 +508,9 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
 
 	req := registerDomainRequest(
 		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr("testScheme://valid/URI"),
+		common.StringPtr(testHistoryArchivalURI),
 		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr("someScheme://invalid/URI"),
+		common.StringPtr(testVisibilityArchivalURI),
 	)
 	err := wh.RegisterDomain(context.Background(), req)
 	assert.Error(s.T(), err)
@@ -524,8 +522,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithNoArchivalU
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("HistoryArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, true, shared.ArchivalStatusDisabled, "testScheme://valid/URI"))
-	s.mockClusterMetadata.On("VisibilityArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, true, shared.ArchivalStatusDisabled, "testScheme://valid/URI"))
+	s.mockClusterMetadata.On("HistoryArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, true, shared.ArchivalStatusDisabled, testHistoryArchivalURI))
+	s.mockClusterMetadata.On("VisibilityArchivalConfig").Return(cluster.NewArchivalConfig(cluster.ArchivalEnabled, true, shared.ArchivalStatusDisabled, testVisibilityArchivalURI))
 	s.mockClusterMetadata.On("GetNextFailoverVersion", mock.Anything, mock.Anything).Return(int64(0))
 	mMetadataManager := &mocks.MetadataManager{}
 	mMetadataManager.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
@@ -576,9 +574,9 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithArchivalURI
 
 	req := registerDomainRequest(
 		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr("testScheme://valid/URI"),
+		common.StringPtr(testHistoryArchivalURI),
 		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr("testScheme://valid/URI"),
+		common.StringPtr(testVisibilityArchivalURI),
 	)
 	err := wh.RegisterDomain(context.Background(), req)
 	assert.NoError(s.T(), err)
@@ -605,7 +603,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ClusterNotConfiguredFo
 
 	req := registerDomainRequest(
 		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr("testScheme://valid/URI"),
+		common.StringPtr(testVisibilityArchivalURI),
 		shared.ArchivalStatusEnabled.Ptr(),
 		common.StringPtr("invalidURI"),
 	)
@@ -751,7 +749,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_InvalidArchivalURI() {
 	wh.startWG.Done()
 
 	updateReq := updateRequest(
-		common.StringPtr("testScheme://invalid updated history URI"),
+		common.StringPtr("testScheme://invalid/updated/history/URI"),
 		common.ArchivalStatusPtr(shared.ArchivalStatusEnabled),
 		nil,
 		nil,
@@ -1100,7 +1098,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	history := &gen.History{}
 	history.Events = append(history.Events, historyBatch1.Events...)
 	history.Events = append(history.Events, historyBatch2.Events...)
-	mHistoryArchiver.On("Get", mock.Anything, testHistoryArchivalURI, mock.Anything).Return(&archiver.GetHistoryResponse{
+	mHistoryArchiver.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(&archiver.GetHistoryResponse{
 		NextPageToken:  nextPageToken,
 		HistoryBatches: []*gen.History{historyBatch1, historyBatch2},
 	}, nil)
