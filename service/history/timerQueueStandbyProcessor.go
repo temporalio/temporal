@@ -490,7 +490,7 @@ func (t *timerQueueStandbyProcessorImpl) getTimerBuilder() *timerBuilder {
 	timeSource := clock.NewEventTimeSource()
 	now := t.getStandbyClusterTime()
 	timeSource.Update(now)
-	return newTimerBuilder(t.logger, timeSource)
+	return newTimerBuilder(timeSource)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processTimer(

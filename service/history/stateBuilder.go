@@ -730,7 +730,7 @@ func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBui
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)
 
-	return newTimerBuilder(b.logger, timeSource)
+	return newTimerBuilder(timeSource)
 }
 
 func (b *stateBuilderImpl) appendTasksForFinishedExecutions(event *shared.HistoryEvent, domainID, workflowID string) error {

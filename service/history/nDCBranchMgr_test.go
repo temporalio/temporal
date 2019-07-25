@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -97,6 +97,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
+		historyV2Mgr:              s.mockHistoryV2Mgr,
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
@@ -116,7 +117,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.mockMutableState = &mockMutableState{}
 	s.branchIndex = 0
 	s.nDCBranchMgr = newNDCBranchMgr(
-		s.mockContext, s.mockMutableState, s.mockShard, s.mockHistoryV2Mgr, s.logger,
+		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
 	)
 }
 

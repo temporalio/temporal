@@ -277,7 +277,7 @@ func (r *historyReplicator) SyncActivity(
 	timerTasks := []persistence.Task{}
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
-	timerBuilder := newTimerBuilder(r.logger, timeSource)
+	timerBuilder := newTimerBuilder(timeSource)
 	if tt := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
 		timerTasks = append(timerTasks, tt)
 	}
@@ -1408,7 +1408,7 @@ func (r *historyReplicator) persistWorkflowMutation(
 		})
 
 		if msBuilder.IsStickyTaskListEnabled() {
-			tBuilder := newTimerBuilder(r.logger, r.timeSource)
+			tBuilder := newTimerBuilder(r.timeSource)
 			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(
 				di.ScheduleID,
 				di.Attempt,

@@ -992,7 +992,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		TaskList:   currentDecisionStickyTasklist,
 		ScheduleID: newDecision.ScheduleID,
 	}}).Once()
-	msBuilderCurrent.On("AddTimerTasks", []persistence.Task{newTimerBuilder(s.logger, clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
+	msBuilderCurrent.On("AddTimerTasks", []persistence.Task{newTimerBuilder(clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
 		newDecision.ScheduleID,
 		newDecision.Attempt,
 		currentDecisionStickyTimeout,
@@ -1720,7 +1720,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		TaskList:   decisionStickyTasklist,
 		ScheduleID: newDecision.ScheduleID,
 	}}).Once()
-	msBuilderCurrent.On("AddTimerTasks", []persistence.Task{newTimerBuilder(s.logger, clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
+	msBuilderCurrent.On("AddTimerTasks", []persistence.Task{newTimerBuilder(clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
 		newDecision.ScheduleID,
 		newDecision.Attempt,
 		decisionStickyTimeout,
@@ -1886,7 +1886,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		TaskList:   decisionStickyTasklist,
 		ScheduleID: newDecision.ScheduleID,
 	}}).Once()
-	msBuilderIn.On("AddTimerTasks", []persistence.Task{newTimerBuilder(s.logger, clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
+	msBuilderIn.On("AddTimerTasks", []persistence.Task{newTimerBuilder(clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
 		newDecision.ScheduleID,
 		newDecision.Attempt,
 		decisionStickyTimeout,
@@ -2365,7 +2365,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		TaskList:   decisionStickyTasklist,
 		ScheduleID: newDecision.ScheduleID,
 	}}).Once()
-	msBuilderIn.On("AddTimerTasks", []persistence.Task{newTimerBuilder(s.logger, clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
+	msBuilderIn.On("AddTimerTasks", []persistence.Task{newTimerBuilder(clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
 		newDecision.ScheduleID,
 		newDecision.Attempt,
 		decisionStickyTimeout,
@@ -3733,7 +3733,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TaskList:   currentDecisionStickyTasklist,
 		ScheduleID: newDecision.ScheduleID,
 	}}).Once()
-	msBuilderCurrent.On("AddTimerTasks", []persistence.Task{newTimerBuilder(s.logger, clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
+	msBuilderCurrent.On("AddTimerTasks", []persistence.Task{newTimerBuilder(clock.NewEventTimeSource()).AddScheduleToStartDecisionTimoutTask(
 		newDecision.ScheduleID,
 		newDecision.Attempt,
 		currentDecisionStickyTimeout,

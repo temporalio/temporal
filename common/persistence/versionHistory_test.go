@@ -586,19 +586,19 @@ func (s *versionHistoriesSuite) TestCurrentBranchIndexIsInReplay() {
 	s.Equal(1, newVersionHistoryIndex)
 	s.Equal(1, histories.currentBranchIndex)
 
-	isInReplay, err := histories.IsInReplay()
+	isInReplay, err := histories.IsRebuilt()
 	s.NoError(err)
 	s.False(isInReplay)
 
 	err = histories.SetCurrentBranchIndex(0)
 	s.NoError(err)
-	isInReplay, err = histories.IsInReplay()
+	isInReplay, err = histories.IsRebuilt()
 	s.NoError(err)
 	s.True(isInReplay)
 
 	err = histories.SetCurrentBranchIndex(1)
 	s.NoError(err)
-	isInReplay, err = histories.IsInReplay()
+	isInReplay, err = histories.IsRebuilt()
 	s.NoError(err)
 	s.False(isInReplay)
 }

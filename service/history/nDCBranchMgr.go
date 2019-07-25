@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -42,32 +42,34 @@ type (
 	}
 
 	nDCBranchMgrImpl struct {
-		context         workflowExecutionContext
-		mutableState    mutableState
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
-		logger          log.Logger
+
+		context      workflowExecutionContext
+		mutableState mutableState
+		logger       log.Logger
 	}
 )
 
 var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
+	shard ShardContext,
+
 	context workflowExecutionContext,
 	mutableState mutableState,
-	shard ShardContext,
-	historyV2Mgr persistence.HistoryV2Manager,
 	logger log.Logger,
 ) *nDCBranchMgrImpl {
 
 	return &nDCBranchMgrImpl{
-		context:         context,
-		mutableState:    mutableState,
 		shard:           shard,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:    historyV2Mgr,
-		logger:          logger,
+		historyV2Mgr:    shard.GetHistoryV2Manager(),
+
+		context:      context,
+		mutableState: mutableState,
+		logger:       logger,
 	}
 }
 
@@ -140,7 +142,9 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 			Success:     retError == nil || persistence.IsTimeoutError(retError),
 			ShardID:     common.IntPtr(shardID),
 		}); errComplete != nil {
-			r.logger.WithTags(tag.Error(errComplete)).Error("unable to complete creation of new branch.")
+			r.logger.WithTags(
+				tag.Error(errComplete),
+			).Error("nDCBranchMgr unable to complete creation of new branch.")
 		}
 	}()
 
@@ -155,7 +159,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 	}
 	if branchChanged {
 		return 0, &shared.BadRequestError{
-			Message: "conflict resolution branching should not change current branch",
+			Message: "nDCBranchMgr encounter branch change during conflict resolution",
 		}
 	}
 

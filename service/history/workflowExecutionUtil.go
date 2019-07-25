@@ -71,7 +71,7 @@ func scheduleDecision(
 	mutableState.AddTransferTasks(transferTask)
 
 	if mutableState.IsStickyTaskListEnabled() {
-		tBuilder := newTimerBuilder(logger, timeSource)
+		tBuilder := newTimerBuilder(timeSource)
 		timerTask := tBuilder.AddScheduleToStartDecisionTimoutTask(
 			di.ScheduleID,
 			di.Attempt,

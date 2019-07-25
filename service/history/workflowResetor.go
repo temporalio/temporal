@@ -365,7 +365,8 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 		); retError != nil {
 			return
 		}
-		closeTask, cleanupTask, retError = w.eng.getWorkflowHistoryCleanupTasks(
+		closeTask, cleanupTask, retError = getWorkflowCleanupTasks(
+			w.eng.shard.GetDomainCache(),
 			currMutableState.GetExecutionInfo().DomainID,
 			currMutableState.GetExecutionInfo().WorkflowID,
 			w.eng.getTimerBuilder(&workflow.WorkflowExecution{

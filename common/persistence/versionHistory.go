@@ -493,9 +493,9 @@ func (h *VersionHistories) FindLCAVersionHistoryIndexAndItem(
 	return versionHistoryIndex, versionHistoryItem, nil
 }
 
-// IsInReplay returns true if the current branch index's last write version is not the largest
+// IsRebuilt returns true if the current branch index's last write version is not the largest
 // among all branches' last write version
-func (h *VersionHistories) IsInReplay() (bool, error) {
+func (h *VersionHistories) IsRebuilt() (bool, error) {
 
 	currentVersionHistory, err := h.GetVersionHistory(h.GetCurrentBranchIndex())
 	if err != nil {

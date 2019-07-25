@@ -1983,6 +1983,20 @@ func (_m *mockMutableState) IsCancelRequested() (bool, string) {
 	return r0, r1
 }
 
+// IsCurrentWorkflow provides a mock function with given fields:
+func (_m *mockMutableState) IsCurrentWorkflowGuaranteed() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
 // IsSignalRequested provides a mock function with given fields: requestID
 func (_m *mockMutableState) IsSignalRequested(requestID string) bool {
 	ret := _m.Called(requestID)

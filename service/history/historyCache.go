@@ -50,6 +50,8 @@ type (
 	}
 )
 
+var noopReleaseFn releaseWorkflowExecutionFunc = func(err error) {}
+
 const (
 	cacheNotReleased int32 = 0
 	cacheReleased    int32 = 1
@@ -120,7 +122,7 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := func(error) {}
+	releaseFunc := noopReleaseFn
 	// If cache hit, we need to lock the cache to prevent race condition
 	if cacheHit {
 		if err := contextFromCache.lock(ctx); err != nil {
@@ -183,7 +185,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 
 	// Test hook for disabling the cache
 	if c.disabled {
-		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), func(error) {}, nil
+		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), noopReleaseFn, nil
 	}
 
 	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())

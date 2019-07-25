@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,8 @@ package history
 
 import (
 	ctx "context"
-	"fmt"
+
+	"github.com/pborman/uuid"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -36,52 +37,97 @@ import (
 
 type (
 	nDCStateRebuilder interface {
-		rebuild(
+		prepareMutableState(
 			ctx ctx.Context,
-			requestID string,
-		) (mutableState, error)
+			branchIndex int,
+			incomingVersion int64,
+		) (mutableState, bool, error)
 	}
 
 	nDCStateRebuilderImpl struct {
-		mutableState mutableState
-		branchIndex  int
-
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
-		logger          log.Logger
+
+		mutableState mutableState
+		logger       log.Logger
 	}
 )
 
 var _ nDCStateRebuilder = (*nDCStateRebuilderImpl)(nil)
 
 func newNDCStateRebuilder(
-	mutableState mutableState,
-	branchIndex int,
-
 	shard ShardContext,
-	historyV2Mgr persistence.HistoryV2Manager,
+
+	mutableState mutableState,
 	logger log.Logger,
 ) *nDCStateRebuilderImpl {
 
 	return &nDCStateRebuilderImpl{
-		mutableState: mutableState,
-		branchIndex:  branchIndex,
-
 		shard:           shard,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:    historyV2Mgr,
-		logger:          logger,
+		historyV2Mgr:    shard.GetHistoryV2Manager(),
+
+		mutableState: mutableState,
+		logger:       logger,
 	}
+}
+
+func (r *nDCStateRebuilderImpl) prepareMutableState(
+	ctx ctx.Context,
+	branchIndex int,
+	incomingVersion int64,
+) (mutableState, bool, error) {
+
+	// NOTE: this function also need to preserve whether a workflow is a zombie or not
+	//  this is done by the rebuild function below
+
+	versionHistories := r.mutableState.GetVersionHistories()
+	currentBranchIndex := versionHistories.GetCurrentBranchIndex()
+
+	// replication task to be applied to current branch
+	if branchIndex == currentBranchIndex {
+		return r.mutableState, false, nil
+	}
+
+	currentVersionHistory, err := versionHistories.GetVersionHistory(currentBranchIndex)
+	if err != nil {
+		return nil, false, err
+	}
+	currentLastItem, err := currentVersionHistory.GetLastItem()
+	if err != nil {
+		return nil, false, err
+	}
+
+	// mutable state does not need rebuild
+	if incomingVersion < currentLastItem.GetVersion() {
+		return r.mutableState, false, nil
+	}
+
+	if incomingVersion == currentLastItem.GetVersion() {
+		return nil, false, &shared.BadRequestError{
+			Message: "nDCStateRebuilder encounter replication task version == current branch last write version",
+		}
+	}
+
+	// task.getVersion() > currentLastItem
+	// incoming replication task, after application, will become the current branch
+	// (because higher version wins), we need to rebuild the mutable state for that
+	rebuildMutableState, err := r.rebuild(ctx, branchIndex, uuid.New())
+	if err != nil {
+		return nil, false, err
+	}
+	return rebuildMutableState, true, nil
 }
 
 func (r *nDCStateRebuilderImpl) rebuild(
 	ctx ctx.Context,
+	branchIndex int,
 	requestID string,
 ) (mutableState, error) {
 
 	versionHistories := r.mutableState.GetVersionHistories()
-	replayVersionHistory, err := versionHistories.GetVersionHistory(r.branchIndex)
+	replayVersionHistory, err := versionHistories.GetVersionHistory(branchIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +164,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		}
 	}
 
+	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetVersionHistories()
 	rebuildVersionHistory, err := rebuildVersionHistories.GetVersionHistory(
 		rebuildVersionHistories.GetCurrentBranchIndex(),
@@ -130,15 +177,20 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, err
 	}
 
-	// TODO also double check get next event ID
-	//Sanity check on last event id of the last history batch
 	if !rebuildVersionHistory.Equals(replayVersionHistory) {
-		return nil, &shared.BadRequestError{Message: fmt.Sprintf(
-			"failed to rebuild mutable state as the version history before / after are not matched",
-		)}
+		return nil, &shared.InternalServiceError{
+			Message: "nDCStateRebuilder encounter mismatch version history after rebuild",
+		}
 	}
 
-	// set the original version history back
+	// set the current branch index to target branch index
+	// set the version history back
+	//
+	// caller can use the IsRebuilt function in VersionHistories
+	// telling whether mutable state is rebuilt, before apply new history events
+	if err := versionHistories.SetCurrentBranchIndex(branchIndex); err != nil {
+		return nil, err
+	}
 	if err = rebuildMutableState.SetVersionHistories(versionHistories); err != nil {
 		return nil, err
 	}
@@ -182,7 +234,7 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 		nDCMutableStateEventStoreVersion,
 	)
 	if err != nil {
-		r.logger.Error("error rebuild mutable state.", tag.Error(err))
+		r.logger.Error("nDCStateRebuilder unable to rebuild mutable state.", tag.Error(err))
 		return err
 	}
 	return nil

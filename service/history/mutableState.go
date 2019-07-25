@@ -146,6 +146,7 @@ type (
 		HasPendingDecisionTask() bool
 		HasProcessedOrPendingDecisionTask() bool
 		IsCancelRequested() (bool, string)
+		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool
 		IsWorkflowExecutionRunning() bool

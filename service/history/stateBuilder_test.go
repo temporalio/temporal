@@ -603,7 +603,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory.Events, s.logger))
 	expectedNewRunStateBuilder.UpdateReplicationStateLastEventID(newRunStartedEvent.GetVersion(), newRunDecisionEvent.GetEventId())
 
-	expectedNewRunStateBuilder.condition = newRunStateBuilder.(*mutableStateBuilder).condition
+	expectedNewRunStateBuilder.nextEventIDInDB = newRunStateBuilder.(*mutableStateBuilder).nextEventIDInDB
 	expectedNewRunStateBuilder.insertTransferTasks = newRunStateBuilder.(*mutableStateBuilder).insertTransferTasks
 	expectedNewRunStateBuilder.insertTimerTasks = newRunStateBuilder.(*mutableStateBuilder).insertTimerTasks
 	s.Equal(expectedNewRunStateBuilder, newRunStateBuilder)
@@ -802,7 +802,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory.Events, s.logger))
 	expectedNewRunStateBuilder.UpdateReplicationStateLastEventID(newRunStartedEvent.GetVersion(), newRunDecisionEvent.GetEventId())
 
-	expectedNewRunStateBuilder.condition = newRunStateBuilder.(*mutableStateBuilder).condition
+	expectedNewRunStateBuilder.nextEventIDInDB = newRunStateBuilder.(*mutableStateBuilder).nextEventIDInDB
 	expectedNewRunStateBuilder.insertTransferTasks = newRunStateBuilder.(*mutableStateBuilder).insertTransferTasks
 	expectedNewRunStateBuilder.insertTimerTasks = newRunStateBuilder.(*mutableStateBuilder).insertTimerTasks
 	s.Equal(expectedNewRunStateBuilder, newRunStateBuilder)

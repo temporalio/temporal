@@ -1905,7 +1905,8 @@ Update_History_Loop:
 
 		transferTasks, timerTasks := postActions.transferTasks, postActions.timerTasks
 		if postActions.deleteWorkflow {
-			tranT, timerT, err := e.getWorkflowHistoryCleanupTasks(
+			tranT, timerT, err := getWorkflowCleanupTasks(
+				e.shard.GetDomainCache(),
 				domainID,
 				execution.GetWorkflowId(),
 				tBuilder)
@@ -1974,21 +1975,14 @@ func (e *historyEngineImpl) updateWorkflowExecution(
 		})
 }
 
-func (e *historyEngineImpl) getWorkflowHistoryCleanupTasks(
-	domainID, workflowID string,
-	tBuilder *timerBuilder,
-) (persistence.Task, persistence.Task, error) {
-	return getWorkflowHistoryCleanupTasksFromShard(e.shard, domainID, workflowID, tBuilder)
-}
-
-func getWorkflowHistoryCleanupTasksFromShard(
-	shard ShardContext,
+func getWorkflowCleanupTasks(
+	domainCache cache.DomainCache,
 	domainID, workflowID string,
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
 
 	var retentionInDays int32
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
+	domainEntry, err := domainCache.GetDomainByID(domainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return nil, nil, err
@@ -2070,9 +2064,7 @@ func (e *historyEngineImpl) failDecision(
 func (e *historyEngineImpl) getTimerBuilder(
 	we *workflow.WorkflowExecution,
 ) *timerBuilder {
-
-	log := e.logger.WithTags(tag.WorkflowID(we.GetWorkflowId()), tag.WorkflowRunID(we.GetRunId()))
-	return newTimerBuilder(log, clock.NewRealTimeSource())
+	return newTimerBuilder(clock.NewRealTimeSource())
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(

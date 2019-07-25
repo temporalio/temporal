@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -36,7 +36,7 @@ import (
 type (
 	nDCReplicationTask interface {
 		getDomainID() string
-		getExecution() shared.WorkflowExecution
+		getExecution() *shared.WorkflowExecution
 		getWorkflowID() string
 		getRunID() string
 		getEventTime() time.Time
@@ -45,22 +45,23 @@ type (
 		getVersion() int64
 		getSourceCluster() string
 		getEvents() []*shared.HistoryEvent
-		getNewRunEvents() []*shared.HistoryEvent
+		getNewEvents() []*shared.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
 		getRequest() *h.ReplicateEventsRequest
+		generateNewRunTask(taskStartTime time.Time) (nDCReplicationTask, error)
 	}
 
 	nDCReplicationTaskImpl struct {
-		sourceCluster       string
-		domainID            string
-		execution           shared.WorkflowExecution
-		version             int64
-		firstEvent          *shared.HistoryEvent
-		lastEvent           *shared.HistoryEvent
-		eventTime           time.Time
-		historyEvents       []*shared.HistoryEvent
-		newRunHistoryEvents []*shared.HistoryEvent
+		sourceCluster    string
+		domainID         string
+		execution        *shared.WorkflowExecution
+		version          int64
+		firstEvent       *shared.HistoryEvent
+		lastEvent        *shared.HistoryEvent
+		eventTime        time.Time
+		historyEvents    []*shared.HistoryEvent
+		newHistoryEvents []*shared.HistoryEvent
 
 		request *h.ReplicateEventsRequest
 
@@ -80,25 +81,35 @@ var (
 	ErrEventIDMismatch = &shared.BadRequestError{Message: "event ID mismatch"}
 	// ErrEventVersionMismatch is returned if event version mis-matched
 	ErrEventVersionMismatch = &shared.BadRequestError{Message: "event version mismatch"}
+	// ErrNoNewRunHistory is returned if there is no new run history
+	ErrNoNewRunHistory = &shared.BadRequestError{Message: "no new run history events"}
+	// ErrLastEventIsNotContinueAsNew is returned if the last event is not continue as new
+	ErrLastEventIsNotContinueAsNew = &shared.BadRequestError{Message: "last event is not continue as new"}
 )
 
-func newNDCReplicationTask(clusterMetadata cluster.Metadata, now time.Time, logger log.Logger,
-	request *h.ReplicateEventsRequest) (*nDCReplicationTaskImpl, error) {
+func newNDCReplicationTask(
+	clusterMetadata cluster.Metadata,
+	taskStartTime time.Time,
+	logger log.Logger,
+	request *h.ReplicateEventsRequest,
+) (*nDCReplicationTaskImpl, error) {
 
-	if err := validateReplicateEventsRequest(request); err != nil {
+	if err := validateReplicateEventsRequest(
+		request,
+	); err != nil {
 		return nil, err
 	}
 
 	domainID := request.GetDomainUUID()
-	execution := *request.WorkflowExecution
+	execution := request.WorkflowExecution
 
 	version := request.GetVersion()
 	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(version)
 
 	history := request.History
-	var newRunHistoryEvents []*shared.HistoryEvent
-	if request.NewRunHistory != nil {
-		newRunHistoryEvents = request.NewRunHistory.Events
+	newHistoryEvents := []*shared.HistoryEvent{}
+	if request.NewRunHistory != nil && request.NewRunHistory.Events != nil {
+		newHistoryEvents = request.NewRunHistory.Events
 	}
 	historyEvents := history.Events
 	firstEvent := history.Events[0]
@@ -121,22 +132,19 @@ func newNDCReplicationTask(clusterMetadata cluster.Metadata, now time.Time, logg
 	)
 
 	return &nDCReplicationTaskImpl{
-		sourceCluster: sourceCluster,
-		domainID:      domainID,
-		execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(execution.GetWorkflowId()),
-			RunId:      common.StringPtr(execution.GetRunId()),
-		},
-		version:             version,
-		firstEvent:          firstEvent,
-		lastEvent:           lastEvent,
-		eventTime:           time.Unix(0, eventTime),
-		historyEvents:       historyEvents,
-		newRunHistoryEvents: newRunHistoryEvents,
+		sourceCluster:    sourceCluster,
+		domainID:         domainID,
+		execution:        execution,
+		version:          version,
+		firstEvent:       firstEvent,
+		lastEvent:        lastEvent,
+		eventTime:        time.Unix(0, eventTime),
+		historyEvents:    historyEvents,
+		newHistoryEvents: newHistoryEvents,
 
 		request: request,
 
-		startTime: now, // TODO use time source
+		startTime: taskStartTime,
 		logger:    logger,
 	}, nil
 }
@@ -145,7 +153,7 @@ func (t *nDCReplicationTaskImpl) getDomainID() string {
 	return t.domainID
 }
 
-func (t *nDCReplicationTaskImpl) getExecution() shared.WorkflowExecution {
+func (t *nDCReplicationTaskImpl) getExecution() *shared.WorkflowExecution {
 	return t.execution
 }
 
@@ -181,8 +189,8 @@ func (t *nDCReplicationTaskImpl) getEvents() []*shared.HistoryEvent {
 	return t.historyEvents
 }
 
-func (t *nDCReplicationTaskImpl) getNewRunEvents() []*shared.HistoryEvent {
-	return t.newRunHistoryEvents
+func (t *nDCReplicationTaskImpl) getNewEvents() []*shared.HistoryEvent {
+	return t.newHistoryEvents
 }
 
 func (t *nDCReplicationTaskImpl) getLogger() log.Logger {
@@ -197,7 +205,65 @@ func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsRequest {
 	return t.request
 }
 
-func validateReplicateEventsRequest(request *h.ReplicateEventsRequest) error {
+func (t *nDCReplicationTaskImpl) generateNewRunTask(
+	taskStartTime time.Time,
+) (nDCReplicationTask, error) {
+
+	if len(t.newHistoryEvents) == 0 {
+		return nil, ErrNoNewRunHistory
+	}
+	newHistoryEvents := t.newHistoryEvents
+
+	if t.getLastEvent().GetEventType() != shared.EventTypeWorkflowExecutionContinuedAsNew ||
+		t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes == nil {
+		return nil, ErrLastEventIsNotContinueAsNew
+	}
+	newRunID := t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+
+	newFirstEvent := newHistoryEvents[0]
+	newLastEvent := newHistoryEvents[len(newHistoryEvents)-1]
+
+	newEventTime := int64(0)
+	for _, event := range newHistoryEvents {
+		if event.GetTimestamp() > newEventTime {
+			newEventTime = event.GetTimestamp()
+		}
+	}
+
+	logger := t.logger.WithTags(
+		tag.WorkflowID(t.getExecution().GetWorkflowId()),
+		tag.WorkflowRunID(newRunID),
+		tag.SourceCluster(t.sourceCluster),
+		tag.IncomingVersion(t.version),
+		tag.WorkflowFirstEventID(newFirstEvent.GetEventId()),
+		tag.WorkflowNextEventID(newLastEvent.GetTaskId()+1),
+	)
+
+	return &nDCReplicationTaskImpl{
+		sourceCluster: t.sourceCluster,
+		domainID:      t.domainID,
+		execution: &shared.WorkflowExecution{
+			WorkflowId: t.execution.WorkflowId,
+			RunId:      common.StringPtr(newRunID),
+		},
+		version:          t.version,
+		firstEvent:       newFirstEvent,
+		lastEvent:        newLastEvent,
+		eventTime:        time.Unix(0, newEventTime),
+		historyEvents:    newHistoryEvents,
+		newHistoryEvents: []*shared.HistoryEvent{},
+
+		request: nil,
+
+		startTime: taskStartTime,
+		logger:    logger,
+	}, nil
+}
+
+func validateReplicateEventsRequest(
+	request *h.ReplicateEventsRequest,
+) error {
+
 	if valid := validateUUID(request.GetDomainUUID()); !valid {
 		return ErrInvalidDomainID
 	}
@@ -210,8 +276,10 @@ func validateReplicateEventsRequest(request *h.ReplicateEventsRequest) error {
 	if request.History == nil || len(request.History.Events) == 0 {
 		return ErrEmptyHistoryRawEventBatch
 	}
-	if request.GetFirstEventId() != request.History.Events[0].GetEventId() ||
-		request.GetNextEventId() != request.History.Events[len(request.History.Events)-1].GetEventId()+1 {
+
+	historyEvents := request.History.Events
+	if request.GetFirstEventId() != historyEvents[0].GetEventId() ||
+		request.GetNextEventId() != historyEvents[len(historyEvents)-1].GetEventId()+1 {
 		return ErrEventIDMismatch
 	}
 

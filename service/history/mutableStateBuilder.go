@@ -92,9 +92,11 @@ type (
 
 		// in memory only attributes
 		// indicates whether there are buffered events in persistence
-		hasBufferedEventsInPersistence bool
-		// indicates the next event ID in DB, for condition update
-		condition int64
+		hasBufferedEventsInDB bool
+		// indicates whether the workflow is pointed by current record, guaranteed
+		isWorkflowBeingCurrentGuaranteed bool
+		// indicates the next event ID in DB, for conditional update
+		nextEventIDInDB int64
 		// indicate whether can do replication
 		replicationPolicy cache.ReplicationPolicy
 
@@ -145,8 +147,9 @@ func newMutableStateBuilder(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedID:   "",
 
-		hasBufferedEventsInPersistence: false,
-		condition:                      0,
+		hasBufferedEventsInDB:            false,
+		isWorkflowBeingCurrentGuaranteed: false,
+		nextEventIDInDB:                  0,
 
 		clusterMetadata: shard.GetClusterMetadata(),
 		eventsCache:     eventsCache,
@@ -235,8 +238,17 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
 	}
 
-	e.hasBufferedEventsInPersistence = len(e.bufferedEvents) > 0
-	e.condition = state.ExecutionInfo.NextEventID
+	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
+	// it is guarantee that there is at most one workflow
+	// running, i.e. WorkflowStateCreated or WorkflowStateRunning
+	//
+	// if this workflow's state in DB is created or running, it is
+	// guaranteed that DB's current record is pointing to this workflow
+	//
+	// if the workflow's state in DB is completed or zombie,
+	// caller need to call get current workflow for verification
+	e.isWorkflowBeingCurrentGuaranteed = e.IsWorkflowExecutionRunning()
+	e.nextEventIDInDB = state.ExecutionInfo.NextEventID
 }
 
 func (e *mutableStateBuilder) GetEventStoreVersion() int32 {
@@ -329,7 +341,7 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 			reorderFunc(e.bufferedEvents)
 			e.bufferedEvents = nil
 		}
-		if e.hasBufferedEventsInPersistence {
+		if e.hasBufferedEventsInDB {
 			e.clearBufferedEvents = true
 		}
 
@@ -606,6 +618,10 @@ func (e *mutableStateBuilder) assignTaskIDToEvents() error {
 	}
 
 	return nil
+}
+
+func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
+	return e.isWorkflowBeingCurrentGuaranteed
 }
 
 func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
@@ -1128,7 +1144,7 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	case persistence.WorkflowStateZombie:
 		return false
 	default:
-		panic(fmt.Sprintf("unknown execution state: %v", e.executionInfo.State))
+		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
 	}
 }
 
@@ -3471,12 +3487,12 @@ func (e *mutableStateBuilder) AddTimerTasks(
 	e.insertTimerTasks = append(e.insertTimerTasks, timerTasks...)
 }
 
-func (e *mutableStateBuilder) SetUpdateCondition(condition int64) {
-	e.condition = condition
+func (e *mutableStateBuilder) SetUpdateCondition(nextEventIDInDB int64) {
+	e.nextEventIDInDB = nextEventIDInDB
 }
 
 func (e *mutableStateBuilder) GetUpdateCondition() int64 {
-	return e.condition
+	return e.nextEventIDInDB
 }
 
 func (e *mutableStateBuilder) CloseTransactionAsMutation(
@@ -3531,7 +3547,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
 
-		Condition: e.condition,
+		Condition: e.nextEventIDInDB,
 	}
 
 	if err := e.cleanupTransaction(transactionPolicy); err != nil {
@@ -3596,7 +3612,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
 
-		Condition: e.condition,
+		Condition: e.nextEventIDInDB,
 	}
 
 	if err := e.cleanupTransaction(transactionPolicy); err != nil {
@@ -3669,8 +3685,17 @@ func (e *mutableStateBuilder) cleanupTransaction(
 		e.updateBufferedEvents = nil
 	}
 
-	e.hasBufferedEventsInPersistence = len(e.bufferedEvents) > 0
-	e.condition = e.GetNextEventID()
+	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
+	// it is guarantee that there is at most one workflow
+	// running, i.e. WorkflowStateCreated or WorkflowStateRunning
+	//
+	// if this workflow's state in DB is created or running, it is
+	// guaranteed that DB's current record is pointing to this workflow
+	//
+	// if the workflow's state in DB is completed or zombie,
+	// caller need to call get current workflow for verification
+	e.isWorkflowBeingCurrentGuaranteed = e.IsWorkflowExecutionRunning()
+	e.nextEventIDInDB = e.GetNextEventID()
 
 	e.insertTransferTasks = nil
 	e.insertReplicationTasks = nil

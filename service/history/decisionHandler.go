@@ -500,7 +500,8 @@ Update_History_Loop:
 		}
 
 		if isComplete {
-			tranT, timerT, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(
+			tranT, timerT, err := getWorkflowCleanupTasks(
+				handler.domainCache,
 				domainID,
 				workflowExecution.GetWorkflowId(),
 				tBuilder)
@@ -561,7 +562,12 @@ Update_History_Loop:
 				if err != nil {
 					return nil, err
 				}
-				transferTask, timerTask, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
+				transferTask, timerTask, err := getWorkflowCleanupTasks(
+					handler.domainCache,
+					domainID,
+					workflowExecution.GetWorkflowId(),
+					tBuilder,
+				)
 				if err != nil {
 					return nil, err
 				}

@@ -741,8 +741,8 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 
 	executionInfo := context.getExecution()
 	tBuilder := t.historyService.getTimerBuilder(executionInfo)
-	transferTask, timerTask, err := getWorkflowHistoryCleanupTasksFromShard(
-		t.shard,
+	transferTask, timerTask, err := getWorkflowCleanupTasks(
+		t.shard.GetDomainCache(),
 		domainID,
 		executionInfo.GetWorkflowId(),
 		tBuilder)
@@ -789,7 +789,8 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 
 	if createDeletionTask {
 		tBuilder := t.historyService.getTimerBuilder(context.getExecution())
-		transferTask, timerTask, err := t.historyService.getWorkflowHistoryCleanupTasks(
+		transferTask, timerTask, err := getWorkflowCleanupTasks(
+			t.shard.GetDomainCache(),
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			tBuilder)
