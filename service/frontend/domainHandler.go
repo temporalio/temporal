@@ -46,6 +46,7 @@ type (
 		clusterMetadata     cluster.Metadata
 		domainReplicator    DomainReplicator
 		domainAttrValidator *domainAttrValidatorImpl
+		archivalMetadata    archiver.ArchivalMetadata
 		archiverProvider    provider.ArchiverProvider
 	}
 )
@@ -56,6 +57,7 @@ func newDomainHandler(config *Config,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
 	domainReplicator DomainReplicator,
+	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 ) *domainHandlerImpl {
 	return &domainHandlerImpl{
@@ -65,6 +67,7 @@ func newDomainHandler(config *Config,
 		clusterMetadata:     clusterMetadata,
 		domainReplicator:    domainReplicator,
 		domainAttrValidator: newDomainAttrValidator(clusterMetadata, int32(config.MinRetentionDays())),
+		archivalMetadata:    archivalMetadata,
 		archiverProvider:    archiverProvider,
 	}
 }
@@ -129,13 +132,13 @@ func (d *domainHandlerImpl) registerDomain(
 
 	currentHistoryArchivalState := neverEnabledState()
 	nextHistoryArchivalState := currentHistoryArchivalState
-	clusterHistoryArchivalConfig := d.clusterMetadata.HistoryArchivalConfig()
+	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.HistoryArchivalStatus,
 			registerRequest.GetHistoryArchivalURI(),
-			clusterHistoryArchivalConfig.DomainDefaultStatus,
-			clusterHistoryArchivalConfig.DomainDefaultURI,
+			clusterHistoryArchivalConfig.GetDomainDefaultStatus(),
+			clusterHistoryArchivalConfig.GetDomainDefaultURI(),
 		)
 		if err != nil {
 			return err
@@ -149,13 +152,13 @@ func (d *domainHandlerImpl) registerDomain(
 
 	currentVisibilityArchivalState := neverEnabledState()
 	nextVisibilityArchivalState := currentVisibilityArchivalState
-	clusterVisibilityArchivalConfig := d.clusterMetadata.VisibilityArchivalConfig()
+	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.VisibilityArchivalStatus,
 			registerRequest.GetVisibilityArchivalURI(),
-			clusterVisibilityArchivalConfig.DomainDefaultStatus,
-			clusterVisibilityArchivalConfig.DomainDefaultURI,
+			clusterVisibilityArchivalConfig.GetDomainDefaultStatus(),
+			clusterVisibilityArchivalConfig.GetDomainDefaultURI(),
 		)
 		if err != nil {
 			return err
@@ -369,10 +372,10 @@ func (d *domainHandlerImpl) updateDomain(
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
 	historyArchivalConfigChanged := false
-	clusterHistoryArchivalConfig := d.clusterMetadata.HistoryArchivalConfig()
+	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if updateRequest.Configuration != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.DomainDefaultURI)
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.GetDomainDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -388,10 +391,10 @@ func (d *domainHandlerImpl) updateDomain(
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
 	visibilityArchivalConfigChanged := false
-	clusterVisibilityArchivalConfig := d.clusterMetadata.VisibilityArchivalConfig()
+	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if updateRequest.Configuration != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.DomainDefaultURI)
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.GetDomainDefaultURI())
 		if err != nil {
 			return nil, err
 		}

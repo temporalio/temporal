@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
@@ -131,14 +132,11 @@ func (s *server) startService() common.Daemon {
 	clusterMetadata := s.cfg.ClusterMetadata
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
-		dc,
-		s.cfg.ClusterMetadata.EnableGlobalDomain,
+		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
-		s.cfg.Archival,
-		s.cfg.DomainDefaults.Archival,
 	)
 
 	if s.cfg.PublicClient.HostPort != "" {
@@ -177,13 +175,28 @@ func (s *server) startService() common.Daemon {
 	}
 	params.PublicClient = workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
-	configuredForHistoryArchival := params.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival()
+	// Dynamic archival config is accessed once on cluster startup than never accessed again.
+	// This is done so as to keep archival status and and the initialization of archiver.Provider in sync.
+	// TODO: Once archival pause is implemented archival config can be made truly dynamic.
+	clusterHistoryArchivalStatus := dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, s.cfg.Archival.History.Status)()
+	enableReadFromHistoryArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, s.cfg.Archival.History.EnableRead)()
+	clusterVisibilityArchivalStatus := dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, s.cfg.Archival.Visibility.Status)()
+	enableReadFromVisibilityArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, s.cfg.Archival.Visibility.EnableRead)()
+	params.ArchivalMetadata = archiver.NewArchivalMetadata(
+		clusterHistoryArchivalStatus,
+		enableReadFromHistoryArchival,
+		clusterVisibilityArchivalStatus,
+		enableReadFromVisibilityArchival,
+		&s.cfg.DomainDefaults.Archival,
+	)
+
+	configuredForHistoryArchival := params.ArchivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival()
 	historyArchiverProviderCfg := s.cfg.Archival.History.Provider
 	if (configuredForHistoryArchival && historyArchiverProviderCfg == nil) || (!configuredForHistoryArchival && historyArchiverProviderCfg != nil) {
 		log.Fatalf("invalid history archival config")
 	}
 
-	configuredForVisibilityArchival := params.ClusterMetadata.VisibilityArchivalConfig().ClusterConfiguredForArchival()
+	configuredForVisibilityArchival := params.ArchivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival()
 	visibilityArchiverProviderCfg := s.cfg.Archival.Visibility.Provider
 	if (configuredForVisibilityArchival && visibilityArchiverProviderCfg == nil) || (!configuredForVisibilityArchival && visibilityArchiverProviderCfg != nil) {
 		log.Fatalf("invalid visibility archival config")

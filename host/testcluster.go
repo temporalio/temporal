@@ -27,6 +27,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/filestore"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
@@ -54,6 +55,7 @@ type (
 
 	// ArchiverBase is a base struct for archiver provider being used in integration tests
 	ArchiverBase struct {
+		metadata       archiver.ArchivalMetadata
 		provider       provider.ArchiverProvider
 		storeDirectory string
 		historyURI     string
@@ -96,19 +98,15 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	clusterMetadata := cluster.GetTestClusterMetadata(
 		options.ClusterMetadata.EnableGlobalDomain,
 		options.IsMasterCluster,
-		options.EnableArchival,
 	)
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
 			logger,
-			dynamicconfig.NewNopCollection(),
-			options.ClusterMetadata.EnableGlobalDomain,
+			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalDomain),
 			options.ClusterMetadata.FailoverVersionIncrement,
 			options.ClusterMetadata.MasterClusterName,
 			options.ClusterMetadata.CurrentClusterName,
 			options.ClusterMetadata.ClusterInformation,
-			config.Archival{},
-			config.ArchivalDomainDefaults{},
 		)
 	}
 
@@ -117,7 +115,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
-	archiverBase := newArchiverBase(logger)
+	archiverBase := newArchiverBase(options.EnableArchival, logger)
 	messagingClient := getMessagingClient(options.MessagingClientConfig, logger)
 	var esClient elasticsearch.Client
 	var esVisibilityMgr persistence.VisibilityManager
@@ -164,6 +162,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		EnableEventsV2:      options.EnableEventsV2,
 		ESConfig:            &options.ESConfig,
 		ESClient:            esClient,
+		ArchiverMetadata:    archiverBase.metadata,
 		ArchiverProvider:    archiverBase.provider,
 		HistoryConfig:       options.HistoryConfig,
 		WorkerConfig:        options.WorkerConfig,
@@ -186,7 +185,14 @@ func setupShards(testBase persistencetests.TestBase, numHistoryShards int, logge
 	}
 }
 
-func newArchiverBase(logger log.Logger) *ArchiverBase {
+func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
+	if !enabled {
+		return &ArchiverBase{
+			metadata: archiver.NewArchivalMetadata("", false, "", false, &config.ArchivalDomainDefaults{}),
+			provider: provider.NewArchiverProvider(nil, nil),
+		}
+	}
+
 	storeDirectory, err := ioutil.TempDir("", "test-archiver")
 	if err != nil {
 		logger.Fatal("Failed to create temp dir for archiver", tag.Error(err))
@@ -199,6 +205,16 @@ func newArchiverBase(logger log.Logger) *ArchiverBase {
 		Filestore: cfg,
 	}, nil)
 	return &ArchiverBase{
+		metadata: archiver.NewArchivalMetadata("enabled", true, "enabled", true, &config.ArchivalDomainDefaults{
+			History: config.HistoryArchivalDomainDefaults{
+				Status: "enabled",
+				URI:    "testScheme://test/archive/path",
+			},
+			Visibility: config.VisibilityArchivalDomainDefaults{
+				Status: "enabled",
+				URI:    "testScheme://test/archive/path",
+			},
+		}),
 		provider:       provider,
 		storeDirectory: storeDirectory,
 		historyURI:     filestore.URIScheme + "://" + storeDirectory,

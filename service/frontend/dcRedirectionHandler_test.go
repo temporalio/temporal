@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -60,7 +61,8 @@ type (
 		mockClientBean           *client.MockClientBean
 		mockFrontendHandler      *MockWorkflowHandler
 		mockRemoteFrontendClient *mocks.FrontendClient
-		mockArchiverProvider     *provider.ArchiverProviderMock
+		mockArchivalMetadata     *archiver.MockArchivalMetadata
+		mockArchiverProvider     *provider.MockArchiverProvider
 
 		frontendHandler *WorkflowHandler
 		handler         *DCRedirectionHandlerImpl
@@ -76,7 +78,6 @@ func (s *dcRedirectionHandlerSuite) SetupSuite() {
 }
 
 func (s *dcRedirectionHandlerSuite) TearDownSuite() {
-
 }
 
 func (s *dcRedirectionHandlerSuite) SetupTest() {
@@ -96,14 +97,13 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockRemoteFrontendClient = &mocks.FrontendClient{}
+	s.mockArchivalMetadata = &archiver.MockArchivalMetadata{}
+	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
-	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
-
-	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
-	s.mockArchiverProvider.On("RegisterBootstrapContainer", common.FrontendServiceName, mock.Anything, mock.Anything).Return(nil)
+	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.mockArchivalMetadata, s.mockArchiverProvider)
 
 	s.domainCache = cache.NewDomainCache(s.mockMetadataMgr, s.service.GetClusterMetadata(), s.service.GetMetricsClient(), s.service.GetLogger())
-	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, s.domainCache, s.mockArchiverProvider)
+	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, s.domainCache)
 	frontendHandler.metricsClient = metricsClient
 	frontendHandler.startWG.Done()
 
@@ -112,7 +112,6 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockFrontendHandler = &MockWorkflowHandler{}
 	s.handler.frontendHandler = s.mockFrontendHandler
 	s.handler.redirectionPolicy = s.mockDCRedirectionPolicy
-
 }
 
 func (s *dcRedirectionHandlerSuite) TearDownTest() {
@@ -120,6 +119,8 @@ func (s *dcRedirectionHandlerSuite) TearDownTest() {
 	s.mockDCRedirectionPolicy.AssertExpectations(s.T())
 	s.mockFrontendHandler.AssertExpectations(s.T())
 	s.mockRemoteFrontendClient.AssertExpectations(s.T())
+	s.mockArchivalMetadata.AssertExpectations(s.T())
+	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
 func (s *dcRedirectionHandlerSuite) TestDescribeTaskList() {

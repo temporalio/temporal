@@ -22,7 +22,6 @@ package mocks
 
 import (
 	"github.com/stretchr/testify/mock"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -154,36 +153,6 @@ func (_m *ClusterMetadata) IsMasterCluster() bool {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// HistoryArchivalConfig provides a mock function with given fields:
-func (_m *ClusterMetadata) HistoryArchivalConfig() *cluster.ArchivalConfig {
-	ret := _m.Called()
-
-	var r0 *cluster.ArchivalConfig
-	if rf, ok := ret.Get(0).(func() *cluster.ArchivalConfig); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(*cluster.ArchivalConfig)
-	}
-
-	return r0
-}
-
-// VisibilityArchivalConfig provides a mock function with given fields:
-func (_m *ClusterMetadata) VisibilityArchivalConfig() *cluster.ArchivalConfig {
-	ret := _m.Called()
-
-	var r0 *cluster.ArchivalConfig
-	if rf, ok := ret.Get(0).(func() *cluster.ArchivalConfig); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*cluster.ArchivalConfig)
-		}
 	}
 
 	return r0

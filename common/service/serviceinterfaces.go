@@ -22,6 +22,8 @@ package service
 
 import (
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -64,5 +66,9 @@ type (
 
 		// GetMessagingClient returns the messaging client against Kafka
 		GetMessagingClient() messaging.Client
+
+		GetArchivalMetadata() archiver.ArchivalMetadata
+
+		GetArchiverProvider() provider.ArchiverProvider
 	}
 )

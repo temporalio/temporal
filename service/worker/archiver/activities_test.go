@@ -68,7 +68,7 @@ type activitiesSuite struct {
 	logger           log.Logger
 	metricsClient    *mmocks.Client
 	metricsScope     *mmocks.Scope
-	archiverProvider *provider.ArchiverProviderMock
+	archiverProvider *provider.MockArchiverProvider
 	historyArchiver  *carchiver.HistoryArchiverMock
 }
 
@@ -81,7 +81,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.metricsClient = &mmocks.Client{}
 	s.metricsScope = &mmocks.Scope{}
-	s.archiverProvider = &provider.ArchiverProviderMock{}
+	s.archiverProvider = &provider.MockArchiverProvider{}
 	s.historyArchiver = &carchiver.HistoryArchiverMock{}
 	s.metricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Maybe()
 	s.metricsScope.On("RecordTimer", mock.Anything, mock.Anything).Maybe()

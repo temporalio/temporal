@@ -39,7 +39,7 @@ const (
 )
 
 func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
-	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
+	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-timer-queue-processor-workflow-id"
@@ -59,7 +59,7 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 }
 
 func (s *integrationSuite) TestArchival_ContinueAsNew() {
-	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
+	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-continueAsNew-workflow-id"
@@ -81,7 +81,7 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 }
 
 func (s *integrationSuite) TestArchival_ArchiverWorker() {
-	s.True(s.testCluster.testBase.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival())
+	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
 	workflowID := "archival-archiver-worker-workflow-id"

@@ -113,7 +113,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:         s.mockService,
 		clusterMetadata: s.mockClusterMetadata,
@@ -562,7 +562,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:         s.mockService,
 		clusterMetadata: s.mockClusterMetadata,

@@ -31,12 +31,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/service/config"
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -50,7 +52,8 @@ type (
 		metadataMgr          persistence.MetadataManager
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator DomainReplicator
-		mockArchiverProvider *provider.ArchiverProviderMock
+		archivalMetadata     archiver.ArchivalMetadata
+		mockArchiverProvider *provider.MockArchiverProvider
 
 		handler *domainHandlerImpl
 	}
@@ -67,7 +70,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) SetupSuite() {
 	}
 
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{
-		ClusterMetadata: cluster.GetTestClusterMetadata(true, false, false),
+		ClusterMetadata: cluster.GetTestClusterMetadata(true, false),
 	})
 	s.TestBase.Setup()
 }
@@ -82,14 +85,16 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) SetupTest() {
 	s.metadataMgr = s.TestBase.MetadataProxy
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
-	s.mockArchiverProvider = &provider.ArchiverProviderMock{}
+	s.archivalMetadata = archiver.NewArchivalMetadata("", false, "", false, &config.ArchivalDomainDefaults{})
+	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 
 	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
-		s.mockDomainReplicator, s.mockArchiverProvider)
+		s.mockDomainReplicator, s.archivalMetadata, s.mockArchiverProvider)
 }
 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
+	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetDomain_LocalDomain_AllDefault() {

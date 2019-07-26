@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,27 +18,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cluster
+package archiver
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
-	// ArchivalStatus represents the archival status of the cluster
-	ArchivalStatus int
+	// ArchivalMetadata provides cluster level archival information
+	ArchivalMetadata interface {
+		GetHistoryConfig() ArchivalConfig
+		GetVisibilityConfig() ArchivalConfig
+	}
 
 	// ArchivalConfig is an immutable representation of the archival configuration of the cluster
 	// This config is determined at cluster startup time
-	ArchivalConfig struct {
-		ClusterStatus       ArchivalStatus
-		EnableRead          bool
-		DomainDefaultStatus shared.ArchivalStatus
-		DomainDefaultURI    string
+	ArchivalConfig interface {
+		ClusterConfiguredForArchival() bool
+		GetClusterStatus() ArchivalStatus
+		ReadEnabled() bool
+		GetDomainDefaultStatus() shared.ArchivalStatus
+		GetDomainDefaultURI() string
 	}
+
+	archivalMetadata struct {
+		historyConfig    ArchivalConfig
+		visibilityConfig ArchivalConfig
+	}
+
+	archivalConfig struct {
+		clusterStatus       ArchivalStatus
+		enableRead          bool
+		domainDefaultStatus shared.ArchivalStatus
+		domainDefaultURI    string
+	}
+
+	// ArchivalStatus represents the archival status of the cluster
+	ArchivalStatus int
 )
 
 const (
@@ -51,18 +71,59 @@ const (
 	ArchivalEnabled
 )
 
+// NewArchivalMetadata constructs a new ArchivalMetadata
+func NewArchivalMetadata(
+	historyStatus string,
+	historyReadEnabled bool,
+	visibilityStatus string,
+	visibilityReadEnabled bool,
+	domainDefaults *config.ArchivalDomainDefaults,
+) ArchivalMetadata {
+	return &archivalMetadata{
+		historyConfig: NewArchivalConfig(
+			historyStatus,
+			historyReadEnabled,
+			domainDefaults.History.Status,
+			domainDefaults.History.URI,
+		),
+		visibilityConfig: NewArchivalConfig(
+			visibilityStatus,
+			visibilityReadEnabled,
+			domainDefaults.Visibility.Status,
+			domainDefaults.Visibility.URI,
+		),
+	}
+}
+
+func (metadata *archivalMetadata) GetHistoryConfig() ArchivalConfig {
+	return metadata.historyConfig
+}
+
+func (metadata *archivalMetadata) GetVisibilityConfig() ArchivalConfig {
+	return metadata.visibilityConfig
+}
+
 // NewArchivalConfig constructs a new valid ArchivalConfig
 func NewArchivalConfig(
-	clusterStatus ArchivalStatus,
+	clusterStatusStr string,
 	enableRead bool,
-	domainDefaultStatus shared.ArchivalStatus,
+	domainDefaultStatusStr string,
 	domainDefaultURI string,
-) *ArchivalConfig {
-	ac := &ArchivalConfig{
-		ClusterStatus:       clusterStatus,
-		EnableRead:          enableRead,
-		DomainDefaultStatus: domainDefaultStatus,
-		DomainDefaultURI:    domainDefaultURI,
+) ArchivalConfig {
+	clusterStatus, err := getClusterArchivalStatus(clusterStatusStr)
+	if err != nil {
+		panic(err)
+	}
+	domainDefaultStatus, err := getDomainArchivalStatus(domainDefaultStatusStr)
+	if err != nil {
+		panic(err)
+	}
+
+	ac := &archivalConfig{
+		clusterStatus:       clusterStatus,
+		enableRead:          enableRead,
+		domainDefaultStatus: domainDefaultStatus,
+		domainDefaultURI:    domainDefaultURI,
 	}
 	if !ac.isValid() {
 		panic("invalid cluster level archival configuration")
@@ -71,12 +132,28 @@ func NewArchivalConfig(
 }
 
 // ClusterConfiguredForArchival returns true if cluster is configured to handle archival, false otherwise
-func (a *ArchivalConfig) ClusterConfiguredForArchival() bool {
-	return a.ClusterStatus == ArchivalEnabled
+func (a *archivalConfig) ClusterConfiguredForArchival() bool {
+	return a.clusterStatus == ArchivalEnabled
 }
 
-func (a *ArchivalConfig) isValid() bool {
-	URISet := len(a.DomainDefaultURI) != 0
+func (a *archivalConfig) GetClusterStatus() ArchivalStatus {
+	return a.clusterStatus
+}
+
+func (a *archivalConfig) ReadEnabled() bool {
+	return a.enableRead
+}
+
+func (a *archivalConfig) GetDomainDefaultStatus() shared.ArchivalStatus {
+	return a.domainDefaultStatus
+}
+
+func (a *archivalConfig) GetDomainDefaultURI() string {
+	return a.domainDefaultURI
+}
+
+func (a *archivalConfig) isValid() bool {
+	URISet := len(a.domainDefaultURI) != 0
 	return (URISet && a.ClusterConfiguredForArchival()) || (!URISet && !a.ClusterConfiguredForArchival())
 }
 
