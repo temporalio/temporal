@@ -448,7 +448,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 		return &workflow.InternalServiceError{Message: "Unable to get workflow start event."}
 	}
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-	visibilityMemo := getVisibilityMemo(startEvent)
+	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
 
 	// release the context lock since we no longer need mutable state builder and
@@ -943,7 +943,7 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 		return &workflow.InternalServiceError{Message: "Failed to load start event."}
 	}
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-	visibilityMemo := getVisibilityMemo(startEvent)
+	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 
 	// release the context lock since we no longer need mutable state builder and

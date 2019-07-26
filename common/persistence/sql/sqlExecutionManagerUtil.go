@@ -1181,6 +1181,7 @@ func buildExecutionRow(
 		AutoResetPoints:                 executionInfo.AutoResetPoints.Data,
 		AutoResetPointsEncoding:         common.StringPtr(string(executionInfo.AutoResetPoints.GetEncoding())),
 		SearchAttributes:                executionInfo.SearchAttributes,
+		Memo:                            executionInfo.Memo,
 	}
 
 	completionEvent := executionInfo.CompletionEvent

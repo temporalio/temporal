@@ -254,6 +254,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		ExecutionContext:             info.GetExecutionContext(),
 		NonRetriableErrors:           info.GetRetryNonRetryableErrors(),
 		SearchAttributes:             info.GetSearchAttributes(),
+		Memo:                         info.GetMemo(),
 	}
 
 	if info.LastWriteEventID != nil {

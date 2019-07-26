@@ -169,6 +169,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		ExpirationSeconds:            info.ExpirationSeconds,
 		AutoResetPoints:              autoResetPoints,
 		SearchAttributes:             info.SearchAttributes,
+		Memo:                         info.Memo,
 	}
 	newStats := &ExecutionStats{
 		HistorySize: info.HistorySize,
@@ -478,6 +479,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		BranchToken:                  info.BranchToken,
 		CronSchedule:                 info.CronSchedule,
 		ExpirationSeconds:            info.ExpirationSeconds,
+		Memo:                         info.Memo,
 		SearchAttributes:             info.SearchAttributes,
 
 		// attributes which are not related to mutable state

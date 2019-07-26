@@ -809,6 +809,12 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		testSearchAttrKey: testSearchAttrVal,
 	}
 
+	testMemoKey := "memoKey"
+	testMemoVal, _ := json.Marshal("memoVal")
+	testMemo := map[string][]byte{
+		testMemoKey: testMemoVal,
+	}
+
 	createReq := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
@@ -847,6 +853,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				ExpirationSeconds:    rand.Int31(),
 				AutoResetPoints:      &testResetPoints,
 				SearchAttributes:     testSearchAttr,
+				Memo:                 testMemo,
 			},
 			ExecutionStats: &p.ExecutionStats{
 				HistorySize: int64(rand.Int31()),
@@ -914,6 +921,9 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	val, ok := info.SearchAttributes[testSearchAttrKey]
 	s.True(ok)
 	s.Equal(testSearchAttrVal, val)
+	val, ok = info.Memo[testMemoKey]
+	s.True(ok)
+	s.Equal(testMemoVal, val)
 
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteEventID, state.ReplicationState.LastWriteEventID)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteVersion, state.ReplicationState.LastWriteVersion)
@@ -972,6 +982,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int32(0), info0.SignalCount)
 	s.True(info0.AutoResetPoints.Equals(&gen.ResetPoints{}))
 	s.True(len(info0.SearchAttributes) == 0)
+	s.True(len(info0.Memo) == 0)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -1000,6 +1011,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrKey := "env"
 	searchAttrVal := []byte("test")
 	updatedInfo.SearchAttributes = map[string][]byte{searchAttrKey: searchAttrVal}
+	memoKey := "memoKey"
+	memoVal := []byte("memoVal")
+	updatedInfo.Memo = map[string][]byte{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
@@ -1047,6 +1061,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal1)
+	memoVal1, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal1)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
@@ -1093,7 +1110,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal2)
-
+	memoVal2, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal2)
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
 	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateStats, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
@@ -1137,6 +1156,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal3)
+	memoVal3, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal3)
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
@@ -1181,6 +1203,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal4)
+	memoVal4, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal4)
 
 	log.Infof("Workflow execution last updated: %v", info4.LastUpdatedTimestamp)
 }

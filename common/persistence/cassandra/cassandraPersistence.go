@@ -166,7 +166,8 @@ const (
 		`branch_token: ?, ` +
 		`cron_schedule: ?, ` +
 		`expiration_seconds: ?, ` +
-		`search_attributes: ? ` +
+		`search_attributes: ?, ` +
+		`memo: ? ` +
 		`}`
 
 	templateReplicationStateType = `{` +

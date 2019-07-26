@@ -1331,6 +1331,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		domainEntry.GetRetentionDays(e.executionInfo.WorkflowID),
 	)
 
+	if event.Memo != nil {
+		e.executionInfo.Memo = event.Memo.GetFields()
+	}
 	if event.SearchAttributes != nil {
 		e.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}

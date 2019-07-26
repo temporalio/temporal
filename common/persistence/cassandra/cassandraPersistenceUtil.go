@@ -448,6 +448,7 @@ func createExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
@@ -519,6 +520,7 @@ func createExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			replicationState.CurrentVersion,
 			replicationState.StartVersion,
 			replicationState.LastWriteVersion,
@@ -625,6 +627,7 @@ func updateExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			executionInfo.NextEventID,
 			shardID,
 			rowTypeExecution,
@@ -697,6 +700,7 @@ func updateExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			replicationState.CurrentVersion,
 			replicationState.StartVersion,
 			replicationState.LastWriteVersion,
@@ -1758,6 +1762,8 @@ func createWorkflowExecutionInfo(
 			info.ExpirationSeconds = int32(v.(int))
 		case "search_attributes":
 			info.SearchAttributes = v.(map[string][]byte)
+		case "memo":
+			info.Memo = v.(map[string][]byte)
 		}
 	}
 	info.CompletionEvent = p.NewDataBlob(completionEventData, completionEventEncoding)

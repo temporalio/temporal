@@ -266,6 +266,7 @@ type (
 		ClientFeatureVersion         string
 		ClientImpl                   string
 		AutoResetPoints              *workflow.ResetPoints
+		Memo                         map[string][]byte
 		SearchAttributes             map[string][]byte
 		// for retry
 		Attempt            int32
