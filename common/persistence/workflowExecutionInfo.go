@@ -41,11 +41,6 @@ func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
 	e.LastFirstEventID = id
 }
 
-// GetCurrentBranch return the current branch token
-func (e *WorkflowExecutionInfo) GetCurrentBranch() []byte {
-	return e.BranchToken
-}
-
 // UpdateWorkflowStateCloseStatus update the workflow state
 func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	state int,
@@ -53,6 +48,8 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 ) error {
 
 	switch e.State {
+	case WorkflowStateVoid:
+		// no validation
 	case WorkflowStateCreated:
 		switch state {
 		case WorkflowStateCreated:

@@ -117,9 +117,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 				transferTasks:  []persistence.Task{&persistence.RecordWorkflowStartedTask{}},
 			}
 
-			startEvent, found := msBuilder.GetStartEvent()
-			if !found {
-				return nil, &workflow.InternalServiceError{Message: "Failed to load start event."}
+			startEvent, err := msBuilder.GetStartEvent()
+			if err != nil {
+				return nil, err
 			}
 			executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 			if req.GetIsFirstDecision() && executionTimestamp.After(handler.timeSource.Now()) {
@@ -160,6 +160,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, ErrWorkflowCompleted
 			}
 
+			var err error
 			di, isRunning := msBuilder.GetPendingDecision(scheduleID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -190,7 +191,10 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if di.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if di.RequestID == requestID {
-					resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
+					if err != nil {
+						return nil, err
+					}
 					updateAction.noop = true
 					return updateAction, nil
 				}
@@ -206,7 +210,10 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskStarted event to history."}
 			}
 
-			resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
+			if err != nil {
+				return nil, err
+			}
 			updateAction.timerTasks = []persistence.Task{tBuilder.AddStartToCloseDecisionTimoutTask(
 				di.ScheduleID,
 				di.Attempt,
@@ -584,7 +591,10 @@ Update_History_Loop:
 		resp = &h.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			di, _ := msBuilder.GetPendingDecision(newDecisionTaskScheduledID)
-			resp.StartedResponse = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, request.GetIdentity())
+			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, request.GetIdentity())
+			if err != nil {
+				return nil, err
+			}
 			// sticky is always enabled when worker request for new decision task from RespondDecisionTaskCompleted
 			resp.StartedResponse.StickyExecutionEnabled = common.BoolPtr(true)
 		}
@@ -600,7 +610,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	msBuilder mutableState,
 	di *decisionInfo,
 	identity string,
-) *h.RecordDecisionTaskStartedResponse {
+) (*h.RecordDecisionTaskStartedResponse, error) {
 
 	response := &h.RecordDecisionTaskStartedResponse{}
 	response.WorkflowType = msBuilder.GetWorkflowType()
@@ -632,7 +642,11 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 		response.DecisionInfo.StartedEvent = startedEvent
 	}
 	response.EventStoreVersion = common.Int32Ptr(msBuilder.GetEventStoreVersion())
-	response.BranchToken = msBuilder.GetCurrentBranch()
+	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
+	if err != nil {
+		return nil, err
+	}
+	response.BranchToken = currentBranchToken
 
-	return response
+	return response, nil
 }

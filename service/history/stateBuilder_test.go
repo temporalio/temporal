@@ -798,7 +798,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	expectedNewRunStateBuilder.GetExecutionInfo().LastFirstEventID = newRunStartedEvent.GetEventId()
 	expectedNewRunStateBuilder.GetExecutionInfo().NextEventID = newRunDecisionEvent.GetEventId() + 1
 	expectedNewRunStateBuilder.GetExecutionInfo().EventStoreVersion = persistence.EventStoreVersionV2
-	expectedNewRunStateBuilder.GetExecutionInfo().BranchToken = newRunStateBuilder.GetCurrentBranch()
+	expectedNewRunStateBuilder.GetExecutionInfo().BranchToken = newRunStateBuilder.GetExecutionInfo().BranchToken
 	expectedNewRunStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory.Events, s.logger))
 	expectedNewRunStateBuilder.UpdateReplicationStateLastEventID(newRunStartedEvent.GetVersion(), newRunDecisionEvent.GetEventId())
 

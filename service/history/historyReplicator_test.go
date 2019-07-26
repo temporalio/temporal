@@ -264,7 +264,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 		LastWriteVersion: lastWriteVersion,
 		LastWriteEventID: nextEventID - 1,
 	})
-	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion)
+	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
 	msBuilder.On("UpdateReplicationPolicy", cache.ReplicationPolicyMultiCluster).Once()
 	msBuilder.On("UpdateReplicationStateVersion", lastWriteVersion, false).Once()
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
@@ -326,7 +326,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 		LastWriteVersion: lastWriteVersion,
 		LastWriteEventID: nextEventID - 1,
 	})
-	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion)
+	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
 	msBuilder.On("UpdateReplicationPolicy", cache.ReplicationPolicyMultiCluster).Once()
 	msBuilder.On("UpdateReplicationStateVersion", lastWriteVersion, false).Once()
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
@@ -802,7 +802,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		NextEventID: currentNextEventID,
 	})
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, req, s.logger)
@@ -869,7 +869,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		NextEventID: currentNextEventID,
 	})
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
 	msBuilderCurrent.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
@@ -961,7 +961,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		StickyScheduleToStartTimeout: currentDecisionStickyTimeout,
 	})
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
 	msBuilderCurrent.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
@@ -1205,7 +1205,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		RunID: currentRunID,
 	})
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true) // this is used to update the version on mutable state
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
@@ -1589,7 +1589,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderCurrent.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
@@ -1682,7 +1682,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderCurrent.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
@@ -1789,7 +1789,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion})
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilderIn.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderIn.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
@@ -1847,7 +1847,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		}},
 	}
 	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion})
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilderIn.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderIn.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
@@ -2021,7 +2021,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
 	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("GetUpdateCondition").Return(updateCondition)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
@@ -2091,7 +2091,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
 	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("GetUpdateCondition").Return(updateCondition)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
@@ -2189,7 +2189,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}
 	msBuilderIn.On("GetExecutionInfo").Return(exeInfo)
 	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("GetUpdateCondition").Return(updateCondition)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
@@ -2327,7 +2327,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		ScheduleID: 56,
 		StartedID:  57,
 	}
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
@@ -2378,7 +2378,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID + 2,
 	}).Once()
 	msBuilderIn.On("IsWorkflowExecutionRunning").Return(currentState != persistence.WorkflowStateCompleted)
-	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion)
+	msBuilderIn.On("GetLastWriteVersion").Return(currentLastWriteVersion, nil)
 	msBuilderIn.On("GetUpdateCondition").Return(updateCondition)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
@@ -2577,7 +2577,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -2689,7 +2689,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -2796,7 +2796,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -2926,7 +2926,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3055,7 +3055,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3184,7 +3184,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3302,7 +3302,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		EventStoreVersion:    persistence.EventStoreVersionV2,
 	}
 	msBuilder.On("GetEventStoreVersion").Return(executionInfo.EventStoreVersion)
-	msBuilder.On("GetCurrentBranch").Return(executionInfo.BranchToken)
+	msBuilder.On("GetCurrentBranchToken").Return(executionInfo.BranchToken, nil)
 	msBuilder.On("GetExecutionInfo").Return(executionInfo)
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
@@ -3315,7 +3315,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3460,7 +3460,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		EventStoreVersion:    persistence.EventStoreVersionV2,
 	}
 	msBuilder.On("GetEventStoreVersion").Return(executionInfo.EventStoreVersion)
-	msBuilder.On("GetCurrentBranch").Return(executionInfo.BranchToken)
+	msBuilder.On("GetCurrentBranchToken").Return(executionInfo.BranchToken, nil)
 	msBuilder.On("GetExecutionInfo").Return(executionInfo)
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
@@ -3473,7 +3473,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3522,7 +3522,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, nil)
 
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -3632,7 +3632,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		EventStoreVersion:    persistence.EventStoreVersionV2,
 	}
 	msBuilder.On("GetEventStoreVersion").Return(executionInfo.EventStoreVersion)
-	msBuilder.On("GetCurrentBranch").Return(executionInfo.BranchToken)
+	msBuilder.On("GetCurrentBranchToken").Return(executionInfo.BranchToken, nil)
 	msBuilder.On("GetExecutionInfo").Return(executionInfo)
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    executionInfo,
@@ -3645,7 +3645,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3699,7 +3699,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}, nil)
 
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("AddWorkflowExecutionSignaled", signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -3833,7 +3833,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -3980,7 +3980,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -4144,7 +4144,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DomainID:    domainID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
-		BranchToken: executionInfo.GetCurrentBranch(),
+		BranchToken: executionInfo.BranchToken,
 		Events:      history.Events,
 	}}
 	msBuilder.On("CloseTransactionAsSnapshot", now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil)
@@ -4213,7 +4213,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true) // this is used to update the version on mutable state
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
 
@@ -4245,7 +4245,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		RunID: runID,
 		State: state,
 	})
-	msBuilderTarget.On("GetLastWriteVersion").Return(lastWriteVersion)
+	msBuilderTarget.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
 	prevRunID, prevLastWriteVersion, prevState, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(
 		ctx.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger,
 	)
@@ -4359,7 +4359,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	currentCluster := cluster.TestCurrentClusterName
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentVersion).Return(currentCluster)
 
-	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion)
+	msBuilderCurrent.On("GetLastWriteVersion").Return(currentVersion, nil)
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true) // this is used to update the version on mutable state
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
 

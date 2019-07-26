@@ -1733,8 +1733,8 @@ func (s *transferQueueActiveProcessorSuite) createSignalWorkflowExecutionRequest
 func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(task *persistence.TransferTaskInfo,
 	msBuilder mutableState, ci *persistence.ChildExecutionInfo, domainName string, targetDomainName string) *history.StartWorkflowExecutionRequest {
 
-	event, ok := msBuilder.GetChildExecutionInitiatedEvent(task.ScheduleID)
-	if !ok {
+	event, err := msBuilder.GetChildExecutionInitiatedEvent(task.ScheduleID)
+	if err != nil {
 		s.Fail("Cannot find corresponding child workflow info with scheduled ID %v.", task.ScheduleID)
 	}
 	attributes := event.StartChildWorkflowExecutionInitiatedEventAttributes

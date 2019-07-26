@@ -181,14 +181,10 @@ func (v *VersionHistory) DuplicateUntilLCAItem(
 	return nil, notFoundErr
 }
 
-// SetBranchToken the set the branch token
+// SetBranchToken the overwrite the branch token
 func (v *VersionHistory) SetBranchToken(
 	inputToken []byte,
 ) error {
-
-	if len(v.branchToken) != 0 {
-		return &shared.BadRequestError{Message: "branch token is already set"}
-	}
 
 	token := make([]byte, len(inputToken))
 	copy(token, inputToken)
@@ -334,8 +330,8 @@ func NewVersionHistories(
 	}
 
 	return &VersionHistories{
-		currentBranchIndex: 0,
-		histories:          []*VersionHistory{versionHistory},
+		currentVersionHistoryIndex: 0,
+		histories:                  []*VersionHistory{versionHistory},
 	}
 }
 
@@ -351,7 +347,7 @@ func NewVersionHistoriesFromThrift(
 		panic("version histories cannot have empty")
 	}
 
-	currentBranchIndex := int(input.GetCurrentBranchIndex())
+	currentVersionHistoryIndex := int(input.GetCurrentVersionHistoryIndex())
 
 	versionHistories := NewVersionHistories(NewVersionHistoryFromThrift(input.Histories[0]))
 	for i := 1; i < len(input.Histories); i++ {
@@ -361,7 +357,7 @@ func NewVersionHistoriesFromThrift(
 		}
 	}
 
-	if currentBranchIndex != versionHistories.currentBranchIndex {
+	if currentVersionHistoryIndex != versionHistories.currentVersionHistoryIndex {
 		panic("unable to initialize version histories: current index mismatch")
 	}
 
@@ -371,30 +367,30 @@ func NewVersionHistoriesFromThrift(
 // Duplicate duplicate VersionHistories
 func (h *VersionHistories) Duplicate() *VersionHistories {
 
-	currentBranchIndex := h.currentBranchIndex
+	currentVersionHistoryIndex := h.currentVersionHistoryIndex
 	histories := []*VersionHistory{}
 	for _, history := range h.histories {
 		histories = append(histories, history.Duplicate())
 	}
 
 	return &VersionHistories{
-		currentBranchIndex: currentBranchIndex,
-		histories:          histories,
+		currentVersionHistoryIndex: currentVersionHistoryIndex,
+		histories:                  histories,
 	}
 }
 
 // ToThrift return thrift format of version histories
 func (h *VersionHistories) ToThrift() *shared.VersionHistories {
 
-	currentBranchIndex := h.currentBranchIndex
+	currentVersionHistoryIndex := h.currentVersionHistoryIndex
 	histories := []*shared.VersionHistory{}
 	for _, history := range h.histories {
 		histories = append(histories, history.ToThrift())
 	}
 
 	return &shared.VersionHistories{
-		CurrentBranchIndex: common.Int32Ptr(int32(currentBranchIndex)),
-		Histories:          histories,
+		CurrentVersionHistoryIndex: common.Int32Ptr(int32(currentVersionHistoryIndex)),
+		Histories:                  histories,
 	}
 }
 
@@ -425,7 +421,7 @@ func (h *VersionHistories) AddVersionHistory(
 		return false, 0, err
 	}
 
-	currentVersionHistory, err := h.GetVersionHistory(h.currentBranchIndex)
+	currentVersionHistory, err := h.GetVersionHistory(h.currentVersionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -457,7 +453,7 @@ func (h *VersionHistories) AddVersionHistory(
 	currentBranchChanged := false
 	if newLastItem.version > currentLastItem.version {
 		currentBranchChanged = true
-		h.currentBranchIndex = newVersionHistoryIndex
+		h.currentVersionHistoryIndex = newVersionHistoryIndex
 	}
 	return currentBranchChanged, newVersionHistoryIndex, nil
 }
@@ -497,7 +493,7 @@ func (h *VersionHistories) FindLCAVersionHistoryIndexAndItem(
 // among all branches' last write version
 func (h *VersionHistories) IsRebuilt() (bool, error) {
 
-	currentVersionHistory, err := h.GetVersionHistory(h.GetCurrentBranchIndex())
+	currentVersionHistory, err := h.GetCurrentVersionHistory()
 	if err != nil {
 		return false, err
 	}
@@ -520,18 +516,24 @@ func (h *VersionHistories) IsRebuilt() (bool, error) {
 	return false, nil
 }
 
-// SetCurrentBranchIndex set the current branch index
-func (h *VersionHistories) SetCurrentBranchIndex(index int) error {
+// SetCurrentVersionHistoryIndex set the current branch index
+func (h *VersionHistories) SetCurrentVersionHistoryIndex(index int) error {
 
 	if index < 0 || index >= len(h.histories) {
 		return &shared.BadRequestError{Message: "invalid current branch index."}
 	}
 
-	h.currentBranchIndex = index
+	h.currentVersionHistoryIndex = index
 	return nil
 }
 
-// GetCurrentBranchIndex get the current branch index
-func (h *VersionHistories) GetCurrentBranchIndex() int {
-	return h.currentBranchIndex
+// GetCurrentVersionHistoryIndex get the current branch index
+func (h *VersionHistories) GetCurrentVersionHistoryIndex() int {
+	return h.currentVersionHistoryIndex
+}
+
+// GetCurrentVersionHistory get the current version history
+func (h *VersionHistories) GetCurrentVersionHistory() (*VersionHistory, error) {
+
+	return h.GetVersionHistory(h.GetCurrentVersionHistoryIndex())
 }

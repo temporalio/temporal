@@ -352,7 +352,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	s.Equal(versionHistories, rebuildMutableState.GetVersionHistories())
-	s.Equal(1, versionHistories.GetCurrentBranchIndex())
+	s.Equal(1, versionHistories.GetCurrentVersionHistoryIndex())
 }
 
 func (s *nDCStateRebuilderSuite) TestPrepareMutableState_NoRebuild() {

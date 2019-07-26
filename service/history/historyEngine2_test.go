@@ -266,7 +266,9 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
 	})
 	expectedResponse.EventStoreVersion = common.Int32Ptr(p.EventStoreVersionV2)
-	expectedResponse.BranchToken = msBuilder.GetCurrentBranch()
+	currentBranchTokken, err := msBuilder.GetCurrentBranchToken()
+	s.NoError(err)
+	expectedResponse.BranchToken = currentBranchTokken
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
 	s.Nil(err)

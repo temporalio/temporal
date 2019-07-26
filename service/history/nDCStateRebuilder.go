@@ -83,14 +83,14 @@ func (r *nDCStateRebuilderImpl) prepareMutableState(
 	//  this is done by the rebuild function below
 
 	versionHistories := r.mutableState.GetVersionHistories()
-	currentBranchIndex := versionHistories.GetCurrentBranchIndex()
+	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
 
 	// replication task to be applied to current branch
-	if branchIndex == currentBranchIndex {
+	if branchIndex == currentVersionHistoryIndex {
 		return r.mutableState, false, nil
 	}
 
-	currentVersionHistory, err := versionHistories.GetVersionHistory(currentBranchIndex)
+	currentVersionHistory, err := versionHistories.GetVersionHistory(currentVersionHistoryIndex)
 	if err != nil {
 		return nil, false, err
 	}
@@ -166,9 +166,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetVersionHistories()
-	rebuildVersionHistory, err := rebuildVersionHistories.GetVersionHistory(
-		rebuildVersionHistories.GetCurrentBranchIndex(),
-	)
+	rebuildVersionHistory, err := rebuildVersionHistories.GetCurrentVersionHistory()
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +186,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	//
 	// caller can use the IsRebuilt function in VersionHistories
 	// telling whether mutable state is rebuilt, before apply new history events
-	if err := versionHistories.SetCurrentBranchIndex(branchIndex); err != nil {
+	if err := versionHistories.SetCurrentVersionHistoryIndex(branchIndex); err != nil {
 		return nil, err
 	}
 	if err = rebuildMutableState.SetVersionHistories(versionHistories); err != nil {

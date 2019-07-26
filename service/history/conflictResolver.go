@@ -80,7 +80,7 @@ func (r *conflictResolverImpl) reset(
 	execution := *r.context.getExecution()
 	startTime := info.StartTimestamp
 	eventStoreVersion := info.EventStoreVersion
-	branchToken := info.GetCurrentBranch()
+	branchToken := info.BranchToken // in 2DC world branch token is stored in execution info
 	replayNextEventID := replayEventID + 1
 
 	var nextPageToken []byte
@@ -144,7 +144,7 @@ func (r *conflictResolverImpl) reset(
 	}
 
 	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)
-	resetMutableStateBuilder.executionInfo.BranchToken = branchToken
+	resetMutableStateBuilder.executionInfo.BranchToken = branchToken // in 2DC world branch token is stored in execution info
 
 	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime
 	// the last updated time is not important here, since this should be updated with event time afterwards

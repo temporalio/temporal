@@ -126,14 +126,12 @@ func (r *nDCWorkflowImpl) getReleaseFn() releaseWorkflowExecutionFunc {
 
 func (r *nDCWorkflowImpl) getVectorClock() (int64, int64, error) {
 
-	versionHistory, err := r.mutableState.GetVersionHistories().GetVersionHistory(
-		r.mutableState.GetVersionHistories().GetCurrentBranchIndex(),
-	)
+	currentVersionHistory, err := r.mutableState.GetVersionHistories().GetCurrentVersionHistory()
 	if err != nil {
 		return 0, 0, err
 	}
 
-	lastItem, err := versionHistory.GetLastItem()
+	lastItem, err := currentVersionHistory.GetLastItem()
 	if err != nil {
 		return 0, 0, err
 	}

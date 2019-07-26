@@ -70,6 +70,7 @@ const (
 	WorkflowStateRunning
 	WorkflowStateCompleted
 	WorkflowStateZombie
+	WorkflowStateVoid
 )
 
 // Workflow execution close status
@@ -578,8 +579,8 @@ type (
 
 	// VersionHistories contains a set of VersionHistory
 	VersionHistories struct {
-		currentBranchIndex int
-		histories          []*VersionHistory
+		currentVersionHistoryIndex int
+		histories                  []*VersionHistory
 	}
 
 	// WorkflowMutableState indicates workflow related state

@@ -131,7 +131,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.msBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
 		} else if b.msBuilder.GetVersionHistories() != nil {
 			versionHistories := b.msBuilder.GetVersionHistories()
-			versionHistory, err := versionHistories.GetVersionHistory(versionHistories.GetCurrentBranchIndex())
+			versionHistory, err := versionHistories.GetCurrentVersionHistory()
 			if err != nil {
 				return nil, nil, nil, err
 			}

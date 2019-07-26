@@ -242,7 +242,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 		TaskID:     2,
 		StartedID:  5,
 	}}
-	versionHistory, err := versionHistories.GetVersionHistory(versionHistories.GetCurrentBranchIndex())
+	versionHistory, err := versionHistories.GetCurrentVersionHistory()
 	s.NoError(err)
 	err = versionHistory.AddOrUpdateItem(p.NewVersionHistoryItem(2, 0))
 	s.NoError(err)

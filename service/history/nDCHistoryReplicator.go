@@ -165,7 +165,7 @@ func (r *nDCHistoryReplicator) applyEvents(
 				return err
 			}
 
-			if mutableState.GetVersionHistories().GetCurrentBranchIndex() == branchIndex {
+			if mutableState.GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
 				return r.applyNonStartEventsToCurrentBranch(ctx, context, mutableState, isRebuilt, releaseFn, task)
 			}
 			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)

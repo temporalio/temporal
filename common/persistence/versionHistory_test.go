@@ -141,7 +141,7 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
 	s.IsType(&shared.BadRequestError{}, err)
 }
 
-func (s *versionHistorySuite) TestSetBranchToken_Success() {
+func (s *versionHistorySuite) TestSetBranchToken() {
 	items := []*VersionHistoryItem{
 		{eventID: 3, version: 0},
 		{eventID: 6, version: 4},
@@ -150,18 +150,6 @@ func (s *versionHistorySuite) TestSetBranchToken_Success() {
 
 	err := history.SetBranchToken([]byte("some random branch token"))
 	s.NoError(err)
-}
-
-func (s *versionHistorySuite) TestSetBranchToken_Failure() {
-	branchToken := []byte("some random branch token")
-	items := []*VersionHistoryItem{
-		{eventID: 3, version: 0},
-		{eventID: 6, version: 4},
-	}
-	history := NewVersionHistory(branchToken, items)
-
-	err := history.SetBranchToken([]byte("some random branch token"))
-	s.Error(err)
 }
 
 func (s *versionHistorySuite) TestUpdateItem_VersionIncrease() {
@@ -463,8 +451,8 @@ func (s *versionHistoriesSuite) TestConversion() {
 	histories := NewVersionHistories(versionHistory)
 
 	s.Equal(&VersionHistories{
-		currentBranchIndex: 0,
-		histories:          []*VersionHistory{versionHistory},
+		currentVersionHistoryIndex: 0,
+		histories:                  []*VersionHistory{versionHistory},
 	}, histories)
 
 	s.Equal(histories, NewVersionHistoriesFromThrift(histories.ToThrift()))
@@ -485,13 +473,13 @@ func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	s.Equal(0, histories.currentBranchIndex)
+	s.Equal(0, histories.currentVersionHistoryIndex)
 
 	currentBranchChanged, newVersionHistoryIndex, err := histories.AddVersionHistory(versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(1, newVersionHistoryIndex)
-	s.Equal(1, histories.currentBranchIndex)
+	s.Equal(1, histories.currentVersionHistoryIndex)
 
 	resultVersionHistory1, err := histories.GetVersionHistory(0)
 	s.Nil(err)
@@ -563,7 +551,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 	s.Equal(NewVersionHistoryItem(7, 6), item)
 }
 
-func (s *versionHistoriesSuite) TestCurrentBranchIndexIsInReplay() {
+func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {
 	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*VersionHistoryItem{
 		{eventID: 3, version: 0},
 		{eventID: 5, version: 4},
@@ -578,25 +566,25 @@ func (s *versionHistoriesSuite) TestCurrentBranchIndexIsInReplay() {
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	s.Equal(0, histories.currentBranchIndex)
+	s.Equal(0, histories.currentVersionHistoryIndex)
 
 	currentBranchChanged, newVersionHistoryIndex, err := histories.AddVersionHistory(versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(1, newVersionHistoryIndex)
-	s.Equal(1, histories.currentBranchIndex)
+	s.Equal(1, histories.currentVersionHistoryIndex)
 
 	isInReplay, err := histories.IsRebuilt()
 	s.NoError(err)
 	s.False(isInReplay)
 
-	err = histories.SetCurrentBranchIndex(0)
+	err = histories.SetCurrentVersionHistoryIndex(0)
 	s.NoError(err)
 	isInReplay, err = histories.IsRebuilt()
 	s.NoError(err)
 	s.True(isInReplay)
 
-	err = histories.SetCurrentBranchIndex(1)
+	err = histories.SetCurrentVersionHistoryIndex(1)
 	s.NoError(err)
 	isInReplay, err = histories.IsRebuilt()
 	s.NoError(err)

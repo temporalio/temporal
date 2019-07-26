@@ -108,12 +108,12 @@ type (
 		FlushBufferedEvents() error
 		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
-		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, bool)
+		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, error)
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
-		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
-		GetCompletionEvent() (*workflow.HistoryEvent, bool)
-		GetStartEvent() (*workflow.HistoryEvent, bool)
-		GetCurrentBranch() []byte
+		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, error)
+		GetCompletionEvent() (*workflow.HistoryEvent, error)
+		GetStartEvent() (*workflow.HistoryEvent, error)
+		GetCurrentBranchToken() ([]byte, error)
 		GetVersionHistories() *persistence.VersionHistories
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
@@ -121,7 +121,7 @@ type (
 		GetHistoryBuilder() *historyBuilder
 		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
-		GetLastWriteVersion() int64
+		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
 		GetPendingDecision(int64) (*decisionInfo, bool)
@@ -132,12 +132,12 @@ type (
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
 		GetCronBackoffDuration() time.Duration
-		GetScheduleIDByActivityID(string) (int64, bool)
+		GetScheduleIDByActivityID(string) (int64, error)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
 		GetAllSignalsToSend() map[int64]*persistence.SignalInfo
 		GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo
-		GetStartVersion() int64
-		GetUserTimer(string) (bool, *persistence.TimerInfo)
+		GetStartVersion() (int64, error)
+		GetUserTimer(string) (*persistence.TimerInfo, bool)
 		GetWorkflowType() *workflow.WorkflowType
 		GetWorkflowStateCloseStatus() (int, int)
 		HasBufferedEvents() bool
@@ -192,6 +192,7 @@ type (
 		ReplicateWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *workflow.HistoryEvent) error
+		SetBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
 		SetVersionHistories(*persistence.VersionHistories) error
@@ -202,6 +203,7 @@ type (
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
+		UpdateCurrentVersion(version int64, forceUpdate bool)
 		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
 
 		AddTransferTasks(transferTasks ...persistence.Task)

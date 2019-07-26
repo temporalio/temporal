@@ -457,8 +457,12 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	)
 	if err != nil {
 		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
+			currentBranchToken, getTokenErr := msBuilder.GetCurrentBranchToken()
+			if getTokenErr != nil {
+				return nil, getTokenErr
+			}
 			if t.StartRequestID == *request.RequestId {
-				e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
+				e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 				return &workflow.StartWorkflowExecutionResponse{
 					RunId: common.StringPtr(t.RunID),
 				}, nil
@@ -466,7 +470,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			}
 
 			if msBuilder.GetCurrentVersion() < t.LastWriteVersion {
-				e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
+				e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 				return nil, ce.NewDomainNotActiveError(
 					*request.Domain,
 					clusterMetadata.GetCurrentClusterName(),
@@ -480,7 +484,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			prevLastWriteVersion = t.LastWriteVersion
 			err = e.applyWorkflowIDReusePolicyHelper(t.StartRequestID, prevRunID, t.State, t.CloseStatus, domainID, execution, startRequest.StartRequest.GetWorkflowIdReusePolicy())
 			if err != nil {
-				e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
+				e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
@@ -591,6 +595,11 @@ func (e *historyEngineImpl) getMutableState(
 		return
 	}
 
+	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
+	if err != nil {
+		return nil, err
+	}
+
 	executionInfo := msBuilder.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
 	retResp = &h.GetMutableStateResponse{
@@ -607,7 +616,7 @@ func (e *historyEngineImpl) getMutableState(
 		IsWorkflowRunning:                    common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
 		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
 		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
-		BranchToken:                          msBuilder.GetCurrentBranch(),
+		BranchToken:                          currentBranchToken,
 	}
 
 	replicationState := msBuilder.GetReplicationState()
@@ -770,9 +779,9 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		// for closed workflow
 		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		result.WorkflowExecutionInfo.CloseStatus = &closeStatus
-		completionEvent, ok := msBuilder.GetCompletionEvent()
-		if !ok {
-			return nil, &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
+		completionEvent, err := msBuilder.GetCompletionEvent()
+		if err != nil {
+			return nil, err
 		}
 		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(completionEvent.GetTimestamp())
 	}
@@ -795,9 +804,9 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				p.HeartbeatDetails = ai.Details
 			}
 			// TODO: move to mutable state instead of loading it from event
-			scheduledEvent, ok := msBuilder.GetActivityScheduledEvent(ai.ScheduleID)
-			if !ok {
-				return nil, &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
+			scheduledEvent, err := msBuilder.GetActivityScheduledEvent(ai.ScheduleID)
+			if err != nil {
+				return nil, err
 			}
 			p.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
 			if state == workflow.PendingActivityStateScheduled {
@@ -884,9 +893,9 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return nil, ErrActivityTaskNotFound
 			}
 
-			scheduledEvent, ok := msBuilder.GetActivityScheduledEvent(scheduleID)
-			if !ok {
-				return nil, &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
+			scheduledEvent, err := msBuilder.GetActivityScheduledEvent(scheduleID)
+			if err != nil {
+				return nil, err
 			}
 			response.ScheduledEvent = scheduledEvent
 			response.ScheduledTimestampOfThisAttempt = common.Int64Ptr(ai.ScheduledTime.UnixNano())
@@ -1209,8 +1218,6 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
 				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
-				e.logger.Debug(fmt.Sprintf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, Exist: %v", scheduleID, ai,
-					isRunning))
 				return nil, ErrActivityTaskNotFound
 			}
 
@@ -1500,11 +1507,15 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	if prevMutableState != nil {
-		if prevMutableState.GetLastWriteVersion() > msBuilder.GetCurrentVersion() {
+		prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
+		if err != nil {
+			return nil, err
+		}
+		if prevLastWriteVersion > msBuilder.GetCurrentVersion() {
 			return nil, ce.NewDomainNotActiveError(
 				domainEntry.GetInfo().Name,
 				clusterMetadata.GetCurrentClusterName(),
-				clusterMetadata.ClusterNameForFailoverVersion(prevMutableState.GetLastWriteVersion()),
+				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
 			)
 		}
 		policy := workflow.WorkflowIdReusePolicyAllowDuplicate
@@ -1568,7 +1579,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if prevMutableState != nil {
 		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
 		prevRunID = prevMutableState.GetExecutionInfo().RunID
-		prevLastWriteVersion = prevMutableState.GetLastWriteVersion()
+		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
+		if err != nil {
+			return nil, err
+		}
 	}
 	err = context.createWorkflowExecution(
 		newWorkflow, historySize, now,
@@ -1576,7 +1590,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	)
 
 	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-		e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
+		currentBranchToken, getTokenErr := msBuilder.GetCurrentBranchToken()
+		if getTokenErr != nil {
+			return nil, getTokenErr
+		}
+		e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 		if t.StartRequestID == *request.RequestId {
 			return &workflow.StartWorkflowExecutionResponse{
 				RunId: common.StringPtr(t.RunID),
@@ -1691,7 +1709,6 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				return nil, &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
 			}
 
-			var err error
 			switch *completionEvent.EventType {
 			case workflow.EventTypeWorkflowExecutionCompleted:
 				attributes := completionEvent.WorkflowExecutionCompletedEventAttributes
@@ -2188,9 +2205,9 @@ func getScheduleID(
 	if activityID == "" {
 		return 0, &workflow.BadRequestError{Message: "Neither ActivityID nor ScheduleID is provided"}
 	}
-	scheduleID, ok := msBuilder.GetScheduleIDByActivityID(activityID)
-	if !ok {
-		return 0, &workflow.BadRequestError{Message: fmt.Sprintf("No such activityID: %s\n", activityID)}
+	scheduleID, err := msBuilder.GetScheduleIDByActivityID(activityID)
+	if err != nil {
+		return 0, err
 	}
 	return scheduleID, nil
 }

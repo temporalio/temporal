@@ -2007,7 +2007,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
 }
 
-func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
+func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 	domainID := validDomainID
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: "wId",
@@ -2053,7 +2053,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: No such activityID: aid\n}")
+	s.Error(err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
@@ -2723,7 +2723,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
 }
 
-func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
+func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 	domainID := validDomainID
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: "wId",
@@ -2769,7 +2769,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: No such activityID: aid\n}")
+	s.Error(err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
@@ -3730,7 +3730,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
 }
 
-func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
+func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 	domainID := validDomainID
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: "wId",
@@ -3769,7 +3769,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: No such activityID: aid\n}")
+	s.Error(err)
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotScheduled() {

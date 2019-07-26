@@ -388,9 +388,9 @@ func (s *timerQueueProcessorSuite) checkTimedOutEventFor(domainID string, we wor
 	builder := newMutableStateBuilderWithEventV2(s.ShardContext,
 		s.ShardContext.GetEventsCache(), s.logger, we.GetRunId())
 	builder.Load(info)
-	_, isRunning := builder.GetActivityInfo(scheduleID)
+	_, ok := builder.GetActivityInfo(scheduleID)
 
-	return isRunning
+	return ok
 }
 
 func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(domainID string, we workflow.WorkflowExecution,
@@ -401,8 +401,8 @@ func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(domainID strin
 		s.ShardContext.GetEventsCache(), s.logger, we.GetRunId())
 	builder.Load(info)
 
-	isRunning, _ := builder.GetUserTimer(timerID)
-	return isRunning
+	_, ok := builder.GetUserTimer(timerID)
+	return ok
 }
 
 func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms mutableState, timerTasks []persistence.Task, condition int64) {

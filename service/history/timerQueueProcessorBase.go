@@ -581,7 +581,11 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	} else if msBuilder == nil || msBuilder.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
+	lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, lastWriteVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -649,6 +653,14 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 	archiveInline := executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorHistoryArchivalTimeLimit())
 	defer cancel()
+	lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	branchToken, err := msBuilder.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
 			ShardID:              t.shard.GetShardID(),
@@ -657,9 +669,9 @@ func (t *timerQueueProcessorBase) archiveWorkflow(task *persistence.TimerTaskInf
 			WorkflowID:           task.WorkflowID,
 			RunID:                task.RunID,
 			EventStoreVersion:    msBuilder.GetEventStoreVersion(),
-			BranchToken:          msBuilder.GetCurrentBranch(),
+			BranchToken:          branchToken,
 			NextEventID:          msBuilder.GetNextEventID(),
-			CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
+			CloseFailoverVersion: lastWriteVersion,
 			URI:                  domainCacheEntry.GetConfig().HistoryArchivalURI,
 		},
 		CallerService: common.HistoryServiceName,
@@ -715,6 +727,11 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op := func() error {
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
+			branchToken, err := msBuilder.GetCurrentBranchToken()
+			if err != nil {
+				return err
+			}
+
 			logger := t.logger.WithTags(tag.WorkflowID(task.WorkflowID),
 				tag.WorkflowRunID(task.RunID),
 				tag.WorkflowDomainID(task.DomainID),
@@ -722,7 +739,7 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(task *persistence.TimerT
 				tag.TaskID(task.GetTaskID()),
 				tag.FailoverVersion(task.GetVersion()),
 				tag.TaskType(task.GetTaskType()))
-			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, msBuilder.GetCurrentBranch(), common.IntPtr(t.shard.GetShardID()), logger)
+			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, branchToken, common.IntPtr(t.shard.GetShardID()), logger)
 		}
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{

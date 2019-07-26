@@ -226,7 +226,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		LastWriteVersion: version,
 		LastWriteEventID: nextEventID - 1,
 	})
-	msBuilder.On("GetLastWriteVersion").Return(version)
+	msBuilder.On("GetLastWriteVersion").Return(version, nil)
 	msBuilder.On("UpdateReplicationPolicy", cache.ReplicationPolicyOneCluster).Once()
 	msBuilder.On("UpdateReplicationStateVersion", version, false).Once()
 	msBuilder.On("GetActivityInfo", scheduleID).Return(nil, false)
@@ -298,7 +298,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		LastWriteVersion: version,
 		LastWriteEventID: nextEventID - 1,
 	})
-	msBuilder.On("GetLastWriteVersion").Return(version)
+	msBuilder.On("GetLastWriteVersion").Return(version, nil)
 	msBuilder.On("UpdateReplicationPolicy", cache.ReplicationPolicyOneCluster).Once()
 	msBuilder.On("UpdateReplicationStateVersion", version, false).Once()
 	msBuilder.On("GetActivityInfo", scheduleID).Return(&persistence.ActivityInfo{
@@ -399,7 +399,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		LastWriteVersion: version,
 		LastWriteEventID: nextEventID - 1,
 	})
-	msBuilder.On("GetLastWriteVersion").Return(version)
+	msBuilder.On("GetLastWriteVersion").Return(version, nil)
 	msBuilder.On("UpdateReplicationPolicy", cache.ReplicationPolicyOneCluster).Once()
 	msBuilder.On("UpdateReplicationStateVersion", version, false).Once()
 	msBuilder.On("GetActivityInfo", scheduleID).Return(&persistence.ActivityInfo{
