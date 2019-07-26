@@ -27,32 +27,6 @@ import (
 	"testing"
 )
 
-var (
-	notPendingDecisionTask = func(pastEvents []Vertex) bool {
-		count := 0
-		for _, e := range pastEvents {
-			switch {
-			case e.GetName() == shared.EventTypeDecisionTaskScheduled.String():
-				count++
-			case e.GetName() == shared.EventTypeDecisionTaskCompleted.String(),
-				e.GetName() == shared.EventTypeDecisionTaskFailed.String(),
-				e.GetName() == shared.EventTypeDecisionTaskTimedOut.String():
-				count--
-			}
-		}
-		return count <= 0
-	}
-
-	containActivityComplete = func(pastEvents []Vertex) bool {
-		for _, e := range pastEvents {
-			if e.GetName() == shared.EventTypeActivityTaskCompleted.String() {
-				return true
-			}
-		}
-		return false
-	}
-)
-
 type (
 	historyEventTestSuit struct {
 		suite.Suite
@@ -65,6 +39,91 @@ func TestHistoryEventTestSuite(t *testing.T) {
 }
 
 func (s *historyEventTestSuit) SetupSuite() {
+	generator := NewEventGenerator()
+
+	//Function
+	notPendingDecisionTask := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeDecisionTaskScheduled.String():
+				count++
+			case shared.EventTypeDecisionTaskCompleted.String(),
+				shared.EventTypeDecisionTaskFailed.String(),
+				shared.EventTypeDecisionTaskTimedOut.String():
+				count--
+			}
+		}
+		return count <= 0
+	}
+
+	containActivityComplete := func() bool {
+		for _, e := range generator.ListGeneratedVertices() {
+			if e.GetName() == shared.EventTypeActivityTaskCompleted.String() {
+				return true
+			}
+		}
+		return false
+	}
+
+	hasPendingTimer := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeTimerStarted.String():
+				count++
+			case shared.EventTypeTimerFired.String(),
+				shared.EventTypeTimerCanceled.String():
+				count--
+			}
+		}
+		return count > 0
+	}
+
+	hasPendingActivity := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeActivityTaskScheduled.String():
+				count++
+			case shared.EventTypeActivityTaskCanceled.String(),
+				shared.EventTypeActivityTaskFailed.String(),
+				shared.EventTypeActivityTaskTimedOut.String(),
+				shared.EventTypeActivityTaskCompleted.String():
+				count--
+			}
+		}
+		return count > 0
+	}
+
+	canDoBatch := func(history []Vertex) bool {
+		if len(history) == 0 {
+			return true
+		}
+
+		hasPendingDecisionTask := false
+		for _, event := range generator.ListGeneratedVertices() {
+			switch event.GetName() {
+			case shared.EventTypeDecisionTaskScheduled.String():
+				hasPendingDecisionTask = true
+			case shared.EventTypeDecisionTaskCompleted.String(),
+				shared.EventTypeDecisionTaskFailed.String(),
+				shared.EventTypeDecisionTaskTimedOut.String():
+				hasPendingDecisionTask = false
+			}
+		}
+		if hasPendingDecisionTask {
+			return false
+		}
+		if history[len(history)-1].GetName() == shared.EventTypeDecisionTaskScheduled.String() {
+			return false
+		}
+		if history[0].GetName() == shared.EventTypeDecisionTaskCompleted.String() {
+			return len(history) == 1
+		}
+		return true
+	}
+
 	//Setup decision task model
 	decisionModel := NewHistoryEventModel()
 	decisionSchedule := NewHistoryEvent(shared.EventTypeDecisionTaskScheduled.String())
@@ -123,27 +182,40 @@ func (s *historyEventTestSuit) SetupSuite() {
 	activityCancel := NewHistoryEvent(shared.EventTypeActivityTaskCanceled.String())
 	activityCancelRequestFail := NewHistoryEvent(shared.EventTypeRequestCancelActivityTaskFailed.String())
 	decisionCompleteToATSchedule := NewConnection(decisionComplete, activitySchedule)
+
 	activityScheduleToStart := NewConnection(activitySchedule, activityStart)
+	activityScheduleToStart.SetCondition(hasPendingActivity)
+
 	activityStartToComplete := NewConnection(activityStart, activityComplete)
+	activityStartToComplete.SetCondition(hasPendingActivity)
+
 	activityStartToFail := NewConnection(activityStart, activityFail)
+	activityStartToFail.SetCondition(hasPendingActivity)
+
 	activityStartToTimedOut := NewConnection(activityStart, activityTimedOut)
+	activityStartToTimedOut.SetCondition(hasPendingActivity)
+
 	activityCompleteToDecisionSchedule := NewConnection(activityComplete, decisionSchedule)
 	activityCompleteToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	activityFailToDecisionSchedule := NewConnection(activityFail, decisionSchedule)
 	activityFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	activityTimedOutToDecisionSchedule := NewConnection(activityTimedOut, decisionSchedule)
 	activityTimedOutToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	activityCancelReqToCancel := NewConnection(activityCancelRequest, activityCancel)
-	activityCancelReqToCancelFail := NewConnection(activityCancelRequest, activityCancelRequestFail)
 	activityCancelToDecisionSchedule := NewConnection(activityCancel, decisionSchedule)
 	activityCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
+
+	activityCancelReqToCancel := NewConnection(activityCancelRequest, activityCancel)
+	activityCancelReqToCancel.SetCondition(hasPendingActivity)
+
+	activityCancelReqToCancelFail := NewConnection(activityCancelRequest, activityCancelRequestFail)
 	activityCancelRequestFailToDecisionSchedule := NewConnection(activityCancelRequestFail, decisionSchedule)
 	activityCancelRequestFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	activityStartToCancalReq := NewConnection(activityStart, activityCancelRequest)
+	decisionCompleteToActivityCancelRequest := NewConnection(decisionComplete, activityCancelRequest)
+
 	activityModel.AddEdge(decisionCompleteToATSchedule, activityScheduleToStart, activityStartToComplete,
 		activityStartToFail, activityStartToTimedOut, decisionCompleteToATSchedule, activityCompleteToDecisionSchedule,
 		activityFailToDecisionSchedule, activityTimedOutToDecisionSchedule, activityCancelReqToCancel, activityCancelReqToCancelFail,
-		activityCancelToDecisionSchedule, activityStartToCancalReq, activityCancelRequestFailToDecisionSchedule)
+		activityCancelToDecisionSchedule, decisionCompleteToActivityCancelRequest, activityCancelRequestFailToDecisionSchedule)
 
 	//Setup timer model
 	timerModel := NewHistoryEventModel()
@@ -151,13 +223,16 @@ func (s *historyEventTestSuit) SetupSuite() {
 	timerFired := NewHistoryEvent(shared.EventTypeTimerFired.String())
 	timerCancel := NewHistoryEvent(shared.EventTypeTimerCanceled.String())
 	timerStartToFire := NewConnection(timerStart, timerFired)
-	timerStartToCancel := NewConnection(timerStart, timerCancel)
+	timerStartToFire.SetCondition(hasPendingTimer)
+	decisionCompleteToCancel := NewConnection(decisionComplete, timerCancel)
+	decisionCompleteToCancel.SetCondition(hasPendingTimer)
+
 	decisionCompleteToTimerStart := NewConnection(decisionComplete, timerStart)
 	timerFiredToDecisionSchedule := NewConnection(timerFired, decisionSchedule)
 	timerFiredToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	timerCancelToDecisionSchedule := NewConnection(timerCancel, decisionSchedule)
 	timerCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	timerModel.AddEdge(timerStartToFire, timerStartToCancel, decisionCompleteToTimerStart, timerFiredToDecisionSchedule, timerCancelToDecisionSchedule)
+	timerModel.AddEdge(timerStartToFire, decisionCompleteToCancel, decisionCompleteToTimerStart, timerFiredToDecisionSchedule, timerCancelToDecisionSchedule)
 
 	//Setup child workflow model
 	childWorkflowModel := NewHistoryEventModel()
@@ -222,11 +297,11 @@ func (s *historyEventTestSuit) SetupSuite() {
 		externalWorkflowSignaledToDecisionSchedule, externalWorkflowSignalFailedToDecisionSchedule,
 		externalWorkflowCanceledToDecisionSchedule, externalWorkflowCancelFailToDecisionSchedule)
 
-	//Initial event generator
-	generator := NewEventGenerator()
+	//Config event generator
+	generator.SetCanDoBatchOnNextVertex(canDoBatch)
 	generator.AddInitialEntryVertex(workflowStart)
 	generator.AddExitVertex(workflowComplete, workflowFail, continueAsNew, workflowTerminate, workflowTimedOut)
-	generator.AddRandomEntryVertex(workflowSignal, workflowTerminate, workflowTimedOut)
+	//generator.AddRandomEntryVertex(workflowSignal, workflowTerminate, workflowTimedOut)
 	generator.AddModel(decisionModel)
 	generator.AddModel(workflowModel)
 	generator.AddModel(activityModel)
@@ -237,15 +312,19 @@ func (s *historyEventTestSuit) SetupSuite() {
 }
 
 func (s *historyEventTestSuit) SetupTest() {
-	s.generator.Reset()
+	s.generator.Reset(0)
 }
 
 func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 	for s.generator.HasNextVertex() {
-		v := s.generator.GetNextVertex()
+		fmt.Println("########################")
+		v := s.generator.GetNextVertices()
 		for _, e := range v {
 			fmt.Println(e.GetName())
 		}
 	}
-	s.NotEmpty(s.generator.ListGeneratedVertex())
+	s.NotEmpty(s.generator.ListGeneratedVertices())
+
+	eventAttr := generateHistoryEvents(s.generator.ListGeneratedVertices())
+	s.NotEmpty(eventAttr)
 }
