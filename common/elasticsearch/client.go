@@ -38,6 +38,7 @@ type (
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (*elastic.BulkProcessor, error)
 		PutMapping(ctx context.Context, index, root, key, valueType string) error
+		CreateIndex(ctx context.Context, index string) error
 	}
 
 	// ScrollService is a interface for elastic.ScrollService
@@ -155,6 +156,11 @@ func (c *elasticWrapper) RunBulkProcessor(ctx context.Context, p *BulkProcessorP
 func (c *elasticWrapper) PutMapping(ctx context.Context, index, root, key, valueType string) error {
 	body := buildPutMappingBody(root, key, valueType)
 	_, err := c.client.PutMapping().Index(index).Type("_doc").BodyJson(body).Do(ctx)
+	return err
+}
+
+func (c *elasticWrapper) CreateIndex(ctx context.Context, index string) error {
+	_, err := c.client.CreateIndex(index).Do(ctx)
 	return err
 }
 

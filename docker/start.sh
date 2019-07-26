@@ -68,6 +68,8 @@ setup_es_template() {
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
     URL="http://$server:$ES_PORT/_template/cadence-visibility-template"
     curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
+    URL="http://$server:$ES_PORT/cadence-visibility-dev"
+    curl -X PUT $URL
 }
 
 setup_schema() {

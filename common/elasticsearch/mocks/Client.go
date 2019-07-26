@@ -52,6 +52,20 @@ func (_m *Client) Count(ctx context.Context, index string, query string) (int64,
 	return r0, r1
 }
 
+// CreateIndex provides a mock function with given fields: ctx, index
+func (_m *Client) CreateIndex(ctx context.Context, index string) error {
+	ret := _m.Called(ctx, index)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, index)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // PutMapping provides a mock function with given fields: ctx, index, root, key, valueType
 func (_m *Client) PutMapping(ctx context.Context, index string, root string, key string, valueType string) error {
 	ret := _m.Called(ctx, index, root, key, valueType)

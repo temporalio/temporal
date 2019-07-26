@@ -23,6 +23,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"github.com/olivere/elastic"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -155,6 +156,13 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 			return &gen.BadRequestError{Message: fmt.Sprintf("Unknown value type, %v", v)}
 		}
 		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		if elastic.IsNotFound(err) {
+			err = adh.params.ESClient.CreateIndex(ctx, index)
+			if err != nil {
+				return &gen.InternalServiceError{Message: fmt.Sprintf("Failed to create ES index, err: %v", err)}
+			}
+			err = adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		}
 		if err != nil {
 			return &gen.InternalServiceError{Message: fmt.Sprintf("Failed to update ES mapping, err: %v", err)}
 		}
