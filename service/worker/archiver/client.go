@@ -76,7 +76,7 @@ type (
 )
 
 const (
-	tooManyRequestsErrMsg = "Too many requests to archival workflow"
+	tooManyRequestsErrMsg = "too many requests to archival workflow"
 )
 
 // NewClient creates a new Client
@@ -105,7 +105,6 @@ func NewClient(
 // Archive starts an archival task
 func (c *client) Archive(ctx context.Context, request *ClientRequest) error {
 	c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.CadenceRequests)
-
 	taggedLogger := tagLoggerWithRequest(c.logger, *request.ArchiveRequest).WithTags(
 		tag.ArchivalCallerServiceName(request.CallerService),
 		tag.ArchivalArchiveInline(request.ArchiveInline),
@@ -116,7 +115,6 @@ func (c *client) Archive(ctx context.Context, request *ClientRequest) error {
 		}
 		return nil
 	}
-
 	return c.sendArchiveSignal(ctx, request.ArchiveRequest, taggedLogger)
 }
 

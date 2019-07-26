@@ -126,7 +126,7 @@ func (s *handlerSuite) TestHandleRequest_LocalDeleteFails_NonRetryableError() {
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		if !deleteSucceed {
 			deleteSucceed = true
-			return cadence.NewCustomError(errDeleteHistoryV1)
+			return cadence.NewCustomError(errDeleteNonRetriable.Error())
 		}
 		return nil
 	})

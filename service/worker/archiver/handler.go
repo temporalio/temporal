@@ -103,12 +103,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	sw := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleRequestLatency)
 	logger = tagLoggerWithRequest(logger, request)
 	ao := workflow.ActivityOptions{
-		ScheduleToStartTimeout: 2 * time.Minute,
+		ScheduleToStartTimeout: 1 * time.Minute,
 		StartToCloseTimeout:    2 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       4 * time.Minute,
+			ExpirationInterval:       5 * time.Minute,
 			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
 		},
 	}
@@ -128,7 +128,7 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       3 * time.Minute,
+			ExpirationInterval:       1 * time.Minute,
 			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
 		},
 	}
@@ -144,12 +144,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalFailedAllRetriesCount)
 	logger.Warn("deleting history though local activity failed, attempting to run as normal activity", tag.Error(err))
 	ao = workflow.ActivityOptions{
-		ScheduleToStartTimeout: 2 * time.Minute,
+		ScheduleToStartTimeout: 1 * time.Minute,
 		StartToCloseTimeout:    2 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       4 * time.Minute,
+			ExpirationInterval:       5 * time.Minute,
 			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
 		},
 	}

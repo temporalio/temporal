@@ -23,12 +23,12 @@ package archiver
 import (
 	"context"
 	"errors"
+	"github.com/uber/cadence/common"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/log"
@@ -48,7 +48,6 @@ const (
 	testWorkflowID           = "test-workflow-id"
 	testRunID                = "test-run-id"
 	testNextEventID          = 1800
-	testDomain               = "test-domain"
 	testCloseFailoverVersion = 100
 	testScheme               = "testScheme"
 	testArchivalURI          = testScheme + "://history/archival"
@@ -95,6 +94,8 @@ func (s *activitiesSuite) TearDownTest() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	container := &BootstrapContainer{
 		Logger:        s.logger,
 		MetricsClient: s.metricsClient,
@@ -119,6 +120,8 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(nil, errors.New("failed to get archiver"))
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -145,6 +148,8 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errUploadNonRetriable)
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
@@ -172,6 +177,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	testArchiveErr := errors.New("some random error")
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(s.historyArchiver, nil)
@@ -200,6 +206,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
 }
 
 func (s *activitiesSuite) TestUploadHistory_Success() {
+	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
@@ -252,35 +259,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		URI:                  testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errDeleteHistoryV2, err.Error())
-}
-
-func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV2() {
-	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
-	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
-	mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(errPersistenceRetryable)
-	container := &BootstrapContainer{
-		Logger:           s.logger,
-		MetricsClient:    s.metricsClient,
-		HistoryV2Manager: mockHistoryV2Manager,
-	}
-	env := s.NewTestActivityEnvironment()
-	env.SetWorkerOptions(worker.Options{
-		BackgroundActivityContext: context.WithValue(getCanceledContext(), bootstrapContainerKey, container),
-	})
-	request := ArchiveRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
-		BranchToken:          testBranchToken,
-		NextEventID:          testNextEventID,
-		CloseFailoverVersion: testCloseFailoverVersion,
-		EventStoreVersion:    persistence.EventStoreVersionV2,
-		URI:                  testArchivalURI,
-	}
-	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errContextTimeout.Error(), err.Error())
+	s.Equal(errDeleteNonRetriable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryableError() {
@@ -308,34 +287,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryabl
 		URI:                  testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errDeleteHistoryV1, err.Error())
-}
-
-func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_TimeoutOnDeleteHistoryV1() {
-	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
-	mockHistoryManager := &mocks.HistoryManager{}
-	mockHistoryManager.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(errPersistenceRetryable)
-	container := &BootstrapContainer{
-		Logger:         s.logger,
-		MetricsClient:  s.metricsClient,
-		HistoryManager: mockHistoryManager,
-	}
-	env := s.NewTestActivityEnvironment()
-	env.SetWorkerOptions(worker.Options{
-		BackgroundActivityContext: context.WithValue(getCanceledContext(), bootstrapContainerKey, container),
-	})
-	request := ArchiveRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
-		BranchToken:          testBranchToken,
-		NextEventID:          testNextEventID,
-		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
-	}
-	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errContextTimeout.Error(), err.Error())
+	s.Equal(errDeleteNonRetriable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestDeleteHistoryActivity_Success() {
