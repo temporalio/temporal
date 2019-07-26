@@ -1006,7 +1006,6 @@ func (s *integrationSuite) TestCronWorkflow() {
 		// because the cron schedule interval is 3 seconds.
 		// The precision of the time is second so the time should be round up to seconds
 		s.Equal(int(0), int(executionTime/1000000000-firstExecutionTime/1000000000)%3)
-
 	}
 	dweResponse, err := s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(s.domainName),

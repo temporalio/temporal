@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/client/admin"
@@ -49,7 +51,7 @@ type (
 	// Bean in an collection of clients
 	Bean interface {
 		GetHistoryClient() history.Client
-		GetMatchingClient() matching.Client
+		GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
 		GetFrontendClient() frontend.Client
 		GetRemoteAdminClient(cluster string) admin.Client
 		GetRemoteFrontendClient(cluster string) frontend.Client
@@ -61,11 +63,13 @@ type (
 	}
 
 	clientBeanImpl struct {
+		sync.Mutex
 		historyClient         history.Client
-		matchingClient        matching.Client
+		matchingClient        atomic.Value
 		frontendClient        frontend.Client
 		remoteAdminClients    map[string]admin.Client
 		remoteFrontendClients map[string]frontend.Client
+		factory               Factory
 	}
 
 	dnsDispatcherProvider struct {
@@ -94,11 +98,6 @@ type (
 func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clusterMetadata cluster.Metadata) (Bean, error) {
 
 	historyClient, err := factory.NewHistoryClient()
-	if err != nil {
-		return nil, err
-	}
-
-	matchingClient, err := factory.NewMatchingClient()
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +139,8 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 	}
 
 	return &clientBeanImpl{
+		factory:               factory,
 		historyClient:         historyClient,
-		matchingClient:        matchingClient,
 		frontendClient:        frontendClient,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
@@ -152,8 +151,11 @@ func (h *clientBeanImpl) GetHistoryClient() history.Client {
 	return h.historyClient
 }
 
-func (h *clientBeanImpl) GetMatchingClient() matching.Client {
-	return h.matchingClient
+func (h *clientBeanImpl) GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+	if client := h.matchingClient.Load(); client != nil {
+		return client.(matching.Client), nil
+	}
+	return h.lazyInitMatchingClient(domainIDToName)
 }
 
 func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
@@ -182,6 +184,20 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client
 		))
 	}
 	return client
+}
+
+func (h *clientBeanImpl) lazyInitMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+	h.Lock()
+	defer h.Unlock()
+	if cached := h.matchingClient.Load(); cached != nil {
+		return cached.(matching.Client), nil
+	}
+	client, err := h.factory.NewMatchingClient(domainIDToName)
+	if err != nil {
+		return nil, err
+	}
+	h.matchingClient.Store(client)
+	return client, nil
 }
 
 // NewDNSYarpcDispatcherProvider create a dispatcher provider which handles with IP address

@@ -131,8 +131,16 @@ func (h *Handler) RegisterHandler() {
 func (h *Handler) Start() error {
 	h.Service.Start()
 
+	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
+	h.domainCache.Start()
+
+	matchingClient, err := h.GetClientBean().GetMatchingClient(h.domainCache.GetDomainName)
+	if err != nil {
+		return err
+	}
+
 	h.matchingServiceClient = matching.NewRetryableClient(
-		h.GetClientBean().GetMatchingClient(),
+		matchingClient,
 		common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
@@ -158,7 +166,6 @@ func (h *Handler) Start() error {
 		}
 	}
 
-	h.domainCache.Start()
 	h.controller = newShardController(h.Service, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr, h.historyV2Mgr,
 		h.domainCache, h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
 	h.metricsClient = h.GetMetricsClient()

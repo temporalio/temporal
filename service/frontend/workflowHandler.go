@@ -205,7 +205,11 @@ func (wh *WorkflowHandler) Start() error {
 	wh.domainCache.Start()
 
 	wh.history = wh.GetClientBean().GetHistoryClient()
-	wh.matchingRawClient = wh.GetClientBean().GetMatchingClient()
+	matchingRawClient, err := wh.GetClientBean().GetMatchingClient(wh.domainCache.GetDomainName)
+	if err != nil {
+		return err
+	}
+	wh.matchingRawClient = matchingRawClient
 	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 	wh.startWG.Done()

@@ -43,8 +43,10 @@ type TaskMatcher struct {
 	queryTaskC chan *internalTask
 	// ratelimiter that limits the rate at which tasks can be dispatched to consumers
 	limiter *quotas.RateLimiter
-	// domain metric scope
-	scope func() metrics.Scope
+
+	fwdr          *Forwarder
+	scope         func() metrics.Scope // domain metric scope
+	numPartitions func() int           // number of task list partitions
 }
 
 const (
@@ -57,14 +59,16 @@ var errTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
 // newTaskMatcher returns an task matcher instance. The returned instance can be
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
-func newTaskMatcher(config *taskListConfig, scopeFunc func() metrics.Scope) *TaskMatcher {
+func newTaskMatcher(config *taskListConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
 	dPtr := _defaultTaskDispatchRPS
 	limiter := quotas.NewRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize())
 	return &TaskMatcher{
-		limiter:    limiter,
-		scope:      scopeFunc,
-		taskC:      make(chan *internalTask),
-		queryTaskC: make(chan *internalTask),
+		limiter:       limiter,
+		scope:         scopeFunc,
+		fwdr:          fwdr,
+		taskC:         make(chan *internalTask),
+		queryTaskC:    make(chan *internalTask),
+		numPartitions: config.NumReadPartitions,
 	}
 }
 
@@ -80,20 +84,14 @@ func newTaskMatcher(config *taskListConfig, scopeFunc func() metrics.Scope) *Tas
 //  - context deadline is exceeded
 //  - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
-	if task.isQuery() {
-		select {
-		case tm.queryTaskC <- task:
-			<-task.responseC
-			return true, nil
-		case <-ctx.Done():
-			return false, ctx.Err()
+	var err error
+	var rsv *rate.Reservation
+	if !task.isForwarded() {
+		rsv, err = tm.ratelimit(ctx)
+		if err != nil {
+			tm.scope().IncCounter(metrics.SyncThrottleCounter)
+			return false, err
 		}
-	}
-
-	rsv, err := tm.ratelimit(ctx)
-	if err != nil {
-		tm.scope().IncCounter(metrics.SyncThrottleCounter)
-		return false, err
 	}
 
 	select {
@@ -105,13 +103,63 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			return true, err
 		}
 		return false, nil
-	default: // no poller waiting for tasks
+	default:
+		// no poller waiting for tasks, try forwarding this task to the
+		// root partition if available
+		select {
+		case token := <-tm.fwdrAddReqTokenC():
+			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
+				// task was remotely sync matched on the parent partition
+				token.release()
+				return true, nil
+			}
+			token.release()
+		default:
+		}
+
 		if rsv != nil {
 			// there was a ratelimit token we consumed
 			// return it since we did not really do any work
 			rsv.Cancel()
 		}
 		return false, nil
+	}
+}
+
+// OfferQuery offers a query task to a potential consumer (poller). If the task
+// is successfully matched, this method will return the query response. Otherwise
+// it returns error
+func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) ([]byte, error) {
+	select {
+	case tm.queryTaskC <- task:
+		<-task.responseC
+		return nil, nil
+	default:
+	}
+
+	fwdrTokenC := tm.fwdrAddReqTokenC()
+
+	for {
+		select {
+		case tm.queryTaskC <- task:
+			<-task.responseC
+			return nil, nil
+		case token := <-fwdrTokenC:
+			resp, err := tm.fwdr.ForwardQueryTask(ctx, task)
+			token.release()
+			if err == nil {
+				return resp.QueryResult, nil
+			}
+			if err == errForwarderSlowDown {
+				// if we are rate limited, try only local match for the
+				// remainder of the context timeout left
+				fwdrTokenC = noopForwarderTokenC
+				continue
+			}
+			return nil, err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 }
 
@@ -122,11 +170,46 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask) error 
 	if _, err := tm.ratelimit(ctx); err != nil {
 		return err
 	}
+
+	// attempt a match with local poller first. When that
+	// doesn't succeed, try both local match and remote match
 	select {
 	case tm.taskC <- task:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	default:
+	}
+
+forLoop:
+	for {
+		select {
+		case tm.taskC <- task:
+			return nil
+		case token := <-tm.fwdrAddReqTokenC():
+			childCtx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*2))
+			err := tm.fwdr.ForwardTask(childCtx, task)
+			token.release()
+			if err != nil {
+				// forwarder returns error only when the call is rate limited. To
+				// avoid a busy loop on such rate limiting events, we only attempt to make
+				// the next forwarded call after this childCtx expires. Till then, we block
+				// hoping for a local poller match
+				select {
+				case tm.taskC <- task:
+					return nil
+				case <-childCtx.Done():
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				cancel()
+				continue forLoop
+			}
+			cancel()
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
@@ -134,28 +217,90 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask) error 
 // On success, the returned task could be a query task or a regular task
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
-	select {
-	case task := <-tm.taskC:
-		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		}
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+	// try local match first without blocking until context timeout
+	if task, err := tm.pollNonBlocking(ctx, tm.taskC, tm.queryTaskC); err == nil {
 		return task, nil
-	case task := <-tm.queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
-		return task, nil
-	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutCounter)
-		return nil, ErrNoTasks
 	}
+	// there is no local poller available to pickup this task. Now block waiting
+	// either for a local poller or a forwarding token to be available. When a
+	// forwarding token becomes available, send this poll to a parent partition
+	return tm.pollOrForward(ctx, tm.taskC, tm.queryTaskC)
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context) (*internalTask, error) {
+	// try local match first without blocking until context timeout
+	if task, err := tm.pollNonBlocking(ctx, nil, tm.queryTaskC); err == nil {
+		return task, nil
+	}
+	// there is no local poller available to pickup this task. Now block waiting
+	// either for a local poller or a forwarding token to be available. When a
+	// forwarding token becomes available, send this poll to a parent partition
+	return tm.pollOrForward(ctx, nil, tm.queryTaskC)
+}
+
+// UpdateRatelimit updates the task dispatch rate
+func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
+	if rps == nil {
+		return
+	}
+	rate := *rps
+	nPartitions := tm.numPartitions()
+	if rate > float64(nPartitions) {
+		// divide the rate equally across all partitions
+		rate = rate / float64(tm.numPartitions())
+	}
+	tm.limiter.UpdateMaxDispatch(&rate)
+}
+
+// Rate returns the current rate at which tasks are dispatched
+func (tm *TaskMatcher) Rate() float64 {
+	return tm.limiter.Limit()
+}
+
+func (tm *TaskMatcher) pollOrForward(
+	ctx context.Context,
+	taskC <-chan *internalTask,
+	queryTaskC <-chan *internalTask,
+) (*internalTask, error) {
 	select {
-	case task := <-tm.queryTaskC:
+	case task := <-taskC:
+		if task.responseC != nil {
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+		}
+		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		return task, nil
+	case task := <-queryTaskC:
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		return task, nil
+	case <-ctx.Done():
+		tm.scope().IncCounter(metrics.PollTimeoutCounter)
+		return nil, ErrNoTasks
+	case token := <-tm.fwdrPollReqTokenC():
+		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
+			token.release()
+			return task, nil
+		}
+		token.release()
+		return tm.poll(ctx, taskC, queryTaskC)
+	}
+}
+
+func (tm *TaskMatcher) poll(
+	ctx context.Context,
+	taskC <-chan *internalTask,
+	queryTaskC <-chan *internalTask,
+) (*internalTask, error) {
+	select {
+	case task := <-taskC:
+		if task.responseC != nil {
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+		}
+		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		return task, nil
+	case task := <-queryTaskC:
 		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
 		tm.scope().IncCounter(metrics.PollSuccessCounter)
 		return task, nil
@@ -165,14 +310,39 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context) (*internalTask, error) 
 	}
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
-	tm.limiter.UpdateMaxDispatch(rps)
+func (tm *TaskMatcher) pollNonBlocking(
+	ctx context.Context,
+	taskC <-chan *internalTask,
+	queryTaskC <-chan *internalTask,
+) (*internalTask, error) {
+	select {
+	case task := <-taskC:
+		if task.responseC != nil {
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+		}
+		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		return task, nil
+	case task := <-queryTaskC:
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		return task, nil
+	default:
+		return nil, ErrNoTasks
+	}
 }
 
-// Rate returns the current rate at which tasks are dispatched
-func (tm *TaskMatcher) Rate() float64 {
-	return tm.limiter.Limit()
+func (tm *TaskMatcher) fwdrPollReqTokenC() <-chan *ForwarderReqToken {
+	if tm.fwdr == nil {
+		return noopForwarderTokenC
+	}
+	return tm.fwdr.PollReqTokenC()
+}
+
+func (tm *TaskMatcher) fwdrAddReqTokenC() <-chan *ForwarderReqToken {
+	if tm.fwdr == nil {
+		return noopForwarderTokenC
+	}
+	return tm.fwdr.AddReqTokenC()
 }
 
 func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error) {

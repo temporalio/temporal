@@ -1266,6 +1266,9 @@ const (
 	HistoryArchiverUploadNonRetryableErrorCount
 	HistoryArchiverCleanupFailedCount
 
+	MatchingClientForwardedCounter
+	MatchingClientInvalidTaskListName
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -1402,6 +1405,20 @@ const (
 	SyncMatchLatency
 	AsyncMatchLatency
 	ExpiredTasksCounter
+	ForwardedCounter
+	ForwardTaskCalls
+	ForwardTaskErrors
+	ForwardTaskLatency
+	ForwardQueryCalls
+	ForwardQueryErrors
+	ForwardQueryLatency
+	ForwardPollCalls
+	ForwardPollErrors
+	ForwardPollLatency
+	LocalToLocalMatchCounter
+	LocalToRemoteMatchCounter
+	RemoteToLocalMatchCounter
+	RemoteToRemoteMatchCounter
 
 	NumMatchingMetrics
 )
@@ -1528,6 +1545,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverCouldNotRunBlobIntegrityCheckCount:             {metricName: "history_archiver_could_not_run_blob_integrity_check", metricType: Counter},
 		HistoryArchiverUploadNonRetryableErrorCount:                   {metricName: "history_archiver_upload_non_retryable_error", metricType: Counter},
 		HistoryArchiverCleanupFailedCount:                             {metricName: "history_archiver_cleanup_failed", metricType: Counter},
+		MatchingClientForwardedCounter:                                {metricName: "forwarded", metricType: Counter},
+		MatchingClientInvalidTaskListName:                             {metricName: "invalid_task_list_name", metricType: Counter},
 	},
 	Frontend: {},
 	History: {
@@ -1655,8 +1674,22 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SyncThrottleCounter:           {metricName: "sync_throttle_count"},
 		BufferThrottleCounter:         {metricName: "buffer_throttle_count"},
 		ExpiredTasksCounter:           {metricName: "tasks_expired"},
+		ForwardedCounter:              {metricName: "forwarded"},
+		ForwardTaskCalls:              {metricName: "forward_task_calls"},
+		ForwardTaskErrors:             {metricName: "forward_task_errors"},
+		ForwardQueryCalls:             {metricName: "forward_query_calls"},
+		ForwardQueryErrors:            {metricName: "forward_query_errors"},
+		ForwardPollCalls:              {metricName: "forward_poll_calls"},
+		ForwardPollErrors:             {metricName: "forward_poll_errors"},
 		SyncMatchLatency:              {metricName: "syncmatch_latency", metricType: Timer},
 		AsyncMatchLatency:             {metricName: "asyncmatch_latency", metricType: Timer},
+		ForwardTaskLatency:            {metricName: "forward_task_latency"},
+		ForwardQueryLatency:           {metricName: "forward_query_latency"},
+		ForwardPollLatency:            {metricName: "forward_poll_latency"},
+		LocalToLocalMatchCounter:      {metricName: "local_to_local_matches"},
+		LocalToRemoteMatchCounter:     {metricName: "local_to_remote_matches"},
+		RemoteToLocalMatchCounter:     {metricName: "remote_to_local_matches"},
+		RemoteToRemoteMatchCounter:    {metricName: "remote_to_remote_matches"},
 	},
 	Worker: {
 		ReplicatorMessages:                       {metricName: "replicator_messages"},

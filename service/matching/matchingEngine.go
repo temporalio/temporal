@@ -34,6 +34,7 @@ import (
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
+	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
@@ -50,6 +51,7 @@ import (
 type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
 	historyService  history.Client
+	matchingClient  matching.Client
 	tokenSerializer common.TaskTokenSerializer
 	logger          log.Logger
 	metricsClient   metrics.Client
@@ -92,6 +94,7 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 // NewEngine creates an instance of matching engine
 func NewEngine(taskManager persistence.TaskManager,
 	historyService history.Client,
+	matchingClient matching.Client,
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -105,6 +108,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		taskLists:       make(map[taskListID]taskListManager),
 		logger:          logger.WithTags(tag.ComponentMatchingEngine),
 		metricsClient:   metricsClient,
+		matchingClient:  matchingClient,
 		config:          config,
 		queryTaskMap:    make(map[string]chan *queryResult),
 		domainCache:     domainCache,
@@ -227,8 +231,9 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *m.
 		CreatedTime:            time.Now(),
 	}
 	return tlMgr.AddTask(ctx, addTaskParams{
-		execution: addRequest.Execution,
-		taskInfo:  taskInfo,
+		execution:     addRequest.Execution,
+		taskInfo:      taskInfo,
+		forwardedFrom: addRequest.GetForwardedFrom(),
 	})
 }
 
@@ -264,8 +269,9 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *m.
 		CreatedTime:            time.Now(),
 	}
 	return tlMgr.AddTask(ctx, addTaskParams{
-		execution: addRequest.Execution,
-		taskInfo:  taskInfo,
+		execution:     addRequest.Execution,
+		taskInfo:      taskInfo,
+		forwardedFrom: addRequest.GetForwardedFrom(),
 	})
 }
 
@@ -303,10 +309,11 @@ pollLoop:
 			return nil, err
 		}
 
-		if task.isForwarded() {
-			// forwarded tasks are already started and are matched remotely on a
-			// different matching host. So, simply forward the response
-			return task.forwarded.decisionTaskInfo, nil
+		e.emitForwardedFromStats(metrics.MatchingPollForDecisionTaskScope, task.isForwarded(), req.GetForwardedFrom())
+
+		if task.isStarted() {
+			// tasks received from remote are already started. So, simply forward the response
+			return task.pollForDecisionResponse(), nil
 		}
 
 		if task.isQuery() {
@@ -358,7 +365,7 @@ pollLoop:
 			switch err.(type) {
 			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
 				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
-					taskListName, task.generic.TaskID))
+					taskListName, task.event.TaskID))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -411,10 +418,11 @@ pollLoop:
 			return nil, err
 		}
 
-		if task.isForwarded() {
-			// forwarded tasks are already started and are matched remotely on a
-			// different matching host. So, simply forward the response
-			return task.forwarded.activityTaskInfo, nil
+		e.emitForwardedFromStats(metrics.MatchingPollForActivityTaskScope, task.isForwarded(), req.GetForwardedFrom())
+
+		if task.isStarted() {
+			// tasks received from remote are already started. So, simply forward the response
+			return task.pollForActivityResponse(), nil
 		}
 
 		resp, err := e.recordActivityTaskStarted(ctx, request, task)
@@ -422,7 +430,7 @@ pollLoop:
 			switch err.(type) {
 			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
 				e.logger.Debug(fmt.Sprintf("Duplicated activity task taskList=%v, taskID=%v",
-					taskListName, task.generic.TaskID))
+					taskListName, task.event.TaskID))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -454,9 +462,14 @@ query_loop:
 			return nil, err
 		}
 		taskID := uuid.New()
-		err = tlMgr.DispatchQueryTask(ctx, taskID, queryRequest)
+		result, err := tlMgr.DispatchQueryTask(ctx, taskID, queryRequest)
 		if err != nil {
 			return nil, err
+		}
+
+		if result != nil {
+			// task was remotely matched on another host, directly send the response
+			return &workflow.QueryWorkflowResponse{QueryResult: result}, nil
 		}
 
 		queryResultCh := make(chan *queryResult, 1)
@@ -620,7 +633,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	var token []byte
 	if task.isQuery() {
 		// for a query task
-		queryRequest := task.query.queryRequest
+		queryRequest := task.query.request
 		taskToken := &common.QueryTaskToken{
 			DomainID: *queryRequest.DomainUUID,
 			TaskList: *queryRequest.TaskList.Name,
@@ -629,22 +642,22 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		token, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
 		taskoken := &common.TaskToken{
-			DomainID:        task.generic.DomainID,
-			WorkflowID:      task.generic.WorkflowID,
-			RunID:           task.generic.RunID,
+			DomainID:        task.event.DomainID,
+			WorkflowID:      task.event.WorkflowID,
+			RunID:           task.event.RunID,
 			ScheduleID:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
 		token, _ = e.tokenSerializer.Serialize(taskoken)
 		if task.responseC == nil {
 			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
-			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.generic.CreatedTime))
+			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.event.CreatedTime))
 		}
 	}
 
 	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, task.workflowExecution(), token)
 	if task.query != nil {
-		response.Query = task.query.queryRequest.QueryRequest.Query
+		response.Query = task.query.request.QueryRequest.Query
 	}
 	response.BacklogCountHint = common.Int64Ptr(task.backlogCountHint)
 	return response
@@ -666,7 +679,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	}
 	if task.responseC == nil {
 		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
-		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.generic.CreatedTime))
+		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.event.CreatedTime))
 	}
 
 	response := &workflow.PollForActivityTaskResponse{}
@@ -683,10 +696,10 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	response.HeartbeatTimeoutSeconds = common.Int32Ptr(*attributes.HeartbeatTimeoutSeconds)
 
 	token := &common.TaskToken{
-		DomainID:        task.generic.DomainID,
-		WorkflowID:      task.generic.WorkflowID,
-		RunID:           task.generic.RunID,
-		ScheduleID:      task.generic.ScheduleID,
+		DomainID:        task.event.DomainID,
+		WorkflowID:      task.event.WorkflowID,
+		RunID:           task.event.RunID,
+		ScheduleID:      task.event.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
 
@@ -704,10 +717,10 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	task *internalTask,
 ) (*h.RecordDecisionTaskStartedResponse, error) {
 	request := &h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        &task.generic.DomainID,
+		DomainUUID:        &task.event.DomainID,
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        &task.generic.ScheduleID,
-		TaskId:            &task.generic.TaskID,
+		ScheduleId:        &task.event.ScheduleID,
+		TaskId:            &task.event.TaskID,
 		RequestId:         common.StringPtr(uuid.New()),
 		PollRequest:       pollReq,
 	}
@@ -733,10 +746,10 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	task *internalTask,
 ) (*h.RecordActivityTaskStartedResponse, error) {
 	request := &h.RecordActivityTaskStartedRequest{
-		DomainUUID:        &task.generic.DomainID,
+		DomainUUID:        &task.event.DomainID,
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        &task.generic.ScheduleID,
-		TaskId:            &task.generic.TaskID,
+		ScheduleId:        &task.event.ScheduleID,
+		TaskId:            &task.event.TaskID,
 		RequestId:         common.StringPtr(uuid.New()),
 		PollRequest:       pollReq,
 	}
@@ -756,6 +769,16 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	return resp, err
 }
 
-func workflowExecutionPtr(execution workflow.WorkflowExecution) *workflow.WorkflowExecution {
-	return &execution
+func (e *matchingEngineImpl) emitForwardedFromStats(scope int, isTaskForwarded bool, pollForwardedFrom string) {
+	isPollForwarded := len(pollForwardedFrom) > 0
+	switch {
+	case isTaskForwarded && isPollForwarded:
+		e.metricsClient.IncCounter(scope, metrics.RemoteToRemoteMatchCounter)
+	case isTaskForwarded:
+		e.metricsClient.IncCounter(scope, metrics.RemoteToLocalMatchCounter)
+	case isPollForwarded:
+		e.metricsClient.IncCounter(scope, metrics.LocalToRemoteMatchCounter)
+	default:
+		e.metricsClient.IncCounter(scope, metrics.LocalToLocalMatchCounter)
+	}
 }

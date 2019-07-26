@@ -23,6 +23,7 @@ package matching
 import (
 	"time"
 
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -35,11 +36,18 @@ type (
 		RPS               dynamicconfig.IntPropertyFn
 
 		// taskListManager configuration
-		RangeSize                 int64
-		GetTasksBatchSize         dynamicconfig.IntPropertyFnWithTaskListInfoFilters
-		UpdateAckInterval         dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
-		IdleTasklistCheckInterval dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
-		MaxTasklistIdleTime       dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+		RangeSize                    int64
+		GetTasksBatchSize            dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		UpdateAckInterval            dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+		IdleTasklistCheckInterval    dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+		MaxTasklistIdleTime          dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+		NumTasklistWritePartitions   dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		NumTasklistReadPartitions    dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		ForwarderMaxOutstandingPolls dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		ForwarderMaxOutstandingTasks dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
 		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskListInfoFilters
@@ -52,7 +60,15 @@ type (
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 	}
 
+	forwarderConfig struct {
+		ForwarderMaxOutstandingPolls func() int
+		ForwarderMaxOutstandingTasks func() int
+		ForwarderMaxRatePerSecond    func() int
+		ForwarderMaxChildrenPerNode  func() int
+	}
+
 	taskListConfig struct {
+		forwarderConfig
 		EnableSyncMatch func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
@@ -66,6 +82,8 @@ type (
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
 		MaxTaskBatchSize                func() int
+		NumWritePartitions              func() int
+		NumReadPartitions               func() int
 	}
 )
 
@@ -86,6 +104,12 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		OutstandingTaskAppendsThreshold: dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
 		MaxTaskBatchSize:                dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingMaxTaskBatchSize, 100),
 		ThrottledLogRPS:                 dc.GetIntProperty(dynamicconfig.MatchingThrottledLogRPS, 20),
+		NumTasklistWritePartitions:      dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistWritePartitions, 1),
+		NumTasklistReadPartitions:       dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistReadPartitions, 1),
+		ForwarderMaxOutstandingPolls:    dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 1),
+		ForwarderMaxOutstandingTasks:    dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
+		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
+		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 	}
 }
 
@@ -129,6 +153,26 @@ func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainC
 		},
 		MaxTaskBatchSize: func() int {
 			return config.MaxTaskBatchSize(domain, taskListName, taskType)
+		},
+		NumWritePartitions: func() int {
+			return common.MaxInt(1, config.NumTasklistWritePartitions(domain, taskListName, taskType))
+		},
+		NumReadPartitions: func() int {
+			return common.MaxInt(1, config.NumTasklistReadPartitions(domain, taskListName, taskType))
+		},
+		forwarderConfig: forwarderConfig{
+			ForwarderMaxOutstandingPolls: func() int {
+				return config.ForwarderMaxOutstandingPolls(domain, taskListName, taskType)
+			},
+			ForwarderMaxOutstandingTasks: func() int {
+				return config.ForwarderMaxOutstandingTasks(domain, taskListName, taskType)
+			},
+			ForwarderMaxRatePerSecond: func() int {
+				return config.ForwarderMaxRatePerSecond(domain, taskListName, taskType)
+			},
+			ForwarderMaxChildrenPerNode: func() int {
+				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(domain, taskListName, taskType))
+			},
 		},
 	}, nil
 }

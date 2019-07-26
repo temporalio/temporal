@@ -108,6 +108,12 @@ var keys = map[Key]string{
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
 	MatchingMaxTaskDeleteBatchSize:          "matching.maxTaskDeleteBatchSize",
 	MatchingThrottledLogRPS:                 "matching.throttledLogRPS",
+	MatchingNumTasklistWritePartitions:      "matching.numTasklistWritePartitions",
+	MatchingNumTasklistReadPartitions:       "matching.numTasklistReadPartitions",
+	MatchingForwarderMaxOutstandingPolls:    "matching.forwarderMaxOutstandingPolls",
+	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
+	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
+	MatchingForwarderMaxChildrenPerNode:     "matching.forwarderMaxChildrenPerNode",
 
 	// history settings
 	HistoryRPS:                                            "history.rps",
@@ -338,6 +344,18 @@ const (
 	MatchingMaxTaskDeleteBatchSize
 	// MatchingThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	MatchingThrottledLogRPS
+	// MatchingNumTasklistWritePartitions is the number of write partitions for a task list
+	MatchingNumTasklistWritePartitions
+	// MatchingNumTasklistReadPartitions is the number of read partitions for a task list
+	MatchingNumTasklistReadPartitions
+	// MatchingForwarderMaxOutstandingPolls is the max number of inflight polls from the forwarder
+	MatchingForwarderMaxOutstandingPolls
+	// MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder
+	MatchingForwarderMaxOutstandingTasks
+	// MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded
+	MatchingForwarderMaxRatePerSecond
+	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task list partition tree
+	MatchingForwarderMaxChildrenPerNode
 
 	// key for history
 

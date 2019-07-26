@@ -346,6 +346,14 @@ func MinInt(a, b int) int {
 	return b
 }
 
+// MaxInt returns the greater one of two given integers
+func MaxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // ValidateRetryPolicy validates a retry policy
 func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 	if policy == nil {

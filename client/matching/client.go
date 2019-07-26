@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 	"go.uber.org/yarpc"
 )
 
@@ -44,6 +45,7 @@ type clientImpl struct {
 	timeout         time.Duration
 	longPollTimeout time.Duration
 	clients         common.ClientCache
+	loadBalancer    LoadBalancer
 }
 
 // NewClient creates a new history service TChannel client
@@ -51,79 +53,116 @@ func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
+	lb LoadBalancer,
 ) Client {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
 		clients:         clients,
+		loadBalancer:    lb,
 	}
 }
 
 func (c *clientImpl) AddActivityTask(
 	ctx context.Context,
-	addRequest *m.AddActivityTaskRequest,
+	request *m.AddActivityTaskRequest,
 	opts ...yarpc.CallOption) error {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getClientForTasklist(addRequest.TaskList.GetName())
+	partition := c.loadBalancer.PickWritePartition(
+		request.GetDomainUUID(),
+		*request.GetTaskList(),
+		persistence.TaskListTypeActivity,
+		request.GetForwardedFrom(),
+	)
+	request.TaskList.Name = &partition
+	client, err := c.getClientForTasklist(partition)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddActivityTask(ctx, addRequest, opts...)
+	return client.AddActivityTask(ctx, request, opts...)
 }
 
 func (c *clientImpl) AddDecisionTask(
 	ctx context.Context,
-	addRequest *m.AddDecisionTaskRequest,
+	request *m.AddDecisionTaskRequest,
 	opts ...yarpc.CallOption) error {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getClientForTasklist(addRequest.TaskList.GetName())
+	partition := c.loadBalancer.PickWritePartition(
+		request.GetDomainUUID(),
+		*request.GetTaskList(),
+		persistence.TaskListTypeDecision,
+		request.GetForwardedFrom(),
+	)
+	request.TaskList.Name = &partition
+	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
 		return err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddDecisionTask(ctx, addRequest, opts...)
+	return client.AddDecisionTask(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollForActivityTask(
 	ctx context.Context,
-	pollRequest *m.PollForActivityTaskRequest,
+	request *m.PollForActivityTaskRequest,
 	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getClientForTasklist(pollRequest.PollRequest.TaskList.GetName())
+	partition := c.loadBalancer.PickReadPartition(
+		request.GetDomainUUID(),
+		*request.PollRequest.GetTaskList(),
+		persistence.TaskListTypeActivity,
+		request.GetForwardedFrom(),
+	)
+	request.PollRequest.TaskList.Name = &partition
+	client, err := c.getClientForTasklist(request.PollRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForActivityTask(ctx, pollRequest, opts...)
+	return client.PollForActivityTask(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollForDecisionTask(
 	ctx context.Context,
-	pollRequest *m.PollForDecisionTaskRequest,
+	request *m.PollForDecisionTaskRequest,
 	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getClientForTasklist(pollRequest.PollRequest.TaskList.GetName())
+	partition := c.loadBalancer.PickReadPartition(
+		request.GetDomainUUID(),
+		*request.PollRequest.GetTaskList(),
+		persistence.TaskListTypeDecision,
+		request.GetForwardedFrom(),
+	)
+	request.PollRequest.TaskList.Name = &partition
+	client, err := c.getClientForTasklist(request.PollRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForDecisionTask(ctx, pollRequest, opts...)
+	return client.PollForDecisionTask(ctx, request, opts...)
 }
 
-func (c *clientImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWorkflowRequest, opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
+func (c *clientImpl) QueryWorkflow(ctx context.Context, request *m.QueryWorkflowRequest, opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getClientForTasklist(queryRequest.TaskList.GetName())
+	partition := c.loadBalancer.PickReadPartition(
+		request.GetDomainUUID(),
+		*request.GetTaskList(),
+		persistence.TaskListTypeDecision,
+		request.GetForwardedFrom(),
+	)
+	request.TaskList.Name = &partition
+	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.QueryWorkflow(ctx, queryRequest, opts...)
+	return client.QueryWorkflow(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest, opts ...yarpc.CallOption) error {

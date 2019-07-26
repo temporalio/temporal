@@ -51,20 +51,27 @@ func (_m *MockClientBean) GetHistoryClient() history.Client {
 	return r0
 }
 
-// GetMatchingClient provides a mock function with given fields:
-func (_m *MockClientBean) GetMatchingClient() matching.Client {
-	ret := _m.Called()
+// GetMatchingClient provides a mock function with given fields: domainIDToName
+func (_m *MockClientBean) GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+	ret := _m.Called(domainIDToName)
 
 	var r0 matching.Client
-	if rf, ok := ret.Get(0).(func() matching.Client); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(DomainIDToNameFunc) matching.Client); ok {
+		r0 = rf(domainIDToName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(matching.Client)
 		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(DomainIDToNameFunc) error); ok {
+		r1 = rf(domainIDToName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetFrontendClient provides a mock function with given fields:

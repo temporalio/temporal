@@ -87,6 +87,7 @@ type (
 		GetDomain(name string) (*DomainCacheEntry, error)
 		GetDomainByID(id string) (*DomainCacheEntry, error)
 		GetDomainID(name string) (string, error)
+		GetDomainName(id string) (string, error)
 		GetAllDomain() map[string]*DomainCacheEntry
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 	}
@@ -333,6 +334,15 @@ func (c *domainCache) GetDomainID(name string) (string, error) {
 		return "", err
 	}
 	return entry.info.ID, nil
+}
+
+// GetDomainName returns domain name given the domain id
+func (c *domainCache) GetDomainName(id string) (string, error) {
+	entry, err := c.getDomainByID(id)
+	if err != nil {
+		return "", err
+	}
+	return entry.info.Name, nil
 }
 
 func (c *domainCache) refreshLoop() {
