@@ -1,11 +1,12 @@
 ## What
 
-This README explains how to create new implementations for the History and Visibility Archiver Interface.
+This README explains how to add new Archiver implementations.
 
 ## Steps
 
-1. Create a new directory in the `archiver` folder. The structure should look like the following:
+**Step 1: Create a new package for your implementation**
 
+Create a new directory in the `archiver` folder. The structure should look like the following:
 ```
 ./common/archiver
   - filestore/                      -- Filestore implementation 
@@ -17,24 +18,52 @@ This README explains how to create new implementations for the History and Visib
       - visibilityArchiver.go       -- VisibilityArchiver implementations
       - visibilityArchiver_test.go  -- Unit tests for VisibilityArchiver
 ```
-2. Each Archiver will be given a `BootstrapContainer` when it's created and the archiver implementation can (will) use them to read history, emit logs/metrics etc. See `interface.go` for more details.
 
-3. Implement the Archiver interface. Both Archiver interfaces contain three methods:
-  
+**Step 2: Implement the HistoryArchiver interface**
+
 ```go
-func Archive(ctx context.Context, URI string, request *ArchiveRequest, opts ...ArchiveOption) error
-
-func Get(ctx context.Context, URI string, request *GetRequest) (*GetResponse, error)
-
-func ValidateURI(URI string) error
+type HistoryArchiver interface {
+	// Archive is used to archive a workflow history. When the context expires the method should stop trying to archive.
+	// Implementors are free to archive however they want, including implementing retries of sub-operations. The URI defines
+	// the resource that histories should be archived into. The implementor gets to determine how to interpret the URI.
+	// The Archive method may or may not be automatically retried by the caller. The ArchiveOptions are used
+	// to interact with these retries including giving the implementor the ability to cancel retries and record progress
+	// between retry attempts. 
+    Archive(context.Context, URI, *ArchiveHistoryRequest, ...ArchiveOption) error
+    
+    // Get is used to access an archived history. When context expires method should stop trying to fetch history.
+    // The URI identifies the resource from which history should be accessed and it is up to the implementor to interpret this URI.
+    // This method should thrift errors - see filestore as an example.
+    Get(context.Context, URI, *GetHistoryRequest) (*GetHistoryResponse, error)
+    
+    // ValidateURI is used to define what a valid URI for an implementation is.
+    ValidateURI(URI) error
+}
 ```
 
-Each archiver implementation should define a format of URI, which is used to describe the type of implementation and the target location of the `Archive()` or `Get()` operation. For example, the URI for filestore uses the format: `file:///path/to/dir`. The `ValidateURI()` method is responsible for checking if a given string is a valid URI.
+**Step 3: Implement the VisibilityArchiver interface**
 
-The `Archive()` method should archive workflow histories or visibility records described by the archive request to the location specified by the URI, while the `Get()` method is responsible for retrieving those archived data.
+```go
+type VisibilityArchiver interface {
+    // ValidateURI is used to define what a valid URI for an implementation is.
+    ValidateURI(URI) error
+}
+```
+VisibilityArchiver is plumbed throughout the codebase but the full visibility feature is not yet implemented.
+This means even once the VisibilityArchiver is implemented archival of visibility events will not occur. 
+Despite this implementors are still expected to implement this one method interface.
 
-The `Archive()` method may be invoked differently by different callers. For example some callers may automatically retry, while others only try once. Therefore, a list of `ArchiveOption` will be passed to this method. These options will be applied to an `ArchiveFeatureCatalog`, and by checking the fields of that catalog, the `Archive()` method can figure out what to do. Right now, the only feature in the catalog is `ProgressManager` which can be used to record and load archive progress. More features can be added if needed. The correct way to use it is shown in the code sample below.
+**Step 4: Update provider to provide access to your implementation**
 
+Modify the `./provider/provider.go` file so that the `ArchiverProvider` knows how to create an instance of your archiver. 
+Also, add configs for you archiver to static yaml config files and modify the `HistoryArchiverProvider` 
+and `VisibilityArchiverProvider` struct in the `../common/service/config.go` accordingly.
+
+
+## FAQ
+**If my Archive method can automatically be retried by caller how can I record and access progress between retries?**
+
+ArchiverOptions is used to handle this. The following shows and example: 
 ```go
 func (a *Archiver) Archive(
 	ctx context.Context,
@@ -42,7 +71,7 @@ func (a *Archiver) Archive(
 	request *ArchiveRequest,
 	opts ...ArchiveOption,
 ) error {
-  featureCatalog := **GetFeatureCatalog**(opts...) // this function is defined in options.go
+  featureCatalog := GetFeatureCatalog(opts...) // this function is defined in options.go
 
   var progress progress
 
@@ -64,8 +93,35 @@ func (a *Archiver) Archive(
 }
 ```
 
-4. The `archiver` package provides a utility class called `HistoryIterator` which is a wrapper of `HistoryManager`. Its usage is simpler than the `HistoryManager` given in the `BootstrapContainer`, so archiver implementations can choose to use it when reading workflow histories. See the `historyIterator.go` file for more details. Sample usage can be found in the filestore historyArchiver implementation.
+**If my Archive method encounters an error which is non-retryable how do I indicate that the caller should not retry?**
 
-5. The `archiver` package also provides some common error types and messages in `constants.go`.
+```go
+func (a *Archiver) Archive(
+	ctx context.Context,
+	URI string,
+	request *ArchiveRequest,
+	opts ...ArchiveOption,
+) error {
+  featureCatalog := GetFeatureCatalog(opts...) // this function is defined in options.go
 
-6. After you have finished the implementation, modify the `./provider/provider.go` file so that the `ArchiverProvider` knows how to create an instance of your archiver. Also, add configs for you archiver to static yaml config files and modify the `HistoryArchiverConfig` and `VisibilityArchiverConfig` struct in the `../common/service/config.go` accordingly.
+  err := youArchiverImpl()
+  if nonRetryableErr(err) {
+    if featureCatalog.NonRetriableError != nil {
+	  return featureCatalog.NonRetriableError() // when the caller gets this error type back it will not retry anymore.
+    }
+  }
+}
+```
+
+**How does my archiver implementation read history?**
+
+The `archiver` package provides a utility class called `HistoryIterator` which is a wrapper of `HistoryManager`. 
+Its usage is simpler than the `HistoryManager` given in the `BootstrapContainer`, 
+so archiver implementations can choose to use it when reading workflow histories. 
+See the `historyIterator.go` file for more details. 
+Sample usage can be found in the filestore historyArchiver implementation.
+
+**Should my archiver define all its own error types?**
+
+Each archiver is free to define and return any errors it wants. However many common errors which
+exist between archivers are already defined in `constants.go`.

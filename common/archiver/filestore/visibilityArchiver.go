@@ -33,8 +33,8 @@ type (
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
 func NewVisibilityArchiver(
-	container archiver.VisibilityBootstrapContainer,
-	config *config.FilestoreVisibilityArchiver,
+	_ archiver.VisibilityBootstrapContainer,
+	_ *config.FilestoreVisibilityArchiver,
 ) archiver.VisibilityArchiver {
 	return &visibilityArchiver{}
 }
