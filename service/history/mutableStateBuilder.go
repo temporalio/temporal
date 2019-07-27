@@ -1181,6 +1181,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		Header:                              attributes.Header,
 		RetryPolicy:                         attributes.RetryPolicy,
 		CronSchedule:                        attributes.CronSchedule,
+		Memo:                                attributes.Memo,
+		SearchAttributes:                    attributes.SearchAttributes,
 	}
 
 	req := &h.StartWorkflowExecutionRequest{

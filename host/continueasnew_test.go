@@ -47,6 +47,12 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	header := &workflow.Header{
 		Fields: map[string][]byte{"tracing": []byte("sample payload")},
 	}
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
+	}
+	searchAttr := &workflow.SearchAttributes{
+		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
+	}
 
 	request := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
@@ -56,6 +62,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		TaskList:                            taskList,
 		Input:                               nil,
 		Header:                              header,
+		Memo:                                memo,
+		SearchAttributes:                    searchAttr,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 		Identity:                            common.StringPtr(identity),
@@ -86,6 +94,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 					TaskList:                            &workflow.TaskList{Name: &tl},
 					Input:                               buf.Bytes(),
 					Header:                              header,
+					Memo:                                memo,
+					SearchAttributes:                    searchAttr,
 					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 				},
@@ -124,6 +134,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
+	s.Equal(memo, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.Memo)
+	s.Equal(searchAttr, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.SearchAttributes)
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {

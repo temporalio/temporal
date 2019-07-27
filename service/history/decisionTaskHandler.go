@@ -679,7 +679,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
 		attr.Input,
-		"ContinueAsNewWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
+		"ContinueAsNewWorkflowExecutionDecisionAttributes. Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true

@@ -872,6 +872,8 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes.FailureReason = request.FailureReason
 	attributes.FailureDetails = request.FailureDetails
 	attributes.LastCompletionResult = request.LastCompletionResult
+	attributes.Memo = request.Memo
+	attributes.SearchAttributes = request.SearchAttributes
 	historyEvent.WorkflowExecutionContinuedAsNewEventAttributes = attributes
 
 	return historyEvent
