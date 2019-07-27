@@ -460,6 +460,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 	var newWorkflow *persistence.WorkflowSnapshot
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+
 		defer func() {
 			if retError != nil {
 				newContext.clear()
@@ -470,17 +471,15 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		if err != nil {
 			return err
 		}
-
 		newWorkflowSizeSize := newContext.getHistorySize()
 		eventsSize, err := c.persistFirstWorkflowEvents(workflowEventsSeq[0])
 		if err != nil {
 			return err
 		}
 		newWorkflowSizeSize += eventsSize
-
-		newContext.setHistorySize(currentWorkflowSize)
+		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
-			HistorySize: currentWorkflowSize,
+			HistorySize: newWorkflowSizeSize,
 		}
 	}
 
