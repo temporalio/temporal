@@ -103,8 +103,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 			},
 			ExecutionStats: &p.ExecutionStats{},
 		},
-		RangeID:            s.ShardInfo.RangeID,
-		CreateWorkflowMode: p.CreateWorkflowModeBrandNew,
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
 	}
 
 	workflowExecutionStatusCreated := gen.WorkflowExecution{
@@ -169,7 +169,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 		WorkflowId: workflowExecutionStatusRunning.WorkflowId,
 		RunId:      common.StringPtr(uuid.New()),
 	}
-	req.CreateWorkflowMode = p.CreateWorkflowModeZombie
+	req.Mode = p.CreateWorkflowModeZombie
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowID = workflowExecutionStatusZombie.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionInfo.RunID = workflowExecutionStatusZombie.GetRunId()
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateZombie
@@ -190,8 +190,9 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 // TestCreateWorkflowExecutionWithZombieState test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	domainID := uuid.New()
-	workflowExecutionRunning := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("create-workflow-test-with-zombie-state"),
+	workflowID := "create-workflow-test-with-zombie-state"
+	workflowExecutionZombie1 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(uuid.New()),
 	}
 	tasklist := "some random tasklist"
@@ -206,8 +207,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 			ExecutionInfo: &p.WorkflowExecutionInfo{
 				CreateRequestID:      uuid.New(),
 				DomainID:             domainID,
-				WorkflowID:           workflowExecutionRunning.GetWorkflowId(),
-				RunID:                workflowExecutionRunning.GetRunId(),
+				WorkflowID:           workflowID,
+				RunID:                workflowExecutionZombie1.GetRunId(),
 				TaskList:             tasklist,
 				WorkflowTypeName:     workflowType,
 				WorkflowTimeout:      workflowTimeout,
@@ -219,28 +220,34 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 			},
 			ExecutionStats: &p.ExecutionStats{},
 		},
-		RangeID:            s.ShardInfo.RangeID,
-		CreateWorkflowMode: p.CreateWorkflowModeZombie,
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.CreateWorkflowModeZombie,
 	}
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-	s.NotNil(err) // do not allow creating a zombie workflow if no current running workflow
+	s.Nil(err) // allow creating a zombie workflow if no current running workflow
+	_, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
+	s.IsType(&gen.EntityNotExistsError{}, err) // no current workflow
 
-	req.CreateWorkflowMode = p.CreateWorkflowModeBrandNew
+	workflowExecutionRunning := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	req.NewWorkflowSnapshot.ExecutionInfo.RunID = workflowExecutionRunning.GetRunId()
+	req.Mode = p.CreateWorkflowModeBrandNew
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateRunning
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
-	currentRunID, err := s.GetCurrentWorkflowRunID(domainID, workflowExecutionRunning.GetWorkflowId())
+	currentRunID, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Nil(err)
 	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
 
 	workflowExecutionZombie := gen.WorkflowExecution{
-		WorkflowId: workflowExecutionRunning.WorkflowId,
+		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(uuid.New()),
 	}
-	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowID = workflowExecutionZombie.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionInfo.RunID = workflowExecutionZombie.GetRunId()
-	req.CreateWorkflowMode = p.CreateWorkflowModeZombie
+	req.Mode = p.CreateWorkflowModeZombie
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateZombie
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -294,8 +301,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			},
 			ExecutionStats: &p.ExecutionStats{},
 		},
-		RangeID:            s.ShardInfo.RangeID,
-		CreateWorkflowMode: p.CreateWorkflowModeBrandNew,
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
 	}
 
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateCreated
@@ -318,6 +325,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 	})
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -337,6 +345,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 				Condition:      nextEventID,
 			},
 			RangeID: s.ShardInfo.RangeID,
+			Mode:    p.UpdateWorkflowModeUpdateCurrent,
 		})
 		s.IsType(&gen.InternalServiceError{}, err)
 	}
@@ -352,6 +361,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 	})
 	s.IsType(&gen.InternalServiceError{}, err)
 
@@ -364,6 +374,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 				Condition:      nextEventID,
 			},
 			RangeID: s.ShardInfo.RangeID,
+			Mode:    p.UpdateWorkflowModeUpdateCurrent,
 		})
 		s.Nil(err)
 		info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -380,7 +391,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowID = workflowExecutionRunning.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionInfo.RunID = workflowExecutionRunning.GetRunId()
-	req.CreateWorkflowMode = p.CreateWorkflowModeWorkflowIDReuse
+	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
 	req.PreviousRunID = workflowExecution.GetRunId()
 	req.PreviousLastWriteVersion = common.EmptyVersion
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateRunning
@@ -399,6 +410,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeBypassCurrent,
 	})
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -418,6 +430,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 				Condition:      nextEventID,
 			},
 			RangeID: s.ShardInfo.RangeID,
+			Mode:    p.UpdateWorkflowModeBypassCurrent,
 		})
 		s.IsType(&gen.InternalServiceError{}, err)
 	}
@@ -457,8 +470,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 			},
 			ExecutionStats: &p.ExecutionStats{},
 		},
-		RangeID:            s.ShardInfo.RangeID,
-		CreateWorkflowMode: p.CreateWorkflowModeBrandNew,
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
 	}
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
@@ -481,6 +494,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeBypassCurrent,
 	})
 	s.NotNil(err)
 
@@ -495,6 +509,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 	})
 	s.NoError(err)
 
@@ -505,7 +520,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowID = workflowExecutionRunning.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionInfo.RunID = workflowExecutionRunning.GetRunId()
-	req.CreateWorkflowMode = p.CreateWorkflowModeWorkflowIDReuse
+	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
 	req.PreviousRunID = workflowExecution.GetRunId()
 	req.PreviousLastWriteVersion = common.EmptyVersion
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateRunning
@@ -530,6 +545,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 			Condition:      nextEventID,
 		},
 		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeBypassCurrent,
 	})
 	s.NoError(err)
 	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -546,7 +562,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	domainID := uuid.New()
 	workflowExecution := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("create-workflow-test"),
+		WorkflowId: common.StringPtr("create-workflow-test-brand-new"),
 		RunId:      common.StringPtr(uuid.New()),
 	}
 	tasklist := "some random tasklist"
@@ -575,8 +591,8 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 			},
 			ExecutionStats: &p.ExecutionStats{},
 		},
-		RangeID:            s.ShardInfo.RangeID,
-		CreateWorkflowMode: p.CreateWorkflowModeBrandNew,
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
 	}
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
@@ -646,7 +662,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.RangeID,
-		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:                     p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:            workflowExecution.GetRunId(),
 		PreviousLastWriteVersion: version,
 	})
@@ -726,7 +742,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.RangeID,
-		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:                     p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:            uuid.New(),
 		PreviousLastWriteVersion: version,
 	})
@@ -755,7 +771,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.RangeID,
-		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:                     p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:            workflowExecution.GetRunId(),
 		PreviousLastWriteVersion: version - 1,
 	})
@@ -784,7 +800,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 			ReplicationState: replicationState,
 		},
 		RangeID:                  s.ShardInfo.RangeID,
-		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:                     p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:            workflowExecution.GetRunId(),
 		PreviousLastWriteVersion: version,
 	})
@@ -851,7 +867,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 			ExecutionStats: &p.ExecutionStats{},
 		},
 		RangeID:                  s.ShardInfo.RangeID,
-		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:                     p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:            workflowExecution.GetRunId(),
 		PreviousLastWriteVersion: common.EmptyVersion,
 	})
@@ -1122,7 +1138,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				},
 			},
 		},
-		CreateWorkflowMode: p.CreateWorkflowModeBrandNew,
+		Mode: p.CreateWorkflowModeBrandNew,
 	}
 
 	createResp, err := s.ExecutionManager.CreateWorkflowExecution(createReq)
@@ -1498,7 +1514,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	}
 	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
 	workflowExecution := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("get-current-workflow-test"),
+		WorkflowId: common.StringPtr("delete-current-workflow-test"),
 		RunId:      common.StringPtr("6cae4054-6ba7-46d3-8755-e3c2db6f74ea"),
 	}
 

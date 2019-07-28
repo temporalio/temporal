@@ -2585,7 +2585,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		s.Equal(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:  persistence.CreateWorkflowModeBrandNew,
+			Mode:                persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:       "",
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 		}, input)
@@ -2944,7 +2944,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:  persistence.CreateWorkflowModeBrandNew,
+			Mode:                persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:       "",
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 		}, input)
@@ -2952,7 +2952,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:       persistence.CreateWorkflowModeWorkflowIDReuse,
+			Mode:                     persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:            currentRunID,
 			PreviousLastWriteVersion: currentVersion,
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
@@ -3073,7 +3073,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:  persistence.CreateWorkflowModeBrandNew,
+			Mode:                persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:       "",
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 		}, input)
@@ -3081,7 +3081,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:       persistence.CreateWorkflowModeWorkflowIDReuse,
+			Mode:                     persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:            currentRunID,
 			PreviousLastWriteVersion: currentVersion,
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
@@ -3202,7 +3202,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:  persistence.CreateWorkflowModeBrandNew,
+			Mode:                persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:       "",
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 		}, input)
@@ -3210,7 +3210,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:       persistence.CreateWorkflowModeWorkflowIDReuse,
+			Mode:                     persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:            currentRunID,
 			PreviousLastWriteVersion: currentVersion,
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
@@ -4162,7 +4162,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:  persistence.CreateWorkflowModeBrandNew,
+			Mode:                persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:       "",
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 		}, input)
@@ -4170,7 +4170,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		return reflect.DeepEqual(&persistence.CreateWorkflowExecutionRequest{
-			CreateWorkflowMode:       persistence.CreateWorkflowModeWorkflowIDReuse,
+			Mode:                     persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:            currentRunID,
 			PreviousLastWriteVersion: currentVersion,
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,

@@ -564,7 +564,7 @@ func lockCurrentExecutionIfExists(
 
 func createOrUpdateCurrentExecution(
 	tx sqldb.Tx,
-	createMode int,
+	createMode p.CreateWorkflowMode,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
@@ -996,7 +996,14 @@ func createTimerTasks(
 	return nil
 }
 
-func assertNotCurrentExecution(tx sqldb.Tx, shardID int, domainID sqldb.UUID, workflowID string, runID sqldb.UUID) error {
+func assertNotCurrentExecution(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
 	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
 		return assertRunIDMismatch(runID, currentRow.RunID)
 	}

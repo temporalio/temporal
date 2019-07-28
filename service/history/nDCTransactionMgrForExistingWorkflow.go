@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -244,6 +245,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		return err
 	}
 
+	var newContext workflowExecutionContext
+	var newMutableState mutableState
+	var newTransactionPolicy *transactionPolicy
 	if newWorkflow != nil {
 		if err := newWorkflow.suppressWorkflowBy(
 			currentWorkflow,
@@ -251,14 +255,19 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			return err
 		}
 
-		return targetWorkflow.getContext().updateWorkflowExecutionWithNewAsPassive(
-			now,
-			newWorkflow.getContext(),
-			newWorkflow.getMutableState(),
-		)
+		newContext = newWorkflow.getContext()
+		newMutableState = newWorkflow.getMutableState()
+		newTransactionPolicy = transactionPolicyPassive.ptr()
 	}
 
-	return targetWorkflow.getContext().updateWorkflowExecutionAsPassive(now)
+	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		newContext,
+		newMutableState,
+		transactionPolicyPassive,
+		newTransactionPolicy,
+	)
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCurrent(

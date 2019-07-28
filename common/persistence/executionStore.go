@@ -60,7 +60,7 @@ func (m *executionManagerImpl) GetShardID() int {
 	return m.persistence.GetShardID()
 }
 
-//The below three APIs are related to serialization/deserialization
+// The below three APIs are related to serialization/deserialization
 func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
@@ -313,7 +313,10 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
-		RangeID:                request.RangeID,
+		RangeID: request.RangeID,
+
+		Mode: request.Mode,
+
 		UpdateWorkflowMutation: *serializedWorkflowMutation,
 		NewWorkflowSnapshot:    serializedNewWorkflowSnapshot,
 	}
@@ -516,6 +519,8 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		RangeID: request.RangeID,
 
+		Mode: request.Mode,
+
 		PrevRunID:            request.PrevRunID,
 		PrevLastWriteVersion: request.PrevLastWriteVersion,
 		PrevState:            request.PrevState,
@@ -573,8 +578,9 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}
 
 	newRequest := &InternalCreateWorkflowExecutionRequest{
-		RangeID:            request.RangeID,
-		CreateWorkflowMode: request.CreateWorkflowMode,
+		RangeID: request.RangeID,
+
+		Mode: request.Mode,
 
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,

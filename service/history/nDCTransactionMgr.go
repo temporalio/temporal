@@ -201,6 +201,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	//  the current record, by `UpdateWorkflowMode`
 	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
 		now,
+		persistence.UpdateWorkflowModeBypassCurrent,
 		nil,
 		nil,
 		transactionPolicyPassive,

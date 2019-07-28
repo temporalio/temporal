@@ -298,12 +298,6 @@ const (
 		`control: ?` +
 		`}`
 
-	templateSerializedEventBatch = `{` +
-		`encoding_type: ?, ` +
-		`version: ?, ` +
-		`data: ?` +
-		`}`
-
 	templateTaskListType = `{` +
 		`domain_id: ?, ` +
 		`name: ?, ` +
@@ -371,15 +365,15 @@ workflow_state = ? ` +
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, visibility_ts, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?) `
+		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateWorkflowExecutionWithReplicationQuery = `INSERT INTO executions (` +
 		`shard_id, domain_id, workflow_id, run_id, type, execution, replication_state, next_event_id, visibility_ts, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ` + templateReplicationStateType + `, ?, ?, ?) `
+		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ` + templateReplicationStateType + `, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateWorkflowExecutionWithVersionHistoriesQuery = `INSERT INTO executions (` +
 		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, visibility_ts, task_id, version_histories, version_histories_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?, ?, ?) `
+		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, transfer, visibility_ts, task_id) ` +
@@ -1054,24 +1048,27 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
-	executionInfo := request.NewWorkflowSnapshot.ExecutionInfo
-	replicationState := request.NewWorkflowSnapshot.ReplicationState
+	newWorkflow := request.NewWorkflowSnapshot
+	executionInfo := newWorkflow.ExecutionInfo
+	replicationState := newWorkflow.ReplicationState
 	domainID := executionInfo.DomainID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 
-	switch request.CreateWorkflowMode {
+	if err := p.ValidateCreateWorkflowModeState(
+		request.Mode,
+		newWorkflow,
+	); err != nil {
+		return nil, err
+	}
+
+	switch request.Mode {
 	case p.CreateWorkflowModeZombie:
-		if err := d.assertNotCurrentExecution(
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID); err != nil {
-			return nil, err
-		}
+		// noop
 
 	default:
 		if err := createOrUpdateCurrentExecution(batch,
-			request.CreateWorkflowMode,
+			request.Mode,
 			d.shardID,
 			domainID,
 			workflowID,
@@ -1086,9 +1083,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			return nil, err
 		}
 	}
+
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
 		d.shardID,
-		&request.NewWorkflowSnapshot,
+		&newWorkflow,
 	); err != nil {
 		return nil, err
 	}
@@ -1165,14 +1163,18 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
 						executionInfo.WorkflowID, executionInfo.RunID, request.RangeID, strings.Join(columns, ","))
-					return nil, &p.WorkflowExecutionAlreadyStartedError{
-						Msg:              msg,
-						StartRequestID:   executionInfo.CreateRequestID,
-						RunID:            executionInfo.RunID,
-						State:            executionInfo.State,
-						CloseStatus:      executionInfo.CloseStatus,
-						LastWriteVersion: lastWriteVersion,
+					if request.Mode == p.CreateWorkflowModeBrandNew {
+						return nil, &p.WorkflowExecutionAlreadyStartedError{
+							Msg:              msg,
+							StartRequestID:   executionInfo.CreateRequestID,
+							RunID:            executionInfo.RunID,
+							State:            executionInfo.State,
+							CloseStatus:      executionInfo.CloseStatus,
+							LastWriteVersion: lastWriteVersion,
+						}
 					}
+					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
+
 				}
 
 				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.PreviousRunID {
@@ -1323,52 +1325,66 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	updateWorkflow := request.UpdateWorkflowMutation
-	shardID := d.shardID
-	executionInfo := updateWorkflow.ExecutionInfo
+	newWorkflow := request.NewWorkflowSnapshot
 
-	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
+	executionInfo := updateWorkflow.ExecutionInfo
+	domainID := executionInfo.DomainID
+	workflowID := executionInfo.WorkflowID
+	runID := executionInfo.RunID
+	shardID := d.shardID
+
+	if err := p.ValidateUpdateWorkflowModeState(
+		request.Mode,
+		updateWorkflow,
+		newWorkflow,
+	); err != nil {
 		return err
 	}
 
-	if request.NewWorkflowSnapshot != nil {
-
-		newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
-		newReplicationState := request.NewWorkflowSnapshot.ReplicationState
-		newDomainID := newExecutionInfo.DomainID
-		newWorkflowID := newExecutionInfo.WorkflowID
-		newRunID := newExecutionInfo.RunID
-
-		if err := createOrUpdateCurrentExecution(batch,
-			p.CreateWorkflowModeContinueAsNew,
-			d.shardID,
-			newDomainID,
-			newWorkflowID,
-			newRunID,
-			newExecutionInfo.State,
-			newExecutionInfo.CloseStatus,
-			newExecutionInfo.CreateRequestID,
-			newReplicationState,
-			executionInfo.RunID,
-			0, // for continue as new, this is not used
-		); err != nil {
+	switch request.Mode {
+	case p.UpdateWorkflowModeBypassCurrent:
+		if err := d.assertNotCurrentExecution(
+			domainID,
+			workflowID,
+			runID); err != nil {
 			return err
 		}
-		if err := applyWorkflowSnapshotBatchAsNew(batch,
-			d.shardID,
-			request.NewWorkflowSnapshot,
-		); err != nil {
-			return err
-		}
-	} else {
-		switch executionInfo.State {
-		case p.WorkflowStateZombie:
-			if err := d.assertNotCurrentExecution(
-				executionInfo.DomainID,
-				executionInfo.WorkflowID,
-				executionInfo.RunID); err != nil {
+	case p.UpdateWorkflowModeUpdateCurrent:
+		if newWorkflow != nil {
+			newExecutionInfo := newWorkflow.ExecutionInfo
+			newReplicationState := newWorkflow.ReplicationState
+			newDomainID := newExecutionInfo.DomainID
+			newWorkflowID := newExecutionInfo.WorkflowID
+			newRunID := newExecutionInfo.RunID
+
+			if domainID != newDomainID {
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"),
+				}
+			}
+
+			if err := createOrUpdateCurrentExecution(batch,
+				p.CreateWorkflowModeContinueAsNew,
+				d.shardID,
+				newDomainID,
+				newWorkflowID,
+				newRunID,
+				newExecutionInfo.State,
+				newExecutionInfo.CloseStatus,
+				newExecutionInfo.CreateRequestID,
+				newReplicationState,
+				runID,
+				0, // for continue as new, this is not used
+			); err != nil {
 				return err
 			}
-		case p.WorkflowStateCreated, p.WorkflowStateRunning, p.WorkflowStateCompleted:
+			if err := applyWorkflowSnapshotBatchAsNew(batch,
+				d.shardID,
+				newWorkflow,
+			); err != nil {
+				return err
+			}
+		} else {
 			startVersion := common.EmptyVersion
 			lastWriteVersion := common.EmptyVersion
 			if updateWorkflow.ReplicationState != nil {
@@ -1376,8 +1392,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				lastWriteVersion = updateWorkflow.ReplicationState.LastWriteVersion
 			}
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				executionInfo.RunID,
-				executionInfo.RunID,
+				runID,
+				runID,
 				executionInfo.CreateRequestID,
 				executionInfo.State,
 				executionInfo.CloseStatus,
@@ -1387,18 +1403,22 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				executionInfo.State,
 				d.shardID,
 				rowTypeExecution,
-				executionInfo.DomainID,
-				executionInfo.WorkflowID,
+				domainID,
+				workflowID,
 				permanentRunID,
 				defaultVisibilityTimestamp,
 				rowTypeExecutionTaskID,
-				executionInfo.RunID,
+				runID,
 			)
-		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Unknown workflow state %v", executionInfo.State),
-			}
 		}
+	default:
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown workflow creation mode: %v", request.Mode),
+		}
+	}
+
+	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
+		return err
 	}
 
 	// Verifies that the RangeID has not changed

@@ -63,7 +63,7 @@ type (
 			newWorkflow *persistence.WorkflowSnapshot,
 			historySize int64,
 			now time.Time,
-			createMode int,
+			createMode persistence.CreateWorkflowMode,
 			prevRunID string,
 			prevLastWriteVersion int64,
 		) error
@@ -93,6 +93,7 @@ type (
 		) error
 		updateWorkflowExecutionWithNew(
 			now time.Time,
+			updateMode persistence.UpdateWorkflowMode,
 			newContext workflowExecutionContext,
 			newMutableState mutableState,
 			currentWorkflowTransactionPolicy transactionPolicy,
@@ -292,14 +293,14 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 	newWorkflow *persistence.WorkflowSnapshot,
 	historySize int64,
 	now time.Time,
-	createMode int,
+	createMode persistence.CreateWorkflowMode,
 	prevRunID string,
 	prevLastWriteVersion int64,
 ) error {
 
 	createRequest := &persistence.CreateWorkflowExecutionRequest{
 		// workflow create mode & prev run ID & version
-		CreateWorkflowMode:       createMode,
+		Mode:                     createMode,
 		PreviousRunID:            prevRunID,
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
@@ -377,6 +378,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
 
 	return c.updateWorkflowExecutionWithNew(
 		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
 		transactionPolicyActive,
@@ -392,6 +394,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsActive(
 
 	return c.updateWorkflowExecutionWithNew(
 		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
 		transactionPolicyActive,
@@ -405,6 +408,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsPassive(
 
 	return c.updateWorkflowExecutionWithNew(
 		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
 		transactionPolicyPassive,
@@ -420,6 +424,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsPassive(
 
 	return c.updateWorkflowExecutionWithNew(
 		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
 		transactionPolicyPassive,
@@ -429,6 +434,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsPassive(
 
 func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	now time.Time,
+	updateMode persistence.UpdateWorkflowMode,
 	newContext workflowExecutionContext,
 	newMutableState mutableState,
 	currentWorkflowTransactionPolicy transactionPolicy,
@@ -493,6 +499,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 	resp, err := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		// RangeID , this is set by shard context
+		Mode:                   updateMode,
 		UpdateWorkflowMutation: *currentWorkflow,
 		NewWorkflowSnapshot:    newWorkflow,
 		// Encoding, this is set by shard context

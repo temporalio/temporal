@@ -48,11 +48,14 @@ const (
 	DomainStatusDeleted
 )
 
+// CreateWorkflowMode workflow creation mode
+type CreateWorkflowMode int
+
 // Create Workflow Execution Mode
 const (
 	// Fail if current record exists
 	// Only applicable for CreateWorkflowExecution
-	CreateWorkflowModeBrandNew = iota
+	CreateWorkflowModeBrandNew CreateWorkflowMode = iota
 	// Update current record only if workflow is closed
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeWorkflowIDReuse
@@ -62,6 +65,32 @@ const (
 	// Do not update current record since workflow to
 	// applicable for CreateWorkflowExecution, UpdateWorkflowExecution
 	CreateWorkflowModeZombie
+)
+
+// UpdateWorkflowMode update mode
+type UpdateWorkflowMode int
+
+// Update Workflow Execution Mode
+const (
+	// Update workflow, including current record
+	// NOTE: update on current record is a condition update
+	UpdateWorkflowModeUpdateCurrent UpdateWorkflowMode = iota
+	// Update workflow, without current record
+	// NOTE: current record CANNOT point to the workflow to be updated
+	UpdateWorkflowModeBypassCurrent
+)
+
+// ConflictResolveWorkflowMode conflict resolve mode
+type ConflictResolveWorkflowMode int
+
+// Conflict Resolve Workflow Mode
+const (
+	// Conflict resolve workflow, including current record
+	// NOTE: update on current record is a condition update
+	ConflictResolveWorkflowModeUpdateCurrent ConflictResolveWorkflowMode = iota
+	// Conflict resolve workflow, without current record
+	// NOTE: current record CANNOT point to the workflow to be updated
+	ConflictResolveWorkflowModeBypassCurrent
 )
 
 // Workflow execution states
@@ -703,7 +732,7 @@ type (
 	CreateWorkflowExecutionRequest struct {
 		RangeID int64
 
-		CreateWorkflowMode int
+		Mode CreateWorkflowMode
 
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
@@ -746,6 +775,8 @@ type (
 	UpdateWorkflowExecutionRequest struct {
 		RangeID int64
 
+		Mode UpdateWorkflowMode
+
 		UpdateWorkflowMutation WorkflowMutation
 
 		NewWorkflowSnapshot *WorkflowSnapshot
@@ -756,6 +787,8 @@ type (
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
 	ConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
+
+		Mode ConflictResolveWorkflowMode
 
 		// previous workflow information
 		PrevRunID            string

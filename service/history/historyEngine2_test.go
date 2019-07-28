@@ -1258,7 +1258,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	s.mockExecutionMgr.On(
 		"CreateWorkflowExecution",
 		mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
-			return request.CreateWorkflowMode == p.CreateWorkflowModeBrandNew
+			return request.Mode == p.CreateWorkflowModeBrandNew
 		}),
 	).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
 		Msg:              "random message",
@@ -1288,7 +1288,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 			s.mockExecutionMgr.On(
 				"CreateWorkflowExecution",
 				mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
-					return request.CreateWorkflowMode == p.CreateWorkflowModeWorkflowIDReuse &&
+					return request.Mode == p.CreateWorkflowModeWorkflowIDReuse &&
 						request.PreviousRunID == runID &&
 						request.PreviousLastWriteVersion == lastWriteVersion
 				}),
@@ -1354,7 +1354,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 		s.mockExecutionMgr.On(
 			"CreateWorkflowExecution",
 			mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
-				return request.CreateWorkflowMode == p.CreateWorkflowModeBrandNew
+				return request.Mode == p.CreateWorkflowModeBrandNew
 			}),
 		).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
 			Msg:              "random message",
@@ -1385,7 +1385,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 				s.mockExecutionMgr.On(
 					"CreateWorkflowExecution",
 					mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
-						return request.CreateWorkflowMode == p.CreateWorkflowModeWorkflowIDReuse &&
+						return request.Mode == p.CreateWorkflowModeWorkflowIDReuse &&
 							request.PreviousRunID == runIDs[i] &&
 							request.PreviousLastWriteVersion == lastWriteVersion
 					}),

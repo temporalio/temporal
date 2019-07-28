@@ -199,12 +199,12 @@ func (_m *mockWorkflowExecutionContext) resetWorkflowExecution(_a0 mutableState,
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) createWorkflowExecution(_a0 *persistence.WorkflowSnapshot, _a1 int64, _a2 time.Time, _a3 int, _a4 string, _a5 int64) error {
+func (_m *mockWorkflowExecutionContext) createWorkflowExecution(_a0 *persistence.WorkflowSnapshot, _a1 int64, _a2 time.Time, _a3 persistence.CreateWorkflowMode, _a4 string, _a5 int64) error {
 
 	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*persistence.WorkflowSnapshot, int64, time.Time, int, string, int64) error); ok {
+	if rf, ok := ret.Get(0).(func(*persistence.WorkflowSnapshot, int64, time.Time, persistence.CreateWorkflowMode, string, int64) error); ok {
 		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		r0 = ret.Error(0)
@@ -265,12 +265,12 @@ func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithNewAsPassive(
 	return r0
 }
 
-func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithNew(_a0 time.Time, _a1 workflowExecutionContext, _a2 mutableState, _a3 transactionPolicy, _a4 *transactionPolicy) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+func (_m *mockWorkflowExecutionContext) updateWorkflowExecutionWithNew(_a0 time.Time, _a1 persistence.UpdateWorkflowMode, _a2 workflowExecutionContext, _a3 mutableState, _a4 transactionPolicy, _a5 *transactionPolicy) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(time.Time, workflowExecutionContext, mutableState, transactionPolicy, *transactionPolicy) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	if rf, ok := ret.Get(0).(func(time.Time, persistence.UpdateWorkflowMode, workflowExecutionContext, mutableState, transactionPolicy, *transactionPolicy) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		r0 = ret.Error(0)
 	}

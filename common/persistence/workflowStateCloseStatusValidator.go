@@ -46,7 +46,11 @@ var (
 )
 
 // ValidateCreateWorkflowStateCloseStatus validate workflow state and close status
-func ValidateCreateWorkflowStateCloseStatus(state int, closeStatus int) error {
+func ValidateCreateWorkflowStateCloseStatus(
+	state int,
+	closeStatus int,
+) error {
+
 	if err := validateWorkflowState(state); err != nil {
 		return err
 	}
@@ -65,7 +69,11 @@ func ValidateCreateWorkflowStateCloseStatus(state int, closeStatus int) error {
 }
 
 // ValidateUpdateWorkflowStateCloseStatus validate workflow state and close status
-func ValidateUpdateWorkflowStateCloseStatus(state int, closeStatus int) error {
+func ValidateUpdateWorkflowStateCloseStatus(
+	state int,
+	closeStatus int,
+) error {
+
 	if err := validateWorkflowState(state); err != nil {
 		return err
 	}
@@ -99,7 +107,10 @@ func ValidateUpdateWorkflowStateCloseStatus(state int, closeStatus int) error {
 }
 
 // validateWorkflowState validate workflow state
-func validateWorkflowState(state int) error {
+func validateWorkflowState(
+	state int,
+) error {
+
 	if _, ok := validWorkflowStates[state]; !ok {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Invalid workflow state: %v", state),
@@ -110,7 +121,10 @@ func validateWorkflowState(state int) error {
 }
 
 // validateWorkflowCloseStatus validate workflow close status
-func validateWorkflowCloseStatus(closeStatus int) error {
+func validateWorkflowCloseStatus(
+	closeStatus int,
+) error {
+
 	if _, ok := validWorkflowCloseStatuses[closeStatus]; !ok {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Invalid workflow close status: %v", closeStatus),

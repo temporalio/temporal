@@ -173,8 +173,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			return err
 		}
 		return targetWorkflow.getContext().createWorkflowExecution(
-			targetWorkflowSnapshot, targetWorkflowHistorySize, now,
-			createMode, prevRunID, prevLastWriteVersion,
+			targetWorkflowSnapshot,
+			targetWorkflowHistorySize,
+			now,
+			createMode,
+			prevRunID,
+			prevLastWriteVersion,
 		)
 	}
 
@@ -183,8 +187,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.getContext().createWorkflowExecution(
-		targetWorkflowSnapshot, targetWorkflowHistorySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
+		targetWorkflowSnapshot,
+		targetWorkflowHistorySize,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
 	)
 }
 
@@ -220,8 +228,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.getContext().createWorkflowExecution(
-		targetWorkflowSnapshot, targetWorkflowHistorySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
+		targetWorkflowSnapshot,
+		targetWorkflowHistorySize,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
 	)
 }
 
@@ -240,6 +252,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	return currentWorkflow.getContext().updateWorkflowExecutionWithNew(
 		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.getContext(),
 		targetWorkflow.getMutableState(),
 		transactionPolicyActive,

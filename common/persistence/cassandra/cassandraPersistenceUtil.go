@@ -1163,7 +1163,7 @@ func createTimerTasks(
 
 func createOrUpdateCurrentExecution(
 	batch *gocql.Batch,
-	createMode int,
+	createMode p.CreateWorkflowMode,
 	shardID int,
 	domainID string,
 	workflowID string,
@@ -1254,7 +1254,9 @@ func createOrUpdateCurrentExecution(
 			state,
 		)
 	default:
-		return fmt.Errorf("Unknown CreateWorkflowMode: %v", createMode)
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("unknown create mode: %v", createMode),
+		}
 	}
 
 	return nil

@@ -154,7 +154,7 @@ type (
 	InternalCreateWorkflowExecutionRequest struct {
 		RangeID int64
 
-		CreateWorkflowMode int
+		Mode CreateWorkflowMode
 
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
@@ -297,6 +297,8 @@ type (
 	InternalUpdateWorkflowExecutionRequest struct {
 		RangeID int64
 
+		Mode UpdateWorkflowMode
+
 		UpdateWorkflowMutation InternalWorkflowMutation
 
 		NewWorkflowSnapshot *InternalWorkflowSnapshot
@@ -305,6 +307,8 @@ type (
 	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
 	InternalConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
+
+		Mode ConflictResolveWorkflowMode
 
 		// previous workflow information
 		PrevRunID            string

@@ -106,11 +106,18 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
 
-	switch request.CreateWorkflowMode {
+	if err := p.ValidateCreateWorkflowModeState(
+		request.Mode,
+		newWorkflow,
+	); err != nil {
+		return nil, err
+	}
+
+	switch request.Mode {
 	case p.CreateWorkflowModeContinueAsNew:
 		// cannot create workflow with continue as new mode
 		return nil, &workflow.InternalServiceError{
-			Message: "CreateWorkflowExecution operation failed. Invalid CreateWorkflowModeContinueAsNew is used",
+			Message: "CreateWorkflowExecution: operation failed, encounter invalid CreateWorkflowModeContinueAsNew",
 		}
 	}
 
@@ -121,14 +128,9 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 	}
 
 	// current workflow record check
-	if row == nil {
-		// current row does not exists, check if creating zombie workflow
-		if request.CreateWorkflowMode == p.CreateWorkflowModeZombie {
-			return nil, fmt.Errorf("Cannot create zombie workflow when current record is missing")
-		}
-	} else {
+	if row != nil {
 		// current run ID, last write version, current workflow state check
-		switch request.CreateWorkflowMode {
+		switch request.Mode {
 		case p.CreateWorkflowModeBrandNew:
 			return nil, &p.WorkflowExecutionAlreadyStartedError{
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", row.WorkflowID),
@@ -167,12 +169,17 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				return nil, err
 			}
 		default:
-			return nil, fmt.Errorf("Unknown workflow creation mode: %v", request.CreateWorkflowMode)
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf(
+					"CreteWorkflowExecution: unknown workflow creation mode: %v",
+					request.Mode,
+				),
+			}
 		}
 	}
 
 	if err := createOrUpdateCurrentExecution(tx,
-		request.CreateWorkflowMode,
+		request.Mode,
 		m.shardID,
 		domainID,
 		workflowID,
@@ -204,13 +211,15 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-					*request.Execution.WorkflowId,
-					*request.Execution.RunId),
+				Message: fmt.Sprintf(
+					"Workflow execution not found.  WorkflowId: %v, RunId: %v",
+					request.Execution.GetWorkflowId(),
+					request.Execution.GetRunId(),
+				),
 			}
 		}
 		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetWorkflowExecution failed. Error: %v", err),
+			Message: fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err),
 		}
 	}
 
@@ -325,7 +334,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get activity info. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err),
 			}
 		}
 	}
@@ -339,7 +348,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get timer info. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err),
 			}
 		}
 	}
@@ -353,7 +362,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get child execution info. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get child execution info. Error: %v", err),
 			}
 		}
 	}
@@ -367,7 +376,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get request cancel info. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err),
 			}
 		}
 	}
@@ -381,7 +390,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get signal info. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err),
 			}
 		}
 	}
@@ -395,7 +404,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get buffered events. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err),
 			}
 		}
 	}
@@ -409,7 +418,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			runID)
 		if err != nil {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution failed. Failed to get signals requested. Error: %v", err),
+				Message: fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err),
 			}
 		}
 	}
@@ -432,6 +441,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 ) error {
 
 	updateWorkflow := request.UpdateWorkflowMutation
+	newWorkflow := request.NewWorkflowSnapshot
 
 	executionInfo := updateWorkflow.ExecutionInfo
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
@@ -439,57 +449,56 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
 	shardID := m.shardID
 
-	if err := applyWorkflowMutationTx(tx, shardID, &updateWorkflow); err != nil {
-		return err
-	}
-
-	if request.NewWorkflowSnapshot != nil {
-		newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
-		newReplicationState := request.NewWorkflowSnapshot.ReplicationState
-		newDomainID := sqldb.MustParseUUID(newExecutionInfo.DomainID)
-		newRunID := sqldb.MustParseUUID(newExecutionInfo.RunID)
-
-		if !bytes.Equal(domainID, newDomainID) {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateWorkflowExecution. Cannot continue as new to another domain"),
-			}
-		}
-
-		startVersion := common.EmptyVersion
-		lastWriteVersion := common.EmptyVersion
-		if newReplicationState != nil {
-			startVersion = newReplicationState.StartVersion
-			lastWriteVersion = newReplicationState.LastWriteVersion
-		}
-
-		if err := assertRunIDAndUpdateCurrentExecution(tx,
+	switch request.Mode {
+	case p.UpdateWorkflowModeBypassCurrent:
+		if err := assertNotCurrentExecution(tx,
 			shardID,
 			domainID,
 			workflowID,
-			newRunID,
-			runID,
-			request.NewWorkflowSnapshot.ExecutionInfo.CreateRequestID,
-			request.NewWorkflowSnapshot.ExecutionInfo.State,
-			request.NewWorkflowSnapshot.ExecutionInfo.CloseStatus,
-			startVersion,
-			lastWriteVersion); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateWorkflowExecution. Failed to continue as new current execution. Error: %v", err),
-			}
-		}
-
-		if err := applyWorkflowSnapshotTxAsNew(tx, shardID, request.NewWorkflowSnapshot); err != nil {
+			runID); err != nil {
 			return err
 		}
+	case p.UpdateWorkflowModeUpdateCurrent:
+		if newWorkflow != nil {
+			newExecutionInfo := newWorkflow.ExecutionInfo
+			newReplicationState := newWorkflow.ReplicationState
+			newDomainID := sqldb.MustParseUUID(newExecutionInfo.DomainID)
+			newRunID := sqldb.MustParseUUID(newExecutionInfo.RunID)
 
-	} else {
-		executionInfo := updateWorkflow.ExecutionInfo
-		switch executionInfo.State {
-		case p.WorkflowStateZombie:
-			if err := assertNotCurrentExecution(tx, shardID, domainID, workflowID, runID); err != nil {
+			if !bytes.Equal(domainID, newDomainID) {
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"),
+				}
+			}
+
+			startVersion := common.EmptyVersion
+			lastWriteVersion := common.EmptyVersion
+			if newReplicationState != nil {
+				startVersion = newReplicationState.StartVersion
+				lastWriteVersion = newReplicationState.LastWriteVersion
+			}
+
+			if err := assertRunIDAndUpdateCurrentExecution(tx,
+				shardID,
+				domainID,
+				workflowID,
+				newRunID,
+				runID,
+				newWorkflow.ExecutionInfo.CreateRequestID,
+				newWorkflow.ExecutionInfo.State,
+				newWorkflow.ExecutionInfo.CloseStatus,
+				startVersion,
+				lastWriteVersion); err != nil {
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err),
+				}
+			}
+
+			if err := applyWorkflowSnapshotTxAsNew(tx, shardID, newWorkflow); err != nil {
 				return err
 			}
-		case p.WorkflowStateCreated, p.WorkflowStateRunning, p.WorkflowStateCompleted:
+
+		} else {
 			startVersion := common.EmptyVersion
 			lastWriteVersion := common.EmptyVersion
 			if updateWorkflow.ReplicationState != nil {
@@ -509,16 +518,17 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				startVersion,
 				lastWriteVersion); err != nil {
 				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update current execution. Error: %v", err),
+					Message: fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err),
 				}
 			}
-		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Unknown workflow state %v", executionInfo.State),
-			}
+		}
+	default:
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown workflow creation mode: %v", request.Mode),
 		}
 	}
-	return nil
+
+	return applyWorkflowMutationTx(tx, shardID, &updateWorkflow)
 }
 
 func (m *sqlExecutionManager) ResetWorkflowExecution(
