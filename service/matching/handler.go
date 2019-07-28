@@ -192,7 +192,11 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", h.Service.GetLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForActivityTask",
+		h.Service.GetThrottledLogger(),
+	); err != nil {
 		return nil, h.handleErr(err, scope)
 	}
 
@@ -217,7 +221,11 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", h.Service.GetLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForDecisionTask",
+		h.Service.GetThrottledLogger(),
+	); err != nil {
 		return nil, h.handleErr(err, scope)
 	}
 

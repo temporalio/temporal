@@ -64,7 +64,13 @@ type (
 	}
 )
 
-func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, logger log.Logger) timerQueueProcessor {
+func newTimerQueueProcessor(
+	shard ShardContext,
+	historyService *historyEngineImpl,
+	matchingClient matching.Client,
+	logger log.Logger,
+) timerQueueProcessor {
+
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
@@ -137,7 +143,11 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimers - Notify the processor about the new active / standby timer arrival.
 // This should be called each time new timer arrives, otherwise timers maybe fired unexpected.
-func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, timerTasks []persistence.Task) {
+func (t *timerQueueProcessorImpl) NotifyNewTimers(
+	clusterName string,
+	timerTasks []persistence.Task,
+) {
+
 	if clusterName == t.currentClusterName {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
@@ -152,7 +162,10 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, timerTasks
 	standbyTimerProcessor.retryTasks()
 }
 
-func (t *timerQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) {
+func (t *timerQueueProcessorImpl) FailoverDomain(
+	domainIDs map[string]struct{},
+) {
+
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
 	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
@@ -194,7 +207,10 @@ func (t *timerQueueProcessorImpl) UnlockTaskPrrocessing() {
 	t.taskAllocator.unlock()
 }
 
-func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 {
+func (t *timerQueueProcessorImpl) getTimerFiredCount(
+	clusterName string,
+) uint64 {
+
 	if clusterName == t.currentClusterName {
 		return t.activeTimerProcessor.getTimerFiredCount()
 	}

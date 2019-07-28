@@ -43,7 +43,6 @@ import (
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
-		StartDelay                         dynamicconfig.DurationPropertyFn
 		BatchSize                          dynamicconfig.IntPropertyFn
 		WorkerCount                        dynamicconfig.IntPropertyFn
 		MaxPollRPS                         dynamicconfig.IntPropertyFn
@@ -86,7 +85,15 @@ var (
 	loadQueueTaskThrottleRetryDelay       = 5 * time.Second
 )
 
-func newQueueProcessorBase(clusterName string, shard ShardContext, options *QueueProcessorOptions, processor processor, queueAckMgr queueAckMgr, logger log.Logger) *queueProcessorBase {
+func newQueueProcessorBase(
+	clusterName string,
+	shard ShardContext,
+	options *QueueProcessorOptions,
+	processor processor,
+	queueAckMgr queueAckMgr,
+	logger log.Logger,
+) *queueProcessorBase {
+
 	workerNotificationChans := []chan struct{}{}
 	for index := 0; index < options.WorkerCount(); index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
@@ -155,8 +162,6 @@ func (p *queueProcessorBase) notifyNewTask() {
 }
 
 func (p *queueProcessorBase) processorPump() {
-	<-time.NewTimer(backoff.NewJitter().JitDuration(p.options.StartDelay(), 0.99)).C
-
 	defer p.shutdownWG.Done()
 	tasksCh := make(chan queueTaskInfo, p.options.BatchSize())
 
@@ -216,7 +221,9 @@ processorPumpLoop:
 
 }
 
-func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
+func (p *queueProcessorBase) processBatch(
+	tasksCh chan<- queueTaskInfo,
+) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
 	if err := p.rateLimiter.Wait(ctx); err != nil {
@@ -256,7 +263,12 @@ func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 	return
 }
 
-func (p *queueProcessorBase) taskWorker(tasksCh <-chan queueTaskInfo, notificationChan <-chan struct{}, workerWG *sync.WaitGroup) {
+func (p *queueProcessorBase) taskWorker(
+	tasksCh <-chan queueTaskInfo,
+	notificationChan <-chan struct{},
+	workerWG *sync.WaitGroup,
+) {
+
 	defer workerWG.Done()
 
 	for {
@@ -281,7 +293,10 @@ func (p *queueProcessorBase) retryTasks() {
 	}
 }
 
-func (p *queueProcessorBase) processTaskAndAck(notificationChan <-chan struct{}, task queueTaskInfo) {
+func (p *queueProcessorBase) processTaskAndAck(
+	notificationChan <-chan struct{},
+	task queueTaskInfo,
+) {
 
 	var scope int
 	var shouldProcessTask bool
@@ -347,7 +362,13 @@ FilterLoop:
 	}
 }
 
-func (p *queueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task queueTaskInfo, shouldProcessTask bool, logger log.Logger) (int, error) {
+func (p *queueProcessorBase) processTaskOnce(
+	notificationChan <-chan struct{},
+	task queueTaskInfo,
+	shouldProcessTask bool,
+	logger log.Logger,
+) (int, error) {
+
 	select {
 	case <-notificationChan:
 	default:
@@ -362,8 +383,13 @@ func (p *queueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, t
 	return scope, err
 }
 
-func (p *queueProcessorBase) handleTaskError(scope int, startTime time.Time,
-	notificationChan <-chan struct{}, err error, logger log.Logger) error {
+func (p *queueProcessorBase) handleTaskError(
+	scope int,
+	startTime time.Time,
+	notificationChan <-chan struct{},
+	err error,
+	logger log.Logger,
+) error {
 
 	if err == nil {
 		return nil
@@ -406,7 +432,14 @@ func (p *queueProcessorBase) handleTaskError(scope int, startTime time.Time,
 	return err
 }
 
-func (p *queueProcessorBase) ackTaskOnce(task queueTaskInfo, scope int, reportMetrics bool, startTime time.Time, attempt int) {
+func (p *queueProcessorBase) ackTaskOnce(
+	task queueTaskInfo,
+	scope int,
+	reportMetrics bool,
+	startTime time.Time,
+	attempt int,
+) {
+
 	p.ackMgr.completeQueueTask(task.GetTaskID())
 	if reportMetrics {
 		p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
@@ -419,7 +452,10 @@ func (p *queueProcessorBase) ackTaskOnce(task queueTaskInfo, scope int, reportMe
 	}
 }
 
-func (p *queueProcessorBase) initializeLoggerForTask(task queueTaskInfo) log.Logger {
+func (p *queueProcessorBase) initializeLoggerForTask(
+	task queueTaskInfo,
+) log.Logger {
+
 	logger := p.logger.WithTags(
 		tag.ShardID(p.shard.GetShardID()),
 		tag.TaskID(task.GetTaskID()),

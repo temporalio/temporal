@@ -105,7 +105,6 @@ func newTimerQueueStandbyProcessor(
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
-			shard.GetConfig().TimerProcessorStartDelay,
 			logger,
 		),
 		timerQueueAckMgr:    timerQueueAckMgr,

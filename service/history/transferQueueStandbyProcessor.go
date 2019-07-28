@@ -62,7 +62,6 @@ func newTransferQueueStandbyProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                         config.TransferProcessorStartDelay,
 		BatchSize:                          config.TransferTaskBatchSize,
 		WorkerCount:                        config.TransferTaskWorkerCount,
 		MaxPollRPS:                         config.TransferProcessorMaxPollRPS,

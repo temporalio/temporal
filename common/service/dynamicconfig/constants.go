@@ -133,8 +133,6 @@ var keys = map[Key]string{
 	TimerTaskBatchSize:                                    "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                  "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                                "history.timerTaskMaxRetryCount",
-	TimerProcessorStartDelay:                              "history.timerProcessorStartDelay",
-	TimerProcessorFailoverStartDelay:                      "history.timerProcessorFailoverStartDelay",
 	TimerProcessorGetFailureRetryCount:                    "history.timerProcessorGetFailureRetryCount",
 	TimerProcessorCompleteTimerFailureRetryCount:          "history.timerProcessorCompleteTimerFailureRetryCount",
 	TimerProcessorUpdateShardTaskCount:                    "history.timerProcessorUpdateShardTaskCount",
@@ -153,8 +151,6 @@ var keys = map[Key]string{
 	TransferProcessorMaxPollRPS:                           "history.transferProcessorMaxPollRPS",
 	TransferTaskWorkerCount:                               "history.transferTaskWorkerCount",
 	TransferTaskMaxRetryCount:                             "history.transferTaskMaxRetryCount",
-	TransferProcessorStartDelay:                           "history.transferProcessorStartDelay",
-	TransferProcessorFailoverStartDelay:                   "history.transferProcessorFailoverStartDelay",
 	TransferProcessorCompleteTransferFailureRetryCount:    "history.transferProcessorCompleteTransferFailureRetryCount",
 	TransferProcessorUpdateShardTaskCount:                 "history.transferProcessorUpdateShardTaskCount",
 	TransferProcessorMaxPollInterval:                      "history.transferProcessorMaxPollInterval",
@@ -165,7 +161,6 @@ var keys = map[Key]string{
 	ReplicatorTaskBatchSize:                               "history.replicatorTaskBatchSize",
 	ReplicatorTaskWorkerCount:                             "history.replicatorTaskWorkerCount",
 	ReplicatorTaskMaxRetryCount:                           "history.replicatorTaskMaxRetryCount",
-	ReplicatorProcessorStartDelay:                         "history.replicatorProcessorStartDelay",
 	ReplicatorProcessorMaxPollRPS:                         "history.replicatorProcessorMaxPollRPS",
 	ReplicatorProcessorUpdateShardTaskCount:               "history.replicatorProcessorUpdateShardTaskCount",
 	ReplicatorProcessorMaxPollInterval:                    "history.replicatorProcessorMaxPollInterval",
@@ -391,10 +386,6 @@ const (
 	TimerTaskWorkerCount
 	// TimerTaskMaxRetryCount is max retry count for timer processor
 	TimerTaskMaxRetryCount
-	// TimerProcessorStartDelay is the start delay
-	TimerProcessorStartDelay
-	// TimerProcessorFailoverStartDelay is the failover start delay
-	TimerProcessorFailoverStartDelay
 	// TimerProcessorGetFailureRetryCount is retry count for timer processor get failure operation
 	TimerProcessorGetFailureRetryCount
 	// TimerProcessorCompleteTimerFailureRetryCount is retry count for timer processor complete timer operation
@@ -431,10 +422,6 @@ const (
 	TransferTaskWorkerCount
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
 	TransferTaskMaxRetryCount
-	// TransferProcessorStartDelay is the start delay
-	TransferProcessorStartDelay
-	// TransferProcessorFailoverStartDelay is the failover start delay
-	TransferProcessorFailoverStartDelay
 	// TransferProcessorCompleteTransferFailureRetryCount is times of retry for failure
 	TransferProcessorCompleteTransferFailureRetryCount
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
@@ -455,8 +442,6 @@ const (
 	ReplicatorTaskWorkerCount
 	// ReplicatorTaskMaxRetryCount is max times of retry for ReplicatorProcessor
 	ReplicatorTaskMaxRetryCount
-	// ReplicatorProcessorStartDelay is the start delay
-	ReplicatorProcessorStartDelay
 	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor
 	ReplicatorProcessorMaxPollRPS
 	// ReplicatorProcessorUpdateShardTaskCount is update shard count for ReplicatorProcessor

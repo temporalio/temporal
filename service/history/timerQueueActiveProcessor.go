@@ -102,7 +102,6 @@ func newTimerQueueActiveProcessor(
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
-			shard.GetConfig().TimerProcessorStartDelay,
 			logger,
 		),
 		timerQueueAckMgr: timerQueueAckMgr,
@@ -186,7 +185,6 @@ func newTimerQueueFailoverProcessor(
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
-			shard.GetConfig().TimerProcessorFailoverStartDelay,
 			logger,
 		),
 		timerQueueAckMgr: timerQueueAckMgr,
@@ -307,7 +305,7 @@ ExpireUserTimers:
 		if isExpired := tBuilder.IsTimerExpired(td, task.VisibilityTimestamp); isExpired {
 			// Add TimerFired event to history.
 			if _, err := msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID); err != nil {
-				return errFailedToAddTimerFiredEvent
+				return err
 			}
 
 			scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
@@ -432,7 +430,7 @@ ExpireActivityTimers:
 			{
 				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-					return errFailedToAddTimeoutEvent
+					return err
 				}
 				updateHistory = true
 			}
@@ -442,7 +440,7 @@ ExpireActivityTimers:
 				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
 				if ai.StartedID != common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-						return errFailedToAddTimeoutEvent
+						return err
 					}
 					updateHistory = true
 				}
@@ -452,7 +450,7 @@ ExpireActivityTimers:
 			{
 				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-					return errFailedToAddTimeoutEvent
+					return err
 				}
 				updateHistory = true
 			}
@@ -462,7 +460,7 @@ ExpireActivityTimers:
 				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 				if ai.StartedID == common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-						return errFailedToAddTimeoutEvent
+						return err
 					}
 					updateHistory = true
 				}

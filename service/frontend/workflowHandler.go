@@ -360,7 +360,11 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	}
 
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", wh.Service.GetLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForActivityTask",
+		wh.Service.GetThrottledLogger(),
+	); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -440,7 +444,11 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	}
 
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", wh.Service.GetLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForDecisionTask",
+		wh.Service.GetThrottledLogger(),
+	); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2904,18 +2912,7 @@ func (wh *WorkflowHandler) getHistory(
 		nextPageToken = response.NextPageToken
 		size = response.Size
 	}
-
-	if len(historyEvents) > 0 {
-		scope.RecordTimer(metrics.HistorySize, time.Duration(size))
-
-		if size > common.GetHistoryWarnSizeLimit {
-			wh.GetThrottledLogger().Warn("GetHistory size threshold breached",
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.WorkflowDomainID(domainID),
-				tag.WorkflowSize(int64(size)))
-		}
-	}
+	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	if len(nextPageToken) == 0 && transientDecision != nil {
 		// Append the transient decision events once we are done enumerating everything from the events table

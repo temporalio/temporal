@@ -65,9 +65,15 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(shard ShardContext, historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,
-	historyClient history.Client, logger log.Logger) *transferQueueProcessorImpl {
+func newTransferQueueProcessor(
+	shard ShardContext,
+	historyService *historyEngineImpl,
+	visibilityMgr persistence.VisibilityManager,
+	matchingClient matching.Client,
+	historyClient history.Client,
+	logger log.Logger,
+) *transferQueueProcessorImpl {
+
 	logger = logger.WithTags(tag.ComponentTransferQueue)
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	taskAllocator := newTaskAllocator(shard)
@@ -144,7 +150,11 @@ func (t *transferQueueProcessorImpl) Stop() {
 
 // NotifyNewTask - Notify the processor about the new active / standby transfer task arrival.
 // This should be called each time new transfer task arrives, otherwise tasks maybe delayed.
-func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, transferTasks []persistence.Task) {
+func (t *transferQueueProcessorImpl) NotifyNewTask(
+	clusterName string,
+	transferTasks []persistence.Task,
+) {
+
 	if clusterName == t.currentClusterName {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
@@ -163,7 +173,10 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, transferT
 	standbyTaskProcessor.retryTasks()
 }
 
-func (t *transferQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) {
+func (t *transferQueueProcessorImpl) FailoverDomain(
+	domainIDs map[string]struct{},
+) {
+
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
 	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {

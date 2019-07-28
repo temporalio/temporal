@@ -121,7 +121,6 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		s.mockQueueAckMgr,
 		NewLocalTimerGate(clock.NewRealTimeSource()),
 		dynamicconfig.GetIntPropertyFn(10),
-		dynamicconfig.GetDurationPropertyFn(0*time.Second),
 		s.logger,
 	)
 	s.timerQueueProcessor.timerProcessor = s.mockProcessor
@@ -200,16 +199,16 @@ func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
 		WorkflowId: &task.WorkflowID,
 		RunId:      &task.RunID,
 	}
-	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
-	ms := &mockMutableState{}
+	context := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	mutableState := &mockMutableState{}
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecutionHistoryV2", mock.Anything, mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteExecutionFromVisibility", mock.Anything).Return(nil).Once()
-	ms.On("GetEventStoreVersion").Return(persistence.EventStoreVersionV2).Once()
-	ms.On("GetCurrentBranch").Return([]byte{}).Once()
+	mutableState.On("GetEventStoreVersion").Return(persistence.EventStoreVersionV2).Once()
+	mutableState.On("GetCurrentBranch").Return([]byte{}).Once()
 
-	err := s.timerQueueProcessor.deleteWorkflow(task, ms, ctx)
+	err := s.timerQueueProcessor.deleteWorkflow(task, context, mutableState)
 	s.NoError(err)
 }
 

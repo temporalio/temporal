@@ -149,7 +149,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 
 	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
 		executionInfo := c.mutableState.GetExecutionInfo()
-		c.logger.Warn("history size exceeds limit.",
+		c.logger.Error("history size exceeds error limit.",
 			tag.WorkflowDomainID(executionInfo.DomainID),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
@@ -169,7 +169,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 
 	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
 		executionInfo := c.mutableState.GetExecutionInfo()
-		c.logger.Warn("history size exceeds limit.",
+		c.logger.Warn("history size exceeds warn limit.",
 			tag.WorkflowDomainID(executionInfo.DomainID),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),

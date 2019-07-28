@@ -68,7 +68,6 @@ func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache,
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                         config.ReplicatorProcessorStartDelay,
 		BatchSize:                          config.ReplicatorTaskBatchSize,
 		WorkerCount:                        config.ReplicatorTaskWorkerCount,
 		MaxPollRPS:                         config.ReplicatorProcessorMaxPollRPS,
@@ -390,13 +389,6 @@ func GetAllHistory(historyMgr persistence.HistoryManager, historyV2Mgr persisten
 	// Emit metric and log for history size
 	if metricsClient != nil {
 		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
-	}
-	if historySize > common.GetHistoryWarnSizeLimit {
-		logger.Warn("GetHistory size threshold breached",
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.WorkflowDomainID(domainID),
-			tag.WorkflowSize(int64(historySize)))
 	}
 
 	history := &shared.History{

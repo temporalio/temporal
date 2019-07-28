@@ -69,7 +69,6 @@ func newTransferQueueActiveProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                         config.TransferProcessorStartDelay,
 		BatchSize:                          config.TransferTaskBatchSize,
 		WorkerCount:                        config.TransferTaskWorkerCount,
 		MaxPollRPS:                         config.TransferProcessorMaxPollRPS,
@@ -139,7 +138,6 @@ func newTransferQueueFailoverProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                         config.TransferProcessorFailoverStartDelay,
 		BatchSize:                          config.TransferTaskBatchSize,
 		WorkerCount:                        config.TransferTaskWorkerCount,
 		MaxPollRPS:                         config.TransferProcessorFailoverMaxPollRPS,
