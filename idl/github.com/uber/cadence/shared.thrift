@@ -237,6 +237,11 @@ enum QueryTaskCompletedType {
   FAILED,
 }
 
+enum QueryResultType {
+  ANSWERED,
+  FAILED,
+}
+
 enum PendingActivityState {
   SCHEDULED,
   STARTED,
@@ -1057,6 +1062,7 @@ struct PollForDecisionTaskResponse {
   90: optional TaskList WorkflowExecutionTaskList
   100:  optional i64 (js.type = "Long") scheduledTimestamp
   110:  optional i64 (js.type = "Long") startedTimestamp
+  120:  optional list<WorkflowQuery> queries
 }
 
 struct StickyExecutionAttributes {
@@ -1073,6 +1079,7 @@ struct RespondDecisionTaskCompletedRequest {
   60: optional bool returnNewDecisionTask
   70: optional bool forceCreateNewDecisionTask
   80: optional string binaryChecksum
+  90: optional list<WorkflowQueryResult> queryResults
 }
 
 struct RespondDecisionTaskCompletedResponse {
@@ -1335,6 +1342,13 @@ struct RespondQueryTaskCompletedRequest {
   20: optional QueryTaskCompletedType completedType
   30: optional binary queryResult
   40: optional string errorMessage
+}
+
+struct WorkflowQueryResult {
+  10: optional QueryResultType resultType
+  20: optional binary answer
+  30: optional string errorReason
+  40: optional binary errorDetails
 }
 
 struct DescribeWorkflowExecutionRequest {
