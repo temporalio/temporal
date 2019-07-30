@@ -24,6 +24,8 @@ frontend.validSearchAttributes:
     addon: 1
     addon-type: 1
     user: 1
+    CustomDomain: 1
+    Operator: 1
   constraints: {}
 system.minRetentionDays:
 - value: 0

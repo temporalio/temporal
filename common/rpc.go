@@ -46,8 +46,6 @@ const (
 	// EnforceDCRedirection refers to a boolean string of whether
 	// to enforce DCRedirection(auto-forwarding)
 	// Will be removed in the future: https://github.com/uber/cadence/issues/2304
-	// This is in Context Key/Value instead of RPC Call Option.
-	// because we want to allow setting it for each request.
 	EnforceDCRedirection = "cadence-enforce-dc-redirection"
 )
 

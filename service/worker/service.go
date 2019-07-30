@@ -186,6 +186,7 @@ func (s *Service) startBatcher(base service.Service) {
 		MetricsClient: s.metricsClient,
 		Logger:        s.logger,
 		TallyScope:    s.params.MetricScope,
+		ClientBean:    base.GetClientBean(),
 	}
 	batcher := batcher.New(params)
 	if err := batcher.Start(); err != nil {

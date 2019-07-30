@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -323,40 +322,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.Nil(err)
 
 		err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
-		s.Nil(err)
-	}
-
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
-}
-
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Enforce_Forwarding_AlternativeClusterToCurrentCluster() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, false)
-
-	currentClustercallCount := 0
-	alternativeClustercallCount := 0
-	callFn := func(targetCluster string) error {
-		switch targetCluster {
-		case s.currentClusterName:
-			currentClustercallCount++
-			return nil
-		case s.alternativeClusterName:
-			alternativeClustercallCount++
-			return &shared.DomainNotActiveError{
-				CurrentCluster: s.alternativeClusterName,
-				ActiveCluster:  s.currentClusterName,
-			}
-		default:
-			panic(fmt.Sprintf("unknown cluster name %v", targetCluster))
-		}
-	}
-
-	ctx := context.WithValue(context.Background(), common.EnforceDCRedirection, "true")
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithDomainIDRedirect(ctx, s.domainID, apiName, callFn)
-		s.Nil(err)
-
-		err = s.policy.WithDomainNameRedirect(ctx, s.domainName, apiName, callFn)
 		s.Nil(err)
 	}
 

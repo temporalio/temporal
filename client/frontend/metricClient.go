@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"context"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/yarpc"
@@ -192,14 +193,14 @@ func (c *metricClient) ListWorkflowExecutions(
 	opts ...yarpc.CallOption,
 ) (*shared.ListWorkflowExecutionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendListWorkflowExecutionsScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientListWorkflowExecutionsScope, metrics.CadenceClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendListWorkflowExecutionsScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientListWorkflowExecutionsScope, metrics.CadenceClientLatency)
 	resp, err := c.client.ListWorkflowExecutions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendListWorkflowExecutionsScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientListWorkflowExecutionsScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }
@@ -210,14 +211,14 @@ func (c *metricClient) ScanWorkflowExecutions(
 	opts ...yarpc.CallOption,
 ) (*shared.ListWorkflowExecutionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendScanWorkflowExecutionsScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientScanWorkflowExecutionsScope, metrics.CadenceClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendScanWorkflowExecutionsScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientScanWorkflowExecutionsScope, metrics.CadenceClientLatency)
 	resp, err := c.client.ListWorkflowExecutions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendScanWorkflowExecutionsScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientScanWorkflowExecutionsScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }
@@ -228,14 +229,14 @@ func (c *metricClient) CountWorkflowExecutions(
 	opts ...yarpc.CallOption,
 ) (*shared.CountWorkflowExecutionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendCountWorkflowExecutionsScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientCountWorkflowExecutionsScope, metrics.CadenceClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendCountWorkflowExecutionsScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientCountWorkflowExecutionsScope, metrics.CadenceClientLatency)
 	resp, err := c.client.CountWorkflowExecutions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendCountWorkflowExecutionsScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientCountWorkflowExecutionsScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }
@@ -245,14 +246,14 @@ func (c *metricClient) GetSearchAttributes(
 	opts ...yarpc.CallOption,
 ) (*shared.GetSearchAttributesResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendGetSearchAttributesScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientGetSearchAttributesScope, metrics.CadenceClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendGetSearchAttributesScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetSearchAttributesScope, metrics.CadenceClientLatency)
 	resp, err := c.client.GetSearchAttributes(ctx, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendGetSearchAttributesScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientGetSearchAttributesScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }

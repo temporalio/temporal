@@ -39,7 +39,7 @@ func TerminateBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 	reason := getRequiredOption(c, FlagReason)
 	svcClient := cFactory.ClientFrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemGlobalDomainName, &cclient.Options{})
+	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	err := client.TerminateWorkflow(tcCtx, jobID, "", reason, nil)
@@ -57,7 +57,7 @@ func DescribeBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 
 	svcClient := cFactory.ClientFrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemGlobalDomainName, &cclient.Options{})
+	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	wf, err := client.DescribeWorkflowExecution(tcCtx, jobID, "")
@@ -92,11 +92,11 @@ func ListBatchJobs(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	pageSize := c.Int(FlagPageSize)
 	svcClient := cFactory.ClientFrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemGlobalDomainName, &cclient.Options{})
+	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	resp, err := client.ListWorkflow(tcCtx, &shared.ListWorkflowExecutionsRequest{
-		Domain:   common.StringPtr(common.SystemGlobalDomainName),
+		Domain:   common.StringPtr(common.SystemLocalDomainName),
 		PageSize: common.Int32Ptr(int32(pageSize)),
 		Query:    common.StringPtr(fmt.Sprintf("CustomDomain = '%v'", domain)),
 	})
@@ -142,7 +142,7 @@ func StartBatchJob(c *cli.Context) {
 	rps := c.Int(FlagRPS)
 
 	svcClient := cFactory.ClientFrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemGlobalDomainName, &cclient.Options{})
+	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	resp, err := client.CountWorkflow(tcCtx, &shared.CountWorkflowExecutionsRequest{

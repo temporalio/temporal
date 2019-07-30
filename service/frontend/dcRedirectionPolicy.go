@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/config"
+	"go.uber.org/yarpc"
 )
 
 const (
@@ -167,7 +168,8 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDoma
 		return policy.currentClusterName, false
 	}
 
-	enforceDCRedirection := ctx.Value(common.EnforceDCRedirection)
+	call := yarpc.CallFromContext(ctx)
+	enforceDCRedirection := call.Header(common.EnforceDCRedirection)
 	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) && enforceDCRedirection != "true" {
 		// do not do dc redirection if auto-forwarding dynamic config and EnforceDCRedirection context flag is not enabled
 		return policy.currentClusterName, false
