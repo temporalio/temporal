@@ -44,7 +44,7 @@ You can also [build and run](docker/README.md) the service using Docker.
 
 ### Run the Samples
 
-Try out the sample recipes [here](https://github.com/samarabbas/cadence-samples) to get started.
+Try out the sample recipes for [Go](https://github.com/uber-common/cadence-samples) or [Java](https://github.com/uber/cadence-java-samples) to get started.
 
 ### Use CLI
 
