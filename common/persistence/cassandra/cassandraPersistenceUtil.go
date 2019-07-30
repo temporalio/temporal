@@ -1255,7 +1255,7 @@ func createOrUpdateCurrentExecution(
 		)
 	default:
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown create mode: %v", createMode),
+			Message: fmt.Sprintf("unknown mode: %v", createMode),
 		}
 	}
 

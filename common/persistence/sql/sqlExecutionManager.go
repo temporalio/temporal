@@ -140,6 +140,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				CloseStatus:      int(row.CloseStatus),
 				LastWriteVersion: row.LastWriteVersion,
 			}
+
 		case p.CreateWorkflowModeWorkflowIDReuse:
 			if request.PreviousLastWriteVersion != row.LastWriteVersion {
 				return nil, &p.CurrentWorkflowConditionFailedError{
@@ -163,15 +164,17 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, runIDStr, request.PreviousRunID),
 				}
 			}
+
 		case p.CreateWorkflowModeZombie:
 			// zombie workflow creation with existence of current record, this is a noop
 			if err := assertRunIDMismatch(sqldb.MustParseUUID(executionInfo.RunID), row.RunID); err != nil {
 				return nil, err
 			}
+
 		default:
 			return nil, &workflow.InternalServiceError{
 				Message: fmt.Sprintf(
-					"CreteWorkflowExecution: unknown workflow creation mode: %v",
+					"CreteWorkflowExecution: unknown mode: %v",
 					request.Mode,
 				),
 			}
@@ -449,6 +452,14 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
 	shardID := m.shardID
 
+	if err := p.ValidateUpdateWorkflowModeState(
+		request.Mode,
+		updateWorkflow,
+		newWorkflow,
+	); err != nil {
+		return err
+	}
+
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := assertNotCurrentExecution(tx,
@@ -458,6 +469,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 			runID); err != nil {
 			return err
 		}
+
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newExecutionInfo := newWorkflow.ExecutionInfo
@@ -522,9 +534,10 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				}
 			}
 		}
+
 	default:
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown workflow creation mode: %v", request.Mode),
+			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode),
 		}
 	}
 
@@ -629,11 +642,11 @@ func (m *sqlExecutionManager) ConflictResolveWorkflowExecution(
 ) error {
 
 	return m.txExecuteShardLocked("ConflictResolveWorkflowExecution", request.RangeID, func(tx sqldb.Tx) error {
-		return m.resetMutableStateTx(tx, request)
+		return m.conflictResolveWorkflowExecutionTx(tx, request)
 	})
 }
 
-func (m *sqlExecutionManager) resetMutableStateTx(
+func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 	tx sqldb.Tx,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
@@ -642,45 +655,112 @@ func (m *sqlExecutionManager) resetMutableStateTx(
 	resetWorkflow := request.ResetWorkflowSnapshot
 	newWorkflow := request.NewWorkflowSnapshot
 
-	prevRunID := sqldb.MustParseUUID(request.PrevRunID)
-	prevLastWriteVersion := request.PrevLastWriteVersion
-	prevState := request.PrevState
-
 	shardID := m.shardID
 
 	domainID := sqldb.MustParseUUID(resetWorkflow.ExecutionInfo.DomainID)
 	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
 
-	executionInfo := resetWorkflow.ExecutionInfo
-	replicationState := resetWorkflow.ReplicationState
-	if newWorkflow != nil {
-		executionInfo = newWorkflow.ExecutionInfo
-		replicationState = newWorkflow.ReplicationState
+	if err := p.ValidateConflictResolveWorkflowModeState(
+		request.Mode,
+		resetWorkflow,
+		newWorkflow,
+		currentWorkflow,
+	); err != nil {
+		return err
 	}
-	runID := sqldb.MustParseUUID(executionInfo.RunID)
-	createRequestID := executionInfo.CreateRequestID
-	state := executionInfo.State
-	closeStatus := executionInfo.CloseStatus
-	startVersion := replicationState.StartVersion
-	lastWriteVersion := replicationState.LastWriteVersion
 
-	if err := assertAndUpdateCurrentExecution(tx,
-		m.shardID,
-		domainID,
-		workflowID,
-		runID,
-		prevRunID,
-		prevLastWriteVersion,
-		prevState,
-		createRequestID,
-		state,
-		closeStatus,
-		startVersion,
-		lastWriteVersion); err != nil {
-		return &workflow.InternalServiceError{Message: fmt.Sprintf(
-			"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
-			err,
-		)}
+	switch request.Mode {
+	case p.ConflictResolveWorkflowModeBypassCurrent:
+		if err := assertNotCurrentExecution(tx,
+			shardID,
+			domainID,
+			workflowID,
+			sqldb.MustParseUUID(resetWorkflow.ExecutionInfo.RunID)); err != nil {
+			return err
+		}
+
+	case p.ConflictResolveWorkflowModeUpdateCurrent:
+		executionInfo := resetWorkflow.ExecutionInfo
+		replicationState := resetWorkflow.ReplicationState
+		if newWorkflow != nil {
+			executionInfo = newWorkflow.ExecutionInfo
+			replicationState = newWorkflow.ReplicationState
+		}
+		runID := sqldb.MustParseUUID(executionInfo.RunID)
+		createRequestID := executionInfo.CreateRequestID
+		state := executionInfo.State
+		closeStatus := executionInfo.CloseStatus
+		startVersion := replicationState.StartVersion
+		lastWriteVersion := replicationState.LastWriteVersion
+
+		if request.CurrentWorkflowCAS != nil {
+			prevRunID := sqldb.MustParseUUID(request.CurrentWorkflowCAS.PrevRunID)
+			prevLastWriteVersion := request.CurrentWorkflowCAS.PrevLastWriteVersion
+			prevState := request.CurrentWorkflowCAS.PrevState
+
+			if err := assertAndUpdateCurrentExecution(tx,
+				m.shardID,
+				domainID,
+				workflowID,
+				runID,
+				prevRunID,
+				prevLastWriteVersion,
+				prevState,
+				createRequestID,
+				state,
+				closeStatus,
+				startVersion,
+				lastWriteVersion); err != nil {
+				return &workflow.InternalServiceError{Message: fmt.Sprintf(
+					"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
+					err,
+				)}
+			}
+		} else if currentWorkflow != nil {
+			prevRunID := sqldb.MustParseUUID(currentWorkflow.ExecutionInfo.RunID)
+
+			if err := assertRunIDAndUpdateCurrentExecution(tx,
+				m.shardID,
+				domainID,
+				workflowID,
+				runID,
+				prevRunID,
+				createRequestID,
+				state,
+				closeStatus,
+				startVersion,
+				lastWriteVersion); err != nil {
+				return &workflow.InternalServiceError{Message: fmt.Sprintf(
+					"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
+					err,
+				)}
+			}
+		} else {
+			// reset workflow is current
+			prevRunID := sqldb.MustParseUUID(resetWorkflow.ExecutionInfo.RunID)
+
+			if err := assertRunIDAndUpdateCurrentExecution(tx,
+				m.shardID,
+				domainID,
+				workflowID,
+				runID,
+				prevRunID,
+				createRequestID,
+				state,
+				closeStatus,
+				startVersion,
+				lastWriteVersion); err != nil {
+				return &workflow.InternalServiceError{Message: fmt.Sprintf(
+					"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
+					err,
+				)}
+			}
+		}
+
+	default:
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode),
+		}
 	}
 
 	if err := applyWorkflowSnapshotTxAsReset(tx, shardID, &resetWorkflow); err != nil {

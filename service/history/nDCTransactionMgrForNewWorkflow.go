@@ -39,12 +39,14 @@ type (
 	}
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
-		transactionMgr *nDCTransactionMgrImpl
+		transactionMgr nDCTransactionMgr
 	}
 )
 
+var _ nDCTransactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
+
 func newNDCTransactionMgrForNewWorkflow(
-	transactionMgr *nDCTransactionMgrImpl,
+	transactionMgr nDCTransactionMgr,
 ) *nDCTransactionMgrForNewWorkflowImpl {
 
 	return &nDCTransactionMgrForNewWorkflowImpl{
@@ -89,11 +91,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	// there exists a current workflow, need additional check
-	currentWorkflow, err := loadNDCWorkflow(
+	currentWorkflow, err := r.transactionMgr.loadNDCWorkflow(
 		ctx,
-		r.transactionMgr.domainCache,
-		r.transactionMgr.historyCache,
-		r.transactionMgr.clusterMetadata,
 		domainID,
 		workflowID,
 		currentRunID,
@@ -299,7 +298,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 
 	default:
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("nDCTransactionMgr encounter unknown transaction type: %v", transactionPolicy),
+			Message: fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy),
 		}
 	}
 }

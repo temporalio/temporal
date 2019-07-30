@@ -167,18 +167,24 @@ func (r *conflictResolverImpl) reset(
 	}
 
 	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
-	msBuilder, err := r.context.conflictResolveWorkflowExecution(
+	r.context.setHistorySize(totalSize)
+	if err := r.context.conflictResolveWorkflowExecution(
 		startTime,
-		prevRunID,
-		prevLastWriteVersion,
-		prevState,
+		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		resetMutableStateBuilder,
-		totalSize,
-	)
-	if err != nil {
+		nil,
+		nil,
+		nil,
+		nil,
+		&persistence.CurrentWorkflowCAS{
+			PrevRunID:            prevRunID,
+			PrevLastWriteVersion: prevLastWriteVersion,
+			PrevState:            prevState,
+		},
+	); err != nil {
 		r.logError("Conflict resolution err reset workflow.", err)
 	}
-	return msBuilder, err
+	return r.context.loadWorkflowExecution()
 }
 
 func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,

@@ -49,7 +49,9 @@ type (
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
 
+		context      workflowExecutionContext
 		mutableState mutableState
+		historySize  int64
 		logger       log.Logger
 	}
 )
@@ -59,6 +61,7 @@ var _ nDCStateRebuilder = (*nDCStateRebuilderImpl)(nil)
 func newNDCStateRebuilder(
 	shard ShardContext,
 
+	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,
 ) *nDCStateRebuilderImpl {
@@ -68,6 +71,7 @@ func newNDCStateRebuilder(
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
 
+		context:      context,
 		mutableState: mutableState,
 		logger:       logger,
 	}
@@ -192,6 +196,15 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err = rebuildMutableState.SetVersionHistories(versionHistories); err != nil {
 		return nil, err
 	}
+	// set the update condition from original mutable state
+	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
+	if r.shard.GetConfig().EnableVisibilityToKafka() {
+		// whenever a reset of mutable state is done, we need to sync the workflow search attribute
+		rebuildMutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
+	}
+
+	r.context.clear()
+	r.context.setHistorySize(r.historySize)
 	return rebuildMutableState, nil
 }
 
@@ -247,7 +260,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
-		_, historyBatches, token, _, err := PaginateHistory(
+		_, historyBatches, token, size, err := PaginateHistory(
 			nil,
 			r.historyV2Mgr,
 			nil,
@@ -267,6 +280,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
+		r.historySize += int64(size)
 
 		var paginateItems []interface{}
 		for _, history := range historyBatches {

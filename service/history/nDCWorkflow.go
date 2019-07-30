@@ -25,7 +25,6 @@ import (
 	"fmt"
 
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -38,12 +37,8 @@ type (
 		getMutableState() mutableState
 		getReleaseFn() releaseWorkflowExecutionFunc
 		getVectorClock() (int64, int64, error)
-		happensAfter(
-			that nDCWorkflow,
-		) (bool, error)
-		suppressWorkflowBy(
-			incomingWorkflow nDCWorkflow,
-		) error
+		happensAfter(that nDCWorkflow) (bool, error)
+		suppressWorkflowBy(incomingWorkflow nDCWorkflow) error
 	}
 
 	nDCWorkflowImpl struct {
@@ -77,39 +72,6 @@ func newNDCWorkflow(
 		mutableState: mutableState,
 		releaseFn:    releaseFn,
 	}
-}
-
-func loadNDCWorkflow(
-	ctx ctx.Context,
-	domainCache cache.DomainCache,
-	historyCache *historyCache,
-	clusterMetadata cluster.Metadata,
-
-	domainID string,
-	workflowID string,
-	runID string,
-) (nDCWorkflow, error) {
-
-	// we need to check the current workflow execution
-	context, release, err := historyCache.getOrCreateWorkflowExecution(
-		ctx,
-		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	msBuilder, err := context.loadWorkflowExecution()
-	if err != nil {
-		// no matter what error happen, we need to retry
-		release(err)
-		return nil, err
-	}
-	return newNDCWorkflow(ctx, domainCache, clusterMetadata, context, msBuilder, release), nil
 }
 
 func (r *nDCWorkflowImpl) getContext() workflowExecutionContext {
@@ -173,12 +135,6 @@ func (r *nDCWorkflowImpl) suppressWorkflowBy(
 	// if the workflow to be suppressed has last write version being remote active
 	//  then turn this workflow into a zombie
 
-	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return &shared.InternalServiceError{
-			Message: "nDCWorkflow cannot suppress closed workflow",
-		}
-	}
-
 	lastWriteVersion, lastEventTaskID, err := r.getVectorClock()
 	if err != nil {
 		return err
@@ -198,6 +154,11 @@ func (r *nDCWorkflowImpl) suppressWorkflowBy(
 		}
 	}
 
+	// if workflow is in zombie or finished state, keep as is
+	if !r.mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
@@ -212,9 +173,8 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 	incomingLastWriteVersion int64,
 ) error {
 
-	// TODO nDC: modify for version history
 	// do not persist the change right now, NDC requires transaction
-	r.mutableState.UpdateReplicationStateVersion(lastWriteVersion, true)
+	r.mutableState.UpdateCurrentVersion(lastWriteVersion, true)
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		workflowTerminationReason,
 		[]byte(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),

@@ -45,6 +45,7 @@ type (
 	) nDCBranchMgr
 
 	nDCStateRebuilderProvider func(
+		context workflowExecutionContext,
 		mutableState mutableState,
 		logger log.Logger,
 	) nDCStateRebuilder
@@ -86,8 +87,8 @@ func newNDCHistoryReplicator(
 		getNewBranchMgr: func(context workflowExecutionContext, mutableState mutableState, logger log.Logger) nDCBranchMgr {
 			return newNDCBranchMgr(shard, context, mutableState, logger)
 		},
-		getNewStateRebuilder: func(mutableState mutableState, logger log.Logger) nDCStateRebuilder {
-			return newNDCStateRebuilder(shard, mutableState, logger)
+		getNewStateRebuilder: func(context workflowExecutionContext, mutableState mutableState, logger log.Logger) nDCStateRebuilder {
+			return newNDCStateRebuilder(shard, context, mutableState, logger)
 		},
 		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
@@ -289,7 +290,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsPrepareMutableState(
 ) (mutableState, bool, error) {
 
 	incomingVersion := task.getVersion()
-	stateRebuilder := r.getNewStateRebuilder(mutableState, task.getLogger())
+	stateRebuilder := r.getNewStateRebuilder(context, mutableState, task.getLogger())
 	return stateRebuilder.prepareMutableState(
 		ctx,
 		branchIndex,

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -113,6 +114,18 @@ type (
 			targetWorkflow nDCWorkflow,
 			targetWorkflowEvents *persistence.WorkflowEvents,
 		) error
+
+		getCurrentWorkflowRunID(
+			ctx ctx.Context,
+			domainID string,
+			workflowID string,
+		) (string, error)
+		loadNDCWorkflow(
+			ctx ctx.Context,
+			domainID string,
+			workflowID string,
+			runID string,
+		) (nDCWorkflow, error)
 	}
 
 	nDCTransactionMgrImpl struct {
@@ -128,6 +141,8 @@ type (
 		updateMgr nDCTransactionMgrForExistingWorkflow
 	}
 )
+
+var _ nDCTransactionMgr = (*nDCTransactionMgrImpl)(nil)
 
 func newNDCTransactionMgr(
 	shard ShardContext,
@@ -197,11 +212,29 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		return err
 	}
 
-	// TODO nDC: we need to have the ability to control whether to update
-	//  the current record, by `UpdateWorkflowMode`
+	mode := persistence.UpdateWorkflowModeUpdateCurrent
+	if !targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
+		executionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
+		domainID := executionInfo.DomainID
+		workflowID := executionInfo.WorkflowID
+		runID := executionInfo.RunID
+
+		currentRunID, err := r.getCurrentWorkflowRunID(
+			ctx,
+			domainID,
+			workflowID,
+		)
+		if err != nil {
+			return err
+		}
+		if currentRunID != runID {
+			mode = persistence.UpdateWorkflowModeBypassCurrent
+		}
+	}
+
 	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
 		now,
-		persistence.UpdateWorkflowModeBypassCurrent,
+		mode,
 		nil,
 		nil,
 		transactionPolicyPassive,
@@ -230,4 +263,33 @@ func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 	default:
 		return "", err
 	}
+}
+
+func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
+	ctx ctx.Context,
+	domainID string,
+	workflowID string,
+	runID string,
+) (nDCWorkflow, error) {
+
+	// we need to check the current workflow execution
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		domainID,
+		shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		// no matter what error happen, we need to retry
+		release(err)
+		return nil, err
+	}
+	return newNDCWorkflow(ctx, r.domainCache, r.clusterMetadata, context, msBuilder, release), nil
 }

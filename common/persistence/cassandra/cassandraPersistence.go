@@ -1349,6 +1349,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			runID); err != nil {
 			return err
 		}
+
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newExecutionInfo := newWorkflow.ExecutionInfo
@@ -1411,9 +1412,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				runID,
 			)
 		}
+
 	default:
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown workflow creation mode: %v", request.Mode),
+			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode),
 		}
 	}
 
@@ -1600,49 +1602,123 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	resetWorkflow := request.ResetWorkflowSnapshot
 	newWorkflow := request.NewWorkflowSnapshot
 
-	prevRunID := request.PrevRunID
-	prevLastWriteVersion := request.PrevLastWriteVersion
-	prevState := request.PrevState
-
 	shardID := d.shardID
 
 	domainID := resetWorkflow.ExecutionInfo.DomainID
 	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
 
-	executionInfo := resetWorkflow.ExecutionInfo
-	replicationState := resetWorkflow.ReplicationState
-	if newWorkflow != nil {
-		executionInfo = newWorkflow.ExecutionInfo
-		replicationState = newWorkflow.ReplicationState
+	if err := p.ValidateConflictResolveWorkflowModeState(
+		request.Mode,
+		resetWorkflow,
+		newWorkflow,
+		currentWorkflow,
+	); err != nil {
+		return err
 	}
-	runID := executionInfo.RunID
-	createRequestID := executionInfo.CreateRequestID
-	state := executionInfo.State
-	closeStatus := executionInfo.CloseStatus
-	startVersion := replicationState.StartVersion
-	lastWriteVersion := replicationState.LastWriteVersion
 
-	batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
-		runID,
-		runID,
-		createRequestID,
-		state,
-		closeStatus,
-		startVersion,
-		lastWriteVersion,
-		lastWriteVersion,
-		state,
-		shardID,
-		rowTypeExecution,
-		domainID,
-		workflowID,
-		permanentRunID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID,
-		prevRunID,
-		prevLastWriteVersion,
-		prevState,
-	)
+	var prevRunID string
+
+	switch request.Mode {
+	case p.ConflictResolveWorkflowModeBypassCurrent:
+		if err := d.assertNotCurrentExecution(
+			domainID,
+			workflowID,
+			resetWorkflow.ExecutionInfo.RunID); err != nil {
+			return err
+		}
+
+	case p.ConflictResolveWorkflowModeUpdateCurrent:
+		executionInfo := resetWorkflow.ExecutionInfo
+		replicationState := resetWorkflow.ReplicationState
+		if newWorkflow != nil {
+			executionInfo = newWorkflow.ExecutionInfo
+			replicationState = newWorkflow.ReplicationState
+		}
+		runID := executionInfo.RunID
+		createRequestID := executionInfo.CreateRequestID
+		state := executionInfo.State
+		closeStatus := executionInfo.CloseStatus
+		startVersion := replicationState.StartVersion
+		lastWriteVersion := replicationState.LastWriteVersion
+
+		if request.CurrentWorkflowCAS != nil {
+			prevRunID = request.CurrentWorkflowCAS.PrevRunID
+			prevLastWriteVersion := request.CurrentWorkflowCAS.PrevLastWriteVersion
+			prevState := request.CurrentWorkflowCAS.PrevState
+
+			batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
+				runID,
+				runID,
+				createRequestID,
+				state,
+				closeStatus,
+				startVersion,
+				lastWriteVersion,
+				lastWriteVersion,
+				state,
+				shardID,
+				rowTypeExecution,
+				domainID,
+				workflowID,
+				permanentRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				prevRunID,
+				prevLastWriteVersion,
+				prevState,
+			)
+		} else if currentWorkflow != nil {
+			prevRunID = currentWorkflow.ExecutionInfo.RunID
+
+			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+				runID,
+				runID,
+				createRequestID,
+				state,
+				closeStatus,
+				startVersion,
+				lastWriteVersion,
+				lastWriteVersion,
+				state,
+				shardID,
+				rowTypeExecution,
+				domainID,
+				workflowID,
+				permanentRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				prevRunID,
+			)
+		} else {
+			// reset workflow is current
+			prevRunID = resetWorkflow.ExecutionInfo.RunID
+
+			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+				runID,
+				runID,
+				createRequestID,
+				state,
+				closeStatus,
+				startVersion,
+				lastWriteVersion,
+				lastWriteVersion,
+				state,
+				shardID,
+				rowTypeExecution,
+				domainID,
+				workflowID,
+				permanentRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				prevRunID,
+			)
+		}
+
+	default:
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode),
+		}
+	}
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch,
 		shardID,
@@ -1698,7 +1774,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	}
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.ResetWorkflowSnapshot.Condition, request.RangeID, request.PrevRunID)
+		return d.getExecutionConditionalUpdateFailure(previous, iter, resetWorkflow.ExecutionInfo.RunID, request.ResetWorkflowSnapshot.Condition, request.RangeID, prevRunID)
 	}
 	return nil
 }

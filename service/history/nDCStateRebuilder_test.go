@@ -42,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -62,6 +63,7 @@ type (
 		mockClientBean      *client.MockClientBean
 		mockEventsCache     *MockEventsCache
 
+		mockContext      *mockWorkflowExecutionContext
 		mockMutableState *mockMutableState
 		domainID         string
 		workflowID       string
@@ -108,13 +110,15 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockShard.config.EnableVisibilityToKafka = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.domainID = uuid.New()
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
+	s.mockContext = &mockWorkflowExecutionContext{}
 	s.mockMutableState = &mockMutableState{}
 	s.nDCStateRebuilder = newNDCStateRebuilder(
-		s.mockShard, s.mockMutableState, s.logger,
+		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
 	)
 }
 
@@ -272,6 +276,9 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	versionHistories := persistence.NewVersionHistories(versionHistory0)
 	_, _, err := versionHistories.AddVersionHistory(versionHistory1)
 	s.NoError(err)
+
+	updateCondition := int64(59)
+	s.mockMutableState.On("GetUpdateCondition").Return(updateCondition)
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   s.domainID,
@@ -308,6 +315,8 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	history2 := []*shared.History{{events2}}
 	pageToken := []byte("some random pagination token")
 
+	historySize1 := 12345
+	historySize2 := 67890
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken1,
 		MinEventID:    firstEventID,
@@ -318,7 +327,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history1,
 		NextPageToken: pageToken,
-		Size:          12345,
+		Size:          historySize1,
 	}, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken1,
@@ -330,7 +339,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history2,
 		NextPageToken: nil,
-		Size:          12345,
+		Size:          historySize2,
 	}, nil).Once()
 
 	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
@@ -347,12 +356,15 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		s.mockClusterMetadata,
 	), nil)
 
+	s.mockContext.On("clear").Once()
+	s.mockContext.On("setHistorySize", int64(historySize1+historySize2)).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	rebuildMutableState, err := s.nDCStateRebuilder.rebuild(ctx.Background(), 1, requestID)
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	s.Equal(versionHistories, rebuildMutableState.GetVersionHistories())
 	s.Equal(1, versionHistories.GetCurrentVersionHistoryIndex())
+	s.Equal(updateCondition, rebuildMutableState.GetUpdateCondition())
 }
 
 func (s *nDCStateRebuilderSuite) TestPrepareMutableState_NoRebuild() {
@@ -400,6 +412,8 @@ func (s *nDCStateRebuilderSuite) TestPrepareMutableState_Rebuild() {
 	_, _, err := versionHistories.AddVersionHistory(versionHistory1)
 	s.Nil(err)
 
+	updateCondition := int64(59)
+	s.mockMutableState.On("GetUpdateCondition").Return(updateCondition)
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   s.domainID,
@@ -424,6 +438,7 @@ func (s *nDCStateRebuilderSuite) TestPrepareMutableState_Rebuild() {
 	}}
 	history := []*shared.History{{events}}
 
+	historySize := 12345
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken1,
 		MinEventID:    firstEventID,
@@ -434,7 +449,7 @@ func (s *nDCStateRebuilderSuite) TestPrepareMutableState_Rebuild() {
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history,
 		NextPageToken: nil,
-		Size:          12345,
+		Size:          historySize,
 	}, nil).Once()
 
 	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
@@ -451,10 +466,13 @@ func (s *nDCStateRebuilderSuite) TestPrepareMutableState_Rebuild() {
 		s.mockClusterMetadata,
 	), nil)
 
+	s.mockContext.On("clear").Once()
+	s.mockContext.On("setHistorySize", int64(historySize)).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	rebuildMutableState, isRebuilt, err := s.nDCStateRebuilder.prepareMutableState(ctx.Background(), 1, incomingVersion)
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	s.True(isRebuilt)
 	s.Equal(versionHistories, rebuildMutableState.GetVersionHistories())
+	s.Equal(updateCondition, rebuildMutableState.GetUpdateCondition())
 }

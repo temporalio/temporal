@@ -69,12 +69,14 @@ type (
 		) error
 		conflictResolveWorkflowExecution(
 			now time.Time,
-			prevRunID string,
-			prevLastWriteVersion int64,
-			prevState int,
+			conflictResolveMode persistence.ConflictResolveWorkflowMode,
 			resetMutableState mutableState,
-			resetHistorySize int64,
-		) (mutableState, error)
+			newContext workflowExecutionContext,
+			newMutableState mutableState,
+			currentContext workflowExecutionContext,
+			currentMutableState mutableState,
+			workflowCAS *persistence.CurrentWorkflowCAS,
+		) error
 		updateWorkflowExecutionAsActive(
 			now time.Time,
 		) error
@@ -182,7 +184,7 @@ func (c *workflowExecutionContextImpl) unlock() {
 func (c *workflowExecutionContextImpl) clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	c.msBuilder = nil
-	c.stats = nil
+	c.stats = &persistence.ExecutionStats{}
 }
 
 func (c *workflowExecutionContextImpl) getDomainID() string {
@@ -326,40 +328,113 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	now time.Time,
-	prevRunID string,
-	prevLastWriteVersion int64,
-	prevState int,
+	conflictResolveMode persistence.ConflictResolveWorkflowMode,
 	resetMutableState mutableState,
-	resetHistorySize int64,
-) (mutableState, error) {
+	newContext workflowExecutionContext,
+	newMutableState mutableState,
+	currentContext workflowExecutionContext,
+	currentMutableState mutableState,
+	workflowCAS *persistence.CurrentWorkflowCAS,
+) (retError error) {
 
-	// this only resets one mutableState for a workflow
+	defer func() {
+		if retError != nil {
+			c.clear()
+		}
+	}()
+
 	resetWorkflow, workflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		now,
 		transactionPolicyPassive,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(workflowEventsSeq) != 0 {
-		return nil, &workflow.BadRequestError{
-			Message: "reset mutable state should not generate new events",
+	resetHistorySize := c.getHistorySize()
+	for _, workflowEvents := range workflowEventsSeq {
+		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		if err != nil {
+			return err
 		}
+		resetHistorySize += eventsSize
 	}
-
+	c.setHistorySize(resetHistorySize)
 	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
 		HistorySize: resetHistorySize,
 	}
 
+	var newWorkflow *persistence.WorkflowSnapshot
+	if newContext != nil && newMutableState != nil {
+
+		defer func() {
+			if retError != nil {
+				newContext.clear()
+			}
+		}()
+
+		newWorkflow, workflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+			now,
+			transactionPolicyPassive,
+		)
+		if err != nil {
+			return err
+		}
+		newWorkflowSizeSize := newContext.getHistorySize()
+		eventsSize, err := c.persistFirstWorkflowEvents(workflowEventsSeq[0])
+		if err != nil {
+			return err
+		}
+		newWorkflowSizeSize += eventsSize
+		newContext.setHistorySize(newWorkflowSizeSize)
+		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
+			HistorySize: newWorkflowSizeSize,
+		}
+	}
+
+	var currentWorkflow *persistence.WorkflowMutation
+	if currentContext != nil && currentMutableState != nil {
+
+		defer func() {
+			if retError != nil {
+				currentContext.clear()
+			}
+		}()
+
+		currentWorkflow, workflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+			now,
+			transactionPolicyActive, // current workflow must be closed as active
+		)
+		if err != nil {
+			return err
+		}
+		currentWorkflowSize := currentContext.getHistorySize()
+		for _, workflowEvents := range workflowEventsSeq {
+			eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+			if err != nil {
+				return err
+			}
+			currentWorkflowSize += eventsSize
+		}
+		currentContext.setHistorySize(currentWorkflowSize)
+		currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
+			HistorySize: currentWorkflowSize,
+		}
+	}
+
 	if err := c.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
-		// previous workflow information
-		PrevRunID:            prevRunID,
-		PrevLastWriteVersion: prevLastWriteVersion,
-		PrevState:            prevState,
+		// RangeID , this is set by shard context
+		Mode: conflictResolveMode,
 
 		ResetWorkflowSnapshot: *resetWorkflow,
+
+		NewWorkflowSnapshot: newWorkflow,
+
+		CurrentWorkflowMutation: currentWorkflow,
+
+		CurrentWorkflowCAS: workflowCAS,
+		// Encoding, this is set by shard context
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
 	c.notifyTasks(
@@ -369,7 +444,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	)
 
 	c.clear()
-	return c.loadWorkflowExecution()
+	return nil
 }
 
 func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
@@ -447,7 +522,10 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		}
 	}()
 
-	currentWorkflow, workflowEventsSeq, err := c.msBuilder.CloseTransactionAsMutation(now, currentWorkflowTransactionPolicy)
+	currentWorkflow, workflowEventsSeq, err := c.msBuilder.CloseTransactionAsMutation(
+		now,
+		currentWorkflowTransactionPolicy,
+	)
 	if err != nil {
 		return err
 	}
@@ -466,27 +544,29 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 	var newWorkflow *persistence.WorkflowSnapshot
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+
 		defer func() {
 			if retError != nil {
 				newContext.clear()
 			}
 		}()
 
-		newWorkflow, workflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(now, *newWorkflowTransactionPolicy)
+		newWorkflow, workflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+			now,
+			*newWorkflowTransactionPolicy,
+		)
 		if err != nil {
 			return err
 		}
-
 		newWorkflowSizeSize := newContext.getHistorySize()
 		eventsSize, err := c.persistFirstWorkflowEvents(workflowEventsSeq[0])
 		if err != nil {
 			return err
 		}
 		newWorkflowSizeSize += eventsSize
-
-		newContext.setHistorySize(currentWorkflowSize)
+		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
-			HistorySize: currentWorkflowSize,
+			HistorySize: newWorkflowSizeSize,
 		}
 	}
 

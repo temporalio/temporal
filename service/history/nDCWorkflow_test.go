@@ -251,11 +251,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 		noopReleaseFn,
 	)
 
-	// cannot suppress closed workflow
-	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
-	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
-	s.Error(err)
-
 	// cannot suppress by older workflow
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(2)
@@ -294,12 +289,11 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 		LastEventTaskID: incomingLastEventTaskID,
 	})
 
-	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
-	err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.Error(err)
 }
 
-func (s *nDCWorkflowSuite) TestSuppressWorkflowBy() {
+func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(2)
 	lastEventTaskID := int64(144)
@@ -310,7 +304,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy() {
 			persistence.NewVersionHistoryItem(lastEventID, lastEventVersion),
 		},
 	))
-	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		DomainID:        s.domainID,
@@ -374,7 +367,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy() {
 		s.mockClusterMetadata,
 	), nil)
 
-	s.mockMutableState.On("UpdateReplicationStateVersion", lastEventVersion, true)
+	s.mockMutableState.On("UpdateCurrentVersion", lastEventVersion, true)
 	s.mockMutableState.On("AddWorkflowExecutionTerminatedEvent", mock.Anything, mock.Anything, mock.Anything).Return(&shared.HistoryEvent{}, nil)
 	s.mockMutableState.On("AddTransferTasks", mock.MatchedBy(func(tasks []persistence.Task) bool {
 		if len(tasks) != 1 {
@@ -391,7 +384,13 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy() {
 		return ok
 	})).Once()
 
+	// if workflow is in zombie or finished state, keep as is
+	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
 	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	s.NoError(err)
+
+	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
+	err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.NoError(err)
 }
 
@@ -406,7 +405,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 			persistence.NewVersionHistoryItem(lastEventID, lastEventVersion),
 		},
 	))
-	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:        s.domainID,
@@ -460,7 +458,13 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastEventVersion).Return(cluster.TestAlternativeClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
+	// if workflow is in zombie or finished state, keep as is
+	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
 	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	s.NoError(err)
+
+	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
+	err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
 	s.Equal(persistence.WorkflowCloseStatusNone, executionInfo.CloseStatus)

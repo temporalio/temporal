@@ -315,10 +315,12 @@ func (s *conflictResolverSuite) TestReset() {
 		input.ResetWorkflowSnapshot.TransferTasks = nil
 
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
-			RangeID:              s.mockShard.shardInfo.RangeID,
-			PrevRunID:            prevRunID,
-			PrevLastWriteVersion: prevLastWriteVersion,
-			PrevState:            prevState,
+			RangeID: s.mockShard.shardInfo.RangeID,
+			CurrentWorkflowCAS: &persistence.CurrentWorkflowCAS{
+				PrevRunID:            prevRunID,
+				PrevLastWriteVersion: prevLastWriteVersion,
+				PrevState:            prevState,
+			},
 			ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
 				ExecutionInfo: executionInfo,
 				ExecutionStats: &persistence.ExecutionStats{

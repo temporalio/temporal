@@ -516,20 +516,26 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
+	if request.CurrentWorkflowMutation != nil && request.CurrentWorkflowCAS != nil {
+		return &workflow.InternalServiceError{
+			Message: "ConflictResolveWorkflowExecution: current workflow & current workflow CAS both set",
+		}
+	}
+
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
 
-		PrevRunID:            request.PrevRunID,
-		PrevLastWriteVersion: request.PrevLastWriteVersion,
-		PrevState:            request.PrevState,
-
 		ResetWorkflowSnapshot: *serializedResetWorkflowSnapshot,
+
+		NewWorkflowSnapshot: serializedNewWorkflowMutation,
 
 		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
 
-		NewWorkflowSnapshot: serializedNewWorkflowMutation,
+		// TODO deprecate this once nDC migration is completed
+		//  basically should use CurrentWorkflowMutation instead
+		CurrentWorkflowCAS: request.CurrentWorkflowCAS,
 	}
 	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
 }

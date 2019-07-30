@@ -41,12 +41,14 @@ type (
 	}
 
 	nDCTransactionMgrForExistingWorkflowImpl struct {
-		transactionMgr *nDCTransactionMgrImpl
+		transactionMgr nDCTransactionMgr
 	}
 )
 
+var _ nDCTransactionMgrForExistingWorkflow = (*nDCTransactionMgrForExistingWorkflowImpl)(nil)
+
 func newNDCTransactionMgrForExistingWorkflow(
-	transactionMgr *nDCTransactionMgrImpl,
+	transactionMgr nDCTransactionMgr,
 ) *nDCTransactionMgrForExistingWorkflowImpl {
 
 	return &nDCTransactionMgrForExistingWorkflowImpl{
@@ -98,11 +100,17 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	if currentRunID == "" {
 		// this means a bug in our code or DB is inconsistent...
 		return &shared.InternalServiceError{
-			Message: "nDCTransactionMgr unable to locate current workflow during update",
+			Message: "nDCTransactionMgr: unable to locate current workflow during update",
 		}
 	}
 
 	if currentRunID == targetRunID {
+		if !isWorkflowRebuilt {
+			return &shared.InternalServiceError{
+				Message: "nDCTransactionMgr: encounter workflow not rebuilt & current workflow not guaranteed",
+			}
+		}
+
 		// update to current record, since target workflow is pointed by current record
 		return r.dispatchWorkflowUpdateAsCurrent(
 			ctx,
@@ -114,11 +122,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	// there exists a current workflow, need additional check
-	currentWorkflow, err := loadNDCWorkflow(
+	currentWorkflow, err := r.transactionMgr.loadNDCWorkflow(
 		ctx,
-		r.transactionMgr.domainCache,
-		r.transactionMgr.historyCache,
-		r.transactionMgr.clusterMetadata,
 		domainID,
 		workflowID,
 		currentRunID,
@@ -138,6 +143,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 			ctx,
 			now,
 			isWorkflowRebuilt,
+			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
 		)
@@ -188,6 +194,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 	ctx ctx.Context,
 	now time.Time,
 	isWorkflowRebuilt bool,
+	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
 	newWorkflow nDCWorkflow,
 ) error {
@@ -197,7 +204,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 			ctx,
 			now,
 			nDCTransactionPolicyUpdateAsZombie,
-			nil,
+			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
 		)
@@ -207,7 +214,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 		ctx,
 		now,
 		nDCTransactionPolicyConflictResolveAsZombie,
-		nil,
+		currentWorkflow,
 		targetWorkflow,
 		newWorkflow,
 	)
@@ -286,7 +293,16 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		}
 	}
 
-	panic("wire with workflow conflict resolution function")
+	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
+		now,
+		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		targetWorkflow.getMutableState(),
+		newWorkflow.getContext(),
+		newWorkflow.getMutableState(),
+		currentWorkflow.getContext(),
+		currentWorkflow.getMutableState(),
+		nil,
+	)
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
@@ -296,7 +312,23 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 	newWorkflow nDCWorkflow,
 ) error {
 
-	panic("wire with workflow conflict resolution function")
+	var newContext workflowExecutionContext
+	var newMutableState mutableState
+	if newWorkflow != nil {
+		newContext = newWorkflow.getContext()
+		newMutableState = newWorkflow.getMutableState()
+	}
+
+	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
+		now,
+		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		targetWorkflow.getMutableState(),
+		newContext,
+		newMutableState,
+		nil,
+		nil,
+		nil,
+	)
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
@@ -313,15 +345,28 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		return err
 	}
 
+	var newContext workflowExecutionContext
+	var newMutableState mutableState
 	if newWorkflow != nil {
 		if err := newWorkflow.suppressWorkflowBy(
 			currentWorkflow,
 		); err != nil {
 			return err
 		}
+		newContext = newWorkflow.getContext()
+		newMutableState = newWorkflow.getMutableState()
 	}
 
-	panic("wire with workflow conflict resolution function")
+	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
+		now,
+		persistence.ConflictResolveWorkflowModeBypassCurrent,
+		targetWorkflow.getMutableState(),
+		newContext,
+		newMutableState,
+		nil,
+		nil,
+		nil,
+	)
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
@@ -383,7 +428,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 
 	default:
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("nDCTransactionMgr encounter unknown transaction type: %v", transactionPolicy),
+			Message: fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy),
 		}
 	}
 }
