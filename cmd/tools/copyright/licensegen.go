@@ -50,7 +50,8 @@ type (
 const licenseFileName = "LICENSE"
 
 // unique prefix that identifies a license header
-const licenseHeaderPrefix = "// Copyright (c)"
+const licenseHeaderPrefixOld = "// Copyright (c)"
+const licenseHeaderPrefix = "// The MIT License (MIT)"
 
 var (
 	// directories to be excluded
@@ -129,15 +130,18 @@ func (task *addLicenseHeaderTask) handleFile(path string, fileInfo os.FileInfo, 
 		return err
 	}
 
-	buf := make([]byte, len(licenseHeaderPrefix))
-	_, err = io.ReadFull(f, buf)
-	f.Close()
-
-	if err != nil && !isEOF(err) {
+	scanner := bufio.NewScanner(f)
+	readLineSucc := scanner.Scan()
+	if !readLineSucc {
+		return fmt.Errorf("fail to read first line of file %v", path)
+	}
+	firstLine := strings.TrimSpace(scanner.Text())
+	if err := scanner.Err(); err != nil {
 		return err
 	}
+	f.Close()
 
-	if string(buf) == licenseHeaderPrefix {
+	if strings.Contains(firstLine, licenseHeaderPrefixOld) || strings.Contains(firstLine, licenseHeaderPrefix) {
 		return nil // file already has the copyright header
 	}
 
