@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
+	"runtime/debug"
 	"testing"
 )
 
@@ -96,6 +97,22 @@ func (s *historyEventTestSuit) SetupSuite() {
 		return count > 0
 	}
 
+	hasPendingStartActivity := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeActivityTaskStarted.String():
+				count++
+			case shared.EventTypeActivityTaskCanceled.String(),
+				shared.EventTypeActivityTaskFailed.String(),
+				shared.EventTypeActivityTaskTimedOut.String(),
+				shared.EventTypeActivityTaskCompleted.String():
+				count--
+			}
+		}
+		return count > 0
+	}
+
 	canDoBatch := func(history []Vertex) bool {
 		if len(history) == 0 {
 			return true
@@ -126,91 +143,92 @@ func (s *historyEventTestSuit) SetupSuite() {
 
 	//Setup decision task model
 	decisionModel := NewHistoryEventModel()
-	decisionSchedule := NewHistoryEvent(shared.EventTypeDecisionTaskScheduled.String())
-	decisionStart := NewHistoryEvent(shared.EventTypeDecisionTaskStarted.String())
+	decisionSchedule := NewHistoryEventVertex(shared.EventTypeDecisionTaskScheduled.String())
+	decisionStart := NewHistoryEventVertex(shared.EventTypeDecisionTaskStarted.String())
 	decisionStart.SetIsStrictOnNextVertex(true)
-	decisionFail := NewHistoryEvent(shared.EventTypeDecisionTaskFailed.String())
-	decisionTimedOut := NewHistoryEvent(shared.EventTypeDecisionTaskTimedOut.String())
-	decisionComplete := NewHistoryEvent(shared.EventTypeDecisionTaskCompleted.String())
+	decisionFail := NewHistoryEventVertex(shared.EventTypeDecisionTaskFailed.String())
+	decisionTimedOut := NewHistoryEventVertex(shared.EventTypeDecisionTaskTimedOut.String())
+	decisionComplete := NewHistoryEventVertex(shared.EventTypeDecisionTaskCompleted.String())
 	decisionComplete.SetIsStrictOnNextVertex(true)
 	decisionComplete.SetMaxNextVertex(2)
-	decisionScheduleToStart := NewConnection(decisionSchedule, decisionStart)
-	decisionStartToComplete := NewConnection(decisionStart, decisionComplete)
-	decisionStartToFail := NewConnection(decisionStart, decisionFail)
-	decisionStartToTimedOut := NewConnection(decisionStart, decisionTimedOut)
-	decisionFailToSchedule := NewConnection(decisionFail, decisionSchedule)
+	decisionScheduleToStart := NewHistoryEventEdge(decisionSchedule, decisionStart)
+	decisionStartToComplete := NewHistoryEventEdge(decisionStart, decisionComplete)
+	decisionStartToFail := NewHistoryEventEdge(decisionStart, decisionFail)
+	decisionStartToTimedOut := NewHistoryEventEdge(decisionStart, decisionTimedOut)
+	decisionFailToSchedule := NewHistoryEventEdge(decisionFail, decisionSchedule)
 	decisionFailToSchedule.SetCondition(notPendingDecisionTask)
-	decisionTimedOutToSchedule := NewConnection(decisionTimedOut, decisionSchedule)
+	decisionTimedOutToSchedule := NewHistoryEventEdge(decisionTimedOut, decisionSchedule)
 	decisionTimedOutToSchedule.SetCondition(notPendingDecisionTask)
 	decisionModel.AddEdge(decisionScheduleToStart, decisionStartToComplete, decisionStartToFail, decisionStartToTimedOut,
 		decisionFailToSchedule, decisionTimedOutToSchedule)
 
 	//Setup workflow model
 	workflowModel := NewHistoryEventModel()
-	workflowStart := NewHistoryEvent(shared.EventTypeWorkflowExecutionStarted.String())
-	workflowSignal := NewHistoryEvent(shared.EventTypeWorkflowExecutionSignaled.String())
-	workflowComplete := NewHistoryEvent(shared.EventTypeWorkflowExecutionCompleted.String())
-	continueAsNew := NewHistoryEvent(shared.EventTypeWorkflowExecutionContinuedAsNew.String())
-	workflowFail := NewHistoryEvent(shared.EventTypeWorkflowExecutionFailed.String())
-	workflowCancel := NewHistoryEvent(shared.EventTypeWorkflowExecutionCanceled.String())
-	workflowCancelRequest := NewHistoryEvent(shared.EventTypeWorkflowExecutionCancelRequested.String()) //?
-	workflowTerminate := NewHistoryEvent(shared.EventTypeWorkflowExecutionTerminated.String())
-	workflowTimedOut := NewHistoryEvent(shared.EventTypeWorkflowExecutionTimedOut.String())
-	workflowStartToSignal := NewConnection(workflowStart, workflowSignal)
-	workflowStartToDecisionSchedule := NewConnection(workflowStart, decisionSchedule)
+	workflowStart := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionStarted.String())
+	workflowSignal := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionSignaled.String())
+	workflowComplete := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCompleted.String())
+	continueAsNew := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionContinuedAsNew.String())
+	workflowFail := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionFailed.String())
+	workflowCancel := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCanceled.String())
+	workflowCancelRequest := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCancelRequested.String()) //?
+	workflowTerminate := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionTerminated.String())
+	workflowTimedOut := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionTimedOut.String())
+	workflowStartToSignal := NewHistoryEventEdge(workflowStart, workflowSignal)
+	workflowStartToDecisionSchedule := NewHistoryEventEdge(workflowStart, decisionSchedule)
 	workflowStartToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	workflowSignalToDecisionSchedule := NewConnection(workflowSignal, decisionSchedule)
+	workflowSignalToDecisionSchedule := NewHistoryEventEdge(workflowSignal, decisionSchedule)
 	workflowSignalToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	decisionCompleteToWorkflowComplete := NewConnection(decisionComplete, workflowComplete)
+	decisionCompleteToWorkflowComplete := NewHistoryEventEdge(decisionComplete, workflowComplete)
 	decisionCompleteToWorkflowComplete.SetCondition(containActivityComplete)
-	decisionCompleteToWorkflowFailed := NewConnection(decisionComplete, workflowFail)
+	decisionCompleteToWorkflowFailed := NewHistoryEventEdge(decisionComplete, workflowFail)
 	decisionCompleteToWorkflowFailed.SetCondition(containActivityComplete)
-	decisionCompleteToCAN := NewConnection(decisionComplete, continueAsNew)
+	decisionCompleteToCAN := NewHistoryEventEdge(decisionComplete, continueAsNew)
 	decisionCompleteToCAN.SetCondition(containActivityComplete)
-	workflowCancelRequestToCancel := NewConnection(workflowCancelRequest, workflowCancel)
+	workflowCancelRequestToCancel := NewHistoryEventEdge(workflowCancelRequest, workflowCancel)
 	workflowModel.AddEdge(workflowStartToSignal, workflowStartToDecisionSchedule, workflowSignalToDecisionSchedule,
 		decisionCompleteToCAN, decisionCompleteToWorkflowComplete, decisionCompleteToWorkflowFailed, workflowCancelRequestToCancel)
 
 	//Setup activity model
 	activityModel := NewHistoryEventModel()
-	activitySchedule := NewHistoryEvent(shared.EventTypeActivityTaskScheduled.String())
-	activityStart := NewHistoryEvent(shared.EventTypeActivityTaskStarted.String())
-	activityComplete := NewHistoryEvent(shared.EventTypeActivityTaskCompleted.String())
-	activityFail := NewHistoryEvent(shared.EventTypeActivityTaskFailed.String())
-	activityTimedOut := NewHistoryEvent(shared.EventTypeActivityTaskTimedOut.String())
-	activityCancelRequest := NewHistoryEvent(shared.EventTypeActivityTaskCancelRequested.String()) //?
-	activityCancel := NewHistoryEvent(shared.EventTypeActivityTaskCanceled.String())
-	activityCancelRequestFail := NewHistoryEvent(shared.EventTypeRequestCancelActivityTaskFailed.String())
-	decisionCompleteToATSchedule := NewConnection(decisionComplete, activitySchedule)
+	activitySchedule := NewHistoryEventVertex(shared.EventTypeActivityTaskScheduled.String())
+	activityStart := NewHistoryEventVertex(shared.EventTypeActivityTaskStarted.String())
+	activityComplete := NewHistoryEventVertex(shared.EventTypeActivityTaskCompleted.String())
+	activityFail := NewHistoryEventVertex(shared.EventTypeActivityTaskFailed.String())
+	activityTimedOut := NewHistoryEventVertex(shared.EventTypeActivityTaskTimedOut.String())
+	activityCancelRequest := NewHistoryEventVertex(shared.EventTypeActivityTaskCancelRequested.String()) //?
+	activityCancel := NewHistoryEventVertex(shared.EventTypeActivityTaskCanceled.String())
+	activityCancelRequestFail := NewHistoryEventVertex(shared.EventTypeRequestCancelActivityTaskFailed.String())
+	decisionCompleteToATSchedule := NewHistoryEventEdge(decisionComplete, activitySchedule)
 
-	activityScheduleToStart := NewConnection(activitySchedule, activityStart)
+	activityScheduleToStart := NewHistoryEventEdge(activitySchedule, activityStart)
 	activityScheduleToStart.SetCondition(hasPendingActivity)
 
-	activityStartToComplete := NewConnection(activityStart, activityComplete)
+	activityStartToComplete := NewHistoryEventEdge(activityStart, activityComplete)
 	activityStartToComplete.SetCondition(hasPendingActivity)
 
-	activityStartToFail := NewConnection(activityStart, activityFail)
+	activityStartToFail := NewHistoryEventEdge(activityStart, activityFail)
 	activityStartToFail.SetCondition(hasPendingActivity)
 
-	activityStartToTimedOut := NewConnection(activityStart, activityTimedOut)
+	activityStartToTimedOut := NewHistoryEventEdge(activityStart, activityTimedOut)
 	activityStartToTimedOut.SetCondition(hasPendingActivity)
 
-	activityCompleteToDecisionSchedule := NewConnection(activityComplete, decisionSchedule)
+	activityCompleteToDecisionSchedule := NewHistoryEventEdge(activityComplete, decisionSchedule)
 	activityCompleteToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	activityFailToDecisionSchedule := NewConnection(activityFail, decisionSchedule)
+	activityFailToDecisionSchedule := NewHistoryEventEdge(activityFail, decisionSchedule)
 	activityFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	activityTimedOutToDecisionSchedule := NewConnection(activityTimedOut, decisionSchedule)
+	activityTimedOutToDecisionSchedule := NewHistoryEventEdge(activityTimedOut, decisionSchedule)
 	activityTimedOutToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	activityCancelToDecisionSchedule := NewConnection(activityCancel, decisionSchedule)
+	activityCancelToDecisionSchedule := NewHistoryEventEdge(activityCancel, decisionSchedule)
 	activityCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
 
-	activityCancelReqToCancel := NewConnection(activityCancelRequest, activityCancel)
+	activityCancelReqToCancel := NewHistoryEventEdge(activityCancelRequest, activityCancel)
 	activityCancelReqToCancel.SetCondition(hasPendingActivity)
 
-	activityCancelReqToCancelFail := NewConnection(activityCancelRequest, activityCancelRequestFail)
-	activityCancelRequestFailToDecisionSchedule := NewConnection(activityCancelRequestFail, decisionSchedule)
+	activityCancelReqToCancelFail := NewHistoryEventEdge(activityCancelRequest, activityCancelRequestFail)
+	activityCancelRequestFailToDecisionSchedule := NewHistoryEventEdge(activityCancelRequestFail, decisionSchedule)
 	activityCancelRequestFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	decisionCompleteToActivityCancelRequest := NewConnection(decisionComplete, activityCancelRequest)
+	decisionCompleteToActivityCancelRequest := NewHistoryEventEdge(decisionComplete, activityCancelRequest)
+	decisionCompleteToActivityCancelRequest.SetCondition(hasPendingStartActivity)
 
 	activityModel.AddEdge(decisionCompleteToATSchedule, activityScheduleToStart, activityStartToComplete,
 		activityStartToFail, activityStartToTimedOut, decisionCompleteToATSchedule, activityCompleteToDecisionSchedule,
@@ -219,50 +237,50 @@ func (s *historyEventTestSuit) SetupSuite() {
 
 	//Setup timer model
 	timerModel := NewHistoryEventModel()
-	timerStart := NewHistoryEvent(shared.EventTypeTimerStarted.String())
-	timerFired := NewHistoryEvent(shared.EventTypeTimerFired.String())
-	timerCancel := NewHistoryEvent(shared.EventTypeTimerCanceled.String())
-	timerStartToFire := NewConnection(timerStart, timerFired)
+	timerStart := NewHistoryEventVertex(shared.EventTypeTimerStarted.String())
+	timerFired := NewHistoryEventVertex(shared.EventTypeTimerFired.String())
+	timerCancel := NewHistoryEventVertex(shared.EventTypeTimerCanceled.String())
+	timerStartToFire := NewHistoryEventEdge(timerStart, timerFired)
 	timerStartToFire.SetCondition(hasPendingTimer)
-	decisionCompleteToCancel := NewConnection(decisionComplete, timerCancel)
+	decisionCompleteToCancel := NewHistoryEventEdge(decisionComplete, timerCancel)
 	decisionCompleteToCancel.SetCondition(hasPendingTimer)
 
-	decisionCompleteToTimerStart := NewConnection(decisionComplete, timerStart)
-	timerFiredToDecisionSchedule := NewConnection(timerFired, decisionSchedule)
+	decisionCompleteToTimerStart := NewHistoryEventEdge(decisionComplete, timerStart)
+	timerFiredToDecisionSchedule := NewHistoryEventEdge(timerFired, decisionSchedule)
 	timerFiredToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	timerCancelToDecisionSchedule := NewConnection(timerCancel, decisionSchedule)
+	timerCancelToDecisionSchedule := NewHistoryEventEdge(timerCancel, decisionSchedule)
 	timerCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	timerModel.AddEdge(timerStartToFire, decisionCompleteToCancel, decisionCompleteToTimerStart, timerFiredToDecisionSchedule, timerCancelToDecisionSchedule)
 
 	//Setup child workflow model
 	childWorkflowModel := NewHistoryEventModel()
-	childWorkflowInitial := NewHistoryEvent(shared.EventTypeStartChildWorkflowExecutionInitiated.String())
-	childWorkflowInitialFail := NewHistoryEvent(shared.EventTypeStartChildWorkflowExecutionFailed.String())
-	childWorkflowStart := NewHistoryEvent(shared.EventTypeChildWorkflowExecutionStarted.String())
-	childWorkflowCancel := NewHistoryEvent(shared.EventTypeChildWorkflowExecutionCanceled.String())
-	childWorkflowComplete := NewHistoryEvent(shared.EventTypeChildWorkflowExecutionCompleted.String())
-	childWorkflowFail := NewHistoryEvent(shared.EventTypeChildWorkflowExecutionFailed.String())
-	childWorkflowTerminate := NewHistoryEvent(shared.EventTypeChildWorkflowExecutionTerminated.String())
-	childWorkflowTimedOut := NewHistoryEvent(shared.EventTypeChildWorkflowExecutionTimedOut.String())
-	decisionCompleteToChildWorkflowInitial := NewConnection(decisionComplete, childWorkflowInitial)
-	childWorkflowInitialToFail := NewConnection(childWorkflowInitial, childWorkflowInitialFail)
-	childWorkflowInitialToStart := NewConnection(childWorkflowInitial, childWorkflowStart)
-	childWorkflowStartToCancel := NewConnection(childWorkflowStart, childWorkflowCancel)
-	childWorkflowStartToFail := NewConnection(childWorkflowStart, childWorkflowFail)
-	childWorkflowStartToComplete := NewConnection(childWorkflowStart, childWorkflowComplete)
-	childWorkflowStartToTerminate := NewConnection(childWorkflowStart, childWorkflowTerminate)
-	childWorkflowStartToTimedOut := NewConnection(childWorkflowStart, childWorkflowTimedOut)
-	childWorkflowCancelToDecisionSchedule := NewConnection(childWorkflowCancel, decisionSchedule)
+	childWorkflowInitial := NewHistoryEventVertex(shared.EventTypeStartChildWorkflowExecutionInitiated.String())
+	childWorkflowInitialFail := NewHistoryEventVertex(shared.EventTypeStartChildWorkflowExecutionFailed.String())
+	childWorkflowStart := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionStarted.String())
+	childWorkflowCancel := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionCanceled.String())
+	childWorkflowComplete := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionCompleted.String())
+	childWorkflowFail := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionFailed.String())
+	childWorkflowTerminate := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionTerminated.String())
+	childWorkflowTimedOut := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionTimedOut.String())
+	decisionCompleteToChildWorkflowInitial := NewHistoryEventEdge(decisionComplete, childWorkflowInitial)
+	childWorkflowInitialToFail := NewHistoryEventEdge(childWorkflowInitial, childWorkflowInitialFail)
+	childWorkflowInitialToStart := NewHistoryEventEdge(childWorkflowInitial, childWorkflowStart)
+	childWorkflowStartToCancel := NewHistoryEventEdge(childWorkflowStart, childWorkflowCancel)
+	childWorkflowStartToFail := NewHistoryEventEdge(childWorkflowStart, childWorkflowFail)
+	childWorkflowStartToComplete := NewHistoryEventEdge(childWorkflowStart, childWorkflowComplete)
+	childWorkflowStartToTerminate := NewHistoryEventEdge(childWorkflowStart, childWorkflowTerminate)
+	childWorkflowStartToTimedOut := NewHistoryEventEdge(childWorkflowStart, childWorkflowTimedOut)
+	childWorkflowCancelToDecisionSchedule := NewHistoryEventEdge(childWorkflowCancel, decisionSchedule)
 	childWorkflowCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	childWorkflowFailToDecisionSchedule := NewConnection(childWorkflowFail, decisionSchedule)
+	childWorkflowFailToDecisionSchedule := NewHistoryEventEdge(childWorkflowFail, decisionSchedule)
 	childWorkflowFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	childWorkflowCompleteToDecisionSchedule := NewConnection(childWorkflowComplete, decisionSchedule)
+	childWorkflowCompleteToDecisionSchedule := NewHistoryEventEdge(childWorkflowComplete, decisionSchedule)
 	childWorkflowCompleteToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	childWorkflowTerminateToDecisionSchedule := NewConnection(childWorkflowTerminate, decisionSchedule)
+	childWorkflowTerminateToDecisionSchedule := NewHistoryEventEdge(childWorkflowTerminate, decisionSchedule)
 	childWorkflowTerminateToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	childWorkflowTimedOutToDecisionSchedule := NewConnection(childWorkflowTimedOut, decisionSchedule)
+	childWorkflowTimedOutToDecisionSchedule := NewHistoryEventEdge(childWorkflowTimedOut, decisionSchedule)
 	childWorkflowTimedOutToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	childWorkflowInitialFailToDecisionSchedule := NewConnection(childWorkflowInitialFail, decisionSchedule)
+	childWorkflowInitialFailToDecisionSchedule := NewHistoryEventEdge(childWorkflowInitialFail, decisionSchedule)
 	childWorkflowInitialFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	childWorkflowModel.AddEdge(decisionCompleteToChildWorkflowInitial, childWorkflowInitialToFail, childWorkflowInitialToStart,
 		childWorkflowStartToCancel, childWorkflowStartToFail, childWorkflowStartToComplete, childWorkflowStartToTerminate,
@@ -272,25 +290,25 @@ func (s *historyEventTestSuit) SetupSuite() {
 
 	//Setup external workflow model
 	externalWorkflowModel := NewHistoryEventModel()
-	externalWorkflowSignal := NewHistoryEvent(shared.EventTypeSignalExternalWorkflowExecutionInitiated.String())
-	externalWorkflowSignalFailed := NewHistoryEvent(shared.EventTypeSignalExternalWorkflowExecutionFailed.String())
-	externalWorkflowSignaled := NewHistoryEvent(shared.EventTypeExternalWorkflowExecutionSignaled.String())
-	externalWorkflowCancel := NewHistoryEvent(shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated.String())
-	externalWorkflowCancelFail := NewHistoryEvent(shared.EventTypeRequestCancelExternalWorkflowExecutionFailed.String())
-	externalWorkflowCanceled := NewHistoryEvent(shared.EventTypeExternalWorkflowExecutionCancelRequested.String())
-	decisionCompleteToExternalWorkflowSignal := NewConnection(decisionComplete, externalWorkflowSignal)
-	decisionCompleteToExternalWorkflowCancel := NewConnection(decisionComplete, externalWorkflowCancel)
-	externalWorkflowSignalToFail := NewConnection(externalWorkflowSignal, externalWorkflowSignalFailed)
-	externalWorkflowSignalToSignaled := NewConnection(externalWorkflowSignal, externalWorkflowSignaled)
-	externalWorkflowCancelToFail := NewConnection(externalWorkflowCancel, externalWorkflowCancelFail)
-	externalWorkflowCancelToCanceled := NewConnection(externalWorkflowCancel, externalWorkflowCanceled)
-	externalWorkflowSignaledToDecisionSchedule := NewConnection(externalWorkflowSignaled, decisionSchedule)
+	externalWorkflowSignal := NewHistoryEventVertex(shared.EventTypeSignalExternalWorkflowExecutionInitiated.String())
+	externalWorkflowSignalFailed := NewHistoryEventVertex(shared.EventTypeSignalExternalWorkflowExecutionFailed.String())
+	externalWorkflowSignaled := NewHistoryEventVertex(shared.EventTypeExternalWorkflowExecutionSignaled.String())
+	externalWorkflowCancel := NewHistoryEventVertex(shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated.String())
+	externalWorkflowCancelFail := NewHistoryEventVertex(shared.EventTypeRequestCancelExternalWorkflowExecutionFailed.String())
+	externalWorkflowCanceled := NewHistoryEventVertex(shared.EventTypeExternalWorkflowExecutionCancelRequested.String())
+	decisionCompleteToExternalWorkflowSignal := NewHistoryEventEdge(decisionComplete, externalWorkflowSignal)
+	decisionCompleteToExternalWorkflowCancel := NewHistoryEventEdge(decisionComplete, externalWorkflowCancel)
+	externalWorkflowSignalToFail := NewHistoryEventEdge(externalWorkflowSignal, externalWorkflowSignalFailed)
+	externalWorkflowSignalToSignaled := NewHistoryEventEdge(externalWorkflowSignal, externalWorkflowSignaled)
+	externalWorkflowCancelToFail := NewHistoryEventEdge(externalWorkflowCancel, externalWorkflowCancelFail)
+	externalWorkflowCancelToCanceled := NewHistoryEventEdge(externalWorkflowCancel, externalWorkflowCanceled)
+	externalWorkflowSignaledToDecisionSchedule := NewHistoryEventEdge(externalWorkflowSignaled, decisionSchedule)
 	externalWorkflowSignaledToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	externalWorkflowSignalFailedToDecisionSchedule := NewConnection(externalWorkflowSignalFailed, decisionSchedule)
+	externalWorkflowSignalFailedToDecisionSchedule := NewHistoryEventEdge(externalWorkflowSignalFailed, decisionSchedule)
 	externalWorkflowSignalFailedToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	externalWorkflowCanceledToDecisionSchedule := NewConnection(externalWorkflowCanceled, decisionSchedule)
+	externalWorkflowCanceledToDecisionSchedule := NewHistoryEventEdge(externalWorkflowCanceled, decisionSchedule)
 	externalWorkflowCanceledToDecisionSchedule.SetCondition(notPendingDecisionTask)
-	externalWorkflowCancelFailToDecisionSchedule := NewConnection(externalWorkflowCancelFail, decisionSchedule)
+	externalWorkflowCancelFailToDecisionSchedule := NewHistoryEventEdge(externalWorkflowCancelFail, decisionSchedule)
 	externalWorkflowCancelFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	externalWorkflowModel.AddEdge(decisionCompleteToExternalWorkflowSignal, decisionCompleteToExternalWorkflowCancel,
 		externalWorkflowSignalToFail, externalWorkflowSignalToSignaled, externalWorkflowCancelToFail, externalWorkflowCancelToCanceled,
@@ -298,7 +316,7 @@ func (s *historyEventTestSuit) SetupSuite() {
 		externalWorkflowCanceledToDecisionSchedule, externalWorkflowCancelFailToDecisionSchedule)
 
 	//Config event generator
-	generator.SetCanDoBatchOnNextVertex(canDoBatch)
+	generator.SetBatchGenerationRule(canDoBatch)
 	generator.AddInitialEntryVertex(workflowStart)
 	generator.AddExitVertex(workflowComplete, workflowFail, continueAsNew, workflowTerminate, workflowTimedOut)
 	//generator.AddRandomEntryVertex(workflowSignal, workflowTerminate, workflowTimedOut)
@@ -312,19 +330,59 @@ func (s *historyEventTestSuit) SetupSuite() {
 }
 
 func (s *historyEventTestSuit) SetupTest() {
-	s.generator.Reset(0)
+	s.generator.Reset()
 }
 
+// This is a sample about how to use the generator
 func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
-	for s.generator.HasNextVertex() {
-		fmt.Println("########################")
-		v := s.generator.GetNextVertices()
-		for _, e := range v {
-			fmt.Println(e.GetName())
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("stacktrace from panic: \n" + string(debug.Stack()))
+		}
+	}()
+
+	totalBranchNumber := 2
+	currentBranch := totalBranchNumber
+	root := &branch{
+		batches: make([]batch, 0),
+	}
+	curr := root
+	//eventRanches := make([][]Vertex, 0, totalBranchNumber)
+	for currentBranch > 0 {
+		for s.generator.HasNextVertex() {
+			events := s.generator.GetNextVertices()
+			newBatch := batch{
+				events: events,
+			}
+			curr.batches = append(curr.batches, newBatch)
+			for _, e := range events {
+				fmt.Println(e.GetName())
+			}
+		}
+		currentBranch--
+		if currentBranch > 0 {
+			resetIdx := s.generator.RandomResetToResetPoint()
+			curr = root.split(resetIdx)
 		}
 	}
 	s.NotEmpty(s.generator.ListGeneratedVertices())
+	queue := []*branch{root}
+	for len(queue) > 0 {
+		b := queue[0]
+		queue = queue[1:]
+		for _, batch := range b.batches {
+			for _, event := range batch.events {
+				fmt.Println(event.GetName())
+			}
+		}
+		queue = append(queue, b.next...)
+	}
 
-	eventAttr := generateHistoryEvents(s.generator.ListGeneratedVertices())
-	s.NotEmpty(eventAttr)
+	// Generator one branch of history events
+	batches := []batch{}
+	batches = append(batches, root.batches...)
+	batches = append(batches, root.next[0].batches...)
+	attributeGenerator := NewHistoryAttributesGenerator()
+	history := attributeGenerator.GenerateHistoryEvents(batches)
+	s.NotEmpty(history)
 }
