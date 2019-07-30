@@ -269,7 +269,7 @@
 
 [[projects]]
   digest = "1:2f0c811248aeb64978037b357178b1593372439146bda860cb16f2c80785ea93"
-  name = "github.com/hashicorp/go-version.git"
+  name = "github.com/hashicorp/go-version"
   packages = ["."]
   pruneopts = ""
   revision = "ac23dc3fea5d1a983c43f6a0f6e2c13f0195d8bd"
@@ -1116,7 +1116,7 @@
     "github.com/gocql/gocql",
     "github.com/golang/mock/gomock",
     "github.com/google/uuid",
-    "github.com/hashicorp/go-version.git",
+    "github.com/hashicorp/go-version",
     "github.com/iancoleman/strcase",
     "github.com/jmoiron/sqlx",
     "github.com/m3db/prometheus_client_golang/prometheus",
