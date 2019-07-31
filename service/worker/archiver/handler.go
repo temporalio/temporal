@@ -135,31 +135,12 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	deleteSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
-	if err == nil {
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalSuccessCount)
-		sw.Stop()
-		deleteSW.Stop()
-		return
-	}
-	metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteLocalFailedAllRetriesCount)
-	logger.Warn("deleting history though local activity failed, attempting to run as normal activity", tag.Error(err))
-	ao = workflow.ActivityOptions{
-		ScheduleToStartTimeout: 1 * time.Minute,
-		StartToCloseTimeout:    2 * time.Minute,
-		RetryPolicy: &cadence.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			ExpirationInterval:       5 * time.Minute,
-			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
-		},
-	}
-	actCtx = workflow.WithActivityOptions(ctx, ao)
-	if err := workflow.ExecuteActivity(actCtx, deleteHistoryActivityFnName, request).Get(actCtx, nil); err != nil {
-		logger.Error("failed to delete history, this means zombie histories are left", tag.Error(err))
+	if err != nil {
+		logger.Error("deleting history failed, this means zombie histories are left", tag.Error(err))
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
 	} else {
 		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
 	}
-	sw.Stop()
 	deleteSW.Stop()
+	sw.Stop()
 }

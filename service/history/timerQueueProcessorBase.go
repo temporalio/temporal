@@ -624,11 +624,11 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
 		return nil
 	}
 
-	clusterArchivalStatus := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().GetClusterStatus()
 	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
 	if err != nil {
 		return err
 	}
+	clusterArchivalStatus := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().GetClusterStatus()
 	domainArchivalStatus := domainCacheEntry.GetConfig().HistoryArchivalStatus
 	switch clusterArchivalStatus {
 	case carchiver.ArchivalDisabled:
@@ -644,7 +644,7 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
 			return t.deleteWorkflow(task, context, msBuilder)
 		}
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, context, msBuilder)
+		return t.archiveWorkflow(task, context, msBuilder, domainCacheEntry)
 	}
 	return nil
 }
@@ -680,18 +680,13 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 	task *persistence.TimerTaskInfo,
 	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
+	domainCacheEntry *cache.DomainCacheEntry,
 ) error {
-
-	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
-	if err != nil {
-		return err
-	}
-
 	executionStats, err := workflowContext.loadExecutionStats()
 	if err != nil {
 		return err
 	}
-	archiveInline := executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
+	attemptArchiveInline := executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorHistoryArchivalTimeLimit())
 	defer cancel()
 	req := &archiver.ClientRequest{
@@ -707,10 +702,11 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 			CloseFailoverVersion: msBuilder.GetLastWriteVersion(),
 			URI:                  domainCacheEntry.GetConfig().HistoryArchivalURI,
 		},
-		CallerService: common.HistoryServiceName,
-		ArchiveInline: archiveInline,
+		CallerService:        common.HistoryServiceName,
+		AttemptArchiveInline: attemptArchiveInline,
 	}
-	if err := t.historyService.archivalClient.Archive(ctx, req); err != nil {
+	resp, err := t.historyService.archivalClient.Archive(ctx, req)
+	if err != nil {
 		return err
 	}
 
@@ -720,7 +716,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 	if err := t.deleteWorkflowExecution(task); err != nil {
 		return err
 	}
-	if archiveInline {
+	if resp.ArchivedInline {
 		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
 			return err
 		}

@@ -24,10 +24,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber/cadence/common/log"
-
 	"github.com/stretchr/testify/mock"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 )
 

@@ -23,12 +23,12 @@ package archiver
 import (
 	"context"
 	"errors"
-	"github.com/uber/cadence/common"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/log"

@@ -160,7 +160,7 @@ func NewEngineWithShardContext(
 		config:               config,
 		archivalClient: warchiver.NewClient(
 			shard.GetMetricsClient(),
-			shard.GetLogger(),
+			logger,
 			publicClient,
 			shard.GetConfig().NumArchiveSystemWorkflows,
 			shard.GetConfig().ArchiveRequestRPS,

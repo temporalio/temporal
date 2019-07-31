@@ -648,9 +648,9 @@ func ArchivalCallerServiceName(callerServiceName string) Tag {
 	return newStringTag("archival-caller-service-name", callerServiceName)
 }
 
-// ArchivalArchiveInline returns tag for whether archival is done inline or a signal is sent
-func ArchivalArchiveInline(archiveInline bool) Tag {
-	return newBoolTag("archival-archive-inline", archiveInline)
+// ArchivalArchiveAttemptedInline returns tag for whether archival is attempted inline before signal is sent.
+func ArchivalArchiveAttemptedInline(archiveInline bool) Tag {
+	return newBoolTag("archival-archive-attempted-inline", archiveInline)
 }
 
 // ArchivalRequestDomainID returns tag for RequestDomainID
