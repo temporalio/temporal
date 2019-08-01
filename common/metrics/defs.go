@@ -1356,6 +1356,7 @@ const (
 	RemoveEngineForShardLatency
 	CompleteDecisionWithStickyEnabledCounter
 	CompleteDecisionWithStickyDisabledCounter
+	DecisionHeartbeatTimeoutCounter
 	HistoryEventNotificationQueueingLatency
 	HistoryEventNotificationFanoutLatency
 	HistoryEventNotificationInFlightMessageGauge
@@ -1629,6 +1630,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RemoveEngineForShardLatency:                       {metricName: "remove_engine_for_shard_latency", metricType: Timer},
 		CompleteDecisionWithStickyEnabledCounter:          {metricName: "complete_decision_sticky_enabled_count", metricType: Counter},
 		CompleteDecisionWithStickyDisabledCounter:         {metricName: "complete_decision_sticky_disabled_count", metricType: Counter},
+		DecisionHeartbeatTimeoutCounter:                   {metricName: "decision_heartbeat_timeout_count", metricType: Counter},
 		HistoryEventNotificationQueueingLatency:           {metricName: "history_event_notification_queueing_latency", metricType: Timer},
 		HistoryEventNotificationFanoutLatency:             {metricName: "history_event_notification_fanout_latency", metricType: Timer},
 		HistoryEventNotificationInFlightMessageGauge:      {metricName: "history_event_notification_inflight_message_gauge", metricType: Gauge},

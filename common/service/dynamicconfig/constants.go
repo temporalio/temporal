@@ -182,6 +182,7 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 	StickyTTL:                                             "history.stickyTTL",
+	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -486,6 +487,8 @@ const (
 	HistoryThrottledLogRPS
 	// StickyTTL is to expire a sticky tasklist if no update more than this duration
 	StickyTTL
+	// DecisionHeartbeatTimeout for decision heartbeat
+	DecisionHeartbeatTimeout
 
 	// key for worker
 

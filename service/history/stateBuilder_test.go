@@ -555,14 +555,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent,
 		newRunStartedEvent,
 		&decisionInfo{
-			Version:            newRunDecisionEvent.GetVersion(),
-			ScheduleID:         newRunDecisionEvent.GetEventId(),
-			StartedID:          common.EmptyEventID,
-			RequestID:          emptyUUID,
-			DecisionTimeout:    decisionTimeoutSecond,
-			TaskList:           tasklist,
-			Attempt:            newRunDecisionAttempt,
-			ScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
+			Version:                    newRunDecisionEvent.GetVersion(),
+			ScheduleID:                 newRunDecisionEvent.GetEventId(),
+			StartedID:                  common.EmptyEventID,
+			RequestID:                  emptyUUID,
+			DecisionTimeout:            decisionTimeoutSecond,
+			TaskList:                   tasklist,
+			Attempt:                    newRunDecisionAttempt,
+			ScheduledTimestamp:         newRunDecisionEvent.GetTimestamp(),
+			OriginalScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
 		},
 		mock.Anything,
 		int32(0),
@@ -602,6 +603,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		tasklist,
 		decisionTimeoutSecond,
 		newRunDecisionAttempt,
+		newRunDecisionEvent.GetTimestamp(),
 		newRunDecisionEvent.GetTimestamp(),
 	)
 	s.Nil(err)
@@ -885,14 +887,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent,
 		newRunStartedEvent,
 		&decisionInfo{
-			Version:            newRunDecisionEvent.GetVersion(),
-			ScheduleID:         newRunDecisionEvent.GetEventId(),
-			StartedID:          common.EmptyEventID,
-			RequestID:          emptyUUID,
-			DecisionTimeout:    decisionTimeoutSecond,
-			TaskList:           tasklist,
-			Attempt:            newRunDecisionAttempt,
-			ScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
+			Version:                    newRunDecisionEvent.GetVersion(),
+			ScheduleID:                 newRunDecisionEvent.GetEventId(),
+			StartedID:                  common.EmptyEventID,
+			RequestID:                  emptyUUID,
+			DecisionTimeout:            decisionTimeoutSecond,
+			TaskList:                   tasklist,
+			Attempt:                    newRunDecisionAttempt,
+			ScheduledTimestamp:         newRunDecisionEvent.GetTimestamp(),
+			OriginalScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
 		},
 		mock.Anything,
 		int32(persistence.EventStoreVersionV2),
@@ -933,6 +936,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		tasklist,
 		decisionTimeoutSecond,
 		newRunDecisionAttempt,
+		newRunDecisionEvent.GetTimestamp(),
 		newRunDecisionEvent.GetTimestamp(),
 	)
 	s.Nil(err)
@@ -1709,7 +1713,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	}
 	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
 	s.mockMutableState.On("ReplicateDecisionTaskScheduledEvent",
-		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt, event.GetTimestamp(),
+		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt, event.GetTimestamp(), event.GetTimestamp(),
 	).Return(di, nil).Once()
 	s.mockMutableState.On("UpdateDecision", di).Once()
 	s.mockUpdateVersion(event)

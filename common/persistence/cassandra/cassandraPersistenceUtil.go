@@ -426,6 +426,7 @@ func createExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -498,6 +499,7 @@ func createExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -605,6 +607,7 @@ func updateExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -678,6 +681,7 @@ func updateExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -1722,6 +1726,8 @@ func createWorkflowExecutionInfo(
 			info.DecisionStartedTimestamp = v.(int64)
 		case "decision_scheduled_timestamp":
 			info.DecisionScheduledTimestamp = v.(int64)
+		case "decision_original_scheduled_timestamp":
+			info.DecisionOriginalScheduledTimestamp = v.(int64)
 		case "cancel_requested":
 			info.CancelRequested = v.(bool)
 		case "cancel_request_id":

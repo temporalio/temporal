@@ -1,0 +1,1 @@
+ALTER TYPE workflow_execution ADD decision_original_scheduled_timestamp     bigint;

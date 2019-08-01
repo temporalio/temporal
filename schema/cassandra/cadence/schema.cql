@@ -48,6 +48,7 @@ CREATE TYPE workflow_execution (
   decision_attempt                 bigint,
   decision_timestamp               bigint,  -- this is decision started time
   decision_scheduled_timestamp     bigint,   -- this is decision scheduled time
+  decision_original_scheduled_timestamp     bigint,   -- this is scheduled time of the first decision during heartbeat
   cancel_requested                 boolean,
   cancel_request_id                text,
   sticky_task_list                 text,   -- sticky worker task list

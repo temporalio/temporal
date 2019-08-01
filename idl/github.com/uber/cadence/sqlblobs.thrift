@@ -101,6 +101,7 @@ struct WorkflowExecutionInfo {
   68: optional i64 (js.type = "Long") decisionStartedTimestampNanos
   69: optional i64 (js.type = "Long") decisionScheduledTimestampNanos
   70: optional bool cancelRequested
+  71: optional i64 (js.type = "Long") decisionOriginalScheduledTimestampNanos
   72: optional string createRequestID
   74: optional string decisionRequestID
   76: optional string cancelRequestID
