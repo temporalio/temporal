@@ -1,121 +1,160 @@
 log:
-  stdout: true
-  level: "${LOG_LEVEL}"
+    stdout: true
+    level: {{ default .Env.LOG_LEVEL "info" }}
 
 persistence:
-  defaultStore: cass-default
-  visibilityStore: cass-visibility
-  numHistoryShards: ${NUM_HISTORY_SHARDS}
-  datastores:
-    cass-default:
-      cassandra:
-        hosts: "${CASSANDRA_SEEDS}"
-        keyspace: "${KEYSPACE}"
-        consistency: "${CASSANDRA_CONSISTENCY}"
-    cass-visibility:
-      cassandra:
-        hosts: "${CASSANDRA_SEEDS}"
-        keyspace: "${VISIBILITY_KEYSPACE}"
-        consistency: "${CASSANDRA_CONSISTENCY}"
+    numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}
+    defaultStore: default
+    visibilityStore: visibility
+    datastores:
+        {{- $db := default .Env.DB "cassandra" | lower -}}
+        {{- if eq $db "cassandra" }}
+        default:
+            cassandra:
+                hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
+                keyspace: {{ default .Env.KEYSPACE "cadence" }}
+                consistency: {{ default .Env.CASSANDRA_CONSISTENCY "One" }}
+        visibility:
+            cassandra:
+                hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
+                keyspace: {{ default .Env.VISIBILITY_KEYSPACE "cadence" }}
+                consistency: {{ default .Env.CASSANDRA_CONSISTENCY "One" }}
+        {{- else if eq $db "mysql" }}
+        default:
+            sql:
+                driverName: "mysql"
+                databaseName: {{ default .Env.DBNAME "cadence" }}
+                connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
+                connectProtocol: "tcp"
+                user: {{ default .Env.MYSQL_USER "" }}
+                password: {{ default .Env.MYSQL_PWD "" }}
+        visibility:
+            sql:
+                driverName: "mysql"
+                databaseName: {{ default .Env.VISIBILITY_DBNAME "cadence_visibility" }}
+                connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
+                connectProtocol: "tcp"
+                user: {{ default .Env.MYSQL_USER "" }}
+                password: {{ default .Env.MYSQL_PWD "" }}
+        {{- end }}
 
 ringpop:
-  name: cadence
-  bootstrapMode: hosts
-  bootstrapHosts: ${RINGPOP_SEEDS_JSON_ARRAY}
-  maxJoinDuration: 30s
+    name: cadence
+    bootstrapMode: hosts
+    {{- if .Env.RINGPOP_SEEDS }}
+    bootstrapHosts:
+    {{- range $seed := (split .Env.RINGPOP_SEEDS ",") }}
+        - {{ . }}
+    {{- end }}
+    {{- else }}
+    bootstrapHosts:
+        - {{ .Env.HOST_IP }}:7933
+        - {{ .Env.HOST_IP }}:7934
+        - {{ .Env.HOST_IP }}:7935
+        - {{ .Env.HOST_IP }}:7939
+    {{- end }}
+    maxJoinDuration: 30s
 
 services:
-  frontend:
-    rpc:
-      port: 7933
-      bindOnIP: ${BIND_ON_IP}
-    metrics:
-      statsd:
-        hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence-frontend"
+    frontend:
+        rpc:
+            port: 7933
+            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+        {{- if .Env.STATSD_ENDPOINT }}
+        metrics:
+            statsd:
+                hostPort: {{ .Env.STATSD_ENDPOINT }}
+                prefix: "cadence-frontend"
+        {{- end }}
 
-  matching:
-    rpc:
-      port: 7935
-      bindOnIP: ${BIND_ON_IP}
-    metrics:
-      statsd:
-        hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence-matching"
+    matching:
+        rpc:
+            port: 7935
+            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+        {{- if .Env.STATSD_ENDPOINT }}
+        metrics:
+            statsd:
+                hostPort: {{ .Env.STATSD_ENDPOINT }}
+                prefix: "cadence-matching"
+        {{- end }}
 
-  history:
-    rpc:
-      port: 7934
-      bindOnIP: ${BIND_ON_IP}
-    metrics:
-      statsd:
-        hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence-history"
+    history:
+        rpc:
+            port: 7934
+            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+        {{- if .Env.STATSD_ENDPOINT }}
+        metrics:
+            statsd:
+                hostPort: {{ .Env.STATSD_ENDPOINT }}
+                prefix: "cadence-history"
+        {{- end }}
 
-  worker:
-    rpc:
-      port: 7939
-      bindOnIP: ${BIND_ON_IP}
-    metrics:
-      statsd:
-        hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence-worker"
+    worker:
+        rpc:
+            port: 7939
+            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+        {{- if .Env.STATSD_ENDPOINT }}
+        metrics:
+            statsd:
+                hostPort: {{ .Env.STATSD_ENDPOINT }}
+                prefix: "cadence-worker"
+        {{- end }}
 
 clusterMetadata:
-  enableGlobalDomain: false
-  failoverVersionIncrement: 10
-  masterClusterName: "active"
-  currentClusterName: "active"
-  clusterInformation:
-    active:
-      enabled: true
-      initialFailoverVersion: 0
-      rpcName: "cadence-frontend"
-      rpcAddress: "127.0.0.1:7933"
+    enableGlobalDomain: false
+    failoverVersionIncrement: 10
+    masterClusterName: "active"
+    currentClusterName: "active"
+    clusterInformation:
+        active:
+            enabled: true
+            initialFailoverVersion: 0
+            rpcName: "cadence-frontend"
+            rpcAddress: "127.0.0.1:7933"
 
 dcRedirectionPolicy:
-  policy: "noop"
-  toDC: ""
+    policy: "noop"
+    toDC: ""
 
 archival:
-  status: "enabled"
-  enableReadFromArchival: true
-  defaultBucket: "cadence-development"
-  filestore:
-    storeDirectory: "/tmp/development/blobstore/"
+    status: "enabled"
+    enableReadFromArchival: true
     defaultBucket: "cadence-development"
-    customBuckets:
-      - "custom-bucket-1"
-      - "custom-bucket-2"
+    filestore:
+        storeDirectory: "/tmp/development/blobstore/"
+        defaultBucket: "cadence-development"
+        customBuckets:
+            - "custom-bucket-1"
+            - "custom-bucket-2"
 
 kafka:
-  tls:
-    enabled: false
-  clusters:
-    test:
-      brokers:
-        - ${KAFKA_SEEDS}:9092
-  topics:
-    cadence-visibility-dev:
-      cluster: test
-    cadence-visibility-dev-dlq:
-      cluster: test
-  applications:
-    visibility:
-      topic: cadence-visibility-dev
-      dlq-topic: cadence-visibility-dev-dlq
+    tls:
+        enabled: false
+    clusters:
+        test:
+            brokers:
+                - {{ default .Env.KAFKA_SEEDS "" }}:9092
+    topics:
+        cadence-visibility-dev:
+            cluster: test
+        cadence-visibility-dev-dlq:
+            cluster: test
+    applications:
+        visibility:
+            topic: cadence-visibility-dev
+            dlq-topic: cadence-visibility-dev-dlq
 
 elasticsearch:
-  enable: false
-  url:
-    scheme: "http"
-    host: "${ES_SEEDS}:9200"
-  indices:
-    visibility: cadence-visibility-dev
+    enable: false
+    url:
+        scheme: "http"
+        host: "{{ default .Env.ES_SEEDS "" }}:9200"
+    indices:
+        visibility: cadence-visibility-dev
 
 publicClient:
-  hostPort: ${BIND_ON_IP}:7933
+    hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7933
 
 dynamicConfigClient:
-  filepath: ${DYNAMIC_CONFIG_FILE_PATH}
-  pollInterval: "60s"
+    filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/cadence/config/dynamicconfig" }}
+    pollInterval: "60s"
