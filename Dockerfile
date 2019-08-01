@@ -66,7 +66,7 @@ CMD dockerize -template /etc/cadence/config/config_template.yaml:/etc/cadence/co
 
 
 # All-in-one Cadence server
-FROM cadence-server AS cadence-allinone
+FROM cadence-server AS cadence-auto-setup
 
 RUN apk add --update --no-cache ca-certificates py-pip mysql-client
 RUN pip install cqlsh
