@@ -62,7 +62,7 @@ type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	container          archiver.HistoryBootstrapContainer
+	container          *archiver.HistoryBootstrapContainer
 	logger             log.Logger
 	testArchivalURI    archiver.URI
 	testGetDirectory   string
@@ -90,7 +90,7 @@ func (s *historyArchiverSuite) TearDownSuite() {
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	zapLogger := zap.NewNop()
-	s.container = archiver.HistoryBootstrapContainer{
+	s.container = &archiver.HistoryBootstrapContainer{
 		Logger: loggerimpl.NewLogger(zapLogger),
 	}
 }

@@ -123,7 +123,7 @@ func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (archi
 		if p.historyArchiverConfigs.Filestore == nil {
 			return nil, ErrArchiverConfigNotFound
 		}
-		historyArchiver, err := filestore.NewHistoryArchiver(*container, p.historyArchiverConfigs.Filestore)
+		historyArchiver, err := filestore.NewHistoryArchiver(container, p.historyArchiverConfigs.Filestore)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +149,7 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (ar
 		if p.visibilityArchiverConfigs.Filestore == nil {
 			return nil, ErrArchiverConfigNotFound
 		}
-		p.visibilityArchivers[archiverKey] = filestore.NewVisibilityArchiver(*container, p.visibilityArchiverConfigs.Filestore)
+		p.visibilityArchivers[archiverKey] = filestore.NewVisibilityArchiver(container, p.visibilityArchiverConfigs.Filestore)
 		return p.visibilityArchivers[archiverKey], nil
 	}
 	return nil, ErrUnknownScheme

@@ -716,16 +716,6 @@ func ArchivalBlobKey(blobKey string) Tag {
 	return newStringTag("archival-blob-key", blobKey)
 }
 
-// ArchivalUploadFailReason returns tag for ArchivalUploadFailReason
-func ArchivalUploadFailReason(uploadFailReason string) Tag {
-	return newStringTag("archival-upload-fail-reason", uploadFailReason)
-}
-
-// ArchivalCleanUpFailReason returns tag for ArchivalCleanUpFailReason
-func ArchivalCleanUpFailReason(cleanUpFailReason string) Tag {
-	return newStringTag("archival-clean-up-fail-reason", cleanUpFailReason)
-}
-
 // ArchivalDeterministicConstructionCheckFailReason returns tag for ArchivalDeterministicConstructionCheckFailReason
 func ArchivalDeterministicConstructionCheckFailReason(deterministicConstructionCheckFailReason string) Tag {
 	return newStringTag("archival-deterministic-construction-check-fail-reason", deterministicConstructionCheckFailReason)

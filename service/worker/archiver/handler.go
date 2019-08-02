@@ -104,7 +104,7 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 	logger = tagLoggerWithRequest(logger, request)
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: 1 * time.Minute,
-		StartToCloseTimeout:    2 * time.Minute,
+		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
@@ -128,7 +128,7 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 		RetryPolicy: &cadence.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       1 * time.Minute,
+			ExpirationInterval:       5 * time.Minute,
 			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
 		},
 	}

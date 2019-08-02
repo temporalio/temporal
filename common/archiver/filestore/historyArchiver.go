@@ -67,7 +67,7 @@ var (
 
 type (
 	historyArchiver struct {
-		container archiver.HistoryBootstrapContainer
+		container *archiver.HistoryBootstrapContainer
 		fileMode  os.FileMode
 		dirMode   os.FileMode
 
@@ -83,14 +83,14 @@ type (
 
 // NewHistoryArchiver creates a new archiver.HistoryArchiver based on filestore
 func NewHistoryArchiver(
-	container archiver.HistoryBootstrapContainer,
+	container *archiver.HistoryBootstrapContainer,
 	config *config.FilestoreHistoryArchiver,
 ) (archiver.HistoryArchiver, error) {
 	return newHistoryArchiver(container, config, nil)
 }
 
 func newHistoryArchiver(
-	container archiver.HistoryBootstrapContainer,
+	container *archiver.HistoryBootstrapContainer,
 	config *config.FilestoreHistoryArchiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
