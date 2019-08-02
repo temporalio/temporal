@@ -175,18 +175,12 @@ func (s *server) startService() common.Daemon {
 	}
 	params.PublicClient = workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
-	// Dynamic archival config is accessed once on cluster startup than never accessed again.
-	// This is done so as to keep archival status and and the initialization of archiver.Provider in sync.
-	// TODO: Once archival pause is implemented archival config can be made truly dynamic.
-	clusterHistoryArchivalStatus := dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, s.cfg.Archival.History.Status)()
-	enableReadFromHistoryArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, s.cfg.Archival.History.EnableRead)()
-	clusterVisibilityArchivalStatus := dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, s.cfg.Archival.Visibility.Status)()
-	enableReadFromVisibilityArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, s.cfg.Archival.Visibility.EnableRead)()
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
-		clusterHistoryArchivalStatus,
-		enableReadFromHistoryArchival,
-		clusterVisibilityArchivalStatus,
-		enableReadFromVisibilityArchival,
+		dc,
+		s.cfg.Archival.History.Status,
+		s.cfg.Archival.History.EnableRead,
+		s.cfg.Archival.Visibility.Status,
+		s.cfg.Archival.Visibility.EnableRead,
 		&s.cfg.DomainDefaults.Archival,
 	)
 

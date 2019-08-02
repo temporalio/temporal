@@ -56,8 +56,7 @@ var (
 
 // the following errors represents bad user input
 var (
-	errURIUpdate  = &shared.BadRequestError{Message: "Cannot update existing archival URI"}
-	errInvalidURI = &shared.BadRequestError{Message: "Invalid archival URI"}
+	errURIUpdate = &shared.BadRequestError{Message: "Cannot update existing archival URI"}
 )
 
 func neverEnabledState() *archivalState {
@@ -108,7 +107,7 @@ func (s *archivalState) getNextState(
 			if validateURIErr := URIValidationFunc(nextState.URI); validateURIErr != nil {
 				nextState = nil
 				changed = false
-				err = errInvalidURI
+				err = validateURIErr
 				return
 			}
 		}

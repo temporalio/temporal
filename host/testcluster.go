@@ -186,9 +186,10 @@ func setupShards(testBase persistencetests.TestBase, numHistoryShards int, logge
 }
 
 func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
+	dcCollection := dynamicconfig.NewNopCollection()
 	if !enabled {
 		return &ArchiverBase{
-			metadata: archiver.NewArchivalMetadata("", false, "", false, &config.ArchivalDomainDefaults{}),
+			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalDomainDefaults{}),
 			provider: provider.NewArchiverProvider(nil, nil),
 		}
 	}
@@ -205,7 +206,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		Filestore: cfg,
 	}, nil)
 	return &ArchiverBase{
-		metadata: archiver.NewArchivalMetadata("enabled", true, "enabled", true, &config.ArchivalDomainDefaults{
+		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalDomainDefaults{
 			History: config.HistoryArchivalDomainDefaults{
 				Status: "enabled",
 				URI:    "testScheme://test/archive/path",

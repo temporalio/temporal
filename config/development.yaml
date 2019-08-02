@@ -87,8 +87,8 @@ archival:
     enableRead: true
     provider:
       filestore:
-        fileMode: "0700"
-        dirMode: "0600"
+        fileMode: "0666"
+        dirMode: "0766"
   visibility:
     status: "disabled"
     enableRead: false

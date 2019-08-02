@@ -80,11 +80,12 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TearDownSuite() {
 
 func (s *domainHandlerGlobalDomainDisabledSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
-	s.config = NewConfig(dc.NewCollection(dc.NewNopClient(), logger), numHistoryShards, false)
+	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
+	s.config = NewConfig(dcCollection, numHistoryShards, false)
 	s.metadataMgr = s.TestBase.MetadataProxy
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
-	s.archvialMetadata = archiver.NewArchivalMetadata("", false, "", false, &config.ArchivalDomainDefaults{})
+	s.archvialMetadata = archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalDomainDefaults{})
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
 		s.mockDomainReplicator, s.archvialMetadata, s.mockArchiverProvider)
