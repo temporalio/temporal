@@ -20,7 +20,11 @@
 
 package clock
 
-import "time"
+import (
+	"time"
+
+	_ "github.com/jonboulle/clockwork"
+)
 
 type (
 	// TimeSource is an interface for any
