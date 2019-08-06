@@ -14,33 +14,7 @@ See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos
 
 ### Start the cadence-server locally
 
-* Build the required binaries following the instructions [here](CONTRIBUTING.md).
-
-* Install and run `cassandra` locally:
-
-```bash
-# for OS X
-brew install cassandra
-
-# start cassandra
-/usr/local/bin/cassandra
-```
-
-* Setup the cassandra schema:
-
-```bash
-make install-schema
-```
-
-* Start the service:
-
-```bash
-./cadence-server start
-```
-
-### Using Docker
-
-You can also [build and run](docker/README.md) the service using Docker.
+We highly recommend that you use [Cadence service docker](docker/README.md) to run the service.
 
 ### Run the Samples
 
