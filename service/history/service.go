@@ -154,6 +154,7 @@ type Config struct {
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	// TODO https://github.com/uber/cadence/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithDomainFilter
 }
 
