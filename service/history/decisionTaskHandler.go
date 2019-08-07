@@ -377,7 +377,11 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	}
 
 	// check if this is a cron workflow
-	cronBackoff := handler.mutableState.GetCronBackoffDuration()
+	cronBackoff, err := handler.mutableState.GetCronBackoffDuration()
+	if err != nil {
+		handler.stopProcessing = true
+		return err
+	}
 	if cronBackoff == backoff.NoBackoff {
 		// not cron, so complete this workflow execution
 		if _, err := handler.mutableState.AddCompletedWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
@@ -453,7 +457,11 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {
 		// if no backoff retry, set the backoffInterval using cron schedule
-		backoffInterval = handler.mutableState.GetCronBackoffDuration()
+		backoffInterval, err = handler.mutableState.GetCronBackoffDuration()
+		if err != nil {
+			handler.stopProcessing = true
+			return err
+		}
 		continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 	}
 	// second check the backoff / cron schedule
