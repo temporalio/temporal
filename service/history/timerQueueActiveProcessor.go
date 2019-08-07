@@ -691,7 +691,10 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	continueAsNewInitiator := workflow.ContinueAsNewInitiatorRetryPolicy
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
-		backoffInterval = msBuilder.GetCronBackoffDuration()
+		backoffInterval, err = msBuilder.GetCronBackoffDuration()
+		if err != nil {
+			return err
+		}
 		continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 	}
 	if backoffInterval == backoff.NoBackoff {

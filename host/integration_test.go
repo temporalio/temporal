@@ -39,7 +39,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/service/matching"
 )
@@ -1014,15 +1013,14 @@ func (s *integrationSuite) TestCronWorkflow() {
 	sort.Slice(closedExecutions, func(i, j int) bool {
 		return closedExecutions[i].GetStartTime() < closedExecutions[j].GetStartTime()
 	})
-	startTime := time.Unix(0, closedExecutions[0].GetStartTime())
-	closeTime := time.Unix(0, closedExecutions[0].GetStartTime())
-	for i := 0; i != 4; i++ {
+	lastExecution := closedExecutions[0]
+	for i := 1; i != 4; i++ {
 		executionInfo := closedExecutions[i]
-		backoffDuration := backoff.GetBackoffForNextSchedule(cronSchedule, startTime, closeTime)
-		// Round up to compare only seconds
-		s.Equal(backoffDuration.Nanoseconds(), int64(executionInfo.GetExecutionTime()-executionInfo.GetStartTime()))
-		startTime = time.Unix(0, closedExecutions[i].GetStartTime())
-		closeTime = time.Unix(0, closedExecutions[i].GetCloseTime())
+		// Roundup to compare on the precision of seconds
+		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
+		s.Equal(int64(0), int64(expectedBackoff)%(targetBackoffDuration.Nanoseconds()/1000000000))
+		lastExecution = executionInfo
 	}
 }
 
@@ -1971,21 +1969,18 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-
 	sort.Slice(closedExecutions, func(i, j int) bool {
 		return closedExecutions[i].GetStartTime() < closedExecutions[j].GetStartTime()
 	})
-	// exclude the first execution which is the parent workflow
-	lastChildStartTime := time.Unix(0, closedExecutions[1].GetStartTime())
-	// Use last start time because the first cron use start time to calculate backoff
-	lastChildCloseTime := time.Unix(0, closedExecutions[1].GetStartTime())
-	for i := 1; i != 4; i++ {
+	//The first parent is not the cron workflow, only verify child workflow with cron schedule
+	lastExecution := closedExecutions[1]
+	for i := 2; i != 4; i++ {
 		executionInfo := closedExecutions[i]
-		backoffDuration := backoff.GetBackoffForNextSchedule(cronSchedule, lastChildStartTime, lastChildCloseTime)
 		// Round up the time precision to seconds
-		s.Equal(backoffDuration.Nanoseconds(), int64(executionInfo.GetExecutionTime()-executionInfo.GetStartTime()))
-		lastChildStartTime = time.Unix(0, executionInfo.GetStartTime())
-		lastChildCloseTime = time.Unix(0, executionInfo.GetCloseTime())
+		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
+		s.Equal(int64(0), int64(expectedBackoff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
+		lastExecution = executionInfo
 	}
 }
 

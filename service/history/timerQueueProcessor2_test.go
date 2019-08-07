@@ -421,7 +421,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(0),
 		},
 	}
-	s.mockEventsCache.On("getEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(startedEvent, nil).Times(3)
+	s.mockEventsCache.On("getEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(startedEvent, nil).Times(4)
 
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}

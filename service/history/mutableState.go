@@ -137,7 +137,7 @@ type (
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
-		GetCronBackoffDuration() time.Duration
+		GetCronBackoffDuration() (time.Duration, error)
 		GetScheduleIDByActivityID(string) (int64, bool)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
 		GetAllSignalsToSend() map[int64]*persistence.SignalInfo

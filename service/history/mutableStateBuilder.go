@@ -772,12 +772,24 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Dur
 	return getBackoffInterval(info.Attempt, info.MaximumAttempts, info.InitialInterval, info.MaximumInterval, info.BackoffCoefficient, e.timeSource.Now(), info.ExpirationTime, errReason, info.NonRetriableErrors)
 }
 
-func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
+func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 	info := e.executionInfo
 	if len(info.CronSchedule) == 0 {
-		return backoff.NoBackoff
+		return backoff.NoBackoff, nil
 	}
-	return backoff.GetBackoffForNextSchedule(info.CronSchedule, e.executionInfo.StartTimestamp, e.timeSource.Now())
+	// TODO: decide if we can add execution time in execution info.
+	executionTime := e.executionInfo.StartTimestamp
+	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
+	workflowStartEvent, found := e.GetStartEvent()
+	if !found {
+		errorMsg := fmt.Sprintf("Unable to find workflow start event")
+		e.logger.Error(errorMsg, tag.ErrorTypeInvalidHistoryAction)
+		return backoff.NoBackoff, errors.NewInternalFailureError(errorMsg)
+	}
+	firstDecisionTaskBackoff :=
+		time.Duration(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds()) * time.Second
+	executionTime = executionTime.Add(firstDecisionTaskBackoff)
+	return backoff.GetBackoffForNextSchedule(info.CronSchedule, executionTime, e.timeSource.Now()), nil
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.
