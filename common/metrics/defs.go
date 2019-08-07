@@ -1291,6 +1291,7 @@ const (
 
 	HistoryArchiverArchiveNonRetryableErrorCount
 	HistoryArchiverArchiveTransientErrorCount
+	HistoryArchiverArchiveSuccessCount
 	HistoryArchiverHistoryMutatedCount
 	HistoryArchiverTotalUploadSize
 	HistoryArchiverHistorySize
@@ -1428,6 +1429,9 @@ const (
 	WorkflowFailedCount
 	WorkflowTimeoutCount
 	WorkflowTerminateCount
+	ArchiverClientSendSignalFailureCount
+	ArchiverClientInlineArchiveAttemptCount
+	ArchiverClientInlineArchiveFailureCount
 
 	NumHistoryMetrics
 )
@@ -1500,9 +1504,6 @@ const (
 	ArchiverPumpedNotEqualHandledCount
 	ArchiverHandleAllRequestsLatency
 	ArchiverWorkflowStoppingCount
-	ArchiverClientSendSignalFailureCount
-	ArchiverClientInlineArchiveAttemptCount
-	ArchiverClientInlineArchiveFailureCount
 	TaskProcessedCount
 	TaskDeletedCount
 	TaskListProcessedCount
@@ -1574,7 +1575,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 
 		HistoryArchiverArchiveNonRetryableErrorCount:                  {metricName: "history_archiver_archive_non_retryable_error", metricType: Counter},
 		HistoryArchiverArchiveTransientErrorCount:                     {metricName: "history_archiver_archive_transient_error", metricType: Counter},
-		HistoryArchiverHistoryMutatedCount:                            {metricName: "history_archiver_history_mutated_count", metricType: Counter},
+		HistoryArchiverArchiveSuccessCount:                            {metricName: "history_archiver_archive_success", metricType: Counter},
+		HistoryArchiverHistoryMutatedCount:                            {metricName: "history_archiver_history_mutated", metricType: Counter},
 		HistoryArchiverTotalUploadSize:                                {metricName: "history_archiver_total_upload_size", metricType: Timer},
 		HistoryArchiverHistorySize:                                    {metricName: "history_archiver_history_size", metricType: Timer},
 		HistoryArchiverBlobExistsCount:                                {metricName: "history_archiver_blob_exists", metricType: Counter},
@@ -1703,6 +1705,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowFailedCount:                               {metricName: "workflow_failed", metricType: Counter},
 		WorkflowTimeoutCount:                              {metricName: "workflow_timeout", metricType: Counter},
 		WorkflowTerminateCount:                            {metricName: "workflow_terminate", metricType: Counter},
+		ArchiverClientSendSignalFailureCount:              {metricName: "archiver_client_send_signal_error", metricType: Counter},
+		ArchiverClientInlineArchiveAttemptCount:           {metricName: "archiver_client_inline_archive_attempt", metricType: Counter},
+		ArchiverClientInlineArchiveFailureCount:           {metricName: "archiver_client_inline_archive_failure", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},
@@ -1733,54 +1738,51 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RemoteToRemoteMatchCounter:    {metricName: "remote_to_remote_matches"},
 	},
 	Worker: {
-		ReplicatorMessages:                      {metricName: "replicator_messages"},
-		ReplicatorFailures:                      {metricName: "replicator_errors"},
-		ReplicatorMessagesDropped:               {metricName: "replicator_messages_dropped"},
-		ReplicatorLatency:                       {metricName: "replicator_latency"},
-		ESProcessorRequests:                     {metricName: "es_processor_requests"},
-		ESProcessorRetries:                      {metricName: "es_processor_retries"},
-		ESProcessorFailures:                     {metricName: "es_processor_errors"},
-		ESProcessorCorruptedData:                {metricName: "es_processor_corrupted_data"},
-		ESProcessorProcessMsgLatency:            {metricName: "es_processor_process_msg_latency", metricType: Timer},
-		IndexProcessorCorruptedData:             {metricName: "index_processor_corrupted_data"},
-		IndexProcessorProcessMsgLatency:         {metricName: "index_processor_process_msg_latency", metricType: Timer},
-		ArchiverNonRetryableErrorCount:          {metricName: "archiver_non_retryable_error"},
-		ArchiverStartedCount:                    {metricName: "archiver_started"},
-		ArchiverStoppedCount:                    {metricName: "archiver_stopped"},
-		ArchiverCoroutineStartedCount:           {metricName: "archiver_coroutine_started"},
-		ArchiverCoroutineStoppedCount:           {metricName: "archiver_coroutine_stopped"},
-		ArchiverHandleRequestLatency:            {metricName: "archiver_handle_request_latency"},
-		ArchiverUploadWithRetriesLatency:        {metricName: "archiver_upload_with_retries_latency"},
-		ArchiverDeleteWithRetriesLatency:        {metricName: "archiver_delete_with_retries_latency"},
-		ArchiverUploadFailedAllRetriesCount:     {metricName: "archiver_upload_failed_all_retries"},
-		ArchiverUploadSuccessCount:              {metricName: "archiver_upload_success"},
-		ArchiverDeleteFailedAllRetriesCount:     {metricName: "archiver_delete_failed_all_retries"},
-		ArchiverDeleteSuccessCount:              {metricName: "archiver_delete_success"},
-		ArchiverBacklogSizeGauge:                {metricName: "archiver_backlog_size"},
-		ArchiverPumpTimeoutCount:                {metricName: "archiver_pump_timeout"},
-		ArchiverPumpSignalThresholdCount:        {metricName: "archiver_pump_signal_threshold"},
-		ArchiverPumpTimeoutWithoutSignalsCount:  {metricName: "archiver_pump_timeout_without_signals"},
-		ArchiverPumpSignalChannelClosedCount:    {metricName: "archiver_pump_signal_channel_closed"},
-		ArchiverWorkflowStartedCount:            {metricName: "archiver_workflow_started"},
-		ArchiverNumPumpedRequestsCount:          {metricName: "archiver_num_pumped_requests"},
-		ArchiverNumHandledRequestsCount:         {metricName: "archiver_num_handled_requests"},
-		ArchiverPumpedNotEqualHandledCount:      {metricName: "archiver_pumped_not_equal_handled"},
-		ArchiverHandleAllRequestsLatency:        {metricName: "archiver_handle_all_requests_latency"},
-		ArchiverWorkflowStoppingCount:           {metricName: "archiver_workflow_stopping"},
-		ArchiverClientSendSignalFailureCount:    {metricName: "archiver_client_send_signal_error"},
-		ArchiverClientInlineArchiveAttemptCount: {metricName: "archiver_client_inline_archive_attempt"},
-		ArchiverClientInlineArchiveFailureCount: {metricName: "archiver_client_inline_archive_failure"},
-		TaskProcessedCount:                      {metricName: "task_processed", metricType: Gauge},
-		TaskDeletedCount:                        {metricName: "task_deleted", metricType: Gauge},
-		TaskListProcessedCount:                  {metricName: "tasklist_processed", metricType: Gauge},
-		TaskListDeletedCount:                    {metricName: "tasklist_deleted", metricType: Gauge},
-		TaskListOutstandingCount:                {metricName: "tasklist_outstanding", metricType: Gauge},
-		StartedCount:                            {metricName: "started", metricType: Counter},
-		StoppedCount:                            {metricName: "stopped", metricType: Counter},
-		ExecutorTasksDeferredCount:              {metricName: "executor_deferred", metricType: Counter},
-		ExecutorTasksDroppedCount:               {metricName: "executor_dropped", metricType: Counter},
-		BatcherProcessorSuccess:                 {metricName: "batcher_processor_requests", metricType: Counter},
-		BatcherProcessorFailures:                {metricName: "batcher_processor_errors", metricType: Counter},
+		ReplicatorMessages:                     {metricName: "replicator_messages"},
+		ReplicatorFailures:                     {metricName: "replicator_errors"},
+		ReplicatorMessagesDropped:              {metricName: "replicator_messages_dropped"},
+		ReplicatorLatency:                      {metricName: "replicator_latency"},
+		ESProcessorRequests:                    {metricName: "es_processor_requests"},
+		ESProcessorRetries:                     {metricName: "es_processor_retries"},
+		ESProcessorFailures:                    {metricName: "es_processor_errors"},
+		ESProcessorCorruptedData:               {metricName: "es_processor_corrupted_data"},
+		ESProcessorProcessMsgLatency:           {metricName: "es_processor_process_msg_latency", metricType: Timer},
+		IndexProcessorCorruptedData:            {metricName: "index_processor_corrupted_data"},
+		IndexProcessorProcessMsgLatency:        {metricName: "index_processor_process_msg_latency", metricType: Timer},
+		ArchiverNonRetryableErrorCount:         {metricName: "archiver_non_retryable_error"},
+		ArchiverStartedCount:                   {metricName: "archiver_started"},
+		ArchiverStoppedCount:                   {metricName: "archiver_stopped"},
+		ArchiverCoroutineStartedCount:          {metricName: "archiver_coroutine_started"},
+		ArchiverCoroutineStoppedCount:          {metricName: "archiver_coroutine_stopped"},
+		ArchiverHandleRequestLatency:           {metricName: "archiver_handle_request_latency"},
+		ArchiverUploadWithRetriesLatency:       {metricName: "archiver_upload_with_retries_latency"},
+		ArchiverDeleteWithRetriesLatency:       {metricName: "archiver_delete_with_retries_latency"},
+		ArchiverUploadFailedAllRetriesCount:    {metricName: "archiver_upload_failed_all_retries"},
+		ArchiverUploadSuccessCount:             {metricName: "archiver_upload_success"},
+		ArchiverDeleteFailedAllRetriesCount:    {metricName: "archiver_delete_failed_all_retries"},
+		ArchiverDeleteSuccessCount:             {metricName: "archiver_delete_success"},
+		ArchiverBacklogSizeGauge:               {metricName: "archiver_backlog_size"},
+		ArchiverPumpTimeoutCount:               {metricName: "archiver_pump_timeout"},
+		ArchiverPumpSignalThresholdCount:       {metricName: "archiver_pump_signal_threshold"},
+		ArchiverPumpTimeoutWithoutSignalsCount: {metricName: "archiver_pump_timeout_without_signals"},
+		ArchiverPumpSignalChannelClosedCount:   {metricName: "archiver_pump_signal_channel_closed"},
+		ArchiverWorkflowStartedCount:           {metricName: "archiver_workflow_started"},
+		ArchiverNumPumpedRequestsCount:         {metricName: "archiver_num_pumped_requests"},
+		ArchiverNumHandledRequestsCount:        {metricName: "archiver_num_handled_requests"},
+		ArchiverPumpedNotEqualHandledCount:     {metricName: "archiver_pumped_not_equal_handled"},
+		ArchiverHandleAllRequestsLatency:       {metricName: "archiver_handle_all_requests_latency"},
+		ArchiverWorkflowStoppingCount:          {metricName: "archiver_workflow_stopping"},
+		TaskProcessedCount:                     {metricName: "task_processed", metricType: Gauge},
+		TaskDeletedCount:                       {metricName: "task_deleted", metricType: Gauge},
+		TaskListProcessedCount:                 {metricName: "tasklist_processed", metricType: Gauge},
+		TaskListDeletedCount:                   {metricName: "tasklist_deleted", metricType: Gauge},
+		TaskListOutstandingCount:               {metricName: "tasklist_outstanding", metricType: Gauge},
+		StartedCount:                           {metricName: "started", metricType: Counter},
+		StoppedCount:                           {metricName: "stopped", metricType: Counter},
+		ExecutorTasksDeferredCount:             {metricName: "executor_deferred", metricType: Counter},
+		ExecutorTasksDroppedCount:              {metricName: "executor_dropped", metricType: Counter},
+		BatcherProcessorSuccess:                {metricName: "batcher_processor_requests", metricType: Counter},
+		BatcherProcessorFailures:               {metricName: "batcher_processor_errors", metricType: Counter},
 	},
 }
 
