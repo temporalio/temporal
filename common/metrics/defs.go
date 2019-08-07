@@ -82,6 +82,7 @@ const (
 	FrontendRoleTagValue      = "frontend"
 	AdminRoleTagValue         = "admin"
 	DCRedirectionRoleTagValue = "dc_redirection"
+	BlobstoreRoleTagValue     = "blobstore"
 
 	SizeStatsTypeTagValue  = "size"
 	CountStatsTypeTagValue = "count"
@@ -511,6 +512,22 @@ const (
 
 	// HistoryArchiverScope is used by history archivers
 	HistoryArchiverScope
+
+	// The following metrics are only used by internal archiver implemention.
+	// TODO: move them to internal repo once cadence plugin model is in place.
+
+	// BlobstoreClientUploadScope tracks Upload calls to blobstore
+	BlobstoreClientUploadScope
+	// BlobstoreClientDownloadScope tracks Download calls to blobstore
+	BlobstoreClientDownloadScope
+	// BlobstoreClientGetMetadataScope tracks GetMetadata calls to blobstore
+	BlobstoreClientGetMetadataScope
+	// BlobstoreClientExistsScope tracks Exists calls to blobstore
+	BlobstoreClientExistsScope
+	// BlobstoreClientDeleteScope tracks Delete calls to blobstore
+	BlobstoreClientDeleteScope
+	// BlobstoreClientDirectoryExistsScope tracks DirectoryExists calls to blobstore
+	BlobstoreClientDirectoryExistsScope
 
 	NumCommonScopes
 )
@@ -1040,6 +1057,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SequentialTaskProcessingScope:                              {operation: "SequentialTaskProcessing"},
 
 		HistoryArchiverScope: {operation: "HistoryArchiver"},
+
+		BlobstoreClientUploadScope:          {operation: "BlobstoreClientUpload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDownloadScope:        {operation: "BlobstoreClientDownload", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientGetMetadataScope:     {operation: "BlobstoreClientGetMetadata", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientExistsScope:          {operation: "BlobstoreClientExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
+		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{CadenceRoleTagName: BlobstoreRoleTagValue}},
 	},
 	// Frontend Scope Names
 	Frontend: {
