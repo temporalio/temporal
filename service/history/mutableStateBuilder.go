@@ -1383,6 +1383,13 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEventAsHeartbeat(
 	taskList := e.executionInfo.TaskList
 	if e.IsStickyTaskListEnabled() {
 		taskList = e.executionInfo.StickyTaskList
+	} else {
+		// It can be because stickyness has expired due to StickyTTL config
+		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
+		// In other cases, clearing stickyness shouldn't hurt anything.
+		// TODO: https://github.com/uber/cadence/issues/2357:
+		//  if we can use a new field(LastDecisionUpdateTimestamp), then we could get rid of it.
+		e.ClearStickyness()
 	}
 	startToCloseTimeoutSeconds := e.executionInfo.DecisionTimeoutValue
 

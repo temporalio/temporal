@@ -155,6 +155,7 @@ type Config struct {
 
 	// Decision settings
 	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	// TODO https://github.com/uber/cadence/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithDomainFilter
 	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
 	// So that decision will be scheduled to another worker(by clear stickyness)
