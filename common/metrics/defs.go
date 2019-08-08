@@ -1424,6 +1424,7 @@ const (
 	WorkflowCleanupDeleteCount
 	WorkflowCleanupArchiveCount
 	WorkflowCleanupNopCount
+	WorkflowCleanupDeleteHistoryInlineCount
 	WorkflowSuccessCount
 	WorkflowCancelCount
 	WorkflowFailedCount
@@ -1700,6 +1701,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowCleanupDeleteCount:                        {metricName: "workflow_cleanup_delete", metricType: Counter},
 		WorkflowCleanupArchiveCount:                       {metricName: "workflow_cleanup_archive", metricType: Counter},
 		WorkflowCleanupNopCount:                           {metricName: "workflow_cleanup_nop", metricType: Counter},
+		WorkflowCleanupDeleteHistoryInlineCount:           {metricName: "workflow_cleanup_delete_history_inline", metricType: Counter},
 		WorkflowSuccessCount:                              {metricName: "workflow_success", metricType: Counter},
 		WorkflowCancelCount:                               {metricName: "workflow_cancel", metricType: Counter},
 		WorkflowFailedCount:                               {metricName: "workflow_failed", metricType: Counter},

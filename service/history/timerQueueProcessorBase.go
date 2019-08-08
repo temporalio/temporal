@@ -717,6 +717,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 		return err
 	}
 	if resp.ArchivedInline {
+		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
 		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
 			return err
 		}
