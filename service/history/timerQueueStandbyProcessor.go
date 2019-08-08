@@ -51,7 +51,6 @@ type (
 		clusterName             string
 		timerGate               RemoteTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
-		timerQueueAckMgr        timerQueueAckMgr
 		historyRereplicator     xdc.HistoryRereplicator
 	}
 )
@@ -107,7 +106,6 @@ func newTimerQueueStandbyProcessor(
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			logger,
 		),
-		timerQueueAckMgr:    timerQueueAckMgr,
 		historyRereplicator: historyRereplicator,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
@@ -139,6 +137,14 @@ func (t *timerQueueStandbyProcessorImpl) retryTasks() {
 
 func (t *timerQueueStandbyProcessorImpl) getTaskFilter() timerTaskFilter {
 	return t.timerTaskFilter
+}
+
+func (t *timerQueueStandbyProcessorImpl) getAckLevel() TimerSequenceID {
+	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
+}
+
+func (t *timerQueueStandbyProcessorImpl) getReadLevel() TimerSequenceID {
+	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.

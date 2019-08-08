@@ -58,7 +58,6 @@ type (
 		mockShard                ShardContext
 		mockClusterMetadata      *mocks.ClusterMetadata
 		mockMessagingClient      messaging.Client
-		mocktimerQueueAckMgr     *MockTimerQueueAckMgr
 		mockService              service.Service
 		mockClientBean           *client.MockClientBean
 		mockHistoryRereplicator  *xdc.MockHistoryRereplicator
@@ -165,8 +164,6 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(s.mockShard, h, s.clusterName, newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.logger)
-	s.mocktimerQueueAckMgr = &MockTimerQueueAckMgr{}
-	s.timerQueueStandbyProcessor.timerQueueAckMgr = s.mocktimerQueueAckMgr
 
 	s.domainID = validDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
@@ -177,7 +174,6 @@ func (s *timerQueueStandbyProcessorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
-	s.mocktimerQueueAckMgr.AssertExpectations(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())

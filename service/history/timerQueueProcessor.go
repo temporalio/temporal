@@ -180,7 +180,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 		}
 	}
 	// the ack manager is exclusive, so just add a cassandra min precision
-	maxLevel := t.activeTimerProcessor.timerQueueAckMgr.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
+	maxLevel := t.activeTimerProcessor.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
 	t.logger.Info("Timer Failover Triggered",
 		tag.WorkflowDomainIDs(domainIDs),
 		tag.MinLevel(int64(minLevel.Nanosecond())),
@@ -250,11 +250,11 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 
 func (t *timerQueueProcessorImpl) completeTimers() error {
 	lowerAckLevel := t.ackLevel
-	upperAckLevel := t.activeTimerProcessor.timerQueueAckMgr.getAckLevel()
+	upperAckLevel := t.activeTimerProcessor.getAckLevel()
 
 	if t.isGlobalDomainEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-			ackLevel := standbyTimerProcessor.timerQueueAckMgr.getAckLevel()
+			ackLevel := standbyTimerProcessor.getAckLevel()
 			if !compareTimerIDLess(&upperAckLevel, &ackLevel) {
 				upperAckLevel = ackLevel
 			}

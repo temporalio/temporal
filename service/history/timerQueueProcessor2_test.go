@@ -67,7 +67,6 @@ type (
 		mockProducer             *mocks.KafkaProducer
 		mockClientBean           *client.MockClientBean
 		mockMessagingClient      messaging.Client
-		mocktimerQueueAckMgr     *MockTimerQueueAckMgr
 		mockService              service.Service
 		mockEventsCache          *MockEventsCache
 		mockTxProcessor          *MockTransferQueueProcessor
@@ -187,8 +186,6 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestCurrentClusterName
 	s.timerQueueActiveProcessor = newTimerQueueActiveProcessor(s.mockShard, h, s.mockMatchingClient, newTaskAllocator(s.mockShard), s.logger)
-	s.mocktimerQueueAckMgr = &MockTimerQueueAckMgr{}
-	s.timerQueueActiveProcessor.timerQueueAckMgr = s.mocktimerQueueAckMgr
 
 	s.domainID = testDomainActiveID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
