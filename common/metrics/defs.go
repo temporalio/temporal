@@ -1302,10 +1302,8 @@ const (
 	HistoryArchiverBlobSize
 	HistoryArchiverRunningDeterministicConstructionCheckCount
 	HistoryArchiverDeterministicConstructionCheckFailedCount
-	HistoryArchiverCouldNotRunDeterministicConstructionCheckCount
 	HistoryArchiverRunningBlobIntegrityCheckCount
 	HistoryArchiverBlobIntegrityCheckFailedCount
-	HistoryArchiverCouldNotRunBlobIntegrityCheckCount
 
 	MatchingClientForwardedCounter
 	MatchingClientInvalidTaskListName
@@ -1574,22 +1572,20 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SequentialTaskQueueProcessingLatency:                {metricName: "sequentialtask_queue_processing_latency", metricType: Timer},
 		SequentialTaskTaskProcessingLatency:                 {metricName: "sequentialtask_task_processing_latency", metricType: Timer},
 
-		HistoryArchiverArchiveNonRetryableErrorCount:                  {metricName: "history_archiver_archive_non_retryable_error", metricType: Counter},
-		HistoryArchiverArchiveTransientErrorCount:                     {metricName: "history_archiver_archive_transient_error", metricType: Counter},
-		HistoryArchiverArchiveSuccessCount:                            {metricName: "history_archiver_archive_success", metricType: Counter},
-		HistoryArchiverHistoryMutatedCount:                            {metricName: "history_archiver_history_mutated", metricType: Counter},
-		HistoryArchiverTotalUploadSize:                                {metricName: "history_archiver_total_upload_size", metricType: Timer},
-		HistoryArchiverHistorySize:                                    {metricName: "history_archiver_history_size", metricType: Timer},
-		HistoryArchiverBlobExistsCount:                                {metricName: "history_archiver_blob_exists", metricType: Counter},
-		HistoryArchiverBlobSize:                                       {metricName: "history_archiver_blob_size", metricType: Timer},
-		HistoryArchiverRunningDeterministicConstructionCheckCount:     {metricName: "history_archiver_running_deterministic_construction_check", metricType: Counter},
-		HistoryArchiverDeterministicConstructionCheckFailedCount:      {metricName: "history_archiver_deterministic_construction_check_failed", metricType: Counter},
-		HistoryArchiverCouldNotRunDeterministicConstructionCheckCount: {metricName: "history_archiver_could_not_run_deterministic_construction_check", metricType: Counter},
-		HistoryArchiverRunningBlobIntegrityCheckCount:                 {metricName: "history_archiver_running_blob_integrity_check", metricType: Counter},
-		HistoryArchiverBlobIntegrityCheckFailedCount:                  {metricName: "history_archiver_blob_integrity_check_failed", metricType: Counter},
-		HistoryArchiverCouldNotRunBlobIntegrityCheckCount:             {metricName: "history_archiver_could_not_run_blob_integrity_check", metricType: Counter},
-		MatchingClientForwardedCounter:                                {metricName: "forwarded", metricType: Counter},
-		MatchingClientInvalidTaskListName:                             {metricName: "invalid_task_list_name", metricType: Counter},
+		HistoryArchiverArchiveNonRetryableErrorCount:              {metricName: "history_archiver_archive_non_retryable_error", metricType: Counter},
+		HistoryArchiverArchiveTransientErrorCount:                 {metricName: "history_archiver_archive_transient_error", metricType: Counter},
+		HistoryArchiverArchiveSuccessCount:                        {metricName: "history_archiver_archive_success", metricType: Counter},
+		HistoryArchiverHistoryMutatedCount:                        {metricName: "history_archiver_history_mutated", metricType: Counter},
+		HistoryArchiverTotalUploadSize:                            {metricName: "history_archiver_total_upload_size", metricType: Timer},
+		HistoryArchiverHistorySize:                                {metricName: "history_archiver_history_size", metricType: Timer},
+		HistoryArchiverBlobExistsCount:                            {metricName: "history_archiver_blob_exists", metricType: Counter},
+		HistoryArchiverBlobSize:                                   {metricName: "history_archiver_blob_size", metricType: Timer},
+		HistoryArchiverRunningDeterministicConstructionCheckCount: {metricName: "history_archiver_running_deterministic_construction_check", metricType: Counter},
+		HistoryArchiverDeterministicConstructionCheckFailedCount:  {metricName: "history_archiver_deterministic_construction_check_failed", metricType: Counter},
+		HistoryArchiverRunningBlobIntegrityCheckCount:             {metricName: "history_archiver_running_blob_integrity_check", metricType: Counter},
+		HistoryArchiverBlobIntegrityCheckFailedCount:              {metricName: "history_archiver_blob_integrity_check_failed", metricType: Counter},
+		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
+		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
 	},
 	Frontend: {},
 	History: {
