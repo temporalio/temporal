@@ -32,9 +32,7 @@ services:
     environment:
       - discovery.type=single-node
   cadence:
-    # TODO https://github.com/uber/cadence/issues/2330
-    # after fixing the ES container, need to use the new image: server:master-auto-setup
-    image: ubercadence/server-es:master
+    image: ubercadence/server:master-auto-setup
     ports:
       - "7933:7933"
       - "7934:7934"

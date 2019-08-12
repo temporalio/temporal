@@ -54,7 +54,7 @@ docker-compose up
 Running cadence service with MySQL
 -----------------------------------------
 
-Run cadence with MySQL instead of cassandra, use following commads:
+Run cadence with MySQL instead of Cassandra, use following commads:
 
 ```
 docker-compose -f docker-compose-mysql.yml up
@@ -62,6 +62,15 @@ docker-compose -f docker-compose-mysql.yml down
 ```
 
 Please note that SQL support is still in active developement and it is not production ready yet.
+
+Running cadence service with ElasticSearch
+-----------------------------------------
+
+Run cadence with ElasticSearch for visibility instead of Cassandra/MySQL
+
+```
+docker-compose -f docker-compose-es.yml up
+``` 
 
 Quickstart for production
 =========================
