@@ -1304,6 +1304,7 @@ const (
 	HistoryArchiverDeterministicConstructionCheckFailedCount
 	HistoryArchiverRunningBlobIntegrityCheckCount
 	HistoryArchiverBlobIntegrityCheckFailedCount
+	HistoryArchiverDuplicateArchivalsCount
 
 	MatchingClientForwardedCounter
 	MatchingClientInvalidTaskListName
@@ -1584,6 +1585,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverDeterministicConstructionCheckFailedCount:  {metricName: "history_archiver_deterministic_construction_check_failed", metricType: Counter},
 		HistoryArchiverRunningBlobIntegrityCheckCount:             {metricName: "history_archiver_running_blob_integrity_check", metricType: Counter},
 		HistoryArchiverBlobIntegrityCheckFailedCount:              {metricName: "history_archiver_blob_integrity_check_failed", metricType: Counter},
+		HistoryArchiverDuplicateArchivalsCount:                    {metricName: "history_archiver_duplicate_archivals", metricType: Counter},
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
 	},
