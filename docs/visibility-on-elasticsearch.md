@@ -36,7 +36,7 @@ To list only open workflows, add `CloseTime = missing` to the end of query.
 ### start workflow with search attributes 
 
 ```
-cadence --do samples-domain workflow start --tl helloWorldGroup --wt main.Workflow --et 60 --dt 10 -i '"vancexu"' -search_attr_key 'CustomIntField | CustomKeywordField | CustomStringField |  CustomBoolField | CustomDatetimeField' -search_attr_value '5 | keyword1 | vancexu test | true | 2019-06-07T16:16:36-08:00'
+cadence --do samples-domain workflow start --tl helloWorldGroup --wt main.Workflow --et 60 --dt 10 -i '"input arg"' -search_attr_key 'CustomIntField | CustomKeywordField | CustomStringField |  CustomBoolField | CustomDatetimeField' -search_attr_value '5 | keyword1 | my test | true | 2019-06-07T16:16:36-08:00'
 ```
 
 Note: start workflow with search attributes but without ES will succeed as normal, but will not be searchable and will not be shown in list result.

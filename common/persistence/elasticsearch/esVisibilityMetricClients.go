@@ -246,7 +246,17 @@ func (p *visibilityMetricsClient) CountWorkflowExecutions(request *p.CountWorkfl
 }
 
 func (p *visibilityMetricsClient) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
-	return nil // not applicable for elastic search, which relies on retention policies for deletion
+	p.metricClient.IncCounter(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+
+	sw := p.metricClient.StartTimer(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	err := p.persistence.DeleteWorkflowExecution(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.ElasticsearchDeleteWorkflowExecutionsScope, err)
+	}
+
+	return err
 }
 
 func (p *visibilityMetricsClient) updateErrorMetric(scope int, err error) {
