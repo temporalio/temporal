@@ -40,9 +40,21 @@ bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 -
 ./cadence-server --zone standby start
 ```
 
+5. Create global domains
+```
+cadence --do sample domain register --gd true --ac active --cl active standby
+```
 
-Cadence cluster is now running with the replicator consuming messages from
-Kafka topic standby.
+6. Failover between zones:
+
+Failover to standby:
+```
+cadence --do sample domain update --ac standby
+```
+Failback to active:
+```
+cadence --do sample domain update --ac active
+```
 
 Create replication task using CLI
 ---------------------------------
