@@ -593,8 +593,8 @@ func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
 	if e.executionInfo.StickyTaskList == "" {
 		return false
 	}
-	ttl := e.config.StickyTTL(e.domainName)
-	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(ttl)) {
+	maxDu := e.config.StickyTTL(e.domainName)
+	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(maxDu)) {
 		return false
 	}
 	return true
@@ -976,15 +976,14 @@ func (e *mutableStateBuilder) DeleteUserTimer(timerID string) {
 
 func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 	return &decisionInfo{
-		Version:                    e.executionInfo.DecisionVersion,
-		ScheduleID:                 e.executionInfo.DecisionScheduleID,
-		StartedID:                  e.executionInfo.DecisionStartedID,
-		RequestID:                  e.executionInfo.DecisionRequestID,
-		DecisionTimeout:            e.executionInfo.DecisionTimeout,
-		Attempt:                    e.executionInfo.DecisionAttempt,
-		StartedTimestamp:           e.executionInfo.DecisionStartedTimestamp,
-		ScheduledTimestamp:         e.executionInfo.DecisionScheduledTimestamp,
-		OriginalScheduledTimestamp: e.executionInfo.DecisionOriginalScheduledTimestamp,
+		Version:            e.executionInfo.DecisionVersion,
+		ScheduleID:         e.executionInfo.DecisionScheduleID,
+		StartedID:          e.executionInfo.DecisionStartedID,
+		RequestID:          e.executionInfo.DecisionRequestID,
+		DecisionTimeout:    e.executionInfo.DecisionTimeout,
+		Attempt:            e.executionInfo.DecisionAttempt,
+		StartedTimestamp:   e.executionInfo.DecisionStartedTimestamp,
+		ScheduledTimestamp: e.executionInfo.DecisionScheduledTimestamp,
 	}
 }
 
@@ -1055,7 +1054,6 @@ func (e *mutableStateBuilder) UpdateDecision(di *decisionInfo) {
 	e.executionInfo.DecisionAttempt = di.Attempt
 	e.executionInfo.DecisionStartedTimestamp = di.StartedTimestamp
 	e.executionInfo.DecisionScheduledTimestamp = di.ScheduledTimestamp
-	e.executionInfo.DecisionOriginalScheduledTimestamp = di.OriginalScheduledTimestamp
 
 	e.logger.Debug(fmt.Sprintf("Decision Updated: {Schedule: %v, Started: %v, ID: %v, Timeout: %v, Attempt: %v, Timestamp: %v}",
 		di.ScheduleID, di.StartedID, di.RequestID, di.DecisionTimeout, di.Attempt, di.StartedTimestamp))
@@ -1358,10 +1356,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	return nil
 }
 
-// originalScheduledTimestamp is to record the first scheduled decision during decision heartbeat.
-func (e *mutableStateBuilder) AddDecisionTaskScheduledEventAsHeartbeat(
-	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, error) {
+
 	opTag := tag.WorkflowActionDecisionTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -1422,12 +1418,7 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEventAsHeartbeat(
 		startToCloseTimeoutSeconds,
 		e.executionInfo.DecisionAttempt,
 		scheduleTime,
-		originalScheduledTimestamp,
 	)
-}
-
-func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, error) {
-	return e.AddDecisionTaskScheduledEventAsHeartbeat(time.Now().UnixNano())
 }
 
 func (e *mutableStateBuilder) ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error) {
@@ -1467,20 +1458,18 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(
 	taskList string,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
-	scheduleTimestamp int64,
-	originalScheduledTimestamp int64,
+	timestamp int64,
 ) (*decisionInfo, error) {
 	di := &decisionInfo{
-		Version:                    version,
-		ScheduleID:                 scheduleID,
-		StartedID:                  common.EmptyEventID,
-		RequestID:                  emptyUUID,
-		DecisionTimeout:            startToCloseTimeoutSeconds,
-		TaskList:                   taskList,
-		Attempt:                    attempt,
-		ScheduledTimestamp:         scheduleTimestamp,
-		StartedTimestamp:           0,
-		OriginalScheduledTimestamp: originalScheduledTimestamp,
+		Version:            version,
+		ScheduleID:         scheduleID,
+		StartedID:          common.EmptyEventID,
+		RequestID:          emptyUUID,
+		DecisionTimeout:    startToCloseTimeoutSeconds,
+		TaskList:           taskList,
+		Attempt:            attempt,
+		ScheduledTimestamp: timestamp,
+		StartedTimestamp:   0,
 	}
 
 	e.UpdateDecision(di)

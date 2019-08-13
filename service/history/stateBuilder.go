@@ -157,10 +157,8 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes
-			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			di, err := b.msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(),
-				attributes.TaskList.GetName(), attributes.GetStartToCloseTimeoutSeconds(), attributes.GetAttempt(),
-				event.GetTimestamp(), event.GetTimestamp())
+				attributes.TaskList.GetName(), attributes.GetStartToCloseTimeoutSeconds(), attributes.GetAttempt(), event.GetTimestamp())
 			if err != nil {
 				return nil, nil, nil, err
 			}

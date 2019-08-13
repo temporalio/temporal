@@ -501,28 +501,6 @@ func (_m *mockMutableState) AddDecisionTaskScheduleToStartTimeoutEvent(_a0 int64
 	return r0, r1
 }
 
-func (_m *mockMutableState) AddDecisionTaskScheduledEventAsHeartbeat(_a0 int64) (*decisionInfo, error) {
-	ret := _m.Called(_a0)
-
-	var r0 *decisionInfo
-	if rf, ok := ret.Get(0).(func(int64) *decisionInfo); ok {
-		r0 = rf(_a0)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*decisionInfo)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(int64) error); ok {
-		r1 = rf(_a0)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // AddDecisionTaskScheduledEvent provides a mock function with given fields:
 func (_m *mockMutableState) AddDecisionTaskScheduledEvent() (*decisionInfo, error) {
 	ret := _m.Called()
@@ -2258,12 +2236,12 @@ func (_m *mockMutableState) ReplicateDecisionTaskFailedEvent() error {
 }
 
 // ReplicateDecisionTaskScheduledEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4, _a5
-func (_m *mockMutableState) ReplicateDecisionTaskScheduledEvent(_a0 int64, _a1 int64, _a2 string, _a3 int32, _a4 int64, _a5, _a6 int64) (*decisionInfo, error) {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
+func (_m *mockMutableState) ReplicateDecisionTaskScheduledEvent(_a0 int64, _a1 int64, _a2 string, _a3 int32, _a4 int64, _a5 int64) (*decisionInfo, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
 
 	var r0 *decisionInfo
-	if rf, ok := ret.Get(0).(func(int64, int64, string, int32, int64, int64, int64) *decisionInfo); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
+	if rf, ok := ret.Get(0).(func(int64, int64, string, int32, int64, int64) *decisionInfo); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*decisionInfo)
@@ -2271,8 +2249,8 @@ func (_m *mockMutableState) ReplicateDecisionTaskScheduledEvent(_a0 int64, _a1 i
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(int64, int64, string, int32, int64, int64, int64) error); ok {
-		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
+	if rf, ok := ret.Get(1).(func(int64, int64, string, int32, int64, int64) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
 	} else {
 		r1 = ret.Error(1)
 	}

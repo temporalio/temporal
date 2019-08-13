@@ -23,7 +23,6 @@ package history
 import (
 	ctx "context"
 	"fmt"
-	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -319,7 +318,7 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
-		currentDecision, isRunning := msBuilder.GetPendingDecision(scheduleID)
+		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
@@ -330,43 +329,19 @@ Update_History_Loop:
 			continue Update_History_Loop
 		}
 
-		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning || currentDecision.Attempt != token.ScheduleAttempt ||
-			currentDecision.StartedID == common.EmptyEventID {
+		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning || di.Attempt != token.ScheduleAttempt ||
+			di.StartedID == common.EmptyEventID {
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
 
-		startedID := currentDecision.StartedID
+		startedID := di.StartedID
 		maxResetPoints := handler.config.MaxAutoResetPoints(domainEntry.GetInfo().Name)
 		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 		}
-
-		decisionHeartbeating := request.GetForceCreateNewDecisionTask() && len(request.Decisions) == 0
-		var decisionHeartbeatTimeout bool
-		var completedEvent *workflow.HistoryEvent
-		if decisionHeartbeating {
-			domainName := domainEntry.GetInfo().Name
-			timeout := handler.config.DecisionHeartbeatTimeout(domainName)
-			if len(request.Decisions) == 0 && time.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
-				decisionHeartbeatTimeout = true
-				scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.DomainTag(domainName))
-				scope.IncCounter(metrics.DecisionHeartbeatTimeoutCounter)
-				completedEvent, err = msBuilder.AddDecisionTaskTimedOutEvent(currentDecision.ScheduleID, currentDecision.StartedID)
-				if err != nil {
-					return nil, &workflow.InternalServiceError{Message: "Failed to add decision timeout event."}
-				}
-				msBuilder.ClearStickyness()
-			} else {
-				completedEvent, err = msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
-				if err != nil {
-					return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
-				}
-			}
-		} else {
-			completedEvent, err = msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
-			if err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
-			}
+		completedEvent, err := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
+		if err != nil {
+			return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
 		}
 
 		var (
@@ -491,42 +466,35 @@ Update_History_Loop:
 			request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
 		var newDecisionTaskScheduledID int64
 		if createNewDecisionTask {
-			var newDecision *decisionInfo
-			var err error
-			if decisionHeartbeating {
-				newDecision, err = msBuilder.AddDecisionTaskScheduledEventAsHeartbeat(currentDecision.OriginalScheduledTimestamp)
-			} else {
-				newDecision, err = msBuilder.AddDecisionTaskScheduledEvent()
-			}
+			di, err := msBuilder.AddDecisionTaskScheduledEvent()
 			if err != nil {
 				return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 			}
-
-			newDecisionTaskScheduledID = newDecision.ScheduleID
+			newDecisionTaskScheduledID = di.ScheduleID
 			// skip transfer task for decision if request asking to return new decision task
 			if !request.GetReturnNewDecisionTask() {
 				transferTasks = append(transferTasks, &persistence.DecisionTask{
 					DomainID:   domainID,
-					TaskList:   newDecision.TaskList,
-					ScheduleID: newDecision.ScheduleID,
+					TaskList:   di.TaskList,
+					ScheduleID: di.ScheduleID,
 				})
 				if msBuilder.IsStickyTaskListEnabled() {
 					tBuilder := handler.historyEngine.getTimerBuilder(context.getExecution())
-					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(newDecision.ScheduleID, newDecision.Attempt,
+					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
 						executionInfo.StickyScheduleToStartTimeout)
 					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 				}
 			} else {
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
-				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
-					TaskList: &workflow.TaskList{Name: common.StringPtr(newDecision.TaskList)},
+				_, _, err := msBuilder.AddDecisionTaskStartedEvent(di.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
+					TaskList: &workflow.TaskList{Name: common.StringPtr(di.TaskList)},
 					Identity: request.Identity,
 				})
 				if err != nil {
 					return nil, err
 				}
-				timeOutTask := tBuilder.AddStartToCloseDecisionTimoutTask(newDecision.ScheduleID, newDecision.Attempt, newDecision.DecisionTimeout)
+				timeOutTask := tBuilder.AddStartToCloseDecisionTimoutTask(di.ScheduleID, di.Attempt, di.DecisionTimeout)
 				timerTasks = append(timerTasks, timeOutTask)
 			}
 		}
@@ -605,13 +573,6 @@ Update_History_Loop:
 			}
 
 			return nil, updateErr
-		}
-
-		if decisionHeartbeatTimeout {
-			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("decision heartbeat timeout"),
-			}
 		}
 
 		resp = &h.RespondDecisionTaskCompletedResponse{}
