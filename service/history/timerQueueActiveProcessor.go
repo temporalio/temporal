@@ -430,10 +430,17 @@ ExpireActivityTimers:
 			}
 		}
 
+		domainEntry, err := t.shard.GetDomainCache().GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+		if err != nil {
+			return &workflow.InternalServiceError{Message: "unable to get domain from cache by domainID."}
+		}
+
 		switch timeoutType {
 		case workflow.TimeoutTypeScheduleToClose:
 			{
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
+				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
+					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
+					IncCounter(metrics.ScheduleToCloseTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 					return err
 				}
@@ -442,7 +449,9 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeStartToClose:
 			{
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
+				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
+					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
+					IncCounter(metrics.StartToCloseTimeoutCounter)
 				if ai.StartedID != common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return err
@@ -453,7 +462,9 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeHeartbeat:
 			{
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
+				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
+					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
+					IncCounter(metrics.HeartbeatTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 					return err
 				}
@@ -462,7 +473,9 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeScheduleToStart:
 			{
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
+				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
+					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
+					IncCounter(metrics.ScheduleToStartTimeoutCounter)
 				if ai.StartedID == common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return err
@@ -520,23 +533,32 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 		return nil
 	}
 
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+	if err != nil {
+		return &workflow.InternalServiceError{Message: "unable to get domain from cache by domainID."}
+	}
+
 	scheduleNewDecision := false
 	switch task.TimeoutType {
 	case int(workflow.TimeoutTypeStartToClose):
-		t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.StartToCloseTimeoutCounter)
+		t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
+			Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
+			IncCounter(metrics.StartToCloseTimeoutCounter)
 		if di.Attempt == task.ScheduleAttempt {
 			// Add a decision task timeout event.
 			msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
 			scheduleNewDecision = true
 		}
 	case int(workflow.TimeoutTypeScheduleToStart):
-		t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
+		t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
+			Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
+			IncCounter(metrics.ScheduleToStartTimeoutCounter)
 		// check if scheduled decision still pending and not started yet
 		if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID {
 			_, err := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 			if err != nil {
-				// Unable to add DecisionTaskTimeout event to history
-				return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskScheduleToStartTimeout event to history."}
+				// unable to add DecisionTaskTimeout event to history
+				return &workflow.InternalServiceError{Message: "unable to add DecisionTaskScheduleToStartTimeout event to history."}
 			}
 
 			// reschedule decision, which will be on its original task list
@@ -633,12 +655,12 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	targetDomainID := domainID
 	scheduledEvent, ok := msBuilder.GetActivityScheduledEvent(scheduledID)
 	if !ok {
-		return &workflow.InternalServiceError{Message: "Unable to get activity schedule event."}
+		return &workflow.InternalServiceError{Message: "unable to get activity schedule event."}
 	}
 	if scheduledEvent.ActivityTaskScheduledEventAttributes.Domain != nil {
 		domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.ActivityTaskScheduledEventAttributes.GetDomain())
 		if err != nil {
-			return &workflow.InternalServiceError{Message: "Unable to re-schedule activity across domain."}
+			return &workflow.InternalServiceError{Message: "unable to re-schedule activity across domain."}
 		}
 		targetDomainID = domainEntry.GetInfo().ID
 	}
