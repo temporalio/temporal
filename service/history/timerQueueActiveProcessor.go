@@ -430,17 +430,17 @@ ExpireActivityTimers:
 			}
 		}
 
-		domainEntry, err := t.shard.GetDomainCache().GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+		metricScopeWithDomainTag, err := t.getMetricScopeWithDomainTag(
+			metrics.TimerActiveTaskActivityTimeoutScope,
+			msBuilder.GetExecutionInfo().DomainID)
 		if err != nil {
-			return &workflow.InternalServiceError{Message: "unable to get domain from cache by domainID."}
+			return err
 		}
 
 		switch timeoutType {
 		case workflow.TimeoutTypeScheduleToClose:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.ScheduleToCloseTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.ScheduleToCloseTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 					return err
 				}
@@ -449,9 +449,7 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeStartToClose:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.StartToCloseTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.StartToCloseTimeoutCounter)
 				if ai.StartedID != common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return err
@@ -462,9 +460,7 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeHeartbeat:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.HeartbeatTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.HeartbeatTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 					return err
 				}
@@ -473,9 +469,7 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeScheduleToStart:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.ScheduleToStartTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.ScheduleToStartTimeoutCounter)
 				if ai.StartedID == common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return err
@@ -533,26 +527,24 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 		return nil
 	}
 
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+	metricScopeWithDomainTag, err := t.getMetricScopeWithDomainTag(
+		metrics.TimerActiveTaskDecisionTimeoutScope,
+		msBuilder.GetExecutionInfo().DomainID)
 	if err != nil {
-		return &workflow.InternalServiceError{Message: "unable to get domain from cache by domainID."}
+		return err
 	}
 
 	scheduleNewDecision := false
 	switch task.TimeoutType {
 	case int(workflow.TimeoutTypeStartToClose):
-		t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
-			Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-			IncCounter(metrics.StartToCloseTimeoutCounter)
+		metricScopeWithDomainTag.IncCounter(metrics.StartToCloseTimeoutCounter)
 		if di.Attempt == task.ScheduleAttempt {
 			// Add a decision task timeout event.
 			msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
 			scheduleNewDecision = true
 		}
 	case int(workflow.TimeoutTypeScheduleToStart):
-		t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
-			Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-			IncCounter(metrics.ScheduleToStartTimeoutCounter)
+		metricScopeWithDomainTag.IncCounter(metrics.ScheduleToStartTimeoutCounter)
 		// check if scheduled decision still pending and not started yet
 		if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID {
 			_, err := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
@@ -841,4 +833,13 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	}
 
 	return nil
+}
+
+func (t *timerQueueActiveProcessorImpl) getMetricScopeWithDomainTag(scope int, domainID string) (metrics.Scope, error) {
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return nil, err
+	}
+	return t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
+		Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)), nil
 }
