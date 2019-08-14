@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -146,16 +147,12 @@ func NewArchivalConfig(
 		panic(err)
 	}
 
-	ac := &archivalConfig{
+	return &archivalConfig{
 		clusterStatus:       clusterStatus,
 		enableRead:          enableRead,
 		domainDefaultStatus: domainDefaultStatus,
 		domainDefaultURI:    domainDefaultURI,
 	}
-	if !ac.isValid() {
-		panic("invalid cluster level archival configuration")
-	}
-	return ac
 }
 
 // NewDisabledArchvialConfig returns a disabled ArchivalConfig
@@ -189,21 +186,14 @@ func (a *archivalConfig) GetDomainDefaultURI() string {
 	return a.domainDefaultURI
 }
 
-func (a *archivalConfig) isValid() bool {
-	URISet := len(a.domainDefaultURI) != 0
-	validEnabled := a.ClusterConfiguredForArchival() && URISet
-	validDisabled := !a.ClusterConfiguredForArchival() && !a.enableRead && a.domainDefaultStatus == shared.ArchivalStatusDisabled && !URISet
-	return validEnabled || validDisabled
-}
-
 func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
-	case "", "disabled":
+	case "", common.ArchivalDisabled:
 		return ArchivalDisabled, nil
-	case "paused":
+	case common.ArchivalPaused:
 		return ArchivalPaused, nil
-	case "enabled":
+	case common.ArchivalEnabled:
 		return ArchivalEnabled, nil
 	}
 	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v for cluster, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
@@ -212,9 +202,9 @@ func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
 func getDomainArchivalStatus(str string) (shared.ArchivalStatus, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
-	case "", "disabled":
+	case "", common.ArchivalDisabled:
 		return shared.ArchivalStatusDisabled, nil
-	case "enabled":
+	case common.ArchivalEnabled:
 		return shared.ArchivalStatusEnabled, nil
 	}
 	return shared.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for domain, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
