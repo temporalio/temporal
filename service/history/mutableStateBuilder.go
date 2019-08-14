@@ -3852,6 +3852,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		lastEvent := lastEvents[len(lastEvents)-1]
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
+			transactionPolicy,
 		); err != nil {
 			return nil, nil, err
 		}
@@ -3926,6 +3927,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		lastEvent := lastEvents[len(lastEvents)-1]
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
+			transactionPolicy,
 		); err != nil {
 			return nil, nil, err
 		}
@@ -4153,7 +4155,13 @@ func (e *mutableStateBuilder) syncActivityToReplicationTask(
 
 func (e *mutableStateBuilder) updateWithLastWriteEvent(
 	lastEvent *workflow.HistoryEvent,
+	transactionPolicy transactionPolicy,
 ) error {
+
+	if transactionPolicy == transactionPolicyPassive {
+		// already handled in state builder
+		return nil
+	}
 
 	e.GetExecutionInfo().LastEventTaskID = lastEvent.GetTaskId()
 
