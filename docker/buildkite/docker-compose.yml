@@ -208,6 +208,33 @@ services:
         aliases:
           - integration-test-xdc
 
+  coverage-report:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    environment:
+      - CI
+      - BUILDKITE
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+      - BUILDKITE_BRANCH
+      - BUILDKITE_BUILD_URL
+      - BUILDKITE_PROJECT_SLUG
+      - BUILDKITE_COMMIT
+      - BUILDKITE_PULL_REQUEST
+      - BUILDKITE_TAG
+      - BUILDKITE_REPO
+      - BUILDKITE_BUILD_CREATOR
+      - BUILDKITE_BUILD_CREATOR_EMAIL
+      - BUILDKITE_BUILD_CREATOR_TEAMS
+      - BUILDKITE_PULL_REQUEST_REPO
+      - COVERALLS_TOKEN
+    volumes:
+      - ../../:/cadence
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+
 networks:
   services-network:
     name: services-network

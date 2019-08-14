@@ -29,12 +29,14 @@ INTEG_TEST_ROOT=./host
 INTEG_TEST_DIR=host
 INTEG_TEST_XDC_ROOT=./host/xdc
 INTEG_TEST_XDC_DIR=hostxdc
+EV2_TEST=_ev2
 
 GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
 GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
 
 ifndef EVENTSV2
 override EVENTSV2 = false
+EV2_TEST=
 endif
 
 ifndef PERSISTENCE_TYPE
@@ -72,6 +74,19 @@ TEST_DIRS := $(filter-out $(INTEG_TEST_XDC_ROOT)%, $(sort $(dir $(filter %_test.
 
 # all tests other than integration test fall into the pkg_test category
 PKG_TEST_DIRS := $(filter-out $(INTEG_TEST_ROOT)%,$(TEST_DIRS))
+
+# Code coverage output files
+COVER_ROOT                 := $(BUILD)/coverage
+UNIT_COVER_FILE            := $(COVER_ROOT)/unit_cover.out
+INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)$(EV2_TEST)_cover.out
+INTEG_XDC_COVER_FILE       := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_TYPE)_cover.out
+
+INTEG_CASS_COVER_FILE      := $(COVER_ROOT)/integ_cassandra_cover.out
+INTEG_CASS_EV2_COVER_FILE  := $(COVER_ROOT)/integ_cassandra_ev2_cover.out
+INTEG_XDC_CASS_COVER_FILE  := $(COVER_ROOT)/integ_xdc_cassandra_cover.out
+INTEG_SQL_COVER_FILE       := $(COVER_ROOT)/integ_sql_cover.out
+INTEG_SQL_EV2_COVER_FILE   := $(COVER_ROOT)/integ_sql_ev2_cover.out
+INTEG_XDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_xdc_sql_cover.out
 
 # Need the following option to have integration tests
 # count towards coverage. godoc below:
@@ -143,44 +158,51 @@ test_xdc: bins
 
 cover_profile: clean bins_nothrift
 	@mkdir -p $(BUILD)
-	@echo "mode: atomic" > $(BUILD)/cover.out
+	@mkdir -p $(COVER_ROOT)
+	@echo "mode: atomic" > $(UNIT_COVER_FILE)
 
 	@echo Running package tests:
 	@for dir in $(PKG_TEST_DIRS); do \
 		mkdir -p $(BUILD)/"$$dir"; \
 		go test "$$dir" $(TEST_ARG) -coverprofile=$(BUILD)/"$$dir"/coverage.out || exit 1; \
-		cat $(BUILD)/"$$dir"/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out; \
+		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
 cover_integration_profile: clean bins_nothrift
 	@mkdir -p $(BUILD)
-	@echo "mode: atomic" > $(BUILD)/cover.out
+	@mkdir -p $(COVER_ROOT)
+	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 
 	@echo Running integration test with $(PERSISTENCE_TYPE) and eventsV2 $(EVENTSV2)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_DIR)
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -eventsV2=$(EVENTSV2) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
+	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
 cover_xdc_profile: clean bins_nothrift
 	@mkdir -p $(BUILD)
-	@echo "mode: atomic" > $(BUILD)/cover.out
+	@mkdir -p $(COVER_ROOT)
+	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_DIR)
 	@time go test $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
-	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
+	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover: cover_profile
-	go tool cover -html=$(BUILD)/cover.out;
+$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_CASS_EV2_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_SQL_EV2_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)
+	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
+	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_CASS_EV2_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_SQL_EV2_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -v ".gen" >> $(COVER_ROOT)/cover.out
 
-cover_ci: cover_profile
-	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
+cover: $(COVER_ROOT)/cover.out
+	go tool cover -html=$(COVER_ROOT)/cover.out;
 
-cover_integration_ci: cover_integration_profile
-	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
-
-cover_xdc_ci: cover_xdc_profile
-	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
+cover_ci: $(COVER_ROOT)/cover.out
+	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
 
 lint:
 	@echo Running linter
