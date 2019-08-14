@@ -23,6 +23,7 @@ package history
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -112,7 +113,7 @@ func (s *engine3Suite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockArchivalClient = &archiver.ClientMock{}
@@ -158,6 +159,7 @@ func (s *engine3Suite) SetupTest() {
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
+		throttledLogger:      s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,
@@ -208,6 +210,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)

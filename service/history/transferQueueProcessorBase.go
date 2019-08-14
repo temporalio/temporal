@@ -57,10 +57,17 @@ const (
 	defaultDomainName = "defaultDomainName"
 )
 
-func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
-	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,
-	maxReadAckLevel maxReadAckLevel, updateTransferAckLevel updateTransferAckLevel,
-	transferQueueShutdown transferQueueShutdown, logger log.Logger) *transferQueueProcessorBase {
+func newTransferQueueProcessorBase(
+	shard ShardContext,
+	options *QueueProcessorOptions,
+	visibilityMgr persistence.VisibilityManager,
+	matchingClient matching.Client,
+	maxReadAckLevel maxReadAckLevel,
+	updateTransferAckLevel updateTransferAckLevel,
+	transferQueueShutdown transferQueueShutdown,
+	logger log.Logger,
+) *transferQueueProcessorBase {
+
 	return &transferQueueProcessorBase{
 		shard:                  shard,
 		options:                options,
@@ -74,7 +81,10 @@ func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOp
 	}
 }
 
-func (t *transferQueueProcessorBase) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
+func (t *transferQueueProcessorBase) readTasks(
+	readLevel int64,
+) ([]queueTaskInfo, bool, error) {
+
 	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
 		ReadLevel:    readLevel,
 		MaxReadLevel: t.maxReadAckLevel(),
@@ -93,7 +103,10 @@ func (t *transferQueueProcessorBase) readTasks(readLevel int64) ([]queueTaskInfo
 	return tasks, len(response.NextPageToken) != 0, nil
 }
 
-func (t *transferQueueProcessorBase) updateAckLevel(ackLevel int64) error {
+func (t *transferQueueProcessorBase) updateAckLevel(
+	ackLevel int64,
+) error {
+
 	return t.updateTransferAckLevel(ackLevel)
 }
 
@@ -101,7 +114,11 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
 }
 
-func (t *transferQueueProcessorBase) pushActivity(task *persistence.TransferTaskInfo, activityScheduleToStartTimeout int32) error {
+func (t *transferQueueProcessorBase) pushActivity(
+	task *persistence.TransferTaskInfo,
+	activityScheduleToStartTimeout int32,
+) error {
+
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
@@ -121,7 +138,12 @@ func (t *transferQueueProcessorBase) pushActivity(task *persistence.TransferTask
 	return err
 }
 
-func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTaskInfo, tasklist *workflow.TaskList, decisionScheduleToStartTimeout int32) error {
+func (t *transferQueueProcessorBase) pushDecision(
+	task *persistence.TransferTaskInfo,
+	tasklist *workflow.TaskList,
+	decisionScheduleToStartTimeout int32,
+) error {
+
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
@@ -141,9 +163,16 @@ func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTask
 }
 
 func (t *transferQueueProcessorBase) recordWorkflowStarted(
-	domainID string, execution workflow.WorkflowExecution, workflowTypeName string, startTimeUnixNano,
-	executionTimeUnixNano int64, workflowTimeout int32, taskID int64, visibilityMemo *workflow.Memo,
-	searchAttributes map[string][]byte) error {
+	domainID string,
+	execution workflow.WorkflowExecution,
+	workflowTypeName string,
+	startTimeUnixNano int64,
+	executionTimeUnixNano int64,
+	workflowTimeout int32,
+	taskID int64,
+	visibilityMemo *workflow.Memo,
+	searchAttributes map[string][]byte,
+) error {
 
 	domain := defaultDomainName
 	isSampledEnabled := false
@@ -181,9 +210,16 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 }
 
 func (t *transferQueueProcessorBase) upsertWorkflowExecution(
-	domainID string, execution workflow.WorkflowExecution, workflowTypeName string, startTimeUnixNano,
-	executionTimeUnixNano int64, workflowTimeout int32, taskID int64, visibilityMemo *workflow.Memo,
-	searchAttributes map[string][]byte) error {
+	domainID string,
+	execution workflow.WorkflowExecution,
+	workflowTypeName string,
+	startTimeUnixNano int64,
+	executionTimeUnixNano int64,
+	workflowTimeout int32,
+	taskID int64,
+	visibilityMemo *workflow.Memo,
+	searchAttributes map[string][]byte,
+) error {
 
 	domain := defaultDomainName
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
@@ -212,9 +248,18 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 }
 
 func (t *transferQueueProcessorBase) recordWorkflowClosed(
-	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
-	historyLength int64, taskID int64, visibilityMemo *workflow.Memo, searchAttributes map[string][]byte) error {
+	domainID string,
+	execution workflow.WorkflowExecution,
+	workflowTypeName string,
+	startTimeUnixNano int64,
+	executionTimeUnixNano int64,
+	endTimeUnixNano int64,
+	closeStatus workflow.WorkflowExecutionCloseStatus,
+	historyLength int64,
+	taskID int64,
+	visibilityMemo *workflow.Memo,
+	searchAttributes map[string][]byte,
+) error {
 
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
@@ -260,7 +305,10 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 }
 
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
-func getWorkflowExecutionTimestamp(msBuilder mutableState, startEvent *workflow.HistoryEvent) time.Time {
+func getWorkflowExecutionTimestamp(
+	msBuilder mutableState,
+	startEvent *workflow.HistoryEvent,
+) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows
 	// or later runs of a workflow that needs retry.
@@ -276,9 +324,12 @@ func getWorkflowExecutionTimestamp(msBuilder mutableState, startEvent *workflow.
 	return executionTimestamp
 }
 
-func getVisibilityMemo(startEvent *workflow.HistoryEvent) *workflow.Memo {
-	if startEvent == nil {
+func getWorkflowMemo(
+	memo map[string][]byte,
+) *workflow.Memo {
+
+	if memo == nil {
 		return nil
 	}
-	return startEvent.WorkflowExecutionStartedEventAttributes.Memo
+	return &workflow.Memo{Fields: memo}
 }

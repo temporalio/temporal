@@ -120,7 +120,7 @@ func (s *resetorSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockEventsCache = &MockEventsCache{}
@@ -1483,7 +1483,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 			},
 		},
 		afterResetVersion,
-		cluster.GetTestClusterMetadata(true, true, false),
+		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
@@ -2207,7 +2207,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 			},
 		},
 		afterResetVersion,
-		cluster.GetTestClusterMetadata(true, true, false),
+		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
@@ -2815,7 +2815,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 			},
 		},
 		afterResetVersion,
-		cluster.GetTestClusterMetadata(true, true, false),
+		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
@@ -3518,7 +3518,7 @@ func (s *resetorSuite) TestApplyReset() {
 			},
 		},
 		afterResetVersion,
-		cluster.GetTestClusterMetadata(true, true, false),
+		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)

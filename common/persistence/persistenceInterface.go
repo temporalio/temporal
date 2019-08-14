@@ -164,46 +164,47 @@ type (
 
 	// InternalWorkflowExecutionInfo describes a workflow execution for Persistence Interface
 	InternalWorkflowExecutionInfo struct {
-		DomainID                     string
-		WorkflowID                   string
-		RunID                        string
-		ParentDomainID               string
-		ParentWorkflowID             string
-		ParentRunID                  string
-		InitiatedID                  int64
-		CompletionEventBatchID       int64
-		CompletionEvent              *DataBlob
-		TaskList                     string
-		WorkflowTypeName             string
-		WorkflowTimeout              int32
-		DecisionTimeoutValue         int32
-		ExecutionContext             []byte
-		State                        int
-		CloseStatus                  int
-		LastFirstEventID             int64
-		LastEventTaskID              int64
-		NextEventID                  int64
-		LastProcessedEvent           int64
-		StartTimestamp               time.Time
-		LastUpdatedTimestamp         time.Time
-		CreateRequestID              string
-		SignalCount                  int32
-		DecisionVersion              int64
-		DecisionScheduleID           int64
-		DecisionStartedID            int64
-		DecisionRequestID            string
-		DecisionTimeout              int32
-		DecisionAttempt              int64
-		DecisionStartedTimestamp     int64
-		DecisionScheduledTimestamp   int64
-		CancelRequested              bool
-		CancelRequestID              string
-		StickyTaskList               string
-		StickyScheduleToStartTimeout int32
-		ClientLibraryVersion         string
-		ClientFeatureVersion         string
-		ClientImpl                   string
-		AutoResetPoints              *DataBlob
+		DomainID                           string
+		WorkflowID                         string
+		RunID                              string
+		ParentDomainID                     string
+		ParentWorkflowID                   string
+		ParentRunID                        string
+		InitiatedID                        int64
+		CompletionEventBatchID             int64
+		CompletionEvent                    *DataBlob
+		TaskList                           string
+		WorkflowTypeName                   string
+		WorkflowTimeout                    int32
+		DecisionTimeoutValue               int32
+		ExecutionContext                   []byte
+		State                              int
+		CloseStatus                        int
+		LastFirstEventID                   int64
+		LastEventTaskID                    int64
+		NextEventID                        int64
+		LastProcessedEvent                 int64
+		StartTimestamp                     time.Time
+		LastUpdatedTimestamp               time.Time
+		CreateRequestID                    string
+		SignalCount                        int32
+		DecisionVersion                    int64
+		DecisionScheduleID                 int64
+		DecisionStartedID                  int64
+		DecisionRequestID                  string
+		DecisionTimeout                    int32
+		DecisionAttempt                    int64
+		DecisionStartedTimestamp           int64
+		DecisionScheduledTimestamp         int64
+		DecisionOriginalScheduledTimestamp int64
+		CancelRequested                    bool
+		CancelRequestID                    string
+		StickyTaskList                     string
+		StickyScheduleToStartTimeout       int32
+		ClientLibraryVersion               string
+		ClientFeatureVersion               string
+		ClientImpl                         string
+		AutoResetPoints                    *DataBlob
 		// for retry
 		Attempt            int32
 		HasRetryPolicy     bool
@@ -218,6 +219,7 @@ type (
 		BranchToken       []byte
 		CronSchedule      string
 		ExpirationSeconds int32
+		Memo              map[string][]byte
 		SearchAttributes  map[string][]byte
 
 		// attributes which are not related to mutable state at all

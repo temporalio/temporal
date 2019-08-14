@@ -34,15 +34,24 @@ type ClientMock struct {
 }
 
 // Archive provides a mock function with given fields: _a0, _a1
-func (_m *ClientMock) Archive(_a0 context.Context, _a1 *ClientRequest) error {
+func (_m *ClientMock) Archive(_a0 context.Context, _a1 *ClientRequest) (*ClientResponse, error) {
 	ret := _m.Called(_a0, _a1)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *ClientRequest) error); ok {
+	var r0 *ClientResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *ClientRequest) *ClientResponse); ok {
 		r0 = rf(_a0, _a1)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*ClientResponse)
+		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *ClientRequest) error); ok {
+		r1 = rf(_a0, _a1)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }

@@ -21,6 +21,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -49,7 +50,8 @@ type (
 const licenseFileName = "LICENSE"
 
 // unique prefix that identifies a license header
-const licenseHeaderPrefix = "// Copyright (c)"
+const licenseHeaderPrefixOld = "// Copyright (c)"
+const licenseHeaderPrefix = "// The MIT License (MIT)"
 
 var (
 	// directories to be excluded
@@ -89,7 +91,10 @@ func (task *addLicenseHeaderTask) run() error {
 		return fmt.Errorf("error reading license file, errr=%v", err.Error())
 	}
 
-	task.license = string(data)
+	task.license, err = commentOutLines(string(data))
+	if err != nil {
+		return fmt.Errorf("copyright header failed to comment out lines, err=%v", err.Error())
+	}
 
 	err = filepath.Walk(task.config.rootDir, task.handleFile)
 	if err != nil {
@@ -125,15 +130,18 @@ func (task *addLicenseHeaderTask) handleFile(path string, fileInfo os.FileInfo, 
 		return err
 	}
 
-	buf := make([]byte, len(licenseHeaderPrefix))
-	_, err = io.ReadFull(f, buf)
-	f.Close()
-
-	if err != nil && !isEOF(err) {
+	scanner := bufio.NewScanner(f)
+	readLineSucc := scanner.Scan()
+	if !readLineSucc {
+		return fmt.Errorf("fail to read first line of file %v", path)
+	}
+	firstLine := strings.TrimSpace(scanner.Text())
+	if err := scanner.Err(); err != nil {
 		return err
 	}
+	f.Close()
 
-	if string(buf) == licenseHeaderPrefix {
+	if strings.Contains(firstLine, licenseHeaderPrefixOld) || strings.Contains(firstLine, licenseHeaderPrefix) {
 		return nil // file already has the copyright header
 	}
 
@@ -168,4 +176,18 @@ func mustProcessPath(path string) bool {
 // returns true if the error type is an EOF
 func isEOF(err error) bool {
 	return err == io.EOF || err == io.ErrUnexpectedEOF
+}
+
+func commentOutLines(str string) (string, error) {
+	var lines []string
+	scanner := bufio.NewScanner(strings.NewReader(str))
+	for scanner.Scan() {
+		lines = append(lines, "// "+scanner.Text()+"\n")
+	}
+	lines = append(lines, "\n")
+
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return strings.Join(lines, ""), nil
 }

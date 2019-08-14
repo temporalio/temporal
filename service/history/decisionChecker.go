@@ -149,7 +149,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 
 	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
 		executionInfo := c.mutableState.GetExecutionInfo()
-		c.logger.Warn("history size exceeds limit.",
+		c.logger.Error("history size exceeds error limit.",
 			tag.WorkflowDomainID(executionInfo.DomainID),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
@@ -169,7 +169,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 
 	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
 		executionInfo := c.mutableState.GetExecutionInfo()
-		c.logger.Warn("history size exceeds limit.",
+		c.logger.Warn("history size exceeds warn limit.",
 			tag.WorkflowDomainID(executionInfo.DomainID),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
@@ -501,11 +501,11 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 	}
 
 	// Inherit Tasklist from previous execution if not provided on decision
-	tl, err := v.validatedTaskList(attributes.TaskList, executionInfo.TaskList)
+	taskList, err := v.validatedTaskList(attributes.TaskList, executionInfo.TaskList)
 	if err != nil {
 		return err
 	}
-	attributes.TaskList = tl
+	attributes.TaskList = taskList
 
 	// Inherit workflow timeout from previous execution if not provided on decision
 	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
@@ -517,7 +517,11 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.DecisionTimeoutValue)
 	}
 
-	return nil
+	domainEntry, err := v.domainCache.GetDomainByID(executionInfo.DomainID)
+	if err != nil {
+		return err
+	}
+	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainEntry.GetInfo().Name)
 }
 
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
@@ -571,11 +575,11 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	// Inherit tasklist from parent workflow execution if not provided on decision
-	tl, err := v.validatedTaskList(attributes.TaskList, parentInfo.TaskList)
+	taskList, err := v.validatedTaskList(attributes.TaskList, parentInfo.TaskList)
 	if err != nil {
 		return err
 	}
-	attributes.TaskList = tl
+	attributes.TaskList = taskList
 
 	// Inherit workflow timeout from parent workflow execution if not provided on decision
 	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
@@ -591,36 +595,36 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validatedTaskList(
-	tl *workflow.TaskList,
+	taskList *workflow.TaskList,
 	defaultVal string,
 ) (*workflow.TaskList, error) {
 
-	if tl == nil {
-		tl = &workflow.TaskList{}
+	if taskList == nil {
+		taskList = &workflow.TaskList{}
 	}
 
-	if tl.GetName() == "" {
+	if taskList.GetName() == "" {
 		if defaultVal == "" {
-			return tl, &workflow.BadRequestError{"missing task list name"}
+			return taskList, &workflow.BadRequestError{"missing task list name"}
 		}
-		tl.Name = &defaultVal
-		return tl, nil
+		taskList.Name = &defaultVal
+		return taskList, nil
 	}
 
-	name := tl.GetName()
+	name := taskList.GetName()
 	if len(name) > v.maxIDLengthLimit {
-		return tl, &workflow.BadRequestError{
+		return taskList, &workflow.BadRequestError{
 			Message: fmt.Sprintf("task list name exceeds length limit of %v", v.maxIDLengthLimit),
 		}
 	}
 
 	if strings.HasPrefix(name, reservedTaskListPrefix) {
-		return tl, &workflow.BadRequestError{
+		return taskList, &workflow.BadRequestError{
 			Message: fmt.Sprintf("task list name cannot start with reserved prefix %v", reservedTaskListPrefix),
 		}
 	}
 
-	return tl, nil
+	return taskList, nil
 }
 
 func (v *decisionAttrValidator) validateCrossDomainCall(

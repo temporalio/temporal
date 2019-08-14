@@ -25,15 +25,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence"
-	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"
-	cclient "go.uber.org/cadence/client"
 	"go.uber.org/cadence/workflow"
+	"go.uber.org/yarpc"
 	"golang.org/x/time/rate"
 )
 
@@ -48,10 +50,13 @@ const (
 	InfiniteDuration = 20 * 365 * 24 * time.Hour
 	pageSize         = 1000
 
-	// below are default values for BatchParams
-	DefaultRPS                      = 50
-	DefaultConcurrency              = 5
+	// DefaultRPS is the default RPS
+	DefaultRPS = 50
+	// DefaultConcurrency is the default concurrency
+	DefaultConcurrency = 5
+	// DefaultAttemptsOnRetryableError is the default value for AttemptsOnRetryableError
 	DefaultAttemptsOnRetryableError = 50
+	// DefaultActivityHeartBeatTimeout is the default value for ActivityHeartBeatTimeout
 	DefaultActivityHeartBeatTimeout = time.Second * 10
 )
 
@@ -227,7 +232,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 // BatchActivity is activity for processing batch operation
 func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
-	client := cclient.NewClient(batcher.svcClient, batchParams.DomainName, &cclient.Options{})
+	client := batcher.clientBean.GetFrontendClient()
 
 	hbd := HeartBeatDetails{}
 	startOver := true
@@ -242,8 +247,9 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 	}
 
 	if startOver {
-		resp, err := client.CountWorkflow(ctx, &shared.CountWorkflowExecutionsRequest{
-			Query: common.StringPtr(batchParams.Query),
+		resp, err := client.CountWorkflowExecutions(ctx, &shared.CountWorkflowExecutionsRequest{
+			Domain: common.StringPtr(batchParams.DomainName),
+			Query:  common.StringPtr(batchParams.Query),
 		})
 		if err != nil {
 			return HeartBeatDetails{}, err
@@ -261,7 +267,8 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 		// TODO https://github.com/uber/cadence/issues/2154
 		//  Need to improve scan concurrency because it will hold an ES resource until the workflow finishes.
 		//  And we can't use list API because terminate / reset will mutate the result.
-		resp, err := client.ScanWorkflow(ctx, &shared.ListWorkflowExecutionsRequest{
+		resp, err := client.ScanWorkflowExecutions(ctx, &shared.ListWorkflowExecutionsRequest{
+			Domain:        common.StringPtr(batchParams.DomainName),
 			PageSize:      common.Int32Ptr(int32(pageSize)),
 			NextPageToken: hbd.PageToken,
 			Query:         common.StringPtr(batchParams.Query),
@@ -323,7 +330,7 @@ func startTaskProcessor(
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
-	client cclient.Client,
+	client frontend.Client,
 ) {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	for {
@@ -335,25 +342,54 @@ func startTaskProcessor(
 				return
 			}
 			var err error
+			requestID := uuid.New().String()
+			yarpcCallOptions := []yarpc.CallOption{
+				yarpc.WithHeader(common.EnforceDCRedirection, "true"),
+			}
 
 			switch batchParams.BatchType {
 			case BatchTypeTerminate:
 				err = processTask(ctx, limiter, task, batchParams, client,
 					batchParams.TerminateParams.TerminateChildren,
 					func(workflowID, runID string) error {
-						return client.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason, []byte{})
+						return client.TerminateWorkflowExecution(ctx, &shared.TerminateWorkflowExecutionRequest{
+							Domain: common.StringPtr(batchParams.DomainName),
+							WorkflowExecution: &shared.WorkflowExecution{
+								WorkflowId: common.StringPtr(workflowID),
+								RunId:      common.StringPtr(runID),
+							},
+							Reason:   common.StringPtr(batchParams.Reason),
+							Identity: common.StringPtr(BatchWFTypeName),
+						}, yarpcCallOptions...)
 					})
 			case BatchTypeCancel:
 				err = processTask(ctx, limiter, task, batchParams, client,
 					batchParams.CancelParams.CancelChildren,
 					func(workflowID, runID string) error {
-						return client.CancelWorkflow(ctx, workflowID, runID)
+						return client.RequestCancelWorkflowExecution(ctx, &shared.RequestCancelWorkflowExecutionRequest{
+							Domain: common.StringPtr(batchParams.DomainName),
+							WorkflowExecution: &shared.WorkflowExecution{
+								WorkflowId: common.StringPtr(workflowID),
+								RunId:      common.StringPtr(runID),
+							},
+							Identity:  common.StringPtr(BatchWFTypeName),
+							RequestId: common.StringPtr(requestID),
+						}, yarpcCallOptions...)
 					})
 			case BatchTypeSignal:
 				err = processTask(ctx, limiter, task, batchParams, client, common.BoolPtr(false),
 					func(workflowID, runID string) error {
-						return client.SignalWorkflow(ctx, workflowID, runID,
-							batchParams.SignalParams.SignalName, []byte(batchParams.SignalParams.Input))
+						return client.SignalWorkflowExecution(ctx, &shared.SignalWorkflowExecutionRequest{
+							Domain: common.StringPtr(batchParams.DomainName),
+							WorkflowExecution: &shared.WorkflowExecution{
+								WorkflowId: common.StringPtr(workflowID),
+								RunId:      common.StringPtr(runID),
+							},
+							Identity:   common.StringPtr(BatchWFTypeName),
+							RequestId:  common.StringPtr(requestID),
+							SignalName: common.StringPtr(batchParams.SignalParams.SignalName),
+							Input:      []byte(batchParams.SignalParams.Input),
+						}, yarpcCallOptions...)
 					})
 			}
 			if err != nil {
@@ -381,7 +417,7 @@ func processTask(
 	limiter *rate.Limiter,
 	task taskDetail,
 	batchParams BatchParams,
-	client cclient.Client,
+	client frontend.Client,
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {
@@ -403,7 +439,13 @@ func processTask(
 			}
 		}
 		wfs = wfs[1:]
-		resp, err := client.DescribeWorkflowExecution(ctx, wf.GetWorkflowId(), wf.GetRunId())
+		resp, err := client.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
+			Domain: common.StringPtr(batchParams.DomainName),
+			Execution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(wf.GetWorkflowId()),
+				RunId:      common.StringPtr(wf.GetRunId()),
+			},
+		})
 		if err != nil {
 			// EntityNotExistsError means wf is deleted
 			_, ok := err.(*shared.EntityNotExistsError)

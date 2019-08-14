@@ -145,6 +145,7 @@ const (
 		`decision_attempt: ?, ` +
 		`decision_timestamp: ?, ` +
 		`decision_scheduled_timestamp: ?, ` +
+		`decision_original_scheduled_timestamp: ?, ` +
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?, ` +
 		`sticky_task_list: ?, ` +
@@ -166,7 +167,8 @@ const (
 		`branch_token: ?, ` +
 		`cron_schedule: ?, ` +
 		`expiration_seconds: ?, ` +
-		`search_attributes: ? ` +
+		`search_attributes: ?, ` +
+		`memo: ? ` +
 		`}`
 
 	templateReplicationStateType = `{` +

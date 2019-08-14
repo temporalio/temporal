@@ -651,9 +651,10 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 						w.eng.logger,
 						firstEvent.GetVersion(),
 						domainEntry.GetReplicationPolicy(),
+						domainEntry.GetInfo().Name,
 					)
 				} else {
-					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger)
+					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry.GetInfo().Name)
 				}
 
 				resetMutableState.executionInfo.EventStoreVersion = persistence.EventStoreVersionV2
@@ -868,6 +869,11 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	var sBuilder stateBuilder
 	var wfTimeoutSecs int64
 
+	domainEntry, retError := w.eng.shard.GetDomainCache().GetDomainByID(domainID)
+	if retError != nil {
+		return
+	}
+
 	// replay old history from beginning of the baseRun upto decisionFinishEventID(exclusive)
 	var nextPageToken []byte
 	var lastEvent *workflow.HistoryEvent
@@ -903,6 +909,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					// if can see replication task, meaning that domain is
 					// global domain with > 1 target clusters
 					cache.ReplicationPolicyMultiCluster,
+					domainEntry.GetInfo().Name,
 				)
 				newMsBuilder.GetExecutionInfo().EventStoreVersion = persistence.EventStoreVersionV2
 				sBuilder = newStateBuilder(w.eng.shard, newMsBuilder, w.eng.logger)

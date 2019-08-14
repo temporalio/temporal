@@ -48,6 +48,7 @@ CREATE TYPE workflow_execution (
   decision_attempt                 bigint,
   decision_timestamp               bigint,  -- this is decision started time
   decision_scheduled_timestamp     bigint,   -- this is decision scheduled time
+  decision_original_scheduled_timestamp     bigint,   -- this is scheduled time of the first decision during heartbeat
   cancel_requested                 boolean,
   cancel_request_id                text,
   sticky_task_list                 text,   -- sticky worker task list
@@ -74,7 +75,8 @@ CREATE TYPE workflow_execution (
   last_event_task_id               bigint,
   auto_reset_points                blob, -- the resetting points for auto-reset feature
   auto_reset_points_encoding       text, -- encoding for auto_reset_points_data
-  search_attributes                map<text, blob>
+  search_attributes                map<text, blob>,
+  memo                             map<text, blob>
 );
 
 -- Replication information for each cluster

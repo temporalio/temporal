@@ -520,6 +520,36 @@ func newAdminElasticSearchCommands() []cli.Command {
 				AdminIndex(c)
 			},
 		},
+		{
+			Name:    "report",
+			Aliases: []string{"rep"},
+			Usage:   "Generate Report by Aggregation functions on ElasticSearch",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagURL,
+					Usage: "URL of ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagIndex,
+					Usage: "ElasticSearch target index",
+				},
+				cli.StringFlag{
+					Name:  FlagListQuery,
+					Usage: "SQL query of the report",
+				},
+				cli.StringFlag{
+					Name:  FlagOutputFormat,
+					Usage: "Additional output format (html or csv)",
+				},
+				cli.StringFlag{
+					Name:  FlagOutputFilename,
+					Usage: "Additional output filename with path",
+				},
+			},
+			Action: func(c *cli.Context) {
+				GenerateReport(c)
+			},
+		},
 	}
 }
 

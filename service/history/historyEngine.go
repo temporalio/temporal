@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -34,8 +33,6 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -137,7 +134,6 @@ func NewEngineWithShardContext(
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
-	archiverProvider provider.ArchiverProvider,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -162,7 +158,14 @@ func NewEngineWithShardContext(
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
-		archivalClient:       warchiver.NewClient(shard.GetMetricsClient(), shard.GetLogger(), publicClient, shard.GetConfig().NumArchiveSystemWorkflows, shard.GetConfig().ArchiveRequestRPS, archiverProvider),
+		archivalClient: warchiver.NewClient(
+			shard.GetMetricsClient(),
+			logger,
+			publicClient,
+			shard.GetConfig().NumArchiveSystemWorkflows,
+			shard.GetConfig().ArchiveRequestRPS,
+			shard.GetService().GetArchiverProvider(),
+		),
 	}
 
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
@@ -308,12 +311,14 @@ func (e *historyEngineImpl) createMutableState(
 			e.logger,
 			domainEntry.GetFailoverVersion(),
 			domainEntry.GetReplicationPolicy(),
+			domainEntry.GetInfo().Name,
 		)
 	} else {
 		msBuilder = newMutableStateBuilder(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
+			domainEntry.GetInfo().Name,
 		)
 	}
 
@@ -372,6 +377,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
@@ -618,7 +624,6 @@ func (e *historyEngineImpl) getMutableState(
 		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
 		BranchToken:                          currentBranchToken,
 	}
-
 	replicationState := msBuilder.GetReplicationState()
 	if replicationState != nil {
 		retResp.ReplicationInfo = map[string]*workflow.ReplicationInfo{}
@@ -760,12 +765,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	// TODO: we need to consider adding execution time to mutable state
 	// For now execution time will be calculated based on start time and cron schedule/retry policy
 	// each time DescribeWorkflowExecution is called.
-	backoffDuration := time.Duration(0)
-	if executionInfo.HasRetryPolicy && (executionInfo.Attempt > 0) {
-		backoffDuration = time.Duration(float64(executionInfo.InitialInterval)*math.Pow(executionInfo.BackoffCoefficient, float64(executionInfo.Attempt-1))) * time.Second
-	} else if len(executionInfo.CronSchedule) != 0 {
-		backoffDuration = backoff.GetBackoffForNextSchedule(executionInfo.CronSchedule, executionInfo.StartTimestamp)
+	startEvent, err := msBuilder.GetStartEvent()
+	if err != nil {
+		return nil, err
 	}
+	backoffDuration := time.Duration(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds()) * time.Second
 	result.WorkflowExecutionInfo.ExecutionTime = common.Int64Ptr(result.WorkflowExecutionInfo.GetStartTime() + backoffDuration.Nanoseconds())
 
 	if executionInfo.ParentRunID != "" {
@@ -1476,6 +1480,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
@@ -2156,6 +2161,34 @@ func validateStartWorkflowExecutionRequest(
 	}
 
 	return common.ValidateRetryPolicy(request.RetryPolicy)
+}
+
+func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
+	domainEntry *cache.DomainCacheEntry,
+	request *workflow.StartWorkflowExecutionRequest,
+) {
+
+	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(
+		domainEntry.GetInfo().Name,
+	))
+
+	if request.GetTaskStartToCloseTimeoutSeconds() > maxDecisionStartToCloseTimeoutSeconds {
+		e.throttledLogger.WithTags(
+			tag.WorkflowDomainID(domainEntry.GetInfo().ID),
+			tag.WorkflowID(request.GetWorkflowId()),
+			tag.WorkflowDecisionTimeoutSeconds(request.GetTaskStartToCloseTimeoutSeconds()),
+		).Info("force override decision start to close timeout due to decision timout too large")
+		request.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionStartToCloseTimeoutSeconds)
+	}
+
+	if request.GetTaskStartToCloseTimeoutSeconds() > request.GetExecutionStartToCloseTimeoutSeconds() {
+		e.throttledLogger.WithTags(
+			tag.WorkflowDomainID(domainEntry.GetInfo().ID),
+			tag.WorkflowID(request.GetWorkflowId()),
+			tag.WorkflowDecisionTimeoutSeconds(request.GetTaskStartToCloseTimeoutSeconds()),
+		).Info("force override decision start to close timeout due to decision timeout larger than workflow timeout")
+		request.TaskStartToCloseTimeoutSeconds = request.ExecutionStartToCloseTimeoutSeconds
+	}
 }
 
 func validateDomainUUID(

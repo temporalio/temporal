@@ -86,8 +86,18 @@ func (h *Handler) Start() error {
 	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
 	h.domainCache.Start()
 	h.metricsClient = h.Service.GetMetricsClient()
+	client, err := h.Service.GetClientBean().GetMatchingClient(h.domainCache.GetDomainName)
+	if err != nil {
+		return err
+	}
 	h.engine = NewEngine(
-		h.taskPersistence, h.GetClientBean().GetHistoryClient(), h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
+		h.taskPersistence,
+		h.GetClientBean().GetHistoryClient(),
+		client,
+		h.config,
+		h.Service.GetLogger(),
+		h.Service.GetMetricsClient(),
+		h.domainCache,
 	)
 	h.startWG.Done()
 	return nil
@@ -126,6 +136,10 @@ func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivity
 	sw := h.startRequestProfile("AddActivityTask", scope)
 	defer sw.Stop()
 
+	if addRequest.GetForwardedFrom() != "" {
+		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	}
+
 	if ok := h.rateLimiter.Allow(); !ok {
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
@@ -145,6 +159,10 @@ func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecision
 	scope := metrics.MatchingAddDecisionTaskScope
 	sw := h.startRequestProfile("AddDecisionTask", scope)
 	defer sw.Stop()
+
+	if addRequest.GetForwardedFrom() != "" {
+		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
 		return h.handleErr(errMatchingHostThrottle, scope)
@@ -166,11 +184,19 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForActivityTask", scope)
 	defer sw.Stop()
 
+	if pollRequest.GetForwardedFrom() != "" {
+		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	}
+
 	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForActivityTask", h.Service.GetLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForActivityTask",
+		h.Service.GetThrottledLogger(),
+	); err != nil {
 		return nil, h.handleErr(err, scope)
 	}
 
@@ -187,11 +213,19 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForDecisionTask", scope)
 	defer sw.Stop()
 
+	if pollRequest.GetForwardedFrom() != "" {
+		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	}
+
 	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollForDecisionTask", h.Service.GetLogger()); err != nil {
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForDecisionTask",
+		h.Service.GetThrottledLogger(),
+	); err != nil {
 		return nil, h.handleErr(err, scope)
 	}
 
@@ -206,6 +240,10 @@ func (h *Handler) QueryWorkflow(ctx context.Context,
 	scope := metrics.MatchingQueryWorkflowScope
 	sw := h.startRequestProfile("QueryWorkflow", scope)
 	defer sw.Stop()
+
+	if queryRequest.GetForwardedFrom() != "" {
+		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.handleErr(errMatchingHostThrottle, scope)

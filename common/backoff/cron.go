@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -43,8 +43,8 @@ func ValidateSchedule(cronSchedule string) error {
 }
 
 // GetBackoffForNextSchedule calculates the backoff time for the next run given
-// a cronSchedule and current time
-func GetBackoffForNextSchedule(cronSchedule string, nowTime time.Time) time.Duration {
+// a cronSchedule, workflow start time and workflow close time
+func GetBackoffForNextSchedule(cronSchedule string, startTime time.Time, closeTime time.Time) time.Duration {
 	if len(cronSchedule) == 0 {
 		return NoBackoff
 	}
@@ -53,17 +53,22 @@ func GetBackoffForNextSchedule(cronSchedule string, nowTime time.Time) time.Dura
 	if err != nil {
 		return NoBackoff
 	}
-
-	nowTime = nowTime.In(time.UTC)
-	backoffInterval := schedule.Next(nowTime).Sub(nowTime)
+	startUTCTime := startTime.In(time.UTC)
+	closeUTCTime := closeTime.In(time.UTC)
+	nextScheduleTime := schedule.Next(startUTCTime)
+	// Calculate the next schedule start time which is nearest to the close time
+	for nextScheduleTime.Before(closeUTCTime) {
+		nextScheduleTime = schedule.Next(nextScheduleTime)
+	}
+	backoffInterval := nextScheduleTime.Sub(closeUTCTime)
 	roundedInterval := time.Second * time.Duration(math.Ceil(backoffInterval.Seconds()))
 	return roundedInterval
 }
 
 // GetBackoffForNextScheduleInSeconds calculates the backoff time in seconds for the
 // next run given a cronSchedule and current time
-func GetBackoffForNextScheduleInSeconds(cronSchedule string, nowTime time.Time) int32 {
-	backoffDuration := GetBackoffForNextSchedule(cronSchedule, nowTime)
+func GetBackoffForNextScheduleInSeconds(cronSchedule string, startTime time.Time, closeTime time.Time) int32 {
+	backoffDuration := GetBackoffForNextSchedule(cronSchedule, startTime, closeTime)
 	if backoffDuration == NoBackoff {
 		return 0
 	}

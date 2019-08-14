@@ -25,13 +25,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
-
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -43,21 +42,25 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/worker/archiver"
 )
 
 type (
 	timerQueueProcessorBaseSuite struct {
-		clusterName          string
-		logger               log.Logger
-		mockService          service.Service
-		mockShard            ShardContext
-		mockMetadataMgr      *mocks.MetadataManager
-		mockClusterMetadata  *mocks.ClusterMetadata
-		mockMessagingClient  messaging.Client
-		mockProcessor        *MockTimerProcessor
-		mockQueueAckMgr      *MockTimerQueueAckMgr
-		mockClientBean       *client.MockClientBean
-		mockExecutionManager *mocks.ExecutionManager
+		clusterName           string
+		logger                log.Logger
+		mockService           service.Service
+		mockShard             ShardContext
+		mockMetadataMgr       *mocks.MetadataManager
+		mockClusterMetadata   *mocks.ClusterMetadata
+		mockMessagingClient   messaging.Client
+		mockProcessor         *MockTimerProcessor
+		mockQueueAckMgr       *MockTimerQueueAckMgr
+		mockClientBean        *client.MockClientBean
+		mockExecutionManager  *mocks.ExecutionManager
+		mockVisibilityManager *mocks.VisibilityManager
+		mockHistoryV2Manager  *mocks.HistoryV2Manager
+		mockArchivalClient    *archiver.ClientMock
 
 		scope            int
 		notificationChan chan struct{}
@@ -68,7 +71,7 @@ type (
 )
 
 func TestTimerQueueProcessorBaseSuite(t *testing.T) {
-	s := new(queueProcessorSuite)
+	s := new(timerQueueProcessorBaseSuite)
 	suite.Run(t, s)
 }
 
@@ -90,7 +93,11 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil)
+	s.mockExecutionManager = &mocks.ExecutionManager{}
+	s.mockVisibilityManager = &mocks.VisibilityManager{}
+	s.mockHistoryV2Manager = &mocks.HistoryV2Manager{}
+	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
@@ -104,8 +111,8 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
+		executionManager:          s.mockExecutionManager,
 	}
-	s.mockExecutionManager = &mocks.ExecutionManager{}
 
 	s.scope = 0
 	s.notificationChan = make(chan struct{})
@@ -114,14 +121,16 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		s.scope,
 		s.mockShard,
 		&historyEngineImpl{
-			shard:         s.mockShard,
-			logger:        s.logger,
-			metricsClient: metricsClient,
+			shard:          s.mockShard,
+			logger:         s.logger,
+			metricsClient:  metricsClient,
+			visibilityMgr:  s.mockVisibilityManager,
+			historyV2Mgr:   s.mockHistoryV2Manager,
+			archivalClient: s.mockArchivalClient,
 		},
 		s.mockQueueAckMgr,
 		NewLocalTimerGate(clock.NewRealTimeSource()),
 		dynamicconfig.GetIntPropertyFn(10),
-		dynamicconfig.GetDurationPropertyFn(0*time.Second),
 		s.logger,
 	)
 	s.timerQueueProcessor.timerProcessor = s.mockProcessor
@@ -132,6 +141,10 @@ func (s *timerQueueProcessorBaseSuite) TearDownTest() {
 	s.mockProcessor.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
+	s.mockExecutionManager.AssertExpectations(s.T())
+	s.mockHistoryV2Manager.AssertExpectations(s.T())
+	s.mockVisibilityManager.AssertExpectations(s.T())
+	s.mockArchivalClient.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_ShutDown() {
@@ -150,18 +163,18 @@ func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainErrRetry_Proc
 	s.mockProcessor.On("getTaskFilter").Return(taskFilterErr).Once()
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task, true).Return(s.scope, nil).Once()
-	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
+	s.mockQueueAckMgr.On("completeTimerTask", task).Once()
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
 }
 
 func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
 	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
-		return true, nil
+		return false, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task, false).Return(s.scope, nil).Once()
-	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
+	s.mockQueueAckMgr.On("completeTimerTask", task).Once()
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
 }
 
@@ -171,8 +184,8 @@ func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainTrue_ProcessN
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
-	s.mockProcessor.On("process", task, false).Return(s.scope, nil).Once()
-	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
+	s.mockProcessor.On("process", task, true).Return(s.scope, nil).Once()
+	s.mockQueueAckMgr.On("completeTimerTask", task).Once()
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
 }
 
@@ -183,37 +196,13 @@ func (s *timerQueueProcessorBaseSuite) TestProcessTaskAndAck_DomainTrue_ProcessE
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
-	s.mockProcessor.On("process", task).Return(s.scope, err).Once()
-	s.mockProcessor.On("process", task).Return(s.scope, nil).Once()
-	s.mockQueueAckMgr.On("completeQueueTask", task.GetTaskID()).Once()
+	s.mockProcessor.On("process", task, true).Return(s.scope, err).Once()
+	s.mockProcessor.On("process", task, true).Return(s.scope, nil).Once()
+	s.mockQueueAckMgr.On("completeTimerTask", task).Once()
 	s.timerQueueProcessor.processTaskAndAck(s.notificationChan, task)
 }
 
-func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
-	task := &persistence.TimerTaskInfo{
-		DomainID:            uuid.New().String(),
-		WorkflowID:          uuid.New().String(),
-		RunID:               uuid.New().String(),
-		TaskID:              12345,
-		VisibilityTimestamp: time.Now()}
-	executionInfo := workflow.WorkflowExecution{
-		WorkflowId: &task.WorkflowID,
-		RunId:      &task.RunID,
-	}
-	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
-	ms := &mockMutableState{}
-	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteWorkflowExecutionHistoryV2", mock.Anything, mock.Anything).Return(nil).Once()
-	s.mockExecutionManager.On("DeleteExecutionFromVisibility", mock.Anything).Return(nil).Once()
-	ms.On("GetEventStoreVersion").Return(persistence.EventStoreVersionV2).Once()
-	ms.On("GetCurrentBranch").Return([]byte{}).Once()
-
-	err := s.timerQueueProcessor.deleteWorkflow(task, ms, ctx)
-	s.NoError(err)
-}
-
-func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_EntiryNotExists() {
+func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_EntityNotExists() {
 	err := &workflow.EntityNotExistsError{}
 	s.Nil(s.timerQueueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
 }
@@ -257,4 +246,76 @@ func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_CurrentWorkflowCondit
 func (s *timerQueueProcessorBaseSuite) TestHandleTaskError_RandomErr() {
 	err := errors.New("random error")
 	s.Equal(err, s.timerQueueProcessor.handleTaskError(s.scope, time.Now(), s.notificationChan, err, s.logger))
+}
+
+func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
+	task := &persistence.TimerTaskInfo{
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now(),
+	}
+	executionInfo := workflow.WorkflowExecution{
+		WorkflowId: &task.WorkflowID,
+		RunId:      &task.RunID,
+	}
+	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	mockMutableState := &mockMutableState{}
+	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
+	s.mockVisibilityManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
+	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
+	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil)
+
+	err := s.timerQueueProcessor.deleteWorkflow(task, ctx, mockMutableState)
+	s.NoError(err)
+}
+
+func (s *timerQueueProcessorBaseSuite) TestArchiveWorkflow_NoErr_InlineArchivalFailed() {
+	mockWorkflowExecutionContext := &mockWorkflowExecutionContext{}
+	mockWorkflowExecutionContext.On("loadExecutionStats").Return(&persistence.ExecutionStats{
+		HistorySize: 1024,
+	}, nil)
+	mockWorkflowExecutionContext.On("clear")
+
+	mockMutableState := &mockMutableState{}
+	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
+	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
+	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
+	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
+
+	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockVisibilityManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
+		return req.CallerService == common.HistoryServiceName && req.AttemptArchiveInline
+	})).Return(&archiver.ClientResponse{
+		ArchivedInline: false,
+	}, nil)
+
+	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, mockWorkflowExecutionContext, mockMutableState, domainCacheEntry)
+	s.NoError(err)
+}
+
+func (s *timerQueueProcessorBaseSuite) TestArchiveWorkflow_SendSignalErr() {
+	mockWorkflowExecutionContext := &mockWorkflowExecutionContext{}
+	mockWorkflowExecutionContext.On("loadExecutionStats").Return(&persistence.ExecutionStats{
+		HistorySize: 1024 * 1024 * 1024,
+	}, nil)
+
+	mockMutableState := &mockMutableState{}
+	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
+	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
+	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
+	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
+
+	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
+		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline
+	})).Return(nil, errors.New("failed to send signal"))
+
+	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, mockWorkflowExecutionContext, mockMutableState, domainCacheEntry)
+	s.Error(err)
 }

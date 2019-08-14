@@ -101,6 +101,7 @@ struct WorkflowExecutionInfo {
   68: optional i64 (js.type = "Long") decisionStartedTimestampNanos
   69: optional i64 (js.type = "Long") decisionScheduledTimestampNanos
   70: optional bool cancelRequested
+  71: optional i64 (js.type = "Long") decisionOriginalScheduledTimestampNanos
   72: optional string createRequestID
   74: optional string decisionRequestID
   76: optional string cancelRequestID
@@ -125,9 +126,10 @@ struct WorkflowExecutionInfo {
   114: optional string clientImpl
   115: optional binary autoResetPoints
   116: optional string autoResetPointsEncoding
-  118: optional binary versionHistories
-  120: optional string versionHistoriesEncoding
-  122: optional map<string, binary> searchAttributes
+  118: optional map<string, binary> searchAttributes
+  120: optional map<string, binary> memo
+  122: optional binary versionHistories
+  124: optional string versionHistoriesEncoding
 }
 
 struct ActivityInfo {

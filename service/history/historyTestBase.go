@@ -122,7 +122,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 
 	shardCtx := &TestShardContext{
 		shardID:                   0,
-		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, clientBean),
+		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, clientBean, nil, nil),
 		shardInfo:                 shardInfo,
 		transferSequenceNumber:    transferSequenceNumber,
 		historyMgr:                historyMgr,
@@ -543,7 +543,7 @@ func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase.Setup()
 	log := loggerimpl.NewDevelopmentForTest(s.Suite)
 	config := NewDynamicConfigForTest()
-	clusterMetadata := cluster.GetTestClusterMetadata(false, false, false)
+	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
 		clusterMetadata, nil, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext

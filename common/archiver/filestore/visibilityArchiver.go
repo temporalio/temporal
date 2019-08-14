@@ -21,7 +21,6 @@
 package filestore
 
 import (
-	"context"
 	"errors"
 
 	"github.com/uber/cadence/common/archiver"
@@ -34,29 +33,12 @@ type (
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
 func NewVisibilityArchiver(
-	container archiver.VisibilityBootstrapContainer,
-	config *config.FilestoreVisibilityArchiver,
+	_ *archiver.VisibilityBootstrapContainer,
+	_ *config.FilestoreVisibilityArchiver,
 ) archiver.VisibilityArchiver {
 	return &visibilityArchiver{}
 }
 
-func (v *visibilityArchiver) Archive(
-	ctx context.Context,
-	URI string,
-	request *archiver.ArchiveVisibilityRequest,
-	opts ...archiver.ArchiveOption,
-) error {
-	return errors.New("method Archive() is not implemented")
-}
-
-func (v *visibilityArchiver) Get(
-	ctx context.Context,
-	URI string,
-	request *archiver.GetVisibilityRequest,
-) (*archiver.GetVisibilityResponse, error) {
-	return nil, errors.New("method Get() is not implemented")
-}
-
-func (v *visibilityArchiver) ValidateURI(URI string) error {
+func (v *visibilityArchiver) ValidateURI(URI archiver.URI) error {
 	return errors.New("method ValidateURI() is not implemented")
 }

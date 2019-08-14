@@ -91,7 +91,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 	s.mockEventsCache = &MockEventsCache{}
 
 	s.mockShard = &shardContextImpl{
@@ -172,16 +172,23 @@ func (s *stateBuilderSuite) applyWorkflowExecutionStartedEventTest(cronSchedule 
 
 	now := time.Now()
 	evenType := shared.EventTypeWorkflowExecutionStarted
-	event := &shared.HistoryEvent{
-		Version:   common.Int64Ptr(version),
-		EventId:   common.Int64Ptr(1),
-		Timestamp: common.Int64Ptr(now.UnixNano()),
-		EventType: &evenType,
-		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-			ParentWorkflowDomain: common.StringPtr(parentName),
-		},
+	startWorkflowAttribute := &shared.WorkflowExecutionStartedEventAttributes{
+		ParentWorkflowDomain: common.StringPtr(parentName),
 	}
 
+	if len(cronSchedule) > 0 {
+		startWorkflowAttribute.Initiator = shared.ContinueAsNewInitiatorCronSchedule.Ptr()
+		startWorkflowAttribute.FirstDecisionTaskBackoffSeconds = common.Int32Ptr(int32(backoff.GetBackoffForNextSchedule(cronSchedule, now, now).Seconds()))
+	}
+	event := &shared.HistoryEvent{
+		Version:                                 common.Int64Ptr(version),
+		EventId:                                 common.Int64Ptr(1),
+		Timestamp:                               common.Int64Ptr(now.UnixNano()),
+		EventType:                               &evenType,
+		WorkflowExecutionStartedEventAttributes: startWorkflowAttribute,
+	}
+
+	s.mockMutableState.On("GetStartEvent").Return(event, true)
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
@@ -221,7 +228,7 @@ func (s *stateBuilderSuite) applyWorkflowExecutionStartedEventTest(cronSchedule 
 
 	expectedTimerTasksLength := 1
 	timeout := now.Add(time.Duration(executionInfo.WorkflowTimeout) * time.Second)
-	backoffDuration := backoff.GetBackoffForNextSchedule(cronSchedule, now)
+	backoffDuration := backoff.GetBackoffForNextSchedule(cronSchedule, now, now)
 	if backoffDuration != backoff.NoBackoff {
 		expectedTimerTasksLength = 2
 		timeout = timeout.Add(backoffDuration)
@@ -511,7 +518,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			Attempt:                    common.Int64Ptr(newRunDecisionAttempt),
 		},
 	}
-
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -549,14 +555,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent,
 		newRunStartedEvent,
 		&decisionInfo{
-			Version:            newRunDecisionEvent.GetVersion(),
-			ScheduleID:         newRunDecisionEvent.GetEventId(),
-			StartedID:          common.EmptyEventID,
-			RequestID:          emptyUUID,
-			DecisionTimeout:    decisionTimeoutSecond,
-			TaskList:           tasklist,
-			Attempt:            newRunDecisionAttempt,
-			ScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
+			Version:                    newRunDecisionEvent.GetVersion(),
+			ScheduleID:                 newRunDecisionEvent.GetEventId(),
+			StartedID:                  common.EmptyEventID,
+			RequestID:                  emptyUUID,
+			DecisionTimeout:            decisionTimeoutSecond,
+			TaskList:                   tasklist,
+			Attempt:                    newRunDecisionAttempt,
+			ScheduledTimestamp:         newRunDecisionEvent.GetTimestamp(),
+			OriginalScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
 		},
 		mock.Anything,
 		int32(0),
@@ -575,6 +582,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		s.logger,
 		newRunStartedEvent.GetVersion(),
 		cache.ReplicationPolicyMultiCluster,
+		domainName,
 	)
 	err = expectedNewRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(
 		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),
@@ -595,6 +603,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		tasklist,
 		decisionTimeoutSecond,
 		newRunDecisionAttempt,
+		newRunDecisionEvent.GetTimestamp(),
 		newRunDecisionEvent.GetTimestamp(),
 	)
 	s.Nil(err)
@@ -742,14 +751,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent,
 		newRunStartedEvent,
 		&decisionInfo{
-			Version:            newRunDecisionEvent.GetVersion(),
-			ScheduleID:         newRunDecisionEvent.GetEventId(),
-			StartedID:          common.EmptyEventID,
-			RequestID:          emptyUUID,
-			DecisionTimeout:    decisionTimeoutSecond,
-			TaskList:           tasklist,
-			Attempt:            newRunDecisionAttempt,
-			ScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
+			Version:                    newRunDecisionEvent.GetVersion(),
+			ScheduleID:                 newRunDecisionEvent.GetEventId(),
+			StartedID:                  common.EmptyEventID,
+			RequestID:                  emptyUUID,
+			DecisionTimeout:            decisionTimeoutSecond,
+			TaskList:                   tasklist,
+			Attempt:                    newRunDecisionAttempt,
+			ScheduledTimestamp:         newRunDecisionEvent.GetTimestamp(),
+			OriginalScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
 		},
 		mock.Anything,
 		int32(persistence.EventStoreVersionV2),
@@ -772,6 +782,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		s.logger,
 		newRunStartedEvent.GetVersion(),
 		cache.ReplicationPolicyMultiCluster,
+		domainName,
 	)
 	err = expectedNewRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(
 		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),
@@ -792,6 +803,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		tasklist,
 		decisionTimeoutSecond,
 		newRunDecisionAttempt,
+		newRunDecisionEvent.GetTimestamp(),
 		newRunDecisionEvent.GetTimestamp(),
 	)
 	s.Nil(err)
@@ -1704,7 +1716,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	}
 	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
 	s.mockMutableState.On("ReplicateDecisionTaskScheduledEvent",
-		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt, event.GetTimestamp(),
+		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt, event.GetTimestamp(), event.GetTimestamp(),
 	).Return(di, nil).Once()
 	s.mockMutableState.On("UpdateDecision", di).Once()
 	s.mockUpdateVersion(event)

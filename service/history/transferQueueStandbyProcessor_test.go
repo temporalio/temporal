@@ -117,7 +117,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 
 	config := NewDynamicConfigForTest()
 	shardContext := &shardContextImpl{
@@ -285,7 +285,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessActivityTask_Pending_Pus
 	activityType := "some random activity type"
 	event, _ = addActivityTaskScheduledEvent(msBuilder, event.GetEventId(), activityID, activityType, taskListName, []byte{}, 1, 1, 1)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	transferTask := &persistence.TransferTaskInfo{
 		Version:             version,
 		DomainID:            s.domainID,
@@ -440,7 +440,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Pending_Pus
 	taskID := int64(59)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	transferTask := &persistence.TransferTaskInfo{
 		Version:             version,
 		DomainID:            s.domainID,
@@ -685,7 +685,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessCancelExecution_Pending(
 	_, err = s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		transferTask.DomainID, transferTask.WorkflowID,
 		transferTask.RunID, nextEventID,
@@ -823,7 +823,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessSignalExecution_Pending(
 	_, err = s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		transferTask.DomainID, transferTask.WorkflowID,
 		transferTask.RunID, nextEventID,
@@ -961,7 +961,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessStartChildExecution_Pend
 	_, err = s.transferQueueStandbyProcessor.process(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
-	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(3*s.mockShard.GetConfig().StandbyClusterDelay()))
+	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(5*s.mockShard.GetConfig().StandbyClusterDelay()))
 	s.mockHistoryRereplicator.On("SendMultiWorkflowHistory",
 		transferTask.DomainID, transferTask.WorkflowID,
 		transferTask.RunID, nextEventID,

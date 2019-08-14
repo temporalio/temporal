@@ -39,10 +39,16 @@ type (
 		DecisionTimeout int32
 		TaskList        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
 		Attempt         int64
-		// They are useful for transient decision: when transient decision finally completes, use these timestamp to create scheduled/started events.
+		// Scheduled and Started timestamps are useful for transient decision: when transient decision finally completes,
+		// use these timestamp to create scheduled/started events.
 		// Also used for recording latency metrics
 		ScheduledTimestamp int64
 		StartedTimestamp   int64
+		// OriginalScheduledTimestamp is to record the first scheduled decision during decision heartbeat.
+		// Client may heartbeat decision by RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true
+		// In this case, OriginalScheduledTimestamp won't change. Then when current time - OriginalScheduledTimestamp exceeds
+		// some threshold, server can interrupt the heartbeat by enforcing to timeout the decision.
+		OriginalScheduledTimestamp int64
 	}
 
 	mutableState interface {
@@ -66,6 +72,7 @@ type (
 		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause workflow.DecisionTaskFailedCause, details []byte, identity, reason, baseRunID, newRunID string, forkEventVersion int64) (*workflow.HistoryEvent, error)
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) (*workflow.HistoryEvent, error)
 		AddDecisionTaskScheduledEvent() (*decisionInfo, error)
+		AddDecisionTaskScheduledEventAsHeartbeat(originalScheduledTimestamp int64) (*decisionInfo, error)
 		AddDecisionTaskStartedEvent(int64, string, *workflow.PollForDecisionTaskRequest) (*workflow.HistoryEvent, *decisionInfo, error)
 		AddDecisionTaskTimedOutEvent(int64, int64) (*workflow.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*workflow.HistoryEvent, error)
@@ -131,7 +138,7 @@ type (
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
-		GetCronBackoffDuration() time.Duration
+		GetCronBackoffDuration() (time.Duration, error)
 		GetScheduleIDByActivityID(string) (int64, error)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
 		GetAllSignalsToSend() map[int64]*persistence.SignalInfo
@@ -167,7 +174,7 @@ type (
 		ReplicateChildWorkflowExecutionTimedOutEvent(*workflow.HistoryEvent) error
 		ReplicateDecisionTaskCompletedEvent(*workflow.HistoryEvent) error
 		ReplicateDecisionTaskFailedEvent() error
-		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64, int64) (*decisionInfo, error)
+		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64, int64, int64) (*decisionInfo, error)
 		ReplicateDecisionTaskStartedEvent(*decisionInfo, int64, int64, int64, string, int64) (*decisionInfo, error)
 		ReplicateDecisionTaskTimedOutEvent(workflow.TimeoutType) error
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent) error

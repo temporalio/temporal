@@ -159,7 +159,7 @@ func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryV2Manager, req *ReadHistory
 			return nil, 0, nil, err
 		}
 		historyBatches = append(historyBatches, response.History...)
-		for _, batch := range historyBatches {
+		for _, batch := range response.History {
 			eventsRead += len(batch.Events)
 		}
 		size += response.Size

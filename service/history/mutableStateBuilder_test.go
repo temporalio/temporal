@@ -72,7 +72,7 @@ func (s *mutableStateSuite) SetupTest() {
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger)
+		s.logger, "")
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -473,6 +473,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds(),
 		decisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt(),
 		0,
+		0,
 	)
 	s.Nil(err)
 	s.NotNil(di)
@@ -522,6 +523,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
 		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds(),
 		newDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt(),
+		0,
 		0,
 	)
 	s.Nil(err)

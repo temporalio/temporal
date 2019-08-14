@@ -95,18 +95,23 @@ dcRedirectionPolicy:
 
 archival:
   history:
-    status: "disabled"
-    enableReadFromArchival: false
+    status: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
   visibility:
     status: "disabled"
-    enableReadFromArchival: false
+    enableRead: false
 
 domainDefaults:
   archival:
     history:
-      defaultStatus: "disabled"
+      status: "enabled"
+      URI: "file:///tmp/cadence_archival/development"
     visibility:
-      defaultStatus: "disabled"
+      status: "disabled"
 
 kafka:
   clusters:

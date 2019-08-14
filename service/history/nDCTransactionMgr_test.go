@@ -73,7 +73,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockShard = &shardContextImpl{

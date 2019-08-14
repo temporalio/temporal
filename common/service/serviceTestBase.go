@@ -22,6 +22,8 @@ package service
 
 import (
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -29,9 +31,8 @@ import (
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/zap"
-
 	"go.uber.org/yarpc"
+	"go.uber.org/zap"
 )
 
 type (
@@ -44,6 +45,8 @@ type (
 		clientBean        client.Bean
 		timeSource        clock.TimeSource
 		membershipMonitor membership.Monitor
+		archivalMetadata  archiver.ArchivalMetadata
+		archiverProvider  provider.ArchiverProvider
 
 		metrics metrics.Client
 		logger  log.Logger
@@ -61,8 +64,14 @@ var (
 )
 
 // NewTestService is the new service instance created for testing
-func NewTestService(clusterMetadata cluster.Metadata, messagingClient messaging.Client, metrics metrics.Client,
-	clientBean client.Bean) Service {
+func NewTestService(
+	clusterMetadata cluster.Metadata,
+	messagingClient messaging.Client,
+	metrics metrics.Client,
+	clientBean client.Bean,
+	archivalMetadata archiver.ArchivalMetadata,
+	archiverProvider provider.ArchiverProvider,
+) Service {
 
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
@@ -71,13 +80,15 @@ func NewTestService(clusterMetadata cluster.Metadata, messagingClient messaging.
 	logger := loggerimpl.NewLogger(zapLogger)
 
 	return &serviceTestBase{
-		hostInfo:        testHostInfo,
-		clusterMetadata: clusterMetadata,
-		messagingClient: messagingClient,
-		metrics:         metrics,
-		clientBean:      clientBean,
-		timeSource:      clock.NewRealTimeSource(),
-		logger:          logger,
+		hostInfo:         testHostInfo,
+		clusterMetadata:  clusterMetadata,
+		messagingClient:  messagingClient,
+		metrics:          metrics,
+		clientBean:       clientBean,
+		timeSource:       clock.NewRealTimeSource(),
+		logger:           logger,
+		archivalMetadata: archivalMetadata,
+		archiverProvider: archiverProvider,
 	}
 }
 
@@ -140,4 +151,14 @@ func (s *serviceTestBase) GetClusterMetadata() cluster.Metadata {
 // GetMessagingClient returns the messaging client against Kafka
 func (s *serviceTestBase) GetMessagingClient() messaging.Client {
 	return s.messagingClient
+}
+
+// GetArchivalMetadata returns the cluster level archival metadata
+func (s *serviceTestBase) GetArchivalMetadata() archiver.ArchivalMetadata {
+	return s.archivalMetadata
+}
+
+// GetArchivalProvider returns the archiver provider used by the service
+func (s *serviceTestBase) GetArchiverProvider() provider.ArchiverProvider {
+	return s.archiverProvider
 }

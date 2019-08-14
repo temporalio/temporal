@@ -45,7 +45,7 @@ func archivalWorkflowHelper(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *Config,
-	archiver Archiver, // enables tests to inject mocks
+	handler Handler, // enables tests to inject mocks
 	pump Pump, // enables tests to inject mocks
 	carryover []ArchiveRequest,
 ) error {
@@ -77,19 +77,19 @@ func archivalWorkflowHelper(
 			}
 		}).Get(&dcResult)
 	requestCh := workflow.NewBufferedChannel(ctx, dcResult.ArchivalsPerIteration)
-	if archiver == nil {
-		archiver = NewArchiver(ctx, logger, metricsClient, dcResult.ArchiverConcurrency, requestCh)
+	if handler == nil {
+		handler = NewHandler(ctx, logger, metricsClient, dcResult.ArchiverConcurrency, requestCh)
 	}
-	archiverSW := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
-	archiver.Start()
+	handlerSW := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
+	handler.Start()
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
 	if pump == nil {
 		pump = NewPump(ctx, logger, metricsClient, carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh)
 	}
 	pumpResult := pump.Run()
 	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
-	handledHashes := archiver.Finished()
-	archiverSW.Stop()
+	handledHashes := handler.Finished()
+	handlerSW.Stop()
 	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
 	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
 		logger.Error("handled archival requests do not match pumped archival requests")

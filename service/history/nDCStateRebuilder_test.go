@@ -66,6 +66,7 @@ type (
 		mockContext      *mockWorkflowExecutionContext
 		mockMutableState *mockMutableState
 		domainID         string
+		domainName       string
 		workflowID       string
 		runID            string
 
@@ -89,7 +90,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockEventsCache = &MockEventsCache{}
 
@@ -113,6 +114,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.mockShard.config.EnableVisibilityToKafka = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.domainID = uuid.New()
+	s.domainName = "some random domain name"
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 	s.mockContext = &mockWorkflowExecutionContext{}
@@ -137,7 +139,7 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
 	version := int64(123)
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(version)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(version, s.domainName)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetVersionHistories())
@@ -278,6 +280,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.NoError(err)
 
 	updateCondition := int64(59)
+	s.mockContext.On("getDomainName").Return(s.domainName)
 	s.mockMutableState.On("GetUpdateCondition").Return(updateCondition)
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
@@ -413,6 +416,7 @@ func (s *nDCStateRebuilderSuite) TestPrepareMutableState_Rebuild() {
 	s.Nil(err)
 
 	updateCondition := int64(59)
+	s.mockContext.On("getDomainName").Return(s.domainName)
 	s.mockMutableState.On("GetUpdateCondition").Return(updateCondition)
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{

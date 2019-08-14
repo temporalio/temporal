@@ -62,8 +62,9 @@ type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	container          archiver.HistoryBootstrapContainer
+	container          *archiver.HistoryBootstrapContainer
 	logger             log.Logger
+	testArchivalURI    archiver.URI
 	testGetDirectory   string
 	historyBatchesV1   []*shared.History
 	historyBatchesV100 []*shared.History
@@ -78,6 +79,8 @@ func (s *historyArchiverSuite) SetupSuite() {
 	s.testGetDirectory, err = ioutil.TempDir("", "TestGet")
 	s.Require().NoError(err)
 	s.setupHistoryDirectory()
+	s.testArchivalURI, err = archiver.NewURI("file:///a/b/c")
+	s.Require().NoError(err)
 }
 
 func (s *historyArchiverSuite) TearDownSuite() {
@@ -87,7 +90,7 @@ func (s *historyArchiverSuite) TearDownSuite() {
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	zapLogger := zap.NewNop()
-	s.container = archiver.HistoryBootstrapContainer{
+	s.container = &archiver.HistoryBootstrapContainer{
 		Logger: loggerimpl.NewLogger(zapLogger),
 	}
 }
@@ -99,11 +102,7 @@ func (s *historyArchiverSuite) TestValidateURI() {
 	}{
 		{
 			URI:         "wrongscheme:///a/b/c",
-			expectedErr: archiver.ErrInvalidURIScheme,
-		},
-		{
-			URI:         "",
-			expectedErr: archiver.ErrInvalidURIScheme,
+			expectedErr: archiver.ErrURISchemeMismatch,
 		},
 		{
 			URI:         "file://",
@@ -117,7 +116,9 @@ func (s *historyArchiverSuite) TestValidateURI() {
 
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	for _, tc := range testCases {
-		s.Equal(tc.expectedErr, historyArchiver.ValidateURI(tc.URI))
+		URI, err := archiver.NewURI(tc.URI)
+		s.NoError(err)
+		s.Equal(tc.expectedErr, historyArchiver.ValidateURI(URI))
 	}
 }
 
@@ -132,7 +133,9 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err := historyArchiver.Archive(context.Background(), "wrongscheme://", request)
+	URI, err := archiver.NewURI("wrongscheme://")
+	s.NoError(err)
+	err = historyArchiver.Archive(context.Background(), URI, request)
 	s.Error(err)
 }
 
@@ -147,7 +150,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err := historyArchiver.Archive(context.Background(), "file:///a/b/c", request)
+	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
 	s.Error(err)
 }
 
@@ -170,7 +173,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err := historyArchiver.Archive(context.Background(), "file:///a/b/c", request)
+	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
 	s.Error(err)
 }
 
@@ -193,7 +196,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err := historyArchiver.Archive(getCanceledContext(), "file:///a/b/c", request)
+	err := historyArchiver.Archive(getCanceledContext(), s.testArchivalURI, request)
 	s.Error(err)
 }
 
@@ -233,8 +236,32 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err := historyArchiver.Archive(context.Background(), "file:///a/b/c", request)
+	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
 	s.Error(err)
+}
+
+func (s *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
+	mockCtrl := gomock.NewController(s.T())
+	defer mockCtrl.Finish()
+	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
+	gomock.InOrder(
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next().Return(nil, errors.New("some random error")),
+	)
+
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
+	request := &archiver.ArchiveHistoryRequest{
+		DomainID:             testDomainID,
+		DomainName:           testDomainName,
+		WorkflowID:           testWorkflowID,
+		RunID:                testRunID,
+		BranchToken:          testBranchToken,
+		NextEventID:          testNextEventID,
+		CloseFailoverVersion: testCloseFailoverVersion,
+	}
+	nonRetryableErr := errors.New("some non-retryable error")
+	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request, archiver.GetNonRetriableErrorOption(nonRetryableErr))
+	s.Equal(nonRetryableErr, err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Success() {
@@ -292,7 +319,9 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err = historyArchiver.Archive(context.Background(), "file://"+dir, request)
+	URI, err := archiver.NewURI("file://" + dir)
+	s.NoError(err)
+	err = historyArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
 	expectedFilename := constructFilename(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
@@ -307,7 +336,9 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 		RunID:      testRunID,
 		PageSize:   100,
 	}
-	response, err := historyArchiver.Get(context.Background(), "wrongscheme://", request)
+	URI, err := archiver.NewURI("wrongscheme://")
+	s.NoError(err)
+	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
 }
@@ -318,11 +349,12 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 		DomainID:   testDomainID,
 		WorkflowID: testWorkflowID,
 		RunID:      testRunID,
-		PageSize:   0, // pageSize shoulbe greater than 0
+		PageSize:   0, // pageSize should be greater than 0
 	}
-	response, err := historyArchiver.Get(context.Background(), "file:///a/b/c", request)
+	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
-	s.Equal(archiver.ErrInvalidGetHistoryRequest, err)
+	s.Error(err)
+	s.IsType(&shared.BadRequestError{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
@@ -333,9 +365,10 @@ func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
 		RunID:      testRunID,
 		PageSize:   testPageSize,
 	}
-	response, err := historyArchiver.Get(context.Background(), "file:///a/b/c", request)
+	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
-	s.Equal(archiver.ErrHistoryNotExist, err)
+	s.Error(err)
+	s.IsType(&shared.BadRequestError{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
@@ -347,9 +380,12 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 		PageSize:      testPageSize,
 		NextPageToken: []byte{'r', 'a', 'n', 'd', 'o', 'm'},
 	}
-	response, err := historyArchiver.Get(context.Background(), "file://.", request)
+	URI, err := archiver.NewURI("file:///")
+	s.NoError(err)
+	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
-	s.Equal(archiver.ErrGetHistoryTokenCorrupted, err)
+	s.Error(err)
+	s.IsType(&shared.BadRequestError{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
@@ -361,9 +397,12 @@ func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
 		PageSize:             testPageSize,
 		CloseFailoverVersion: common.Int64Ptr(testCloseFailoverVersion),
 	}
-	response, err := historyArchiver.Get(context.Background(), "file://.", request)
+	URI, err := archiver.NewURI("file:///")
+	s.NoError(err)
+	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
-	s.Equal(archiver.ErrHistoryNotExist, err)
+	s.Error(err)
+	s.IsType(&shared.EntityNotExistsError{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
@@ -374,7 +413,9 @@ func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 		RunID:      testRunID,
 		PageSize:   testPageSize,
 	}
-	response, err := historyArchiver.Get(context.Background(), "file://"+s.testGetDirectory, request)
+	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
+	s.NoError(err)
+	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.Nil(response.NextPageToken)
 	s.Equal(s.historyBatchesV100, response.HistoryBatches)
@@ -389,7 +430,9 @@ func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 		PageSize:             testPageSize,
 		CloseFailoverVersion: common.Int64Ptr(1),
 	}
-	response, err := historyArchiver.Get(context.Background(), "file://"+s.testGetDirectory, request)
+	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
+	s.NoError(err)
+	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.Nil(response.NextPageToken)
 	s.Equal(s.historyBatchesV1, response.HistoryBatches)
@@ -406,7 +449,9 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	}
 	combinedHistory := []*shared.History{}
 
-	response, err := historyArchiver.Get(context.Background(), "file://"+s.testGetDirectory, request)
+	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
+	s.NoError(err)
+	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
@@ -415,7 +460,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	combinedHistory = append(combinedHistory, response.HistoryBatches...)
 
 	request.NextPageToken = response.NextPageToken
-	response, err = historyArchiver.Get(context.Background(), "file://"+s.testGetDirectory, request)
+	response, err = historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
@@ -456,7 +501,9 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err = historyArchiver.Archive(context.Background(), "file://"+dir, archiveRequest)
+	URI, err := archiver.NewURI("file://" + dir)
+	s.NoError(err)
+	err = historyArchiver.Archive(context.Background(), URI, archiveRequest)
 	s.NoError(err)
 
 	expectedFilename := constructFilename(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
@@ -468,7 +515,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		RunID:      testRunID,
 		PageSize:   testPageSize,
 	}
-	response, err := historyArchiver.Get(context.Background(), "file://"+dir, getRequest)
+	response, err := historyArchiver.Get(context.Background(), URI, getRequest)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)

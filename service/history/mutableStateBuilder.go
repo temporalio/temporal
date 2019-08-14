@@ -128,6 +128,7 @@ type (
 		config          *Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
+		domainName      string
 	}
 )
 
@@ -137,6 +138,7 @@ func newMutableStateBuilder(
 	shard ShardContext,
 	eventsCache eventsCache,
 	logger log.Logger,
+	domainName string,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:             make(map[*persistence.ActivityInfo]struct{}),
@@ -176,6 +178,7 @@ func newMutableStateBuilder(
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
+		domainName:      domainName,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		DecisionVersion:    common.EmptyVersion,
@@ -200,9 +203,9 @@ func newMutableStateBuilderWithReplicationState(
 	logger log.Logger,
 	version int64,
 	replicationPolicy cache.ReplicationPolicy,
+	domainName string,
 ) *mutableStateBuilder {
-
-	s := newMutableStateBuilder(shard, eventsCache, logger)
+	s := newMutableStateBuilder(shard, eventsCache, logger, domainName)
 	s.replicationState = &persistence.ReplicationState{
 		StartVersion:        version,
 		CurrentVersion:      version,
@@ -221,9 +224,10 @@ func newMutableStateBuilderWithVersionHistories(
 	logger log.Logger,
 	version int64,
 	replicationPolicy cache.ReplicationPolicy,
+	domainName string,
 ) *mutableStateBuilder {
 
-	s := newMutableStateBuilder(shard, eventsCache, logger)
+	s := newMutableStateBuilder(shard, eventsCache, logger, domainName)
 	s.versionHistories = persistence.NewVersionHistories(&persistence.VersionHistory{})
 	s.currentVersion = version
 	s.replicationPolicy = replicationPolicy
@@ -757,7 +761,14 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 }
 
 func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
-	return len(e.executionInfo.StickyTaskList) > 0
+	if e.executionInfo.StickyTaskList == "" {
+		return false
+	}
+	ttl := e.config.StickyTTL(e.domainName)
+	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(ttl)) {
+		return false
+	}
+	return true
 }
 
 func (e *mutableStateBuilder) CreateNewHistoryEvent(
@@ -995,12 +1006,23 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 	)
 }
 
-func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
+func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 	info := e.executionInfo
 	if len(info.CronSchedule) == 0 {
-		return backoff.NoBackoff
+		return backoff.NoBackoff, nil
 	}
-	return backoff.GetBackoffForNextSchedule(info.CronSchedule, e.timeSource.Now())
+	// TODO: decide if we can add execution time in execution info.
+	executionTime := e.executionInfo.StartTimestamp
+	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
+	workflowStartEvent, err := e.GetStartEvent()
+	if err != nil {
+		e.logger.Error("Unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
+		return backoff.NoBackoff, err
+	}
+	firstDecisionTaskBackoff :=
+		time.Duration(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds()) * time.Second
+	executionTime = executionTime.Add(firstDecisionTaskBackoff)
+	return backoff.GetBackoffForNextSchedule(info.CronSchedule, executionTime, e.timeSource.Now()), nil
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.
@@ -1246,14 +1268,15 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 
 func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 	return &decisionInfo{
-		Version:            e.executionInfo.DecisionVersion,
-		ScheduleID:         e.executionInfo.DecisionScheduleID,
-		StartedID:          e.executionInfo.DecisionStartedID,
-		RequestID:          e.executionInfo.DecisionRequestID,
-		DecisionTimeout:    e.executionInfo.DecisionTimeout,
-		Attempt:            e.executionInfo.DecisionAttempt,
-		StartedTimestamp:   e.executionInfo.DecisionStartedTimestamp,
-		ScheduledTimestamp: e.executionInfo.DecisionScheduledTimestamp,
+		Version:                    e.executionInfo.DecisionVersion,
+		ScheduleID:                 e.executionInfo.DecisionScheduleID,
+		StartedID:                  e.executionInfo.DecisionStartedID,
+		RequestID:                  e.executionInfo.DecisionRequestID,
+		DecisionTimeout:            e.executionInfo.DecisionTimeout,
+		Attempt:                    e.executionInfo.DecisionAttempt,
+		StartedTimestamp:           e.executionInfo.DecisionStartedTimestamp,
+		ScheduledTimestamp:         e.executionInfo.DecisionScheduledTimestamp,
+		OriginalScheduledTimestamp: e.executionInfo.DecisionOriginalScheduledTimestamp,
 	}
 }
 
@@ -1330,6 +1353,7 @@ func (e *mutableStateBuilder) UpdateDecision(
 	e.executionInfo.DecisionAttempt = di.Attempt
 	e.executionInfo.DecisionStartedTimestamp = di.StartedTimestamp
 	e.executionInfo.DecisionScheduledTimestamp = di.ScheduledTimestamp
+	e.executionInfo.DecisionOriginalScheduledTimestamp = di.OriginalScheduledTimestamp
 
 	e.logger.Debug(fmt.Sprintf("Decision Updated: {Schedule: %v, Started: %v, ID: %v, Timeout: %v, Attempt: %v, Timestamp: %v}",
 		di.ScheduleID, di.StartedID, di.RequestID, di.DecisionTimeout, di.Attempt, di.StartedTimestamp))
@@ -1492,6 +1516,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		Header:                              attributes.Header,
 		RetryPolicy:                         attributes.RetryPolicy,
 		CronSchedule:                        attributes.CronSchedule,
+		Memo:                                attributes.Memo,
+		SearchAttributes:                    attributes.SearchAttributes,
 	}
 
 	req := &h.StartWorkflowExecutionRequest{
@@ -1646,6 +1672,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		domainEntry.GetRetentionDays(e.executionInfo.WorkflowID),
 	)
 
+	if event.Memo != nil {
+		e.executionInfo.Memo = event.Memo.GetFields()
+	}
 	if event.SearchAttributes != nil {
 		e.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
@@ -1654,8 +1683,10 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	return nil
 }
 
-func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, error) {
-
+// originalScheduledTimestamp is to record the first scheduled decision during decision heartbeat.
+func (e *mutableStateBuilder) AddDecisionTaskScheduledEventAsHeartbeat(
+	originalScheduledTimestamp int64,
+) (*decisionInfo, error) {
 	opTag := tag.WorkflowActionDecisionTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -1673,6 +1704,13 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, er
 	taskList := e.executionInfo.TaskList
 	if e.IsStickyTaskListEnabled() {
 		taskList = e.executionInfo.StickyTaskList
+	} else {
+		// It can be because stickyness has expired due to StickyTTL config
+		// In that case we need to clear stickyness so that the LastUpdateTimestamp is not corrupted.
+		// In other cases, clearing stickyness shouldn't hurt anything.
+		// TODO: https://github.com/uber/cadence/issues/2357:
+		//  if we can use a new field(LastDecisionUpdateTimestamp), then we could get rid of it.
+		e.ClearStickyness()
 	}
 	startToCloseTimeoutSeconds := e.executionInfo.DecisionTimeoutValue
 
@@ -1705,7 +1743,12 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, er
 		startToCloseTimeoutSeconds,
 		e.executionInfo.DecisionAttempt,
 		scheduleTime,
+		originalScheduledTimestamp,
 	)
+}
+
+func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*decisionInfo, error) {
+	return e.AddDecisionTaskScheduledEventAsHeartbeat(time.Now().UnixNano())
 }
 
 func (e *mutableStateBuilder) ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error) {
@@ -1745,7 +1788,8 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(
 	taskList string,
 	startToCloseTimeoutSeconds int32,
 	attempt int64,
-	timestamp int64,
+	scheduleTimestamp int64,
+	originalScheduledTimestamp int64,
 ) (*decisionInfo, error) {
 
 	// set workflow state to running, since decision is scheduled
@@ -1759,15 +1803,16 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(
 	}
 
 	di := &decisionInfo{
-		Version:            version,
-		ScheduleID:         scheduleID,
-		StartedID:          common.EmptyEventID,
-		RequestID:          emptyUUID,
-		DecisionTimeout:    startToCloseTimeoutSeconds,
-		TaskList:           taskList,
-		Attempt:            attempt,
-		ScheduledTimestamp: timestamp,
-		StartedTimestamp:   0,
+		Version:                    version,
+		ScheduleID:                 scheduleID,
+		StartedID:                  common.EmptyEventID,
+		RequestID:                  emptyUUID,
+		DecisionTimeout:            startToCloseTimeoutSeconds,
+		TaskList:                   taskList,
+		Attempt:                    attempt,
+		ScheduledTimestamp:         scheduleTimestamp,
+		StartedTimestamp:           0,
+		OriginalScheduledTimestamp: originalScheduledTimestamp,
 	}
 
 	e.UpdateDecision(di)
@@ -3279,6 +3324,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 				e.logger,
 				e.GetCurrentVersion(),
 				e.replicationPolicy,
+				e.domainName,
 			)
 		} else if e.GetVersionHistories() != nil {
 			newStateBuilder = newMutableStateBuilderWithVersionHistories(
@@ -3287,13 +3333,16 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 				e.logger,
 				e.GetCurrentVersion(),
 				e.replicationPolicy,
+				e.domainName,
 			)
 		} else {
 			return nil, nil, &workflow.InternalServiceError{Message: "Continue as new missing both replication state and version history."}
 		}
 	} else {
-		newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger)
+		// TODO we need to migrate existing local domain workflow to use version history
+		newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainName)
 	}
+
 	domainID := domainEntry.GetInfo().ID
 	startedEvent, err := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainEntry, parentInfo, newExecution, e, attributes, firstRunID)
 	if err != nil {

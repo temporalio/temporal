@@ -721,7 +721,11 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	iterator, err := NewHistoryIterator(request, mockHistoryManager, mockHistoryV2Manager, targetHistoryBlobSize, initialState, newTestSizeEstimator())
-	s.NoError(err)
-	return iterator.(*historyIterator)
+	itr := newHistoryIterator(request, mockHistoryManager, mockHistoryV2Manager, targetHistoryBlobSize)
+	if initialState != nil {
+		err := itr.reset(initialState)
+		s.NoError(err)
+	}
+	itr.sizeEstimator = newTestSizeEstimator()
+	return itr
 }

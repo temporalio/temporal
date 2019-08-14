@@ -22,6 +22,7 @@ package matching
 
 import (
 	"context"
+	"strings"
 
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -46,12 +47,18 @@ func NewMetricClient(client Client, metricsClient metrics.Client) Client {
 
 func (c *metricClient) AddActivityTask(
 	ctx context.Context,
-	addRequest *m.AddActivityTaskRequest,
+	request *m.AddActivityTaskRequest,
 	opts ...yarpc.CallOption) error {
 	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceClientRequests)
-
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceClientLatency)
-	err := c.client.AddActivityTask(ctx, addRequest, opts...)
+
+	c.emitForwardedFromStats(
+		metrics.MatchingClientAddActivityTaskScope,
+		request.GetForwardedFrom(),
+		request.TaskList,
+	)
+
+	err := c.client.AddActivityTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -63,12 +70,18 @@ func (c *metricClient) AddActivityTask(
 
 func (c *metricClient) AddDecisionTask(
 	ctx context.Context,
-	addRequest *m.AddDecisionTaskRequest,
+	request *m.AddDecisionTaskRequest,
 	opts ...yarpc.CallOption) error {
 	c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceClientRequests)
-
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceClientLatency)
-	err := c.client.AddDecisionTask(ctx, addRequest, opts...)
+
+	c.emitForwardedFromStats(
+		metrics.MatchingClientAddDecisionTaskScope,
+		request.GetForwardedFrom(),
+		request.TaskList,
+	)
+
+	err := c.client.AddDecisionTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -80,12 +93,20 @@ func (c *metricClient) AddDecisionTask(
 
 func (c *metricClient) PollForActivityTask(
 	ctx context.Context,
-	pollRequest *m.PollForActivityTaskRequest,
+	request *m.PollForActivityTaskRequest,
 	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
 	c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceClientRequests)
-
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceClientLatency)
-	resp, err := c.client.PollForActivityTask(ctx, pollRequest, opts...)
+
+	if request.PollRequest != nil {
+		c.emitForwardedFromStats(
+			metrics.MatchingClientPollForActivityTaskScope,
+			request.GetForwardedFrom(),
+			request.PollRequest.TaskList,
+		)
+	}
+
+	resp, err := c.client.PollForActivityTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -97,12 +118,20 @@ func (c *metricClient) PollForActivityTask(
 
 func (c *metricClient) PollForDecisionTask(
 	ctx context.Context,
-	pollRequest *m.PollForDecisionTaskRequest,
+	request *m.PollForDecisionTaskRequest,
 	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
 	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceClientRequests)
-
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceClientLatency)
-	resp, err := c.client.PollForDecisionTask(ctx, pollRequest, opts...)
+
+	if request.PollRequest != nil {
+		c.emitForwardedFromStats(
+			metrics.MatchingClientPollForDecisionTaskScope,
+			request.GetForwardedFrom(),
+			request.PollRequest.TaskList,
+		)
+	}
+
+	resp, err := c.client.PollForDecisionTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -114,12 +143,18 @@ func (c *metricClient) PollForDecisionTask(
 
 func (c *metricClient) QueryWorkflow(
 	ctx context.Context,
-	queryRequest *m.QueryWorkflowRequest,
+	request *m.QueryWorkflowRequest,
 	opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
 	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceClientRequests)
-
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceClientLatency)
-	resp, err := c.client.QueryWorkflow(ctx, queryRequest, opts...)
+
+	c.emitForwardedFromStats(
+		metrics.MatchingClientQueryWorkflowScope,
+		request.GetForwardedFrom(),
+		request.TaskList,
+	)
+
+	resp, err := c.client.QueryWorkflow(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -178,4 +213,19 @@ func (c *metricClient) DescribeTaskList(
 	}
 
 	return resp, err
+}
+
+func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskList *workflow.TaskList) {
+	if taskList == nil {
+		return
+	}
+	isChildPartition := strings.HasPrefix(taskList.GetName(), taskListPartitionPrefix)
+	switch {
+	case forwardedFrom != "":
+		c.metricsClient.IncCounter(scope, metrics.MatchingClientForwardedCounter)
+	default:
+		if isChildPartition {
+			c.metricsClient.IncCounter(scope, metrics.MatchingClientInvalidTaskListName)
+		}
+	}
 }

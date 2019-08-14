@@ -175,8 +175,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes
+			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			di, err := b.msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(),
-				attributes.TaskList.GetName(), attributes.GetStartToCloseTimeoutSeconds(), attributes.GetAttempt(), event.GetTimestamp())
+				attributes.TaskList.GetName(), attributes.GetStartToCloseTimeoutSeconds(), attributes.GetAttempt(),
+				event.GetTimestamp(), event.GetTimestamp())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -539,6 +541,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 					b.logger,
 					newRunStartedEvent.GetVersion(),
 					domainEntry.GetReplicationPolicy(),
+					domainEntry.GetInfo().Name,
 				)
 			} else if b.msBuilder.GetVersionHistories() != nil {
 				// TODO add a configuration to migrate from replication state
@@ -549,6 +552,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 					b.logger,
 					newRunStartedEvent.GetVersion(),
 					domainEntry.GetReplicationPolicy(),
+					domainEntry.GetInfo().Name,
 				)
 			} else {
 				return nil, nil, nil, errors.NewInternalFailureError("either replication state or version histories should be set")
@@ -688,14 +692,22 @@ func (b *stateBuilderImpl) scheduleWorkflowTimerTask(event *shared.HistoryEvent,
 	timerTasks := []persistence.Task{}
 	now := time.Unix(0, event.GetTimestamp())
 	timeout := now.Add(time.Duration(msBuilder.GetExecutionInfo().WorkflowTimeout) * time.Second)
+	backoffDuration := backoff.NoBackoff
+	startWorkflowAttribute := event.GetWorkflowExecutionStartedEventAttributes()
+	firstDecisionTaskBackoffSecond := startWorkflowAttribute.GetFirstDecisionTaskBackoffSeconds()
+	if firstDecisionTaskBackoffSecond > 0 {
+		backoffDuration = time.Duration(firstDecisionTaskBackoffSecond) * time.Second
+	}
 
-	cronSchedule := b.msBuilder.GetExecutionInfo().CronSchedule
-	cronBackoffDuration := backoff.GetBackoffForNextSchedule(cronSchedule, now)
-	if cronBackoffDuration != backoff.NoBackoff {
-		timeout = timeout.Add(cronBackoffDuration)
+	if backoffDuration != backoff.NoBackoff {
+		timeout = timeout.Add(backoffDuration)
+		timeoutType := persistence.WorkflowBackoffTimeoutTypeRetry
+		if startWorkflowAttribute.GetInitiator().Equals(shared.ContinueAsNewInitiatorCronSchedule) {
+			timeoutType = persistence.WorkflowBackoffTimeoutTypeCron
+		}
 		timerTasks = append(timerTasks, &persistence.WorkflowBackoffTimerTask{
-			VisibilityTimestamp: now.Add(cronBackoffDuration),
-			TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
+			VisibilityTimestamp: now.Add(backoffDuration),
+			TimeoutType:         timeoutType,
 		})
 	}
 

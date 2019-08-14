@@ -433,6 +433,7 @@ func createExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -455,6 +456,7 @@ func createExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
@@ -501,6 +503,7 @@ func createExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -523,6 +526,7 @@ func createExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
@@ -574,6 +578,7 @@ func createExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -596,6 +601,7 @@ func createExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			replicationState.CurrentVersion,
 			replicationState.StartVersion,
 			replicationState.LastWriteVersion,
@@ -685,6 +691,7 @@ func updateExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -707,6 +714,7 @@ func updateExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			executionInfo.NextEventID,
 			shardID,
 			rowTypeExecution,
@@ -754,6 +762,7 @@ func updateExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -776,6 +785,7 @@ func updateExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			executionInfo.NextEventID,
 			versionHistoriesData,
 			versionHistoriesEncoding,
@@ -828,6 +838,7 @@ func updateExecution(
 			executionInfo.DecisionAttempt,
 			executionInfo.DecisionStartedTimestamp,
 			executionInfo.DecisionScheduledTimestamp,
+			executionInfo.DecisionOriginalScheduledTimestamp,
 			executionInfo.CancelRequested,
 			executionInfo.CancelRequestID,
 			executionInfo.StickyTaskList,
@@ -850,6 +861,7 @@ func updateExecution(
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
 			executionInfo.SearchAttributes,
+			executionInfo.Memo,
 			replicationState.CurrentVersion,
 			replicationState.StartVersion,
 			replicationState.LastWriteVersion,
@@ -1877,6 +1889,8 @@ func createWorkflowExecutionInfo(
 			info.DecisionStartedTimestamp = v.(int64)
 		case "decision_scheduled_timestamp":
 			info.DecisionScheduledTimestamp = v.(int64)
+		case "decision_original_scheduled_timestamp":
+			info.DecisionOriginalScheduledTimestamp = v.(int64)
 		case "cancel_requested":
 			info.CancelRequested = v.(bool)
 		case "cancel_request_id":
@@ -1917,6 +1931,8 @@ func createWorkflowExecutionInfo(
 			info.ExpirationSeconds = int32(v.(int))
 		case "search_attributes":
 			info.SearchAttributes = v.(map[string][]byte)
+		case "memo":
+			info.Memo = v.(map[string][]byte)
 		}
 	}
 	info.CompletionEvent = p.NewDataBlob(completionEventData, completionEventEncoding)

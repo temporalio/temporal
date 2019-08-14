@@ -35,11 +35,11 @@ import (
 )
 
 var (
-	workflowTestMetrics  *mmocks.Client
-	workflowTestLogger   log.Logger
-	workflowTestArchiver *MockArchiver
-	workflowTestPump     *PumpMock
-	workflowTestConfig   *Config
+	workflowTestMetrics *mmocks.Client
+	workflowTestLogger  log.Logger
+	workflowTestHandler *MockHandler
+	workflowTestPump    *PumpMock
+	workflowTestConfig  *Config
 )
 
 type workflowSuite struct {
@@ -58,7 +58,7 @@ func TestWorkflowSuite(t *testing.T) {
 func (s *workflowSuite) SetupTest() {
 	workflowTestMetrics = &mmocks.Client{}
 	workflowTestLogger = loggerimpl.NewLogger(zap.NewNop())
-	workflowTestArchiver = &MockArchiver{}
+	workflowTestHandler = &MockHandler{}
 	workflowTestPump = &PumpMock{}
 	workflowTestConfig = &Config{
 		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(0),
@@ -74,8 +74,8 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(3)).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(3)).Once()
 	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount).Once()
-	workflowTestArchiver.On("Start").Once()
-	workflowTestArchiver.On("Finished").Return([]uint64{9, 7, 0}).Once()
+	workflowTestHandler.On("Start").Once()
+	workflowTestHandler.On("Finished").Return([]uint64{9, 7, 0}).Once()
 	workflowTestPump.On("Run").Return(PumpResult{
 		PumpedHashes: []uint64{8, 7, 0},
 	}).Once()
@@ -96,8 +96,8 @@ func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(0)).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(0)).Once()
 	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount).Once()
-	workflowTestArchiver.On("Start").Once()
-	workflowTestArchiver.On("Finished").Return([]uint64{}).Once()
+	workflowTestHandler.On("Start").Once()
+	workflowTestHandler.On("Finished").Return([]uint64{}).Once()
 	workflowTestPump.On("Run").Return(PumpResult{
 		PumpedHashes:          []uint64{},
 		TimeoutWithoutSignals: true,
@@ -117,8 +117,8 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NopStopwatch()).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(5)).Once()
 	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(5)).Once()
-	workflowTestArchiver.On("Start").Once()
-	workflowTestArchiver.On("Finished").Return([]uint64{1, 2, 3, 4, 5}).Once()
+	workflowTestHandler.On("Start").Once()
+	workflowTestHandler.On("Finished").Return([]uint64{1, 2, 3, 4, 5}).Once()
 	workflowTestPump.On("Run").Return(PumpResult{
 		PumpedHashes: []uint64{1, 2, 3, 4, 5},
 	}).Once()
@@ -133,5 +133,5 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 }
 
 func archivalWorkflowTest(ctx workflow.Context) error {
-	return archivalWorkflowHelper(ctx, workflowTestLogger, workflowTestMetrics, workflowTestConfig, workflowTestArchiver, workflowTestPump, nil)
+	return archivalWorkflowHelper(ctx, workflowTestLogger, workflowTestMetrics, workflowTestConfig, workflowTestHandler, workflowTestPump, nil)
 }

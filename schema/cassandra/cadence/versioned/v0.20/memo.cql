@@ -1,0 +1,1 @@
+ALTER TYPE workflow_execution ADD memo map<text, blob>;

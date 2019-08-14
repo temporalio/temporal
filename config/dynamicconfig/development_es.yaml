@@ -21,3 +21,13 @@ frontend.validSearchAttributes:
       CustomBoolField: 3
       CustomDoubleField: 4
       CustomDatetimeField: 5
+      project: 1
+      service: 1
+      environment: 1
+      addon: 1
+      addon-type: 1
+      user: 1
+      CustomDomain: 1
+      Operator: 1
+system.minRetentionDays:
+    - value: 0

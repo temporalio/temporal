@@ -89,7 +89,7 @@ func getPolicy() Policy {
 		func() float64 {
 			return float64(defaultRps)
 		},
-		func() float64 {
+		func(domain string) float64 {
 			return float64(defaultRps)
 		},
 	)

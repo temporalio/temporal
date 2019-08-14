@@ -49,11 +49,6 @@ type (
 		GetAllClusterInfo() map[string]config.ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
-
-		// HistoryArchivalConfig returns the history archival config of the cluster
-		HistoryArchivalConfig() *ArchivalConfig
-		// VisibilityArchivalConfig returns the visibility archival config of the cluster
-		VisibilityArchivalConfig() *ArchivalConfig
 	}
 
 	metadataImpl struct {
@@ -72,25 +67,17 @@ type (
 		clusterInfo map[string]config.ClusterInformation
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
-
-		// historyArchivalConfig is cluster's history archival config
-		historyArchivalConfig *ArchivalConfig
-		// visibilityArchivalConfig is cluster's visibility archival config
-		visibilityArchivalConfig *ArchivalConfig
 	}
 )
 
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
 	logger log.Logger,
-	dc *dynamicconfig.Collection,
-	enableGlobalDomain bool,
+	enableGlobalDomain dynamicconfig.BoolPropertyFn,
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
 	clusterInfo map[string]config.ClusterInformation,
-	archivalClusterConfig config.Archival,
-	archivalDomainDefault config.ArchivalDomainDefaults,
 ) Metadata {
 
 	if len(clusterInfo) == 0 {
@@ -132,41 +119,14 @@ func NewMetadata(
 		panic("Cluster info initial versions have duplicates")
 	}
 
-	clusterHistoryArchivalStatus := dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, archivalClusterConfig.History.Status)()
-	enableReadFromHistoryArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, archivalClusterConfig.History.EnableReadFromArchival)()
-	clusterVisibilityArchivalStatus := dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, archivalClusterConfig.Visibility.Status)()
-	enableReadFromVisibilityArchival := dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, archivalClusterConfig.Visibility.EnableReadFromArchival)()
-
-	clusterStatus, err := getClusterArchivalStatus(clusterHistoryArchivalStatus)
-	if err != nil {
-		panic(err)
-	}
-	domainStatus, err := getDomainArchivalStatus(archivalDomainDefault.History.DefaultStatus)
-	if err != nil {
-		panic(err)
-	}
-	historyArchivalConfig := NewArchivalConfig(clusterStatus, enableReadFromHistoryArchival, domainStatus, archivalDomainDefault.History.DefaultURI)
-
-	clusterStatus, err = getClusterArchivalStatus(clusterVisibilityArchivalStatus)
-	if err != nil {
-		panic(err)
-	}
-	domainStatus, err = getDomainArchivalStatus(archivalDomainDefault.Visibility.DefaultStatus)
-	if err != nil {
-		panic(err)
-	}
-	visibilityArchivalConfig := NewArchivalConfig(clusterStatus, enableReadFromVisibilityArchival, domainStatus, archivalDomainDefault.Visibility.DefaultURI)
-
 	return &metadataImpl{
 		logger:                   logger,
-		enableGlobalDomain:       dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, enableGlobalDomain),
+		enableGlobalDomain:       enableGlobalDomain,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
 		currentClusterName:       currentClusterName,
 		clusterInfo:              clusterInfo,
 		versionToClusterName:     versionToClusterName,
-		historyArchivalConfig:    historyArchivalConfig,
-		visibilityArchivalConfig: visibilityArchivalConfig,
 	}
 }
 
@@ -234,14 +194,4 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 		))
 	}
 	return clusterName
-}
-
-// HistoryArchivalConfig returns the history archival config of the cluster.
-func (metadata *metadataImpl) HistoryArchivalConfig() *ArchivalConfig {
-	return metadata.historyArchivalConfig
-}
-
-// VisibilityArchivalConfig returns the visibility archival config of the cluster.
-func (metadata *metadataImpl) VisibilityArchivalConfig() *ArchivalConfig {
-	return metadata.visibilityArchivalConfig
 }

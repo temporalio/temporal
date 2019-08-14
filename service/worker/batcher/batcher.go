@@ -22,20 +22,18 @@ package batcher
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/worker"
 )
 
@@ -69,6 +67,8 @@ type (
 		Logger        log.Logger
 		// TallyScope is an instance of tally metrics scope
 		TallyScope tally.Scope
+		// ClientBean is an instance of client.Bean for a collection of clients
+		ClientBean client.Bean
 	}
 
 	// Batcher is the background sub-system that execute workflow for batch operations
@@ -76,6 +76,7 @@ type (
 	Batcher struct {
 		cfg           Config
 		svcClient     workflowserviceclient.Interface
+		clientBean    client.Bean
 		metricsClient metrics.Client
 		tallyScope    tally.Scope
 		logger        log.Logger
@@ -91,93 +92,26 @@ func New(params *BootstrapParams) *Batcher {
 		metricsClient: params.MetricsClient,
 		tallyScope:    params.TallyScope,
 		logger:        params.Logger.WithTags(tag.ComponentBatcher),
+		clientBean:    params.ClientBean,
 	}
 }
 
 // Start starts the scanner
 func (s *Batcher) Start() error {
-	//retry until making sure global system domain is there
-	err := s.createGlobalSystemDomainIfNotExistsWithRetry()
-	if err != nil {
-		return err
-	}
-
-	// TODO remove this logic after this issue is resolved: https://github.com/uber/cadence/issues/2002
-	if s.cfg.ClusterMetadata.IsGlobalDomainEnabled() {
-		time.Sleep(waitingForGlobalDomainCreationRacingCondition)
-	}
-
 	// start worker for batch operation workflows
+	ctx := context.WithValue(context.Background(), batcherContextKey, s)
 	workerOpts := worker.Options{
 		MetricsScope:              s.tallyScope,
-		BackgroundActivityContext: context.WithValue(context.Background(), batcherContextKey, s),
+		BackgroundActivityContext: ctx,
 		Tracer:                    opentracing.GlobalTracer(),
 	}
-	worker := worker.New(s.svcClient, common.SystemGlobalDomainName, BatcherTaskListName, workerOpts)
-	return worker.Start()
-}
-
-func (s *Batcher) createGlobalSystemDomainIfNotExistsWithRetry() error {
-	policy := backoff.NewExponentialRetryPolicy(backOffInitialInterval)
-	policy.SetMaximumInterval(backOffMaxInterval)
-	policy.SetExpirationInterval(maxStartupTime)
-	return backoff.Retry(func() error {
-		return s.createGlobalSystemDomainIfNotExists()
-	}, policy, func(err error) bool {
-		return true
-	})
-}
-
-func (s *Batcher) createGlobalSystemDomainIfNotExists() error {
-	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
-	_, err := s.svcClient.DescribeDomain(ctx, &shared.DescribeDomainRequest{
-		Name: common.StringPtr(common.SystemGlobalDomainName),
-	})
-	cancel()
-
-	if err == nil {
-		s.logger.Info("Global system domain already exists", tag.WorkflowDomainName(common.SystemGlobalDomainName))
-		return nil
-	}
-
-	if s.cfg.ClusterMetadata.IsGlobalDomainEnabled() && !s.cfg.ClusterMetadata.IsMasterCluster() {
-		return fmt.Errorf("not master of the global cluster, retry on describe domain only")
-	}
-
-	ctx, cancel = context.WithTimeout(context.Background(), rpcTimeout)
-	err = s.svcClient.RegisterDomain(ctx, s.getDomainCreationRequest())
-	cancel()
+	// TODO https://github.com/uber/cadence/issues/2309
+	// Remove it in next release
+	legacyWorker := worker.New(s.svcClient, common.SystemGlobalDomainName, BatcherTaskListName, workerOpts)
+	err := legacyWorker.Start()
 	if err != nil {
-		s.logger.Error("Error creating global system domain", tag.Error(err))
 		return err
 	}
-	s.logger.Info("Domain created successfully")
-	return nil
-}
-
-func (s *Batcher) getDomainCreationRequest() *shared.RegisterDomainRequest {
-	req := &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(common.SystemGlobalDomainName),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(common.SystemDomainRetentionDays),
-		EmitMetric:                             common.BoolPtr(true),
-		SecurityToken:                          common.StringPtr(s.cfg.AdminOperationToken()),
-		IsGlobalDomain:                         common.BoolPtr(false),
-	}
-
-	if s.cfg.ClusterMetadata.IsGlobalDomainEnabled() {
-		req.IsGlobalDomain = common.BoolPtr(true)
-		req.ActiveClusterName = common.StringPtr(s.cfg.ClusterMetadata.GetMasterClusterName())
-		var clusters []*shared.ClusterReplicationConfiguration
-		for name, c := range s.cfg.ClusterMetadata.GetAllClusterInfo() {
-			if !c.Enabled {
-				continue
-			}
-			clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-				ClusterName: common.StringPtr(name),
-			})
-		}
-		req.Clusters = clusters
-	}
-
-	return req
+	batchWorker := worker.New(s.svcClient, common.SystemLocalDomainName, BatcherTaskListName, workerOpts)
+	return batchWorker.Start()
 }

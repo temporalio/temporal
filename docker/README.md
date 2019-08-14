@@ -40,8 +40,9 @@ Building an image for any branch and restarting
 -----------------------------------------
 Replace **YOUR_TAG** and **YOUR_CHECKOUT_BRANCH** in the below command to build:
 ```
-cd $GOPATH/src/github.com/uber/cadence/docker
-docker build . -t ubercadence/server:YOUR_TAG --build-arg git_branch=YOUR_CHECKOUT_BRANCH
+cd $GOPATH/src/github.com/uber/cadence
+git checkout YOUR_CHECKOUT_BRANCH
+docker build . -t ubercadence/server:YOUR_TAG --build-arg TARGET=auto-setup
 ```
 Replace the tag of **image: ubercadence/server** to **YOUR_TAG** in docker-compose.yml .
 Then stop service and remove all containers using the below commands.
@@ -53,7 +54,7 @@ docker-compose up
 Running cadence service with MySQL
 -----------------------------------------
 
-Run cadence with MySQL instead of cassandra, use following commads:
+Run cadence with MySQL instead of Cassandra, use following commads:
 
 ```
 docker-compose -f docker-compose-mysql.yml up
@@ -61,6 +62,15 @@ docker-compose -f docker-compose-mysql.yml down
 ```
 
 Please note that SQL support is still in active developement and it is not production ready yet.
+
+Running cadence service with ElasticSearch
+-----------------------------------------
+
+Run cadence with ElasticSearch for visibility instead of Cassandra/MySQL
+
+```
+docker-compose -f docker-compose-es.yml up
+``` 
 
 Quickstart for production
 =========================

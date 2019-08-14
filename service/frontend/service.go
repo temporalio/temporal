@@ -51,7 +51,7 @@ type Config struct {
 	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                             dynamicconfig.IntPropertyFn
-	DomainRPS                       dynamicconfig.IntPropertyFn
+	DomainRPS                       dynamicconfig.IntPropertyFnWithDomainFilter
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
 	EnableClientVersionCheck        dynamicconfig.BoolPropertyFn
 	MinRetentionDays                dynamicconfig.IntPropertyFn
@@ -59,8 +59,7 @@ type Config struct {
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
 
-	MaxDecisionStartToCloseTimeout dynamicconfig.IntPropertyFnWithDomainFilter
-	MaxBadBinaries                 dynamicconfig.IntPropertyFnWithDomainFilter
+	MaxBadBinaries dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// security protection settings
 	EnableAdminProtection         dynamicconfig.BoolPropertyFn
@@ -98,10 +97,9 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableVisibil
 		ESIndexMaxResultWindow:              dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		DomainRPS:                           dc.GetIntProperty(dynamicconfig.FrontendDomainRPS, 400),
+		DomainRPS:                           dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendDomainRPS, 1200),
 		MaxIDLengthLimit:                    dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		HistoryMgrNumConns:                  dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
-		MaxDecisionStartToCloseTimeout:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
 		MaxBadBinaries:                      dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendMaxBadBinaries, 10),
 		EnableAdminProtection:               dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
 		AdminOperationToken:                 dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
@@ -212,9 +210,12 @@ func (s *Service) Start() {
 		ClusterMetadata:  base.GetClusterMetadata(),
 		DomainCache:      domainCache,
 	}
-	params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	err = params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
+	}
 
-	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, domainCache, params.ArchiverProvider)
+	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, domainCache)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 

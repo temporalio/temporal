@@ -174,7 +174,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	defer failOnPanic(s.T())
 	domainID := uuid.New()
 	workflowExecution := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("test-eventsv2-workflow"),
+		WorkflowId: common.StringPtr("test-eventsv2-workflow-version-history"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 	}
 	versionHistory := p.NewVersionHistory(

@@ -123,7 +123,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean, nil, nil)
 	s.mockEventsCache = &MockEventsCache{}
 
 	historyEventNotifier := newHistoryEventNotifier(
@@ -149,6 +149,7 @@ func (s *engineSuite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
+		throttledLogger:           s.logger,
 		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
 	}
@@ -1472,6 +1473,69 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	s.Equal(int32(10), *activity1Attributes.ScheduleToStartTimeoutSeconds)
 	s.Equal(int32(50), *activity1Attributes.StartToCloseTimeoutSeconds)
 	s.Equal(int32(5), *activity1Attributes.HeartbeatTimeoutSeconds)
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
+
+	decisions := []*workflow.Decision{}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info: &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(true)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+			TaskToken:                  taskToken,
+			Decisions:                  decisions,
+			ExecutionContext:           executionContext,
+			Identity:                   &identity,
+		},
+	})
+	s.Error(err, "decision heartbeat timeout")
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() {
@@ -5125,7 +5189,7 @@ func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int
 func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilder(shard, eventsCache, logger)
+	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, "")
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5134,7 +5198,7 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, eventsCache eventsCache,
 	logger log.Logger, version int64, runID string) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, version, cache.ReplicationPolicyOneCluster)
+	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, version, cache.ReplicationPolicyOneCluster, "")
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5234,6 +5298,8 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		ClientFeatureVersion:         sourceInfo.ClientFeatureVersion,
 		ClientImpl:                   sourceInfo.ClientImpl,
 		AutoResetPoints:              sourceInfo.AutoResetPoints,
+		Memo:                         sourceInfo.Memo,
+		SearchAttributes:             sourceInfo.SearchAttributes,
 		Attempt:                      sourceInfo.Attempt,
 		HasRetryPolicy:               sourceInfo.HasRetryPolicy,
 		InitialInterval:              sourceInfo.InitialInterval,

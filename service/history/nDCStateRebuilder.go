@@ -46,6 +46,7 @@ type (
 
 	nDCStateRebuilderImpl struct {
 		shard           ShardContext
+		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
 
@@ -68,6 +69,7 @@ func newNDCStateRebuilder(
 
 	return &nDCStateRebuilderImpl{
 		shard:           shard,
+		domainCache:     shard.GetDomainCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
 
@@ -85,7 +87,6 @@ func (r *nDCStateRebuilderImpl) prepareMutableState(
 
 	// NOTE: this function also need to preserve whether a workflow is a zombie or not
 	//  this is done by the rebuild function below
-
 	versionHistories := r.mutableState.GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
 
@@ -152,7 +153,10 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, err
 	}
 	firstEventBatch := batch.(*shared.History).Events
-	rebuildMutableState, stateBuilder := r.initializeBuilders(firstEventBatch[0].GetVersion())
+	rebuildMutableState, stateBuilder := r.initializeBuilders(
+		firstEventBatch[0].GetVersion(),
+		r.context.getDomainName(),
+	)
 	if err := r.applyEvents(stateBuilder, firstEventBatch, requestID); err != nil {
 		return nil, err
 	}
@@ -210,6 +214,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
 	version int64,
+	domainName string,
 ) (mutableState, stateBuilder) {
 	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
 		r.shard,
@@ -219,6 +224,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		// if can see replication task, meaning that domain is
 		// global domain with > 1 target clusters
 		cache.ReplicationPolicyMultiCluster,
+		domainName,
 	)
 	resetMutableStateBuilder.executionInfo.EventStoreVersion = nDCMutableStateEventStoreVersion
 	stateBuilder := newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)

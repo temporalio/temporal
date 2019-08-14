@@ -26,6 +26,7 @@ struct PollForDecisionTaskRequest {
   10: optional string domainUUID
   15: optional string pollerID
   20: optional shared.PollForDecisionTaskRequest pollRequest
+  30: optional string forwardedFrom
 }
 
 struct PollForDecisionTaskResponse {
@@ -51,6 +52,7 @@ struct PollForActivityTaskRequest {
   10: optional string domainUUID
   15: optional string pollerID
   20: optional shared.PollForActivityTaskRequest pollRequest
+  30: optional string forwardedFrom
 }
 
 struct AddDecisionTaskRequest {
@@ -59,6 +61,7 @@ struct AddDecisionTaskRequest {
   30: optional shared.TaskList taskList
   40: optional i64 (js.type = "Long") scheduleId
   50: optional i32 scheduleToStartTimeoutSeconds
+  60: optional string forwardedFrom
 }
 
 struct AddActivityTaskRequest {
@@ -68,12 +71,14 @@ struct AddActivityTaskRequest {
   40: optional shared.TaskList taskList
   50: optional i64 (js.type = "Long") scheduleId
   60: optional i32 scheduleToStartTimeoutSeconds
+  70: optional string forwardedFrom
 }
 
 struct QueryWorkflowRequest {
   10: optional string domainUUID
   20: optional shared.TaskList taskList
   30: optional shared.QueryWorkflowRequest queryRequest
+  40: optional string forwardedFrom
 }
 
 struct RespondQueryTaskCompletedRequest {

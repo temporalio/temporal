@@ -22,7 +22,6 @@ package archiver
 
 import (
 	"context"
-	"errors"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
@@ -30,13 +29,6 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-)
-
-var (
-	// ErrArchiveNonRetriable is the error every Archiver implementation should return when
-	// a non-retriable error is encountered.
-	// If errors of other types are returned, method might be retried by caller
-	ErrArchiveNonRetriable = errors.New("archive method encountered a non-retriable error")
 )
 
 type (
@@ -81,29 +73,18 @@ type (
 
 	// HistoryArchiver is used to archive history and read archived history
 	HistoryArchiver interface {
-		Archive(ctx context.Context, URI string, request *ArchiveHistoryRequest, opts ...ArchiveOption) error
-		Get(ctx context.Context, URI string, request *GetHistoryRequest) (*GetHistoryResponse, error)
-		ValidateURI(URI string) error
+		Archive(context.Context, URI, *ArchiveHistoryRequest, ...ArchiveOption) error
+		Get(context.Context, URI, *GetHistoryRequest) (*GetHistoryResponse, error)
+		ValidateURI(URI) error
 	}
 
 	// ycyang TODO: implement visibility archiver
-
-	// ArchiveVisibilityRequest is request to Archive
-	ArchiveVisibilityRequest struct{}
-
-	// GetVisibilityRequest is the request to Get archived visibility records
-	GetVisibilityRequest struct{}
-
-	// GetVisibilityResponse is the response of Get archived visibility records
-	GetVisibilityResponse struct{}
 
 	// VisibilityBootstrapContainer contains components needed by all visibility Archiver implementations
 	VisibilityBootstrapContainer struct{}
 
 	// VisibilityArchiver is used to archive visibility and read archived visibility
 	VisibilityArchiver interface {
-		Archive(ctx context.Context, URI string, request *ArchiveVisibilityRequest, opts ...ArchiveOption) error
-		Get(ctx context.Context, URI string, request *GetVisibilityRequest) (*GetVisibilityResponse, error)
-		ValidateURI(URI string) error
+		ValidateURI(URI) error
 	}
 )

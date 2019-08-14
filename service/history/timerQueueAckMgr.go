@@ -98,8 +98,16 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 	return compareTimerIDLess(&t[i], &t[j])
 }
 
-func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client,
-	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger log.Logger, clusterName string) *timerQueueAckMgrImpl {
+func newTimerQueueAckMgr(
+	scope int,
+	shard ShardContext,
+	metricsClient metrics.Client,
+	minLevel time.Time,
+	timeNow timeNow,
+	updateTimerAckLevel updateTimerAckLevel,
+	logger log.Logger,
+	clusterName string,
+) *timerQueueAckMgrImpl {
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
@@ -127,9 +135,16 @@ func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Cl
 	return timerQueueAckMgrImpl
 }
 
-func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client,
-	minLevel time.Time, maxLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel,
-	timerQueueShutdown timerQueueShutdown, logger log.Logger) *timerQueueAckMgrImpl {
+func newTimerQueueFailoverAckMgr(
+	shard ShardContext,
+	metricsClient metrics.Client,
+	minLevel time.Time,
+	maxLevel time.Time,
+	timeNow timeNow,
+	updateTimerAckLevel updateTimerAckLevel,
+	timerQueueShutdown timerQueueShutdown,
+	logger log.Logger,
+) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
@@ -304,7 +319,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() {
 
 	pendingTasks := len(sequenceIDs)
 	if pendingTasks > warnPendingTasks {
-		t.logger.Warn("Too many pendind tasks.")
+		t.logger.Warn("Too many pending tasks.")
 	}
 	switch t.scope {
 	case metrics.TimerActiveQueueProcessorScope:

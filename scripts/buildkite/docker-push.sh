@@ -17,12 +17,13 @@ if [ "$BUILDKITE_COMMIT" != "$MASTER_SHA" ]; then
     exit 0
 fi
 
-cd docker
-
 echo "Building docker image for $BUILDKITE_MESSAGE"
 
-docker build . -f Dockerfile -t ubercadence/server:master --build-arg git_branch=$BUILDKITE_COMMIT
+docker build . -f Dockerfile -t ubercadence/server:master --build-arg TARGET=server
 docker push ubercadence/server:master
 
-docker build . -f Dockerfile-cli -t ubercadence/cli:master --build-arg git_branch=$BUILDKITE_COMMIT
+docker build . -f Dockerfile -t ubercadence/server:master-auto-setup --build-arg TARGET=auto-setup
+docker push ubercadence/server:master-auto-setup
+
+docker build . -f Dockerfile-cli -t ubercadence/cli:master --build-arg TARGET=cli
 docker push ubercadence/cli:master

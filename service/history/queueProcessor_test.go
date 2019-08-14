@@ -86,7 +86,7 @@ func (s *queueProcessorSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		clusterMetadata:           s.mockClusterMetadata,

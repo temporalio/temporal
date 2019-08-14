@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 const (
@@ -49,34 +50,46 @@ const (
 	clientKeyDispatcher = "client-key-dispatcher"
 )
 
-// Factory can be used to create RPC clients for cadence services
-type Factory interface {
-	NewHistoryClient() (history.Client, error)
-	NewMatchingClient() (matching.Client, error)
-	NewFrontendClient() (frontend.Client, error)
+type (
+	// Factory can be used to create RPC clients for cadence services
+	Factory interface {
+		NewHistoryClient() (history.Client, error)
+		NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
+		NewFrontendClient() (frontend.Client, error)
 
-	NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
-	NewMatchingClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
-	NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
+		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
+		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
+		NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 
-	NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
-	NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
-}
+		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
+		NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
+	}
 
-type rpcClientFactory struct {
-	rpcFactory            common.RPCFactory
-	monitor               membership.Monitor
-	metricsClient         metrics.Client
-	numberOfHistoryShards int
-}
+	// DomainIDToNameFunc maps a domainID to domain name. Returns error when mapping is not possible.
+	DomainIDToNameFunc func(string) (string, error)
+
+	rpcClientFactory struct {
+		rpcFactory            common.RPCFactory
+		monitor               membership.Monitor
+		metricsClient         metrics.Client
+		dynConfig             *dynamicconfig.Collection
+		numberOfHistoryShards int
+	}
+)
 
 // NewRPCClientFactory creates an instance of client factory that knows how to dispatch RPC calls.
-func NewRPCClientFactory(rpcFactory common.RPCFactory, monitor membership.Monitor,
-	metricsClient metrics.Client, numberOfHistoryShards int) Factory {
+func NewRPCClientFactory(
+	rpcFactory common.RPCFactory,
+	monitor membership.Monitor,
+	metricsClient metrics.Client,
+	dc *dynamicconfig.Collection,
+	numberOfHistoryShards int,
+) Factory {
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
 		metricsClient:         metricsClient,
+		dynConfig:             dc,
 		numberOfHistoryShards: numberOfHistoryShards,
 	}
 }
@@ -85,8 +98,8 @@ func (cf *rpcClientFactory) NewHistoryClient() (history.Client, error) {
 	return cf.NewHistoryClientWithTimeout(history.DefaultTimeout)
 }
 
-func (cf *rpcClientFactory) NewMatchingClient() (matching.Client, error) {
-	return cf.NewMatchingClientWithTimeout(matching.DefaultTimeout, matching.DefaultLongPollTimeout)
+func (cf *rpcClientFactory) NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+	return cf.NewMatchingClientWithTimeout(domainIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewFrontendClient() (frontend.Client, error) {
@@ -120,6 +133,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 }
 
 func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
+	domainIDToName DomainIDToNameFunc,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (matching.Client, error) {
@@ -141,7 +155,13 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		return matchingserviceclient.New(dispatcher.ClientConfig(common.MatchingServiceName)), nil
 	}
 
-	client := matching.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
+	client := matching.NewClient(
+		timeout,
+		longPollTimeout,
+		common.NewClientCache(keyResolver, clientProvider),
+		matching.NewLoadBalancer(domainIDToName, cf.dynConfig),
+	)
+
 	if cf.metricsClient != nil {
 		client = matching.NewMetricClient(client, cf.metricsClient)
 	}

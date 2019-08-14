@@ -21,12 +21,15 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/config"
+	"go.uber.org/yarpc"
 )
 
 const (
@@ -47,8 +50,8 @@ const (
 type (
 	// DCRedirectionPolicy is a DC redirection policy interface
 	DCRedirectionPolicy interface {
-		WithDomainIDRedirect(domainID string, apiName string, call func(string) error) error
-		WithDomainNameRedirect(domainName string, apiName string, call func(string) error) error
+		WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error
+		WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -99,12 +102,12 @@ func NewNoopRedirectionPolicy(currentClusterName string) *NoopRedirectionPolicy 
 }
 
 // WithDomainIDRedirect redirect the API call based on domain ID
-func (policy *NoopRedirectionPolicy) WithDomainIDRedirect(domainID string, apiName string, call func(string) error) error {
+func (policy *NoopRedirectionPolicy) WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
 // WithDomainNameRedirect redirect the API call based on domain name
-func (policy *NoopRedirectionPolicy) WithDomainNameRedirect(domainName string, apiName string, call func(string) error) error {
+func (policy *NoopRedirectionPolicy) WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
@@ -118,25 +121,25 @@ func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, 
 }
 
 // WithDomainIDRedirect redirect the API call based on domain ID
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainIDRedirect(domainID string, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error {
 	domainEntry, err := policy.domainCache.GetDomainByID(domainID)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(domainEntry, apiName, call)
+	return policy.withRedirect(ctx, domainEntry, apiName, call)
 }
 
 // WithDomainNameRedirect redirect the API call based on domain name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainNameRedirect(domainName string, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error {
 	domainEntry, err := policy.domainCache.GetDomain(domainName)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(domainEntry, apiName, call)
+	return policy.withRedirect(ctx, domainEntry, apiName, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(domainEntry *cache.DomainCacheEntry, apiName string, call func(string) error) error {
-	targetDC, enableDomainNotActiveForwarding := policy.getTargetClusterAndIsDomainNotActiveAutoForwarding(domainEntry, apiName)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, domainEntry *cache.DomainCacheEntry, apiName string, call func(string) error) error {
+	targetDC, enableDomainNotActiveForwarding := policy.getTargetClusterAndIsDomainNotActiveAutoForwarding(ctx, domainEntry, apiName)
 
 	err := call(targetDC)
 
@@ -155,7 +158,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) isDomainNotActiveError(er
 	return domainNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDomainNotActiveAutoForwarding(domainEntry *cache.DomainCacheEntry, apiName string) (string, bool) {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDomainNotActiveAutoForwarding(ctx context.Context, domainEntry *cache.DomainCacheEntry, apiName string) (string, bool) {
 	if !domainEntry.IsGlobalDomain() {
 		return policy.currentClusterName, false
 	}
@@ -165,8 +168,10 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDoma
 		return policy.currentClusterName, false
 	}
 
-	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) {
-		// do not do dc redirection if domain is only targeting at 1 dc (effectively local domain)
+	call := yarpc.CallFromContext(ctx)
+	enforceDCRedirection := call.Header(common.EnforceDCRedirection)
+	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) && enforceDCRedirection != "true" {
+		// do not do dc redirection if auto-forwarding dynamic config and EnforceDCRedirection context flag is not enabled
 		return policy.currentClusterName, false
 	}
 

@@ -134,7 +134,7 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) TestBase {
 	metadata := options.ClusterMetadata
 	if metadata == nil {
-		metadata = cluster.GetTestClusterMetadata(false, false, false)
+		metadata = cluster.GetTestClusterMetadata(false, false)
 	}
 	options.ClusterMetadata = metadata
 	base := TestBase{

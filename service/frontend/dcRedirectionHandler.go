@@ -205,7 +205,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -235,7 +235,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -265,7 +265,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -295,7 +295,7 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -325,7 +325,7 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -355,7 +355,7 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -384,7 +384,7 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -414,7 +414,7 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -459,7 +459,7 @@ func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -489,7 +489,7 @@ func (handler *DCRedirectionHandlerImpl) PollForDecisionTask(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -519,7 +519,7 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -554,7 +554,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -584,7 +584,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatByID(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -614,7 +614,7 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -644,7 +644,7 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -674,7 +674,7 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -709,7 +709,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 		return err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -739,7 +739,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledByID(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -774,7 +774,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 		return err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -804,7 +804,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedByID(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -839,7 +839,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 		return err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -869,7 +869,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedByID(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -904,7 +904,7 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -939,7 +939,7 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
 		return err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -974,7 +974,7 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 		return err
 	}
 
-	err = handler.redirectionPolicy.WithDomainIDRedirect(token.DomainID, apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1004,7 +1004,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1034,7 +1034,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1063,7 +1063,7 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1093,7 +1093,7 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithDomainNameRedirect(request.GetDomain(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:

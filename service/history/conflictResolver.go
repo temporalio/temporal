@@ -122,6 +122,7 @@ func (r *conflictResolverImpl) reset(
 				// if can see replication task, meaning that domain is
 				// global domain with > 1 target clusters
 				cache.ReplicationPolicyMultiCluster,
+				r.context.getDomainName(),
 			)
 
 			resetMutableStateBuilder.executionInfo.EventStoreVersion = eventStoreVersion

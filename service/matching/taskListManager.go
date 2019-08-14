@@ -47,8 +47,9 @@ const (
 
 type (
 	addTaskParams struct {
-		execution *s.WorkflowExecution
-		taskInfo  *persistence.TaskInfo
+		execution     *s.WorkflowExecution
+		taskInfo      *persistence.TaskInfo
+		forwardedFrom string
 	}
 
 	taskListManager interface {
@@ -68,7 +69,7 @@ type (
 		// DispatchQueryTask dispatches a query task to a poller. When there are no pollers
 		// to pick up the task, this method will return error. Task will not be persisted to
 		// db and no ratelimits are applied for this call
-		DispatchQueryTask(ctx context.Context, taskID string, request *matching.QueryWorkflowRequest) error
+		DispatchQueryTask(ctx context.Context, taskID string, request *matching.QueryWorkflowRequest) ([]byte, error)
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*s.PollerInfo
 		// DescribeTaskList returns information about the target tasklist
@@ -154,7 +155,11 @@ func newTaskListManager(
 	tlMgr.tryInitDomainNameAndScope()
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
-	tlMgr.matcher = newTaskMatcher(taskListConfig, tlMgr.domainScope)
+	var fwdr *Forwarder
+	if tlMgr.isFowardingAllowed(taskList, *taskListKind) {
+		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, *taskListKind, e.matchingClient, tlMgr.domainScope)
+	}
+	tlMgr.matcher = newTaskMatcher(taskListConfig, fwdr, tlMgr.domainScope)
 	tlMgr.startWG.Add(1)
 	return tlMgr, nil
 }
@@ -239,14 +244,21 @@ func (c *taskListManagerImpl) DispatchQueryTask(
 	ctx context.Context,
 	taskID string,
 	request *matching.QueryWorkflowRequest,
-) error {
+) ([]byte, error) {
 	c.startWG.Wait()
 	task := newInternalQueryTask(taskID, request)
-	_, err := c.matcher.Offer(ctx, task)
-	if err == context.DeadlineExceeded {
-		return &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
+	resp, err := c.matcher.OfferQuery(ctx, task)
+	if err != nil {
+		if err == context.DeadlineExceeded {
+			return nil, &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
+		}
+		if _, ok := err.(*s.QueryFailedError); ok {
+			// this can happen when the query is forwarded to a parent partition
+			return nil, err
+		}
+		return nil, &s.QueryFailedError{Message: err.Error()}
 	}
-	return err
+	return resp, nil
 }
 
 // GetTask blocks waiting for a task.
@@ -478,7 +490,8 @@ func (c *taskListManagerImpl) executeWithRetry(
 
 func (c *taskListManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
 	childCtx, cancel := c.newChildContext(ctx, maxSyncMatchWaitTime, time.Second)
-	matched, err := c.matcher.Offer(childCtx, newInternalTask(params.taskInfo, c.completeTask, true))
+	task := newInternalTask(params.taskInfo, c.completeTask, params.forwardedFrom, true)
+	matched, err := c.matcher.Offer(childCtx, task)
 	cancel()
 	return matched, err
 }
@@ -508,6 +521,10 @@ func (c *taskListManagerImpl) newChildContext(
 		timeout = time.Duration(common.MaxInt64(0, int64(remaining)))
 	}
 	return context.WithTimeout(parent, timeout)
+}
+
+func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind s.TaskListKind) bool {
+	return !taskList.IsRoot() && kind != s.TaskListKindSticky
 }
 
 func createServiceBusyError(msg string) *s.ServiceBusyError {

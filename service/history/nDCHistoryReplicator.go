@@ -93,7 +93,7 @@ func newNDCHistoryReplicator(
 		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
 		},
-		getNewMutableState: func(version int64, logger log.Logger) mutableState {
+		getNewMutableState: func(version int64, domainName string, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithVersionHistories(
 				shard,
 				shard.GetEventsCache(),
@@ -102,6 +102,7 @@ func newNDCHistoryReplicator(
 				// if can see replication task, meaning that domain is
 				// global domain with > 1 target clusters
 				cache.ReplicationPolicyMultiCluster,
+				domainName,
 			)
 		},
 	}
@@ -188,7 +189,7 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 ) (retError error) {
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	mutableState := r.getNewMutableState(task.getVersion(), task.getLogger())
+	mutableState := r.getNewMutableState(task.getVersion(), context.getDomainName(), task.getLogger())
 	stateBuilder := r.getNewStateBuilder(mutableState, task.getLogger())
 
 	// use state builder for workflow mutable state mutation

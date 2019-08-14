@@ -122,7 +122,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 
 	shardContext := &shardContextImpl{
 		service:                   s.mockService,
@@ -1742,7 +1742,7 @@ func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
-
+	now := time.Now()
 	return &history.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(task.TargetDomainID),
 		StartRequest: &workflow.StartWorkflowExecutionRequest{
@@ -1764,7 +1764,7 @@ func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(
 			Execution:   &execution,
 			InitiatedId: common.Int64Ptr(task.ScheduleID),
 		},
-		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), time.Now())),
+		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), now, now)),
 	}
 }
 

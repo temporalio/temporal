@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -45,6 +46,7 @@ type (
 		clusterMetadata     cluster.Metadata
 		domainReplicator    DomainReplicator
 		domainAttrValidator *domainAttrValidatorImpl
+		archivalMetadata    archiver.ArchivalMetadata
 		archiverProvider    provider.ArchiverProvider
 	}
 )
@@ -55,6 +57,7 @@ func newDomainHandler(config *Config,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
 	domainReplicator DomainReplicator,
+	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 ) *domainHandlerImpl {
 	return &domainHandlerImpl{
@@ -64,6 +67,7 @@ func newDomainHandler(config *Config,
 		clusterMetadata:     clusterMetadata,
 		domainReplicator:    domainReplicator,
 		domainAttrValidator: newDomainAttrValidator(clusterMetadata, int32(config.MinRetentionDays())),
+		archivalMetadata:    archivalMetadata,
 		archiverProvider:    archiverProvider,
 	}
 }
@@ -128,13 +132,13 @@ func (d *domainHandlerImpl) registerDomain(
 
 	currentHistoryArchivalState := neverEnabledState()
 	nextHistoryArchivalState := currentHistoryArchivalState
-	clusterHistoryArchivalConfig := d.clusterMetadata.HistoryArchivalConfig()
+	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.HistoryArchivalStatus,
 			registerRequest.GetHistoryArchivalURI(),
-			clusterHistoryArchivalConfig.DomainDefaultStatus,
-			clusterHistoryArchivalConfig.DomainDefaultURI,
+			clusterHistoryArchivalConfig.GetDomainDefaultStatus(),
+			clusterHistoryArchivalConfig.GetDomainDefaultURI(),
 		)
 		if err != nil {
 			return err
@@ -148,13 +152,13 @@ func (d *domainHandlerImpl) registerDomain(
 
 	currentVisibilityArchivalState := neverEnabledState()
 	nextVisibilityArchivalState := currentVisibilityArchivalState
-	clusterVisibilityArchivalConfig := d.clusterMetadata.VisibilityArchivalConfig()
+	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.VisibilityArchivalStatus,
 			registerRequest.GetVisibilityArchivalURI(),
-			clusterVisibilityArchivalConfig.DomainDefaultStatus,
-			clusterVisibilityArchivalConfig.DomainDefaultURI,
+			clusterVisibilityArchivalConfig.GetDomainDefaultStatus(),
+			clusterVisibilityArchivalConfig.GetDomainDefaultURI(),
 		)
 		if err != nil {
 			return err
@@ -368,10 +372,10 @@ func (d *domainHandlerImpl) updateDomain(
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
 	historyArchivalConfigChanged := false
-	clusterHistoryArchivalConfig := d.clusterMetadata.HistoryArchivalConfig()
+	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if updateRequest.Configuration != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.DomainDefaultURI)
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.GetDomainDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -387,10 +391,10 @@ func (d *domainHandlerImpl) updateDomain(
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
 	visibilityArchivalConfigChanged := false
-	clusterVisibilityArchivalConfig := d.clusterMetadata.VisibilityArchivalConfig()
+	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if updateRequest.Configuration != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.DomainDefaultURI)
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.GetDomainDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -773,26 +777,30 @@ func (d *domainHandlerImpl) toArchivalUpdateEvent(
 	return event, nil
 }
 
-func (d *domainHandlerImpl) validateHistoryArchivalURI(URI string) error {
-	scheme, err := common.GetArchivalScheme(URI)
+func (d *domainHandlerImpl) validateHistoryArchivalURI(URIString string) error {
+	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
 	}
-	archiver, err := d.archiverProvider.GetHistoryArchiver(scheme, common.FrontendServiceName)
+
+	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
 	if err != nil {
 		return err
 	}
+
 	return archiver.ValidateURI(URI)
 }
 
-func (d *domainHandlerImpl) validateVisibilityArchivalURI(URI string) error {
-	scheme, err := common.GetArchivalScheme(URI)
+func (d *domainHandlerImpl) validateVisibilityArchivalURI(URIString string) error {
+	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
 	}
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(scheme, common.FrontendServiceName)
+
+	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), common.FrontendServiceName)
 	if err != nil {
 		return err
 	}
+
 	return archiver.ValidateURI(URI)
 }

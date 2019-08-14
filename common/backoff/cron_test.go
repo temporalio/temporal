@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,41 +21,43 @@
 package backoff
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_NextCronSchedule(t *testing.T) {
-	a := assert.New(t)
+var crontests = []struct {
+	cron      string
+	startTime string
+	endTime   string
+	result    time.Duration
+}{
+	{"0 10 * * *", "2018-12-17T08:00:00-08:00", "", time.Hour * 18},
+	{"0 10 * * *", "2018-12-18T02:00:00-08:00", "", time.Hour * 24},
+	{"0 * * * *", "2018-12-17T08:08:00+00:00", "", time.Minute * 52},
+	{"0 * * * *", "2018-12-17T09:00:00+00:00", "", time.Hour},
+	{"* * * * *", "2018-12-17T08:08:18+00:00", "", time.Second * 42},
+	{"0 * * * *", "2018-12-17T09:00:00+00:00", "", time.Minute * 60},
+	{"0 10 * * *", "2018-12-17T08:00:00+00:00", "2018-12-20T00:00:00+00:00", time.Hour * 10},
+	{"0 10 * * *", "2018-12-17T08:00:00+00:00", "2018-12-17T09:00:00+00:00", time.Hour},
+	{"*/10 * * * *", "2018-12-17T00:04:00+00:00", "2018-12-17T01:02:00+00:00", time.Minute * 8},
+	{"invalid-cron-spec", "2018-12-17T00:04:00+00:00", "2018-12-17T01:02:00+00:00", NoBackoff},
+	{"@every 5h", "2018-12-17T08:00:00+00:00", "2018-12-17T09:00:00+00:00", time.Hour * 4},
+	{"@every 5h", "2018-12-17T08:00:00+00:00", "2018-12-18T00:00:00+00:00", time.Hour * 4},
+}
 
-	// every day cron
-	now, _ := time.Parse(time.RFC3339, "2018-12-17T08:00:00-08:00") // UTC: 2018-12-17 16:00:00 +0000 UTC
-	cronSpec := "0 10 * * *"
-	backoff := GetBackoffForNextSchedule(cronSpec, now)
-	a.Equal(time.Hour*18, backoff)
-	backoff = GetBackoffForNextSchedule(cronSpec, now.Add(backoff))
-	a.Equal(time.Hour*24, backoff)
-
-	// every hour cron
-	now, _ = time.Parse(time.RFC3339, "2018-12-17T08:08:00+00:00")
-	cronSpec = "0 * * * *"
-	backoff = GetBackoffForNextSchedule(cronSpec, now)
-	a.Equal(time.Minute*52, backoff)
-	backoff = GetBackoffForNextSchedule(cronSpec, now.Add(backoff))
-	a.Equal(time.Hour, backoff)
-
-	// every minute cron
-	now, _ = time.Parse(time.RFC3339, "2018-12-17T08:08:18+00:00")
-	cronSpec = "* * * * *"
-	backoff = GetBackoffForNextSchedule(cronSpec, now)
-	a.Equal(time.Second*42, backoff)
-	backoff = GetBackoffForNextSchedule(cronSpec, now.Add(backoff))
-	a.Equal(time.Minute, backoff)
-
-	// invalid cron spec
-	cronSpec = "invalid-cron-spec"
-	backoff = GetBackoffForNextSchedule(cronSpec, now)
-	a.Equal(NoBackoff, backoff)
+func TestCron(t *testing.T) {
+	for idx, tt := range crontests {
+		t.Run(strconv.Itoa(idx), func(t *testing.T) {
+			start, _ := time.Parse(time.RFC3339, tt.startTime)
+			end := start
+			if tt.endTime != "" {
+				end, _ = time.Parse(time.RFC3339, tt.endTime)
+			}
+			backoff := GetBackoffForNextSchedule(tt.cron, start, end)
+			assert.Equal(t, tt.result, backoff, "The cron spec is %s and the expected result is %s", tt.cron, tt.result)
+		})
+	}
 }

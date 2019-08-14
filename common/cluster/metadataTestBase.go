@@ -77,59 +77,29 @@ var (
 )
 
 // GetTestClusterMetadata return an cluster metadata instance, which is initialized
-func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool, enableArchival bool) Metadata {
+func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metadata {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
 	}
 
-	archivalClusterConfig := config.Archival{}
-	archivalDomainDefaults := config.ArchivalDomainDefaults{}
-	if enableArchival {
-		archivalClusterConfig = config.Archival{
-			History: config.HistoryArchival{
-				Status:                 "enabled",
-				EnableReadFromArchival: true,
-			},
-			Visibility: config.VisibilityArchival{
-				Status:                 "enabled",
-				EnableReadFromArchival: true,
-			},
-		}
-		archivalDomainDefaults = config.ArchivalDomainDefaults{
-			History: config.HistoryArchivalDomainDefaults{
-				DefaultStatus: "enabled",
-				DefaultURI:    "testScheme://test/archive/path",
-			},
-			Visibility: config.VisibilityArchivalDomainDefaults{
-				DefaultStatus: "enabled",
-				DefaultURI:    "testScheme://test/archive/path",
-			},
-		}
-	}
 	if enableGlobalDomain {
 		return NewMetadata(
 			loggerimpl.NewNopLogger(),
-			dynamicconfig.NewNopCollection(),
-			true,
+			dynamicconfig.GetBoolPropertyFn(true),
 			TestFailoverVersionIncrement,
 			masterClusterName,
 			TestCurrentClusterName,
 			TestAllClusterInfo,
-			archivalClusterConfig,
-			archivalDomainDefaults,
 		)
 	}
 
 	return NewMetadata(
 		loggerimpl.NewNopLogger(),
-		dynamicconfig.NewNopCollection(),
-		false,
+		dynamicconfig.GetBoolPropertyFn(false),
 		TestFailoverVersionIncrement,
 		TestCurrentClusterName,
 		TestCurrentClusterName,
 		TestSingleDCClusterInfo,
-		archivalClusterConfig,
-		archivalDomainDefaults,
 	)
 }

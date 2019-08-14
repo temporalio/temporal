@@ -32,7 +32,7 @@ services:
     environment:
       - discovery.type=single-node
   cadence:
-    image: ubercadence/server-es:master
+    image: ubercadence/server:master-auto-setup
     ports:
       - "7933:7933"
       - "7934:7934"

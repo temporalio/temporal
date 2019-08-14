@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -115,7 +116,7 @@ func (s *engine2Suite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
@@ -163,6 +164,7 @@ func (s *engine2Suite) SetupTest() {
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
+		throttledLogger:      s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,
@@ -194,6 +196,88 @@ func (s *engine2Suite) TearDownTest() {
 	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
+func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	stickyTl := "stickyTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo.StickyTaskList = stickyTl
+
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+
+	ms := createMutableState(msBuilder)
+
+	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{
+		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
+	}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&p.GetDomainResponse{
+			Info:   &p.DomainInfo{ID: domainID},
+			Config: &p.DomainConfig{Retention: 1},
+			ReplicationConfig: &p.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*p.ClusterReplicationConfig{
+					&p.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: p.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	request := h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr(domainID),
+		WorkflowExecution: &we,
+		ScheduleId:        common.Int64Ptr(2),
+		TaskId:            common.Int64Ptr(100),
+		RequestId:         common.StringPtr("reqId"),
+		PollRequest: &workflow.PollForDecisionTaskRequest{
+			TaskList: &workflow.TaskList{
+				Name: common.StringPtr(stickyTl),
+			},
+			Identity: common.StringPtr(identity),
+		},
+	}
+
+	expectedResponse := h.RecordDecisionTaskStartedResponse{}
+	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
+	executionInfo = msBuilder.GetExecutionInfo()
+	if executionInfo.LastProcessedEvent != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = common.Int64Ptr(executionInfo.LastProcessedEvent)
+	}
+	expectedResponse.ScheduledEventId = common.Int64Ptr(di.ScheduleID)
+	expectedResponse.StartedEventId = common.Int64Ptr(di.ScheduleID + 1)
+	expectedResponse.StickyExecutionEnabled = common.BoolPtr(false)
+	expectedResponse.NextEventId = common.Int64Ptr(msBuilder.GetNextEventID() + 1)
+	expectedResponse.Attempt = common.Int64Ptr(di.Attempt)
+	expectedResponse.WorkflowExecutionTaskList = common.TaskListPtr(workflow.TaskList{
+		Name: &executionInfo.TaskList,
+		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+	})
+	expectedResponse.EventStoreVersion = common.Int32Ptr(p.EventStoreVersionV2)
+	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
+
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
+	s.Nil(err)
+	s.NotNil(response)
+	expectedResponse.StartedTimestamp = response.StartedTimestamp
+	expectedResponse.ScheduledTimestamp = common.Int64Ptr(0)
+	s.Equal(&expectedResponse, response)
+}
+
 func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{
@@ -207,6 +291,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)

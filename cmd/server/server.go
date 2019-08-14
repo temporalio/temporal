@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
@@ -131,14 +132,11 @@ func (s *server) startService() common.Daemon {
 	clusterMetadata := s.cfg.ClusterMetadata
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
-		dc,
-		s.cfg.ClusterMetadata.EnableGlobalDomain,
+		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
-		s.cfg.Archival,
-		s.cfg.DomainDefaults.Archival,
 	)
 
 	if s.cfg.PublicClient.HostPort != "" {
@@ -177,17 +175,27 @@ func (s *server) startService() common.Daemon {
 	}
 	params.PublicClient = workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName))
 
-	configuredForHistoryArchival := params.ClusterMetadata.HistoryArchivalConfig().ClusterConfiguredForArchival()
-	configuredForVisibilityArchival := params.ClusterMetadata.VisibilityArchivalConfig().ClusterConfiguredForArchival()
-	historyArchiverProvider := s.cfg.Archival.History.ArchiverProvider
-	visibilityArchiverProvider := s.cfg.Archival.Visibility.ArchiverProvider
-	if (configuredForHistoryArchival && historyArchiverProvider == nil) || (!configuredForHistoryArchival && historyArchiverProvider != nil) {
+	params.ArchivalMetadata = archiver.NewArchivalMetadata(
+		dc,
+		s.cfg.Archival.History.Status,
+		s.cfg.Archival.History.EnableRead,
+		s.cfg.Archival.Visibility.Status,
+		s.cfg.Archival.Visibility.EnableRead,
+		&s.cfg.DomainDefaults.Archival,
+	)
+
+	configuredForHistoryArchival := params.ArchivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival()
+	historyArchiverProviderCfg := s.cfg.Archival.History.Provider
+	if (configuredForHistoryArchival && historyArchiverProviderCfg == nil) || (!configuredForHistoryArchival && historyArchiverProviderCfg != nil) {
 		log.Fatalf("invalid history archival config")
 	}
-	if (configuredForVisibilityArchival && visibilityArchiverProvider == nil) || (!configuredForVisibilityArchival && visibilityArchiverProvider != nil) {
+
+	configuredForVisibilityArchival := params.ArchivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival()
+	visibilityArchiverProviderCfg := s.cfg.Archival.Visibility.Provider
+	if (configuredForVisibilityArchival && visibilityArchiverProviderCfg == nil) || (!configuredForVisibilityArchival && visibilityArchiverProviderCfg != nil) {
 		log.Fatalf("invalid visibility archival config")
 	}
-	params.ArchiverProvider = provider.NewArchiverProvider(historyArchiverProvider, visibilityArchiverProvider)
+	params.ArchiverProvider = provider.NewArchiverProvider(historyArchiverProviderCfg, visibilityArchiverProviderCfg)
 
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 

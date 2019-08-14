@@ -69,7 +69,6 @@ func newTransferQueueActiveProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                         config.TransferProcessorStartDelay,
 		BatchSize:                          config.TransferTaskBatchSize,
 		WorkerCount:                        config.TransferTaskWorkerCount,
 		MaxPollRPS:                         config.TransferProcessorMaxPollRPS,
@@ -139,7 +138,6 @@ func newTransferQueueFailoverProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                         config.TransferProcessorFailoverStartDelay,
 		BatchSize:                          config.TransferTaskBatchSize,
 		WorkerCount:                        config.TransferTaskWorkerCount,
 		MaxPollRPS:                         config.TransferProcessorFailoverMaxPollRPS,
@@ -452,7 +450,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 		return err
 	}
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-	visibilityMemo := getVisibilityMemo(startEvent)
+	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
 
 	// release the context lock since we no longer need mutable state builder and
@@ -821,6 +819,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	}
 
 	attributes := initiatedEvent.StartChildWorkflowExecutionInitiatedEventAttributes
+	now := t.timeSource.Now()
 	// Found pending child execution and it is not marked as started
 	// Let's try and start the child execution
 	startRequest := &h.StartWorkflowExecutionRequest{
@@ -840,6 +839,8 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 			ChildPolicy:           attributes.ChildPolicy,
 			RetryPolicy:           attributes.RetryPolicy,
 			CronSchedule:          attributes.CronSchedule,
+			Memo:                  attributes.Memo,
+			SearchAttributes:      attributes.SearchAttributes,
 		},
 		ParentExecutionInfo: &h.ParentExecutionInfo{
 			DomainUUID: common.StringPtr(domainID),
@@ -850,7 +851,13 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 			},
 			InitiatedId: common.Int64Ptr(initiatedEventID),
 		},
-		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(attributes.GetCronSchedule(), t.timeSource.Now())),
+		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(
+			backoff.GetBackoffForNextScheduleInSeconds(
+				attributes.GetCronSchedule(),
+				now,
+				now,
+			),
+		),
 	}
 
 	var startResponse *workflow.StartWorkflowExecutionResponse
@@ -947,7 +954,7 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 		return err
 	}
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-	visibilityMemo := getVisibilityMemo(startEvent)
+	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 
 	// release the context lock since we no longer need mutable state builder and

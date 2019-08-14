@@ -28,6 +28,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -685,6 +686,10 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		backoff := time.Duration(0)
 		if i > 0 {
 			backoff = time.Duration(float64(initialIntervalInSeconds)*math.Pow(backoffCoefficient, float64(i-1))) * time.Second
+			// retry backoff cannot larger than MaximumIntervalInSeconds
+			if backoff > time.Second {
+				backoff = time.Second
+			}
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime() + backoff.Nanoseconds()
 		s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
@@ -840,6 +845,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	wt := "integration-wf-cron-type"
 	tl := "integration-wf-cron-tasklist"
 	identity := "worker1"
+	cronSchedule := "@every 3s"
 
 	targetBackoffDuration := time.Second * 3
 	backoffDurationTolerance := time.Millisecond * 500
@@ -860,15 +866,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
-		CronSchedule:                        common.StringPtr("@every 3s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
-		RetryPolicy: &workflow.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			MaximumAttempts:             common.Int32Ptr(5),
-			MaximumIntervalInSeconds:    common.Int32Ptr(1),
-			NonRetriableErrorReasons:    []string{"cron-test-error"},
-			BackoffCoefficient:          common.Float64Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(100),
-		},
+		CronSchedule:                        common.StringPtr(cronSchedule), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
 	}
 
 	startWorkflowTS := time.Now()
@@ -957,9 +955,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 			WorkflowId: common.StringPtr(id),
 		},
 	})
-
-	fmt.Printf("terminate_err: %v\n", terminateErr)
-
+	s.NoError(terminateErr)
 	events := s.getHistory(s.domainName, executions[0])
 	lastEvent := events[len(events)-1]
 	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
@@ -1003,11 +999,6 @@ func (s *integrationSuite) TestCronWorkflow() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-	for i := 0; i != 4; i++ {
-		executionInfo := closedExecutions[i]
-		s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
-	}
-
 	dweResponse, err := s.engine.DescribeWorkflowExecution(createContext(), &workflow.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(s.domainName),
 		Execution: &workflow.WorkflowExecution{
@@ -1018,6 +1009,19 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Nil(err)
 	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime() + 3*time.Second.Nanoseconds()
 	s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
+
+	sort.Slice(closedExecutions, func(i, j int) bool {
+		return closedExecutions[i].GetStartTime() < closedExecutions[j].GetStartTime()
+	})
+	lastExecution := closedExecutions[0]
+	for i := 1; i != 4; i++ {
+		executionInfo := closedExecutions[i]
+		// Roundup to compare on the precision of seconds
+		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
+		s.Equal(int64(0), int64(expectedBackoff)%(targetBackoffDuration.Nanoseconds()/1000000000))
+		lastExecution = executionInfo
+	}
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {
@@ -1628,6 +1632,19 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 
+	memoInfo, _ := json.Marshal("memo")
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{
+			"Info": memoInfo,
+		},
+	}
+	attrValBytes, _ := json.Marshal("attrVal")
+	searchAttr := &workflow.SearchAttributes{
+		IndexedFields: map[string][]byte{
+			"CustomKeywordField": attrValBytes,
+		},
+	}
+
 	// Parent Decider Logic
 	dtHandlerParent := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
@@ -1651,6 +1668,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
 						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 						Control:                             nil,
+						Memo:                                memo,
+						SearchAttributes:                    searchAttr,
 					},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -1742,6 +1761,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 	s.Equal(header, startedEvent.ChildWorkflowExecutionStartedEventAttributes.Header)
 	s.Equal(header, childStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
+	s.Equal(memo, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetMemo())
+	s.Equal(searchAttr, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetSearchAttributes())
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
@@ -1753,8 +1774,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(childID, *completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, *completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
-
-	s.Logger.Info("Parent Workflow Execution History: ")
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
@@ -1889,7 +1908,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	startFilter := &workflow.StartTimeFilter{}
 	startFilter.EarliestTime = common.Int64Ptr(startChildWorkflowTS.UnixNano())
-
 	for i := 0; i < 2; i++ {
 		// Sleep some time before checking the open executions.
 		// This will not cost extra time as the polling for first decision task will be blocked for 3 seconds.
@@ -1905,15 +1923,12 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		})
 		s.Nil(err)
 		s.Equal(1, len(resp.GetExecutions()))
-		executionInfo := resp.GetExecutions()[0]
-		s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
 
 		_, err = pollerChild.PollAndProcessDecisionTask(false, false)
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.Nil(err)
 
 		backoffDuration := time.Now().Sub(startChildWorkflowTS)
-		s.True(backoffDuration > targetBackoffDuration)
 		s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 		startChildWorkflowTS = time.Now()
 	}
@@ -1954,13 +1969,18 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-	for i := 0; i != 4; i++ {
+	sort.Slice(closedExecutions, func(i, j int) bool {
+		return closedExecutions[i].GetStartTime() < closedExecutions[j].GetStartTime()
+	})
+	//The first parent is not the cron workflow, only verify child workflow with cron schedule
+	lastExecution := closedExecutions[1]
+	for i := 2; i != 4; i++ {
 		executionInfo := closedExecutions[i]
-		if executionInfo.GetExecution().GetWorkflowId() == childID {
-			s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
-		} else {
-			s.Equal(executionInfo.GetExecutionTime(), executionInfo.GetStartTime())
-		}
+		// Round up the time precision to seconds
+		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
+		s.Equal(int64(0), int64(expectedBackoff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
+		lastExecution = executionInfo
 	}
 }
 

@@ -28,20 +28,25 @@ import (
 )
 
 type (
-	// ArchiveOption is used to provide options for addding features to
+	// ArchiveOption is used to provide options for adding features to
 	// the Archive method of History/Visibility Archiver
 	ArchiveOption func(featureCatalog *ArchiveFeatureCatalog)
 
 	// ArchiveFeatureCatalog is a collection features for the Archive method of
 	// History/Visibility Archiver
 	ArchiveFeatureCatalog struct {
-		ProgressManager ProgressManager
+		ProgressManager   ProgressManager
+		NonRetriableError NonRetriableError
 	}
+
+	// NonRetriableError returns an error indicating archiver has encountered an non-retriable error
+	NonRetriableError func() error
 
 	// ProgressManager is used to record and load archive progress
 	ProgressManager interface {
 		RecordProgress(ctx context.Context, progress interface{}) error
 		LoadProgress(ctx context.Context, valuePtr interface{}) error
+		HasProgress(ctx context.Context) bool
 	}
 )
 
@@ -59,20 +64,34 @@ func GetFeatureCatalog(opts ...ArchiveOption) *ArchiveFeatureCatalog {
 // It should be used when the Archive method is invoked inside an activity.
 func GetHeartbeatArchiveOption() ArchiveOption {
 	return func(catalog *ArchiveFeatureCatalog) {
-		catalog.ProgressManager = &heartbeatProgessManager{}
+		catalog.ProgressManager = &heartbeatProgressManager{}
 	}
 }
 
-type heartbeatProgessManager struct{}
+type heartbeatProgressManager struct{}
 
-func (h *heartbeatProgessManager) RecordProgress(ctx context.Context, progress interface{}) error {
+func (h *heartbeatProgressManager) RecordProgress(ctx context.Context, progress interface{}) error {
 	activity.RecordHeartbeat(ctx, progress)
 	return nil
 }
 
-func (h *heartbeatProgessManager) LoadProgress(ctx context.Context, valuePtr interface{}) error {
-	if !activity.HasHeartbeatDetails(ctx) {
-		return errors.New("no progess information in the context")
+func (h *heartbeatProgressManager) LoadProgress(ctx context.Context, valuePtr interface{}) error {
+	if !h.HasProgress(ctx) {
+		return errors.New("no progress information in the context")
 	}
 	return activity.GetHeartbeatDetails(ctx, valuePtr)
+}
+
+func (h *heartbeatProgressManager) HasProgress(ctx context.Context) bool {
+	return activity.HasHeartbeatDetails(ctx)
+}
+
+// GetNonRetriableErrorOption returns an ArchiveOption so that archiver knows what should
+// be returned when an non-retryable error is encountered.
+func GetNonRetriableErrorOption(nonRetryableErr error) ArchiveOption {
+	return func(catalog *ArchiveFeatureCatalog) {
+		catalog.NonRetriableError = func() error {
+			return nonRetryableErr
+		}
+	}
 }

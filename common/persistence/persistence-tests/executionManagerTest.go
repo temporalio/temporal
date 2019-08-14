@@ -1085,6 +1085,12 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		testSearchAttrKey: testSearchAttrVal,
 	}
 
+	testMemoKey := "memoKey"
+	testMemoVal, _ := json.Marshal("memoVal")
+	testMemo := map[string][]byte{
+		testMemoKey: testMemoVal,
+	}
+
 	createReq := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
@@ -1123,6 +1129,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				ExpirationSeconds:    rand.Int31(),
 				AutoResetPoints:      &testResetPoints,
 				SearchAttributes:     testSearchAttr,
+				Memo:                 testMemo,
 			},
 			ExecutionStats: &p.ExecutionStats{
 				HistorySize: int64(rand.Int31()),
@@ -1190,6 +1197,9 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	val, ok := info.SearchAttributes[testSearchAttrKey]
 	s.True(ok)
 	s.Equal(testSearchAttrVal, val)
+	val, ok = info.Memo[testMemoKey]
+	s.True(ok)
+	s.Equal(testMemoVal, val)
 
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteEventID, state.ReplicationState.LastWriteEventID)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteVersion, state.ReplicationState.LastWriteVersion)
@@ -1240,6 +1250,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(0), info0.DecisionAttempt)
 	s.Equal(int64(0), info0.DecisionStartedTimestamp)
 	s.Equal(int64(0), info0.DecisionScheduledTimestamp)
+	s.Equal(int64(0), info0.DecisionOriginalScheduledTimestamp)
 	s.Empty(info0.StickyTaskList)
 	s.Equal(int32(0), info0.StickyScheduleToStartTimeout)
 	s.Empty(info0.ClientLibraryVersion)
@@ -1248,6 +1259,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int32(0), info0.SignalCount)
 	s.True(info0.AutoResetPoints.Equals(&gen.ResetPoints{}))
 	s.True(len(info0.SearchAttributes) == 0)
+	s.True(len(info0.Memo) == 0)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -1260,6 +1272,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.DecisionAttempt = int64(123)
 	updatedInfo.DecisionStartedTimestamp = int64(321)
 	updatedInfo.DecisionScheduledTimestamp = int64(654)
+	updatedInfo.DecisionOriginalScheduledTimestamp = int64(655)
 	updatedInfo.StickyTaskList = "random sticky tasklist"
 	updatedInfo.StickyScheduleToStartTimeout = 876
 	updatedInfo.ClientLibraryVersion = "random client library version"
@@ -1276,6 +1289,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrKey := "env"
 	searchAttrVal := []byte("test")
 	updatedInfo.SearchAttributes = map[string][]byte{searchAttrKey: searchAttrVal}
+	memoKey := "memoKey"
+	memoVal := []byte("memoVal")
+	updatedInfo.Memo = map[string][]byte{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
@@ -1306,6 +1322,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(123), info1.DecisionAttempt)
 	s.Equal(int64(321), info1.DecisionStartedTimestamp)
 	s.Equal(int64(654), info1.DecisionScheduledTimestamp)
+	s.Equal(int64(655), info1.DecisionOriginalScheduledTimestamp)
 	s.Equal(updatedInfo.StickyTaskList, info1.StickyTaskList)
 	s.Equal(updatedInfo.StickyScheduleToStartTimeout, info1.StickyScheduleToStartTimeout)
 	s.Equal(updatedInfo.ClientLibraryVersion, info1.ClientLibraryVersion)
@@ -1323,6 +1340,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal1)
+	memoVal1, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal1)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
@@ -1357,6 +1377,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(123), info2.DecisionAttempt)
 	s.Equal(int64(321), info2.DecisionStartedTimestamp)
 	s.Equal(int64(654), info2.DecisionScheduledTimestamp)
+	s.Equal(int64(655), info2.DecisionOriginalScheduledTimestamp)
 	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state2.ExecutionStats.HistorySize)
 	s.Equal(updatedInfo.InitialInterval, info2.InitialInterval)
@@ -1369,7 +1390,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal2)
-
+	memoVal2, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal2)
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
 	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateStats, nil, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
@@ -1401,6 +1424,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int64(123), info3.DecisionAttempt)
 	s.Equal(int64(321), info3.DecisionStartedTimestamp)
 	s.Equal(int64(654), info3.DecisionScheduledTimestamp)
+	s.Equal(int64(655), info3.DecisionOriginalScheduledTimestamp)
 	s.Equal(updatedInfo.SignalCount, info3.SignalCount)
 	s.EqualValues(updatedStats.HistorySize, state3.ExecutionStats.HistorySize)
 	s.Equal(updatedInfo.InitialInterval, info3.InitialInterval)
@@ -1413,6 +1437,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal3)
+	memoVal3, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal3)
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
@@ -1457,6 +1484,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal4)
+	memoVal4, ok := info1.Memo[memoKey]
+	s.True(ok)
+	s.Equal(memoVal, memoVal4)
 
 	log.Infof("Workflow execution last updated: %v", info4.LastUpdatedTimestamp)
 }
@@ -4352,7 +4382,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 }
 
-// TestConflictResolveWorkflowExecutionWithTransactionCurrentIsNotSelfWithContinueAsNew test
+// TestConflictResolveWorkflowExecutionWithTransactionCurrentIsSelfWithContinueAsNew test
 func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransactionCurrentIsSelfWithContinueAsNew() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-self-with-continue-as-new"

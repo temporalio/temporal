@@ -51,7 +51,6 @@ type (
 		clusterName             string
 		timerGate               RemoteTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
-		timerQueueAckMgr        timerQueueAckMgr
 		historyRereplicator     xdc.HistoryRereplicator
 	}
 )
@@ -105,10 +104,8 @@ func newTimerQueueStandbyProcessor(
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
-			shard.GetConfig().TimerProcessorStartDelay,
 			logger,
 		),
-		timerQueueAckMgr:    timerQueueAckMgr,
 		historyRereplicator: historyRereplicator,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
@@ -140,6 +137,14 @@ func (t *timerQueueStandbyProcessorImpl) retryTasks() {
 
 func (t *timerQueueStandbyProcessorImpl) getTaskFilter() timerTaskFilter {
 	return t.timerTaskFilter
+}
+
+func (t *timerQueueStandbyProcessorImpl) getAckLevel() TimerSequenceID {
+	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
+}
+
+func (t *timerQueueStandbyProcessorImpl) getReadLevel() TimerSequenceID {
+	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.
@@ -595,7 +600,7 @@ func (t *timerQueueStandbyProcessorImpl) discardTask(
 ) bool {
 
 	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
-	// so discard will be true if task is delayed by 2*t.shard.GetConfig().StandbyClusterDelay()
+	// so discard will be true if task is delayed by 4*t.shard.GetConfig().StandbyClusterDelay()
 	now := t.shard.GetCurrentTime(t.clusterName)
-	return now.Sub(timerTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
+	return now.Sub(timerTask.GetVisibilityTimestamp()) > 3*t.shard.GetConfig().StandbyClusterDelay()
 }

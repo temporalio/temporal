@@ -131,6 +131,7 @@ const (
 	FlagNameWithAlias                     = FlagName + ", n"
 	FlagOutputFilename                    = "output_filename"
 	FlagOutputFilenameWithAlias           = FlagOutputFilename + ", of"
+	FlagOutputFormat                      = "output"
 	FlagQueryType                         = "query_type"
 	FlagQueryTypeWithAlias                = FlagQueryType + ", qt"
 	FlagShowDetail                        = "show_detail"

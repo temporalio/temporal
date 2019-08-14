@@ -67,7 +67,6 @@ type (
 		mockProducer             *mocks.KafkaProducer
 		mockClientBean           *client.MockClientBean
 		mockMessagingClient      messaging.Client
-		mocktimerQueueAckMgr     *MockTimerQueueAckMgr
 		mockService              service.Service
 		mockEventsCache          *MockEventsCache
 		mockTxProcessor          *MockTransferQueueProcessor
@@ -123,13 +122,20 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
 	s.mockEventsCache = &MockEventsCache{}
 
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger)
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
+		service: s.mockService,
+		shardInfo: &persistence.ShardInfo{
+			ShardID:                 shardID,
+			RangeID:                 1,
+			TransferAckLevel:        0,
+			ClusterTransferAckLevel: make(map[string]int64),
+			ClusterTimerAckLevel:    make(map[string]time.Time),
+			TransferFailoverLevels:  make(map[string]persistence.TransferFailoverLevel),
+			TimerFailoverLevels:     make(map[string]persistence.TimerFailoverLevel)},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
@@ -180,8 +186,6 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestCurrentClusterName
 	s.timerQueueActiveProcessor = newTimerQueueActiveProcessor(s.mockShard, h, s.mockMatchingClient, newTaskAllocator(s.mockShard), s.logger)
-	s.mocktimerQueueAckMgr = &MockTimerQueueAckMgr{}
-	s.timerQueueActiveProcessor.timerQueueAckMgr = s.mocktimerQueueAckMgr
 
 	s.domainID = testDomainActiveID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
@@ -361,6 +365,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	schedule := "@every 30s"
 
 	builder := newMutableStateBuilderWithEventV2(s.mockShard, s.mockEventsCache, s.logger, we.GetRunId())
+	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Maybe()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything).Return().Once()
 	startRequest := &workflow.StartWorkflowExecutionRequest{
@@ -413,7 +418,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(0),
 		},
 	}
-	s.mockEventsCache.On("getEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(startedEvent, nil).Times(3)
+	s.mockEventsCache.On("getEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(startedEvent, nil).Times(4)
 
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}

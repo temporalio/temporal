@@ -98,6 +98,7 @@ type (
 		clientWorker        archiver.ClientWorker
 		indexer             *indexer.Indexer
 		enableEventsV2      bool
+		archiverMetadata    carchiver.ArchivalMetadata
 		archiverProvider    provider.ArchiverProvider
 		historyConfig       *HistoryConfig
 		esConfig            *elasticsearch.Config
@@ -130,7 +131,8 @@ type (
 		Logger                        log.Logger
 		ClusterNo                     int
 		EnableEventsV2                bool
-		archiverProvider              provider.ArchiverProvider
+		ArchiverMetadata              carchiver.ArchivalMetadata
+		ArchiverProvider              provider.ArchiverProvider
 		EnableReadHistoryFromArchival bool
 		HistoryConfig                 *HistoryConfig
 		ESConfig                      *elasticsearch.Config
@@ -165,7 +167,8 @@ func NewCadence(params *CadenceParams) Cadence {
 		enableEventsV2:      params.EnableEventsV2,
 		esConfig:            params.ESConfig,
 		esClient:            params.ESClient,
-		archiverProvider:    params.archiverProvider,
+		archiverMetadata:    params.ArchiverMetadata,
+		archiverProvider:    params.ArchiverProvider,
 		historyConfig:       params.HistoryConfig,
 		workerConfig:        params.WorkerConfig,
 	}
@@ -398,6 +401,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
 	// TODO when cross DC is public, remove this temporary override
@@ -431,11 +435,14 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		ClusterMetadata:  c.clusterMetadata,
 		DomainCache:      domainCache,
 	}
-	c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	err = c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		c.logger.Fatal("Failed to register archiver bootstrap container for frontend service", tag.Error(err))
+	}
 
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
-		c.visibilityMgr, kafkaProducer, domainCache, c.archiverProvider)
+		c.visibilityMgr, kafkaProducer, domainCache)
 	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 
@@ -478,6 +485,8 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 			c.logger.Fatal("Failed to get dispatcher for frontend", tag.Error(err))
 		}
 		params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
+		params.ArchivalMetadata = c.archiverMetadata
+		params.ArchiverProvider = c.archiverProvider
 
 		service := service.New(params)
 		hConfig := c.historyConfig
@@ -502,10 +511,13 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 			ClusterMetadata:  c.clusterMetadata,
 			DomainCache:      domainCache,
 		}
-		c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+		err = c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+		if err != nil {
+			c.logger.Fatal("Failed to register archiver bootstrap container for history service", tag.Error(err))
+		}
 
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
-			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, domainCache, params.PublicClient, c.archiverProvider)
+			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory, domainCache, params.PublicClient)
 		handler.RegisterHandler()
 
 		service.Start()
@@ -568,6 +580,8 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.ArchivalMetadata = c.archiverMetadata
+	params.ArchiverProvider = c.archiverProvider
 
 	dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, c.FrontendAddress())
 	if err != nil {
@@ -638,7 +652,10 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 		ClusterMetadata:  c.clusterMetadata,
 		DomainCache:      domainCache,
 	}
-	c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	err := c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		c.logger.Fatal("Failed to register archiver bootstrap container for worker service", tag.Error(err))
+	}
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     params.PublicClient,

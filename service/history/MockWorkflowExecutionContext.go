@@ -24,10 +24,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber/cadence/common/log"
-
 	"github.com/stretchr/testify/mock"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -40,6 +39,21 @@ var _ workflowExecutionContext = (*mockWorkflowExecutionContext)(nil)
 
 func (_m *mockWorkflowExecutionContext) clear() {
 	_m.Called()
+}
+
+func (_m *mockWorkflowExecutionContext) getDomainName() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(string)
+		}
+	}
+
+	return r0
 }
 
 func (_m *mockWorkflowExecutionContext) getDomainID() string {
@@ -307,4 +321,19 @@ func (_m *mockWorkflowExecutionContext) persistNonFirstWorkflowEvents(_a0 *persi
 	}
 
 	return r0, r1
+}
+
+func (_m *mockWorkflowExecutionContext) getWorkflowWatcher() WorkflowWatcher {
+	ret := _m.Called()
+
+	var r0 WorkflowWatcher
+	if rf, ok := ret.Get(0).(func() WorkflowWatcher); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(WorkflowWatcher)
+		}
+	}
+
+	return r0
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -75,6 +76,7 @@ type (
 		DispatcherProvider  client.DispatcherProvider
 		DCRedirectionPolicy config.DCRedirectionPolicy
 		PublicClient        workflowserviceclient.Interface
+		ArchivalMetadata    archiver.ArchivalMetadata
 		ArchiverProvider    provider.ArchiverProvider
 	}
 
@@ -98,7 +100,7 @@ type (
 		clientBean            client.Bean
 		timeSource            clock.TimeSource
 		numberOfHistoryShards int
-		//New logger we are in favor of
+		// New logger we are in favor of
 		logger          log.Logger
 		throttledLogger log.Logger
 
@@ -109,6 +111,8 @@ type (
 		messagingClient        messaging.Client
 		dynamicCollection      *dynamicconfig.Collection
 		dispatcherProvider     client.DispatcherProvider
+		archivalMetadata       archiver.ArchivalMetadata
+		archiverProvider       provider.ArchiverProvider
 	}
 )
 
@@ -133,6 +137,8 @@ func New(params *BootstrapParams) Service {
 		messagingClient:       params.MessagingClient,
 		dispatcherProvider:    params.DispatcherProvider,
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+		archivalMetadata:      params.ArchivalMetadata,
+		archiverProvider:      params.ArchiverProvider,
 	}
 
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)
@@ -197,7 +203,7 @@ func (h *serviceImpl) Start() {
 	h.hostInfo = hostInfo
 
 	h.clientBean, err = client.NewClientBean(
-		client.NewRPCClientFactory(h.rpcFactory, h.membershipMonitor, h.metricsClient, h.numberOfHistoryShards),
+		client.NewRPCClientFactory(h.rpcFactory, h.membershipMonitor, h.metricsClient, h.dynamicCollection, h.numberOfHistoryShards),
 		h.dispatcherProvider,
 		h.clusterMetadata,
 	)
@@ -268,6 +274,14 @@ func (h *serviceImpl) GetClusterMetadata() cluster.Metadata {
 // GetMessagingClient returns the messaging client against Kafka
 func (h *serviceImpl) GetMessagingClient() messaging.Client {
 	return h.messagingClient
+}
+
+func (h *serviceImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
+	return h.archivalMetadata
+}
+
+func (h *serviceImpl) GetArchiverProvider() provider.ArchiverProvider {
+	return h.archiverProvider
 }
 
 // GetMetricsServiceIdx returns the metrics name

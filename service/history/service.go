@@ -52,6 +52,7 @@ type Config struct {
 	EnableVisibilityToKafka         dynamicconfig.BoolPropertyFn
 	EmitShardDiffLog                dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints              dynamicconfig.IntPropertyFnWithDomainFilter
+	ThrottledLogRPS                 dynamicconfig.IntPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -76,8 +77,6 @@ type Config struct {
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
 	TimerTaskWorkerCount                             dynamicconfig.IntPropertyFn
 	TimerTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
-	TimerProcessorStartDelay                         dynamicconfig.DurationPropertyFn
-	TimerProcessorFailoverStartDelay                 dynamicconfig.DurationPropertyFn
 	TimerProcessorGetFailureRetryCount               dynamicconfig.IntPropertyFn
 	TimerProcessorCompleteTimerFailureRetryCount     dynamicconfig.IntPropertyFn
 	TimerProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
@@ -95,8 +94,6 @@ type Config struct {
 	TransferTaskBatchSize                               dynamicconfig.IntPropertyFn
 	TransferTaskWorkerCount                             dynamicconfig.IntPropertyFn
 	TransferTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
-	TransferProcessorStartDelay                         dynamicconfig.DurationPropertyFn
-	TransferProcessorFailoverStartDelay                 dynamicconfig.DurationPropertyFn
 	TransferProcessorCompleteTransferFailureRetryCount  dynamicconfig.IntPropertyFn
 	TransferProcessorFailoverMaxPollRPS                 dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
@@ -110,7 +107,6 @@ type Config struct {
 	ReplicatorTaskBatchSize                               dynamicconfig.IntPropertyFn
 	ReplicatorTaskWorkerCount                             dynamicconfig.IntPropertyFn
 	ReplicatorTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
-	ReplicatorProcessorStartDelay                         dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
@@ -139,9 +135,11 @@ type Config struct {
 	// whether or not using eventsV2
 	EnableEventsV2 dynamicconfig.BoolPropertyFnWithDomainFilter
 
+	// Archival settings
 	NumArchiveSystemWorkflows dynamicconfig.IntPropertyFn
 	ArchiveRequestRPS         dynamicconfig.IntPropertyFn
 
+	// Size limit related settings
 	BlobSizeLimitError     dynamicconfig.IntPropertyFnWithDomainFilter
 	BlobSizeLimitWarn      dynamicconfig.IntPropertyFnWithDomainFilter
 	HistorySizeLimitError  dynamicconfig.IntPropertyFnWithDomainFilter
@@ -149,13 +147,21 @@ type Config struct {
 	HistoryCountLimitError dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryCountLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
 
-	ThrottledLogRPS dynamicconfig.IntPropertyFn
-
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes             dynamicconfig.MapPropertyFn
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithDomainFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithDomainFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithDomainFilter
+
+	// Decision settings
+	// StickyTTL is to expire a sticky tasklist if no update more than this duration
+	// TODO https://github.com/uber/cadence/issues/2357
+	StickyTTL dynamicconfig.DurationPropertyFnWithDomainFilter
+	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
+	// So that decision will be scheduled to another worker(by clear stickyness)
+	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithDomainFilter
+	// MaxDecisionStartToCloseSeconds is the StartToCloseSeconds for decision
+	MaxDecisionStartToCloseSeconds dynamicconfig.IntPropertyFnWithDomainFilter
 }
 
 const (
@@ -174,6 +180,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		VisibilityOpenMaxQPS:                                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:                                dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
 		MaxAutoResetPoints:                                    dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryMaxAutoResetPoints, defaultHistoryMaxAutoResetPoints),
+		MaxDecisionStartToCloseSeconds:                        dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseSeconds, 240),
 		EnableVisibilityToKafka:                               dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
 		EmitShardDiffLog:                                      dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
 		HistoryCacheInitialSize:                               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
@@ -188,8 +195,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		TimerTaskBatchSize:                                    dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                                  dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
 		TimerTaskMaxRetryCount:                                dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 100),
-		TimerProcessorStartDelay:                              dc.GetDurationProperty(dynamicconfig.TimerProcessorStartDelay, 1*time.Microsecond),
-		TimerProcessorFailoverStartDelay:                      dc.GetDurationProperty(dynamicconfig.TimerProcessorFailoverStartDelay, 5*time.Second),
 		TimerProcessorGetFailureRetryCount:                    dc.GetIntProperty(dynamicconfig.TimerProcessorGetFailureRetryCount, 5),
 		TimerProcessorCompleteTimerFailureRetryCount:          dc.GetIntProperty(dynamicconfig.TimerProcessorCompleteTimerFailureRetryCount, 10),
 		TimerProcessorUpdateAckInterval:                       dc.GetDurationProperty(dynamicconfig.TimerProcessorUpdateAckInterval, 30*time.Second),
@@ -200,15 +205,13 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		TimerProcessorMaxPollInterval:                         dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxPollInterval, 5*time.Minute),
 		TimerProcessorMaxPollIntervalJitterCoefficient:        dc.GetFloat64Property(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		TimerProcessorMaxTimeShift:                            dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxTimeShift, 1*time.Second),
-		TimerProcessorHistoryArchivalSizeLimit:                dc.GetIntProperty(dynamicconfig.TimerProcessorHistoryArchivalSizeLimit, 2*1024*1024),
+		TimerProcessorHistoryArchivalSizeLimit:                dc.GetIntProperty(dynamicconfig.TimerProcessorHistoryArchivalSizeLimit, 500*1024),
 		TimerProcessorHistoryArchivalTimeLimit:                dc.GetDurationProperty(dynamicconfig.TimerProcessorHistoryArchivalTimeLimit, 1*time.Second),
 		TransferTaskBatchSize:                                 dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
 		TransferProcessorFailoverMaxPollRPS:                   dc.GetIntProperty(dynamicconfig.TransferProcessorFailoverMaxPollRPS, 1),
 		TransferProcessorMaxPollRPS:                           dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollRPS, 20),
 		TransferTaskWorkerCount:                               dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
 		TransferTaskMaxRetryCount:                             dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 100),
-		TransferProcessorStartDelay:                           dc.GetDurationProperty(dynamicconfig.TransferProcessorStartDelay, 1*time.Microsecond),
-		TransferProcessorFailoverStartDelay:                   dc.GetDurationProperty(dynamicconfig.TransferProcessorFailoverStartDelay, 5*time.Second),
 		TransferProcessorCompleteTransferFailureRetryCount:    dc.GetIntProperty(dynamicconfig.TransferProcessorCompleteTransferFailureRetryCount, 10),
 		TransferProcessorMaxPollInterval:                      dc.GetDurationProperty(dynamicconfig.TransferProcessorMaxPollInterval, 1*time.Minute),
 		TransferProcessorMaxPollIntervalJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
@@ -218,7 +221,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		ReplicatorTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
 		ReplicatorTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
-		ReplicatorProcessorStartDelay:                         dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorStartDelay, 1*time.Microsecond),
 		ReplicatorProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxPollRPS, 20),
 		ReplicatorProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
@@ -240,18 +242,20 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, enableVisibilit
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
 
 		BlobSizeLimitError:     dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 256*1024),
+		BlobSizeLimitWarn:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 512*1024),
 		HistorySizeLimitError:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistorySizeLimitError, 200*1024*1024),
 		HistorySizeLimitWarn:   dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistorySizeLimitWarn, 50*1024*1024),
 		HistoryCountLimitError: dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitError, 200*1024),
 		HistoryCountLimitWarn:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitWarn, 50*1024),
 
-		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 20),
+		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 
 		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
+		StickyTTL:                         dc.GetDurationPropertyFilteredByDomain(dynamicconfig.StickyTTL, time.Hour*24*365),
+		DecisionHeartbeatTimeout:          dc.GetDurationPropertyFilteredByDomain(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
 	}
 
 	return cfg
@@ -355,9 +359,12 @@ func (s *Service) Start() {
 		ClusterMetadata:  base.GetClusterMetadata(),
 		DomainCache:      domainCache,
 	}
-	params.ArchiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	err = params.ArchiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	if err != nil {
+		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
+	}
 
-	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, domainCache, params.PublicClient, params.ArchiverProvider)
+	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, history, historyV2, pFactory, domainCache, params.PublicClient)
 	handler.RegisterHandler()
 
 	// must start base service first
