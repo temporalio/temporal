@@ -371,7 +371,10 @@ type (
 
 // Validate validates this config
 func (c *Config) Validate() error {
-	return c.Persistence.Validate()
+	if err := c.Persistence.Validate(); err != nil {
+		return err
+	}
+	return c.Archival.Validate(&c.DomainDefaults.Archival)
 }
 
 // String converts the config object into a string
