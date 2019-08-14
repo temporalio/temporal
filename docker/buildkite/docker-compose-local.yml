@@ -81,7 +81,7 @@ services:
       - cassandra
       - mysql
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
     networks:
       services-network:
         aliases:
@@ -112,7 +112,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
     networks:
       services-network:
         aliases:
@@ -144,7 +144,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
     networks:
       services-network:
         aliases:
@@ -175,7 +175,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
     networks:
       services-network:
         aliases:
@@ -206,7 +206,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
     networks:
       services-network:
         aliases:
@@ -238,7 +238,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
     networks:
       services-network:
         aliases:

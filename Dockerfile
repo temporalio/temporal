@@ -1,18 +1,23 @@
 ARG TARGET=server
 
+# Can be used in case a proxy is necessary
+ARG GOPROXY
+
 # Build Cadence binaries
 FROM golang:1.12.7-alpine AS builder
 
 RUN apk add --update --no-cache ca-certificates make git curl mercurial bzr
 
-WORKDIR /go/src/github.com/uber/cadence
+WORKDIR /cadence
 
-RUN curl https://raw.githubusercontent.com/golang/dep/master/install.sh | INSTALL_DIRECTORY=/usr/local/bin sh
-COPY Gopkg.* ./
-RUN dep ensure -v -vendor-only
+# Making sure that dependency is not touched
+ENV GOFLAGS="-mod=readonly"
+
+# Copy go mod dependencies and build cache
+COPY go.* .
+RUN go mod download
 
 COPY . .
-RUN sed -i 's/dep-ensured//g' Makefile
 RUN CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
 
@@ -46,11 +51,11 @@ ENV CADENCE_HOME /etc/cadence
 RUN mkdir -p /etc/cadence
 
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
-COPY --from=builder /go/src/github.com/uber/cadence/cadence-cassandra-tool /usr/local/bin
-COPY --from=builder /go/src/github.com/uber/cadence/cadence-sql-tool /usr/local/bin
-COPY --from=builder /go/src/github.com/uber/cadence/cadence /usr/local/bin
-COPY --from=builder /go/src/github.com/uber/cadence/cadence-server /usr/local/bin
-COPY --from=builder /go/src/github.com/uber/cadence/schema /etc/cadence/schema
+COPY --from=builder /cadence/cadence-cassandra-tool /usr/local/bin
+COPY --from=builder /cadence/cadence-sql-tool /usr/local/bin
+COPY --from=builder /cadence/cadence /usr/local/bin
+COPY --from=builder /cadence/cadence-server /usr/local/bin
+COPY --from=builder /cadence/schema /etc/cadence/schema
 
 COPY docker/entrypoint.sh /docker-entrypoint.sh
 COPY config/dynamicconfig /etc/cadence/config/dynamicconfig
@@ -79,7 +84,7 @@ CMD /start.sh
 # Cadence CLI
 FROM alpine AS cadence-cli
 
-COPY --from=builder /go/src/github.com/uber/cadence/cadence /usr/local/bin
+COPY --from=builder /cadence/cadence /usr/local/bin
 
 ENTRYPOINT ["cadence"]
 

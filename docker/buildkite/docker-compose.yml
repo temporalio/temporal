@@ -79,7 +79,7 @@ services:
       - cassandra
       - mysql
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -109,7 +109,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -140,7 +140,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -170,7 +170,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -201,7 +201,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/go/src/github.com/uber/cadence
+      - ../../:/cadence
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
