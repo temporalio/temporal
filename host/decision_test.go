@@ -23,11 +23,263 @@ package host
 import (
 	"encoding/json"
 	"strconv"
+	"time"
 
 	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 )
+
+func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
+	id := uuid.New()
+	wt := "interation-workflow-decision-heartbeating-local-activities"
+	tl := id
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{
+		Name: common.StringPtr(tl),
+		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+	}
+	stikyTaskList := &workflow.TaskList{
+		Name: common.StringPtr("test-sticky-tasklist"),
+		Kind: common.TaskListKindPtr(workflow.TaskListKindSticky),
+	}
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(20),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(3),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	we := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      resp0.RunId,
+	}
+
+	s.assertLastHistoryEvent(we, 2, workflow.EventTypeDecisionTaskScheduled)
+
+	// start decision
+	resp1, err1 := s.engine.PollForDecisionTask(createContext(), &workflow.PollForDecisionTaskRequest{
+		Domain:   common.StringPtr(s.domainName),
+		TaskList: taskList,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err1)
+
+	s.Equal(int64(0), resp1.GetAttempt())
+	s.assertLastHistoryEvent(we, 3, workflow.EventTypeDecisionTaskStarted)
+
+	taskToken := resp1.GetTaskToken()
+	hbTimeout := 0
+	for i := 0; i < 12; i++ {
+		resp2, err2 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken: taskToken,
+			Decisions: []*workflow.Decision{},
+			StickyAttributes: &workflow.StickyExecutionAttributes{
+				WorkerTaskList:                stikyTaskList,
+				ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+			},
+			ReturnNewDecisionTask:      common.BoolPtr(true),
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+		})
+		if _, ok := err2.(*workflow.EntityNotExistsError); ok {
+			hbTimeout++
+			s.Nil(resp2)
+
+			resp, err := s.engine.PollForDecisionTask(createContext(), &workflow.PollForDecisionTaskRequest{
+				Domain:   common.StringPtr(s.domainName),
+				TaskList: taskList,
+				Identity: common.StringPtr(identity),
+			})
+			s.Nil(err)
+			taskToken = resp.GetTaskToken()
+		} else {
+			s.Nil(err2)
+			taskToken = resp2.DecisionTask.GetTaskToken()
+		}
+		time.Sleep(time.Second)
+	}
+
+	s.Equal(2, hbTimeout)
+
+	resp5, err5 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken: taskToken,
+		Decisions: []*workflow.Decision{
+			&workflow.Decision{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+				CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+					Result: []byte("efg"),
+				},
+			},
+		},
+		StickyAttributes: &workflow.StickyExecutionAttributes{
+			WorkerTaskList:                stikyTaskList,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+		},
+		ReturnNewDecisionTask:      common.BoolPtr(true),
+		ForceCreateNewDecisionTask: common.BoolPtr(false),
+	})
+	s.Nil(err5)
+	s.Nil(resp5.DecisionTask)
+
+	s.assertLastHistoryEvent(we, 41, workflow.EventTypeWorkflowExecutionCompleted)
+}
+
+func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
+	id := uuid.New()
+	wt := "interation-workflow-decision-heartbeating-local-activities"
+	tl := id
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{
+		Name: common.StringPtr(tl),
+		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+	}
+	stikyTaskList := &workflow.TaskList{
+		Name: common.StringPtr("test-sticky-tasklist"),
+		Kind: common.TaskListKindPtr(workflow.TaskListKindSticky),
+	}
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(20),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(5),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	we := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      resp0.RunId,
+	}
+
+	s.assertLastHistoryEvent(we, 2, workflow.EventTypeDecisionTaskScheduled)
+
+	// start decision
+	resp1, err1 := s.engine.PollForDecisionTask(createContext(), &workflow.PollForDecisionTaskRequest{
+		Domain:   common.StringPtr(s.domainName),
+		TaskList: taskList,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err1)
+
+	s.Equal(int64(0), resp1.GetAttempt())
+	s.assertLastHistoryEvent(we, 3, workflow.EventTypeDecisionTaskStarted)
+
+	resp2, err2 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken: resp1.GetTaskToken(),
+		Decisions: []*workflow.Decision{},
+		StickyAttributes: &workflow.StickyExecutionAttributes{
+			WorkerTaskList:                stikyTaskList,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+		},
+		ReturnNewDecisionTask:      common.BoolPtr(true),
+		ForceCreateNewDecisionTask: common.BoolPtr(true),
+	})
+	s.Nil(err2)
+
+	resp3, err3 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken: resp2.DecisionTask.GetTaskToken(),
+		Decisions: []*workflow.Decision{
+			&workflow.Decision{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRecordMarker),
+				RecordMarkerDecisionAttributes: &workflow.RecordMarkerDecisionAttributes{
+					MarkerName: common.StringPtr("localActivity1"),
+					Details:    []byte("abc"),
+				},
+			},
+		},
+		StickyAttributes: &workflow.StickyExecutionAttributes{
+			WorkerTaskList:                stikyTaskList,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+		},
+		ReturnNewDecisionTask:      common.BoolPtr(true),
+		ForceCreateNewDecisionTask: common.BoolPtr(true),
+	})
+	s.Nil(err3)
+
+	resp4, err4 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken: resp3.DecisionTask.GetTaskToken(),
+		Decisions: []*workflow.Decision{
+			&workflow.Decision{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRecordMarker),
+				RecordMarkerDecisionAttributes: &workflow.RecordMarkerDecisionAttributes{
+					MarkerName: common.StringPtr("localActivity2"),
+					Details:    []byte("abc"),
+				},
+			},
+		},
+		StickyAttributes: &workflow.StickyExecutionAttributes{
+			WorkerTaskList:                stikyTaskList,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+		},
+		ReturnNewDecisionTask:      common.BoolPtr(true),
+		ForceCreateNewDecisionTask: common.BoolPtr(true),
+	})
+	s.Nil(err4)
+
+	resp5, err5 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken: resp4.DecisionTask.GetTaskToken(),
+		Decisions: []*workflow.Decision{
+			&workflow.Decision{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+				CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+					Result: []byte("efg"),
+				},
+			},
+		},
+		StickyAttributes: &workflow.StickyExecutionAttributes{
+			WorkerTaskList:                stikyTaskList,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+		},
+		ReturnNewDecisionTask:      common.BoolPtr(true),
+		ForceCreateNewDecisionTask: common.BoolPtr(false),
+	})
+	s.Nil(err5)
+	s.Nil(resp5.DecisionTask)
+
+	expectedHistory := []workflow.EventType{
+		workflow.EventTypeWorkflowExecutionStarted,
+		workflow.EventTypeDecisionTaskScheduled,
+		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskCompleted,
+		workflow.EventTypeDecisionTaskScheduled,
+		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskCompleted,
+		workflow.EventTypeMarkerRecorded,
+		workflow.EventTypeDecisionTaskScheduled,
+		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskCompleted,
+		workflow.EventTypeMarkerRecorded,
+		workflow.EventTypeDecisionTaskScheduled,
+		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskCompleted,
+		workflow.EventTypeWorkflowExecutionCompleted,
+	}
+	s.assertHistory(we, expectedHistory)
+}
 
 func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionStarted() {
 	id := uuid.New()

@@ -1541,6 +1541,132 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 	s.Error(err, "decision heartbeat timeout")
 }
 
+func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeout() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
+
+	decisions := []*workflow.Decision{}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info: &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(true)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+			TaskToken:                  taskToken,
+			Decisions:                  decisions,
+			ExecutionContext:           executionContext,
+			Identity:                   &identity,
+		},
+	})
+	s.Nil(err)
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = 0
+
+	decisions := []*workflow.Decision{}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info: &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(true)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+			TaskToken:                  taskToken,
+			Decisions:                  decisions,
+			ExecutionContext:           executionContext,
+			Identity:                   &identity,
+		},
+	})
+	s.Nil(err)
+}
+
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() {
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{
@@ -5261,59 +5387,60 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 
 func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *persistence.WorkflowExecutionInfo {
 	return &persistence.WorkflowExecutionInfo{
-		DomainID:                     sourceInfo.DomainID,
-		WorkflowID:                   sourceInfo.WorkflowID,
-		RunID:                        sourceInfo.RunID,
-		ParentDomainID:               sourceInfo.ParentDomainID,
-		ParentWorkflowID:             sourceInfo.ParentWorkflowID,
-		ParentRunID:                  sourceInfo.ParentRunID,
-		InitiatedID:                  sourceInfo.InitiatedID,
-		CompletionEventBatchID:       sourceInfo.CompletionEventBatchID,
-		CompletionEvent:              sourceInfo.CompletionEvent,
-		TaskList:                     sourceInfo.TaskList,
-		StickyTaskList:               sourceInfo.StickyTaskList,
-		StickyScheduleToStartTimeout: sourceInfo.StickyScheduleToStartTimeout,
-		WorkflowTypeName:             sourceInfo.WorkflowTypeName,
-		WorkflowTimeout:              sourceInfo.WorkflowTimeout,
-		DecisionTimeoutValue:         sourceInfo.DecisionTimeoutValue,
-		ExecutionContext:             sourceInfo.ExecutionContext,
-		State:                        sourceInfo.State,
-		CloseStatus:                  sourceInfo.CloseStatus,
-		LastFirstEventID:             sourceInfo.LastFirstEventID,
-		LastEventTaskID:              sourceInfo.LastEventTaskID,
-		NextEventID:                  sourceInfo.NextEventID,
-		LastProcessedEvent:           sourceInfo.LastProcessedEvent,
-		StartTimestamp:               sourceInfo.StartTimestamp,
-		LastUpdatedTimestamp:         sourceInfo.LastUpdatedTimestamp,
-		CreateRequestID:              sourceInfo.CreateRequestID,
-		SignalCount:                  sourceInfo.SignalCount,
-		DecisionVersion:              sourceInfo.DecisionVersion,
-		DecisionScheduleID:           sourceInfo.DecisionScheduleID,
-		DecisionStartedID:            sourceInfo.DecisionStartedID,
-		DecisionRequestID:            sourceInfo.DecisionRequestID,
-		DecisionTimeout:              sourceInfo.DecisionTimeout,
-		DecisionAttempt:              sourceInfo.DecisionAttempt,
-		DecisionStartedTimestamp:     sourceInfo.DecisionStartedTimestamp,
-		CancelRequested:              sourceInfo.CancelRequested,
-		CancelRequestID:              sourceInfo.CancelRequestID,
-		CronSchedule:                 sourceInfo.CronSchedule,
-		ClientLibraryVersion:         sourceInfo.ClientLibraryVersion,
-		ClientFeatureVersion:         sourceInfo.ClientFeatureVersion,
-		ClientImpl:                   sourceInfo.ClientImpl,
-		AutoResetPoints:              sourceInfo.AutoResetPoints,
-		Memo:                         sourceInfo.Memo,
-		SearchAttributes:             sourceInfo.SearchAttributes,
-		Attempt:                      sourceInfo.Attempt,
-		HasRetryPolicy:               sourceInfo.HasRetryPolicy,
-		InitialInterval:              sourceInfo.InitialInterval,
-		BackoffCoefficient:           sourceInfo.BackoffCoefficient,
-		MaximumInterval:              sourceInfo.MaximumInterval,
-		ExpirationTime:               sourceInfo.ExpirationTime,
-		MaximumAttempts:              sourceInfo.MaximumAttempts,
-		NonRetriableErrors:           sourceInfo.NonRetriableErrors,
-		EventStoreVersion:            sourceInfo.EventStoreVersion,
-		BranchToken:                  sourceInfo.BranchToken,
-		ExpirationSeconds:            sourceInfo.ExpirationSeconds,
+		DomainID:                           sourceInfo.DomainID,
+		WorkflowID:                         sourceInfo.WorkflowID,
+		RunID:                              sourceInfo.RunID,
+		ParentDomainID:                     sourceInfo.ParentDomainID,
+		ParentWorkflowID:                   sourceInfo.ParentWorkflowID,
+		ParentRunID:                        sourceInfo.ParentRunID,
+		InitiatedID:                        sourceInfo.InitiatedID,
+		CompletionEventBatchID:             sourceInfo.CompletionEventBatchID,
+		CompletionEvent:                    sourceInfo.CompletionEvent,
+		TaskList:                           sourceInfo.TaskList,
+		StickyTaskList:                     sourceInfo.StickyTaskList,
+		StickyScheduleToStartTimeout:       sourceInfo.StickyScheduleToStartTimeout,
+		WorkflowTypeName:                   sourceInfo.WorkflowTypeName,
+		WorkflowTimeout:                    sourceInfo.WorkflowTimeout,
+		DecisionTimeoutValue:               sourceInfo.DecisionTimeoutValue,
+		ExecutionContext:                   sourceInfo.ExecutionContext,
+		State:                              sourceInfo.State,
+		CloseStatus:                        sourceInfo.CloseStatus,
+		LastFirstEventID:                   sourceInfo.LastFirstEventID,
+		LastEventTaskID:                    sourceInfo.LastEventTaskID,
+		NextEventID:                        sourceInfo.NextEventID,
+		LastProcessedEvent:                 sourceInfo.LastProcessedEvent,
+		StartTimestamp:                     sourceInfo.StartTimestamp,
+		LastUpdatedTimestamp:               sourceInfo.LastUpdatedTimestamp,
+		CreateRequestID:                    sourceInfo.CreateRequestID,
+		SignalCount:                        sourceInfo.SignalCount,
+		DecisionVersion:                    sourceInfo.DecisionVersion,
+		DecisionScheduleID:                 sourceInfo.DecisionScheduleID,
+		DecisionStartedID:                  sourceInfo.DecisionStartedID,
+		DecisionRequestID:                  sourceInfo.DecisionRequestID,
+		DecisionTimeout:                    sourceInfo.DecisionTimeout,
+		DecisionAttempt:                    sourceInfo.DecisionAttempt,
+		DecisionStartedTimestamp:           sourceInfo.DecisionStartedTimestamp,
+		DecisionOriginalScheduledTimestamp: sourceInfo.DecisionOriginalScheduledTimestamp,
+		CancelRequested:                    sourceInfo.CancelRequested,
+		CancelRequestID:                    sourceInfo.CancelRequestID,
+		CronSchedule:                       sourceInfo.CronSchedule,
+		ClientLibraryVersion:               sourceInfo.ClientLibraryVersion,
+		ClientFeatureVersion:               sourceInfo.ClientFeatureVersion,
+		ClientImpl:                         sourceInfo.ClientImpl,
+		AutoResetPoints:                    sourceInfo.AutoResetPoints,
+		Memo:                               sourceInfo.Memo,
+		SearchAttributes:                   sourceInfo.SearchAttributes,
+		Attempt:                            sourceInfo.Attempt,
+		HasRetryPolicy:                     sourceInfo.HasRetryPolicy,
+		InitialInterval:                    sourceInfo.InitialInterval,
+		BackoffCoefficient:                 sourceInfo.BackoffCoefficient,
+		MaximumInterval:                    sourceInfo.MaximumInterval,
+		ExpirationTime:                     sourceInfo.ExpirationTime,
+		MaximumAttempts:                    sourceInfo.MaximumAttempts,
+		NonRetriableErrors:                 sourceInfo.NonRetriableErrors,
+		EventStoreVersion:                  sourceInfo.EventStoreVersion,
+		BranchToken:                        sourceInfo.BranchToken,
+		ExpirationSeconds:                  sourceInfo.ExpirationSeconds,
 	}
 }
 

@@ -597,6 +597,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_Ca
 		input.RangeID = 0
 		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 		msBuilder.executionInfo.LastEventTaskID = 0
+		msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = input.UpdateWorkflowMutation.ExecutionInfo.DecisionOriginalScheduledTimestamp
 		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
 			UpdateWorkflowMutation: persistence.WorkflowMutation{
 				ExecutionInfo:             msBuilder.executionInfo,

@@ -347,7 +347,7 @@ Update_History_Loop:
 		if decisionHeartbeating {
 			domainName := domainEntry.GetInfo().Name
 			timeout := handler.config.DecisionHeartbeatTimeout(domainName)
-			if len(request.Decisions) == 0 && time.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
+			if currentDecision.OriginalScheduledTimestamp > 0 && time.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
 				decisionHeartbeatTimeout = true
 				scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.DomainTag(domainName))
 				scope.IncCounter(metrics.DecisionHeartbeatTimeoutCounter)
@@ -493,7 +493,7 @@ Update_History_Loop:
 		if createNewDecisionTask {
 			var newDecision *decisionInfo
 			var err error
-			if decisionHeartbeating {
+			if decisionHeartbeating && !decisionHeartbeatTimeout {
 				newDecision, err = msBuilder.AddDecisionTaskScheduledEventAsHeartbeat(currentDecision.OriginalScheduledTimestamp)
 			} else {
 				newDecision, err = msBuilder.AddDecisionTaskScheduledEvent()

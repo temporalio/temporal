@@ -1063,7 +1063,7 @@ func (e *mutableStateBuilder) UpdateDecision(di *decisionInfo) {
 
 // DeleteDecision deletes a decision task.
 func (e *mutableStateBuilder) DeleteDecision() {
-	emptyDecisionInfo := &decisionInfo{
+	resetDecisionInfo := &decisionInfo{
 		Version:            common.EmptyVersion,
 		ScheduleID:         common.EmptyEventID,
 		StartedID:          common.EmptyEventID,
@@ -1072,8 +1072,10 @@ func (e *mutableStateBuilder) DeleteDecision() {
 		Attempt:            0,
 		StartedTimestamp:   0,
 		ScheduledTimestamp: 0,
+		// Keep the last original scheduled timestamp, so that AddDecisionAsHeartbeat can continue with it.
+		OriginalScheduledTimestamp: e.getDecisionInfo().OriginalScheduledTimestamp,
 	}
-	e.UpdateDecision(emptyDecisionInfo)
+	e.UpdateDecision(resetDecisionInfo)
 }
 
 func (e *mutableStateBuilder) FailDecision(incrementAttempt bool) {
@@ -1081,12 +1083,13 @@ func (e *mutableStateBuilder) FailDecision(incrementAttempt bool) {
 	e.ClearStickyness()
 
 	failDecisionInfo := &decisionInfo{
-		Version:          common.EmptyVersion,
-		ScheduleID:       common.EmptyEventID,
-		StartedID:        common.EmptyEventID,
-		RequestID:        emptyUUID,
-		DecisionTimeout:  0,
-		StartedTimestamp: 0,
+		Version:                    common.EmptyVersion,
+		ScheduleID:                 common.EmptyEventID,
+		StartedID:                  common.EmptyEventID,
+		RequestID:                  emptyUUID,
+		DecisionTimeout:            0,
+		StartedTimestamp:           0,
+		OriginalScheduledTimestamp: 0,
 	}
 	if incrementAttempt {
 		failDecisionInfo.Attempt = e.executionInfo.DecisionAttempt + 1
@@ -1564,14 +1567,15 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskStartedEvent(
 	e.executionInfo.State = persistence.WorkflowStateRunning
 	// Update mutable decision state
 	di = &decisionInfo{
-		Version:            version,
-		ScheduleID:         scheduleID,
-		StartedID:          startedID,
-		RequestID:          requestID,
-		DecisionTimeout:    di.DecisionTimeout,
-		Attempt:            di.Attempt,
-		StartedTimestamp:   timestamp,
-		ScheduledTimestamp: di.ScheduledTimestamp,
+		Version:                    version,
+		ScheduleID:                 scheduleID,
+		StartedID:                  startedID,
+		RequestID:                  requestID,
+		DecisionTimeout:            di.DecisionTimeout,
+		Attempt:                    di.Attempt,
+		StartedTimestamp:           timestamp,
+		ScheduledTimestamp:         di.ScheduledTimestamp,
+		OriginalScheduledTimestamp: di.OriginalScheduledTimestamp,
 	}
 
 	e.UpdateDecision(di)
