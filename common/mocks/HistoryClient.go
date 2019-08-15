@@ -107,6 +107,29 @@ func (_m *HistoryClient) GetMutableState(ctx context.Context, getRequest *histor
 	return r0, r1
 }
 
+// PollMutableState provides a mock function with given fields: ctx, getRequest
+func (_m *HistoryClient) PollMutableState(ctx context.Context, pollRequest *history.PollMutableStateRequest, opts ...yarpc.CallOption) (*history.PollMutableStateResponse, error) {
+	ret := _m.Called(ctx, pollRequest)
+
+	var r0 *history.PollMutableStateResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *history.PollMutableStateRequest) *history.PollMutableStateResponse); ok {
+		r0 = rf(ctx, pollRequest)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*history.PollMutableStateResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *history.PollMutableStateRequest) error); ok {
+		r1 = rf(ctx, pollRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ResetStickyTaskList provides a mock function with given fields: ctx, getRequest
 func (_m *HistoryClient) ResetStickyTaskList(ctx context.Context, request *history.ResetStickyTaskListRequest, opts ...yarpc.CallOption) (*history.ResetStickyTaskListResponse, error) {
 	ret := _m.Called(ctx, request)

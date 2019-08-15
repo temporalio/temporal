@@ -514,21 +514,60 @@ func (e *historyEngineImpl) GetMutableState(
 	request *h.GetMutableStateRequest,
 ) (*h.GetMutableStateResponse, error) {
 
+	return e.getMutableStateOrPolling(ctx, request)
+}
+
+// PollMutableState retrieves the mutable state of the workflow execution with long polling
+func (e *historyEngineImpl) PollMutableState(
+	ctx ctx.Context,
+	request *h.PollMutableStateRequest,
+) (*h.PollMutableStateResponse, error) {
+
+	response, err := e.getMutableStateOrPolling(ctx, &h.GetMutableStateRequest{
+		DomainUUID:          request.DomainUUID,
+		Execution:           request.Execution,
+		ExpectedNextEventId: request.ExpectedNextEventId})
+	if err != nil {
+		return nil, err
+	}
+	return &h.PollMutableStateResponse{
+		Execution:                            response.Execution,
+		WorkflowType:                         response.WorkflowType,
+		NextEventId:                          response.NextEventId,
+		PreviousStartedEventId:               response.PreviousStartedEventId,
+		LastFirstEventId:                     response.LastFirstEventId,
+		TaskList:                             response.TaskList,
+		StickyTaskList:                       response.StickyTaskList,
+		ClientLibraryVersion:                 response.ClientLibraryVersion,
+		ClientFeatureVersion:                 response.ClientFeatureVersion,
+		ClientImpl:                           response.ClientImpl,
+		StickyTaskListScheduleToStartTimeout: response.StickyTaskListScheduleToStartTimeout,
+		BranchToken:                          response.BranchToken,
+		ReplicationInfo:                      response.ReplicationInfo,
+		VersionHistories:                     response.VersionHistories,
+		WorkflowState:                        response.WorkflowState,
+		WorkflowCloseState:                   response.WorkflowCloseState,
+	}, nil
+}
+
+func (e *historyEngineImpl) getMutableStateOrPolling(
+	ctx ctx.Context,
+	request *h.GetMutableStateRequest,
+) (*h.GetMutableStateResponse, error) {
+
 	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {
 		return nil, err
 	}
-
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.Execution.WorkflowId,
 		RunId:      request.Execution.RunId,
 	}
-
-	//TODO: GetMutableState can be a long poll and with 3DC, we need to handle when the current branch changes.
 	response, err := e.getMutableState(ctx, domainID, execution)
 	if err != nil {
 		return nil, err
 	}
+
 	// set the run id in case query the current running workflow
 	execution.RunId = response.Execution.RunId
 
@@ -546,14 +585,14 @@ func (e *historyEngineImpl) GetMutableState(
 			return nil, err
 		}
 		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
-
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, domainID, execution)
 		if err != nil {
 			return nil, err
 		}
 
-		if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
+		if expectedNextEventID < response.GetNextEventId() ||
+			!response.GetIsWorkflowRunning() {
 			return response, nil
 		}
 
@@ -570,7 +609,8 @@ func (e *historyEngineImpl) GetMutableState(
 				response.NextEventId = common.Int64Ptr(event.nextEventID)
 				response.IsWorkflowRunning = common.BoolPtr(event.isWorkflowRunning)
 				response.PreviousStartedEventId = common.Int64Ptr(event.previousStartedEventID)
-				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
+				if expectedNextEventID < response.GetNextEventId() ||
+					!response.GetIsWorkflowRunning() {
 					return response, nil
 				}
 			case <-timer.C:
@@ -608,6 +648,7 @@ func (e *historyEngineImpl) getMutableState(
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
+	workflowState, workflowCloseState := msBuilder.GetWorkflowStateCloseStatus()
 	retResp = &h.GetMutableStateResponse{
 		Execution:                            &execution,
 		WorkflowType:                         &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
@@ -623,6 +664,8 @@ func (e *historyEngineImpl) getMutableState(
 		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
 		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
 		BranchToken:                          currentBranchToken,
+		WorkflowState:                        common.Int32Ptr(int32(workflowState)),
+		WorkflowCloseState:                   common.Int32Ptr(int32(workflowCloseState)),
 	}
 	replicationState := msBuilder.GetReplicationState()
 	if replicationState != nil {

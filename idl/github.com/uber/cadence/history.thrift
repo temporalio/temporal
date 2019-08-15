@@ -78,12 +78,42 @@ struct GetMutableStateResponse {
   70: optional string clientLibraryVersion
   80: optional string clientFeatureVersion
   90: optional string clientImpl
+  //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field
   100: optional bool isWorkflowRunning
   110: optional i32 stickyTaskListScheduleToStartTimeout
   120: optional i32 eventStoreVersion
   130: optional binary branchToken
   140: optional map<string, shared.ReplicationInfo> replicationInfo
   150: optional shared.VersionHistories versionHistories
+  //TODO: change these fields to enum when possible
+  160: optional i32 workflowState
+  170: optional i32 workflowCloseState
+}
+
+struct PollMutableStateRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+  30: optional i64 (js.type = "Long") expectedNextEventId
+}
+
+struct PollMutableStateResponse {
+  10: optional shared.WorkflowExecution execution
+  20: optional shared.WorkflowType workflowType
+  30: optional i64 (js.type = "Long") NextEventId
+  35: optional i64 (js.type = "Long") PreviousStartedEventId
+  40: optional i64 (js.type = "Long") LastFirstEventId
+  50: optional shared.TaskList taskList
+  60: optional shared.TaskList stickyTaskList
+  70: optional string clientLibraryVersion
+  80: optional string clientFeatureVersion
+  90: optional string clientImpl
+  100: optional i32 stickyTaskListScheduleToStartTimeout
+  110: optional binary branchToken
+  120: optional map<string, shared.ReplicationInfo> replicationInfo
+  130: optional shared.VersionHistories versionHistories
+   //TODO: change these fields to enum when possible
+  140: optional i32 workflowState
+  150: optional i32 workflowCloseState
 }
 
 struct ResetStickyTaskListRequest {
@@ -309,6 +339,7 @@ service HistoryService {
   /**
   * Returns the information from mutable state of workflow execution.
   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
+  * It returns CurrentBranchChangedError if the workflow version branch has changed.
   **/
   GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)
     throws (
@@ -318,7 +349,24 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
       6: shared.ServiceBusyError serviceBusyError,
+      7: shared.CurrentBranchChangedError currentBranchChangedError,
     )
+
+  /**
+   * Returns the information from mutable state of workflow execution.
+   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
+   * It returns CurrentBranchChangedError if the workflow version branch has changed.
+   **/
+   PollMutableStateResponse PollMutableState(1: PollMutableStateRequest getRequest)
+     throws (
+       1: shared.BadRequestError badRequestError,
+       2: shared.InternalServiceError internalServiceError,
+       3: shared.EntityNotExistsError entityNotExistError,
+       4: ShardOwnershipLostError shardOwnershipLostError,
+       5: shared.LimitExceededError limitExceededError,
+       6: shared.ServiceBusyError serviceBusyError,
+       7: shared.CurrentBranchChangedError currentBranchChangedError,
+     )
 
   /**
   * Reset the sticky tasklist related information in mutable state of a given workflow.

@@ -197,6 +197,39 @@ func (mr *_MockClientRecorder) GetMutableState(
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetMutableState", args...)
 }
 
+// PollMutableState responds to a PollMutableState call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().PollMutableState(gomock.Any(), ...).Return(...)
+// 	... := client.PollMutableState(...)
+func (m *MockClient) PollMutableState(
+	ctx context.Context,
+	_GetRequest *history.PollMutableStateRequest,
+	opts ...yarpc.CallOption,
+) (success *history.PollMutableStateResponse, err error) {
+
+	args := []interface{}{ctx, _GetRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "PollMutableState", args...)
+	success, _ = ret[i].(*history.PollMutableStateResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) PollMutableState(
+	ctx interface{},
+	_GetRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _GetRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "PollMutableState", args...)
+}
+
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

@@ -83,6 +83,11 @@ exception ClientVersionNotSupportedError {
   3: required string supportedVersions
 }
 
+exception CurrentBranchChangedError {
+  10: required string message
+  20: required binary currentBranchToken
+}
+
 enum WorkflowIdReusePolicy {
   /*
    * allow start a workflow execution using the same workflow ID,

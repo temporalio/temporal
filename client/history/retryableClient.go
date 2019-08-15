@@ -110,6 +110,22 @@ func (c *retryableClient) GetMutableState(
 	return resp, err
 }
 
+func (c *retryableClient) PollMutableState(
+	ctx context.Context,
+	request *h.PollMutableStateRequest,
+	opts ...yarpc.CallOption) (*h.PollMutableStateResponse, error) {
+
+	var resp *h.PollMutableStateResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.PollMutableState(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ResetStickyTaskList(
 	ctx context.Context,
 	request *h.ResetStickyTaskListRequest,
