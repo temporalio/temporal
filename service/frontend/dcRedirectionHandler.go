@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -37,6 +38,8 @@ import (
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 )
+
+var _ workflowserviceserver.Interface = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	clientBeanProvider func() client.Bean
@@ -1106,6 +1109,14 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	})
 
 	return err
+}
+
+// GetReplicationMessages API call
+func (handler *DCRedirectionHandlerImpl) GetReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+) (*replicator.GetReplicationMessagesResponse, error) {
+	return handler.frontendHandler.GetReplicationMessages(ctx, request)
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(

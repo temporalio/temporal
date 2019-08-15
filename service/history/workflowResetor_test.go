@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -58,6 +59,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		historyEngine            *historyEngineImpl
+		mockCtrl                 *gomock.Controller
 		mockMatchingClient       *mocks.MatchingClient
 		mockHistoryClient        *mocks.HistoryClient
 		mockMetadataMgr          *mocks.MetadataManager
@@ -76,7 +78,7 @@ type (
 		mockEventsCache          *MockEventsCache
 		resetor                  workflowResetor
 		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *mockQueueProcessor
+		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MockTimerQueueProcessor
 
 		shardClosedCh chan int
@@ -106,6 +108,7 @@ func (s *resetorSuite) SetupTest() {
 
 	shardID := 10
 	s.shardID = shardID
+	s.mockCtrl = gomock.NewController(s.T())
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
@@ -150,8 +153,8 @@ func (s *resetorSuite) SetupTest() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = &mockQueueProcessor{}
-	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
@@ -181,6 +184,7 @@ func (s *resetorSuite) SetupTest() {
 }
 
 func (s *resetorSuite) TearDownTest() {
+	s.mockCtrl.Finish()
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
@@ -192,7 +196,6 @@ func (s *resetorSuite) TearDownTest() {
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockReplicationProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 

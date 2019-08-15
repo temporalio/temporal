@@ -22,12 +22,16 @@ package history
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
+	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/yarpc"
 )
 
@@ -43,6 +47,7 @@ type clientImpl struct {
 	tokenSerializer common.TaskTokenSerializer
 	timeout         time.Duration
 	clients         common.ClientCache
+	logger          log.Logger
 }
 
 // NewClient creates a new history service TChannel client
@@ -50,12 +55,14 @@ func NewClient(
 	numberOfShards int,
 	timeout time.Duration,
 	clients common.ClientCache,
+	logger log.Logger,
 ) Client {
 	return &clientImpl{
 		numberOfShards:  numberOfShards,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		timeout:         timeout,
 		clients:         clients,
+		logger:          logger,
 	}
 }
 
@@ -636,6 +643,58 @@ func (c *clientImpl) SyncActivity(
 	}
 	err = c.executeWithRedirect(ctx, client, op)
 	return err
+}
+
+func (c *clientImpl) GetReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetReplicationMessagesResponse, error) {
+	requestsByClient := make(map[historyserviceclient.Interface]*replicator.GetReplicationMessagesRequest)
+
+	for _, token := range request.Tokens {
+		client, err := c.getClientForShardID(int(token.GetShardID()))
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := requestsByClient[client]; !ok {
+			requestsByClient[client] = &replicator.GetReplicationMessagesRequest{}
+		}
+
+		req := requestsByClient[client]
+		req.Tokens = append(req.Tokens, token)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(requestsByClient))
+	respChan := make(chan *replicator.GetReplicationMessagesResponse, len(requestsByClient))
+	for client, req := range requestsByClient {
+		go func(client historyserviceclient.Interface, request *replicator.GetReplicationMessagesRequest) {
+			defer wg.Done()
+
+			ctx, cancel := c.createContext(ctx)
+			defer cancel()
+			resp, err := client.GetReplicationMessages(ctx, request, opts...)
+			if err != nil {
+				c.logger.Warn("Failed to get replication tasks from client", tag.Error(err))
+				return
+			}
+			respChan <- resp
+		}(client, req)
+	}
+
+	wg.Wait()
+	close(respChan)
+
+	response := &replicator.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replicator.ReplicationMessages)}
+	for resp := range respChan {
+		for shardID, tasks := range resp.MessagesByShard {
+			response.MessagesByShard[shardID] = tasks
+		}
+	}
+
+	return response, nil
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

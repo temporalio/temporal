@@ -24,12 +24,12 @@ import (
 	"context"
 	"time"
 
-	"go.uber.org/yarpc"
-
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -642,4 +642,19 @@ func (c *clientImpl) getRandomClient() (workflowserviceclient.Interface, error) 
 	}
 
 	return client.(workflowserviceclient.Interface), nil
+}
+
+func (c *clientImpl) GetReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetReplicationMessagesResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetReplicationMessages(ctx, request, opts...)
 }

@@ -24,6 +24,7 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 )
 
@@ -713,6 +714,29 @@ func (_m *MockWorkflowHandler) UpdateDomain(ctx context.Context, UpdateRequest *
 	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *shared.UpdateDomainRequest) error); ok {
 		r1 = rf(ctx, UpdateRequest)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetReplicationMessages provides a mock function with given fields: ctx, Request
+func (_m *MockWorkflowHandler) GetReplicationMessages(ctx context.Context, Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse, error) {
+	ret := _m.Called(ctx, Request)
+
+	var r0 *replicator.GetReplicationMessagesResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *replicator.GetReplicationMessagesRequest) *replicator.GetReplicationMessagesResponse); ok {
+		r0 = rf(ctx, Request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*replicator.GetReplicationMessagesResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *replicator.GetReplicationMessagesRequest) error); ok {
+		r1 = rf(ctx, Request)
 	} else {
 		r1 = ret.Error(1)
 	}

@@ -1619,6 +1619,8 @@ func createShardInfo(
 			info.ClusterTimerAckLevel = v.(map[string]time.Time)
 		case "domain_notification_version":
 			info.DomainNotificationVersion = v.(int64)
+		case "cluster_replication_level":
+			info.ClusterReplicationLevel = v.(map[string]int64)
 		}
 	}
 
@@ -1631,6 +1633,9 @@ func createShardInfo(
 		info.ClusterTimerAckLevel = map[string]time.Time{
 			currentCluster: info.TimerAckLevel,
 		}
+	}
+	if info.ClusterReplicationLevel == nil {
+		info.ClusterReplicationLevel = make(map[string]int64)
 	}
 
 	return info

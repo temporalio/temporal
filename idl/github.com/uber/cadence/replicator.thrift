@@ -21,7 +21,6 @@
 namespace java com.uber.cadence.replicator
 
 include "shared.thrift"
-include "history.thrift"
 
 enum ReplicationTaskType {
   Domain
@@ -95,6 +94,7 @@ struct SyncActicvityTaskAttributes {
 
 struct ReplicationTask {
   10: optional ReplicationTaskType taskType
+  11: optional i64 (js.type = "Long") sourceTaskId
   20: optional DomainTaskAttributes domainTaskAttributes
   30: optional HistoryTaskAttributes historyTaskAttributes
   40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes
@@ -102,3 +102,26 @@ struct ReplicationTask {
   60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes
 }
 
+struct ReplicationToken {
+  10: optional i32 shardID
+  // lastRetrivedMessageId is where the next fetch should begin with
+  20: optional i64 (js.type = "Long") lastRetrivedMessageId
+  // lastProcessedMessageId is the last messageId that is processed on the passive side.
+  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.
+  30: optional i64 (js.type = "Long") lastProcessedMessageId
+}
+
+struct ReplicationMessages {
+  10: optional list<ReplicationTask> replicationTasks
+  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
+  20: optional i64 (js.type = "Long") lastRetrivedMessageId
+  30: optional bool hasMore // Hint for flow control
+}
+
+struct GetReplicationMessagesRequest {
+  10: optional list<ReplicationToken> tokens
+}
+
+struct GetReplicationMessagesResponse {
+  10: optional map<i32, ReplicationMessages> messagesByShard
+}

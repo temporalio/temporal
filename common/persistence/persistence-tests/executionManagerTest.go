@@ -3687,14 +3687,15 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	currentClusterTransferAck := int64(21)
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
 	shardInfo := &p.ShardInfo{
-		ShardID:             shardID,
-		Owner:               "some random owner",
-		RangeID:             rangeID,
-		StolenSinceRenew:    12,
-		UpdatedAt:           timestampConvertor(time.Now()),
-		ReplicationAckLevel: currentReplicationAck,
-		TransferAckLevel:    currentClusterTransferAck,
-		TimerAckLevel:       currentClusterTimerAck,
+		ShardID:                 shardID,
+		Owner:                   "some random owner",
+		RangeID:                 rangeID,
+		StolenSinceRenew:        12,
+		UpdatedAt:               timestampConvertor(time.Now()),
+		ReplicationAckLevel:     currentReplicationAck,
+		TransferAckLevel:        currentClusterTransferAck,
+		TimerAckLevel:           currentClusterTimerAck,
+		ClusterReplicationLevel: map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -3749,6 +3750,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
 		DomainNotificationVersion: domainNotificationVersion,
+		ClusterReplicationLevel:   map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -3790,6 +3792,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
 		DomainNotificationVersion: domainNotificationVersion,
+		ClusterReplicationLevel:   map[string]int64{cluster.TestAlternativeClusterName: 12345},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,

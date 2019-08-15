@@ -25,6 +25,7 @@ import (
 	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
@@ -70,6 +71,7 @@ type (
 		ReplicateRawEvents(ctx context.Context, request *h.ReplicateRawEventsRequest) error
 		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *h.SyncActivityRequest) error
+		GetReplicationMessages(ctx context.Context, taskID int64) (*replicator.ReplicationMessages, error)
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -85,6 +87,12 @@ type (
 	queueProcessor interface {
 		common.Daemon
 		notifyNewTask()
+	}
+
+	// ReplicatorQueueProcessor is the interface for replicator queue processor
+	ReplicatorQueueProcessor interface {
+		queueProcessor
+		getTasks(readLevel int64) (*replicator.ReplicationMessages, error)
 	}
 
 	queueAckMgr interface {

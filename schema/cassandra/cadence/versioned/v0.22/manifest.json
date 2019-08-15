@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.22",
+  "MinCompatibleVersion": "0.22",
+  "Description": "Add per cluster replication level (last replicated task_id) to shard info",
+  "SchemaUpdateCqlFiles": [
+    "cluster_replication_level.cql"
+  ]
+}

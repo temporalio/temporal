@@ -32,6 +32,7 @@ struct ShardInfo {
   34: optional map<string, i64> clusterTransferAckLevel
   36: optional map<string, i64> clusterTimerAckLevel
   38: optional string owner
+  40: optional map<string, i64> clusterReplicationLevel
 }
 
 struct DomainInfo {

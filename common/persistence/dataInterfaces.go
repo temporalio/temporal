@@ -203,6 +203,7 @@ type (
 		ClusterTimerAckLevel      map[string]time.Time
 		TransferFailoverLevels    map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
 		TimerFailoverLevels       map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
+		ClusterReplicationLevel   map[string]int64                 // cluster -> last replicated taskID
 		DomainNotificationVersion int64
 	}
 

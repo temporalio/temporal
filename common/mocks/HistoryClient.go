@@ -23,8 +23,8 @@ package mocks
 import (
 	"context"
 
+	"github.com/uber/cadence/.gen/go/replicator"
 	"go.uber.org/yarpc"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
@@ -510,4 +510,31 @@ func (_m *HistoryClient) SyncActivity(ctx context.Context, request *history.Sync
 	}
 
 	return r0
+}
+
+// GetReplicationMessages provides a mock function with given fields: ctx, request
+func (_m *HistoryClient) GetReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetReplicationMessagesResponse, error) {
+	ret := _m.Called(ctx, request)
+
+	var r0 *replicator.GetReplicationMessagesResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *replicator.GetReplicationMessagesRequest) *replicator.GetReplicationMessagesResponse); ok {
+		r0 = rf(ctx, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*replicator.GetReplicationMessagesResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *replicator.GetReplicationMessagesRequest) error); ok {
+		r1 = rf(ctx, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }

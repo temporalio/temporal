@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		mockCtrl                 *gomock.Controller
 		mockHistoryEngine        *historyEngineImpl
 		mockMatchingClient       *mocks.MatchingClient
 		mockArchivalClient       *archiver.ClientMock
@@ -75,7 +77,7 @@ type (
 		mockService              service.Service
 		mockMetricClient         metrics.Client
 		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *mockQueueProcessor
+		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MockTimerQueueProcessor
 
 		shardClosedCh chan int
@@ -108,6 +110,7 @@ func (s *engineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	shardID := 10
+	s.mockCtrl = gomock.NewController(s.T())
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockArchivalClient = &archiver.ClientMock{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
@@ -160,8 +163,8 @@ func (s *engineSuite) SetupTest() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = &mockQueueProcessor{}
-	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
@@ -198,6 +201,7 @@ func (s *engineSuite) SetupTest() {
 }
 
 func (s *engineSuite) TearDownTest() {
+	s.mockCtrl.Finish()
 	s.mockHistoryEngine.historyEventNotifier.Stop()
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
@@ -209,7 +213,6 @@ func (s *engineSuite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockReplicationProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 

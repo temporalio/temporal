@@ -56,15 +56,22 @@ type (
 )
 
 var (
-	errUnknownReplicationTask = errors.New("Unknown replication task")
-	errHistoryNotFoundTask    = errors.New("History not found")
+	errUnknownReplicationTask = errors.New("unknown replication task")
+	errHistoryNotFoundTask    = errors.New("history not found")
 	defaultHistoryPageSize    = 1000
 )
 
-func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache, replicator messaging.Producer,
-	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, logger log.Logger) queueProcessor {
+func newReplicatorQueueProcessor(
+	shard ShardContext,
+	historyCache *historyCache,
+	replicator messaging.Producer,
+	executionMgr persistence.ExecutionManager,
+	historyMgr persistence.HistoryManager,
+	historyV2Mgr persistence.HistoryV2Manager,
+	logger log.Logger,
+) ReplicatorQueueProcessor {
 
-	currentClusterNamer := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
@@ -86,7 +93,7 @@ func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache,
 	}
 
 	processor := &replicatorQueueProcessorImpl{
-		currentClusterNamer:   currentClusterNamer,
+		currentClusterNamer:   currentClusterName,
 		shard:                 shard,
 		historyCache:          historyCache,
 		replicationTaskFilter: replicationTaskFilter,
@@ -100,7 +107,7 @@ func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterNamer, shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -140,12 +147,49 @@ func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo, shouldProces
 	}
 }
 
+func (p *replicatorQueueProcessorImpl) toReplicationTask(qTask queueTaskInfo) (*replicator.ReplicationTask, error) {
+	task, ok := qTask.(*persistence.ReplicationTaskInfo)
+	if !ok {
+		return nil, errUnexpectedQueueTask
+	}
+
+	switch task.TaskType {
+	case persistence.ReplicationTaskTypeSyncActivity:
+		task, err := p.getSyncActivityTask(task)
+		if task != nil {
+			task.SourceTaskId = common.Int64Ptr(qTask.GetTaskID())
+		}
+		return task, err
+	case persistence.ReplicationTaskTypeHistory:
+		task, err := p.getHistoryReplicationTask(task)
+		if task != nil {
+			task.SourceTaskId = common.Int64Ptr(qTask.GetTaskID())
+		}
+		return task, err
+	default:
+		return nil, errUnknownReplicationTask
+	}
+}
+
 func (p *replicatorQueueProcessorImpl) queueShutdown() error {
 	// there is no shutdown specific behavior for replication queue
 	return nil
 }
 
-func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence.ReplicationTaskInfo) (retError error) {
+func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence.ReplicationTaskInfo) error {
+	replicationTask, err := p.getSyncActivityTask(task)
+	if err != nil {
+		return err
+	}
+
+	if replicationTask == nil {
+		return nil
+	}
+
+	return p.replicator.Publish(replicationTask)
+}
+
+func (p *replicatorQueueProcessorImpl) getSyncActivityTask(task *persistence.ReplicationTaskInfo) (replicationTask *replicator.ReplicationTask, retError error) {
 	domainID := task.DomainID
 	execution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
@@ -153,25 +197,25 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 	}
 	context, release, err := p.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { release(retError) }()
 
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); ok {
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
 	if !msBuilder.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process the timer
-		return nil
+		return nil, nil
 	}
 
 	activityInfo, ok := msBuilder.GetActivityInfo(task.ScheduledID)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	var startedTime *int64
@@ -183,7 +227,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 	// LastHeartBeatUpdatedTime must be valid when getting the sync activity replication task
 	heartbeatTime = common.Int64Ptr(activityInfo.LastHeartBeatUpdatedTime.UnixNano())
 
-	replicationTask := &replicator.ReplicationTask{
+	replicationTask = &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
 		SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
 			DomainId:           common.StringPtr(task.DomainID),
@@ -202,7 +246,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 		},
 	}
 
-	return p.replicator.Publish(replicationTask)
+	return replicationTask, retError
 }
 
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) error {
@@ -228,6 +272,22 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 		err = p.replicator.Publish(p.generateHistoryMetadataTask(targetClusters, task))
 	}
 	return err
+}
+
+func (p *replicatorQueueProcessorImpl) getHistoryReplicationTask(
+	task *persistence.ReplicationTaskInfo,
+) (*replicator.ReplicationTask, error) {
+	domainEntry, err := p.shard.GetDomainCache().GetDomainByID(task.DomainID)
+	if err != nil {
+		return nil, err
+	}
+
+	var targetClusters []string
+	for _, cluster := range domainEntry.GetReplicationConfig().Clusters {
+		targetClusters = append(targetClusters, cluster.ClusterName)
+	}
+
+	return GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, p.logger, nil, common.IntPtr(p.shard.GetShardID()))
 }
 
 func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistence.ReplicationTaskInfo) *replicator.ReplicationTask {
@@ -489,4 +549,30 @@ func convertLastReplicationInfo(info map[string]*persistence.ReplicationInfo) ma
 	}
 
 	return replicationInfoMap
+}
+
+func (p *replicatorQueueProcessorImpl) getTasks(readLevel int64) (*replicator.ReplicationMessages, error) {
+	taskInfoList, hasMore, err := p.readTasks(readLevel)
+	if err != nil {
+		return nil, err
+	}
+
+	var replicationTasks []*replicator.ReplicationTask
+	for _, taskInfo := range taskInfoList {
+		readLevel = taskInfo.GetTaskID()
+		replicationTask, err := p.toReplicationTask(taskInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		if replicationTask != nil {
+			replicationTasks = append(replicationTasks, replicationTask)
+		}
+	}
+
+	return &replicator.ReplicationMessages{
+		ReplicationTasks:      replicationTasks,
+		HasMore:               common.BoolPtr(hasMore),
+		LastRetrivedMessageId: common.Int64Ptr(readLevel),
+	}, nil
 }

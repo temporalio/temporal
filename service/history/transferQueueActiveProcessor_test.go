@@ -24,11 +24,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -52,6 +52,7 @@ type (
 	transferQueueActiveProcessorSuite struct {
 		suite.Suite
 
+		mockCtrl                 *gomock.Controller
 		mockShardManager         *mocks.ShardManager
 		mockHistoryEngine        *historyEngineImpl
 		mockMetadataMgr          *mocks.MetadataManager
@@ -70,7 +71,7 @@ type (
 		mockService              service.Service
 		logger                   log.Logger
 		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *mockQueueProcessor
+		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MockTimerQueueProcessor
 
 		domainID                     string
@@ -96,6 +97,7 @@ func (s *transferQueueActiveProcessorSuite) TearDownSuite() {
 func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	shardID := 0
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.mockCtrl = gomock.NewController(s.T())
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
@@ -149,8 +151,8 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = &mockQueueProcessor{}
-	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
@@ -183,6 +185,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 }
 
 func (s *transferQueueActiveProcessorSuite) TearDownTest() {
+	s.mockCtrl.Finish()
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
@@ -194,7 +197,6 @@ func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockReplicationProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 

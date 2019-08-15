@@ -28,6 +28,7 @@ package historyserviceclient
 import (
 	context "context"
 	history "github.com/uber/cadence/.gen/go/history"
+	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	yarpc "go.uber.org/yarpc"
@@ -61,6 +62,12 @@ type Interface interface {
 		GetRequest *history.GetMutableStateRequest,
 		opts ...yarpc.CallOption,
 	) (*history.GetMutableStateResponse, error)
+
+	GetReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetReplicationMessagesResponse, error)
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -308,6 +315,29 @@ func (c client) GetMutableState(
 	}
 
 	success, err = history.HistoryService_GetMutableState_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetReplicationMessagesResponse, err error) {
+
+	args := history.HistoryService_GetReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_GetReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_GetReplicationMessages_Helper.UnwrapResponse(&result)
 	return
 }
 

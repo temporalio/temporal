@@ -28,6 +28,7 @@ package historyserviceserver
 import (
 	context "context"
 	history "github.com/uber/cadence/.gen/go/history"
+	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	transport "go.uber.org/yarpc/api/transport"
@@ -55,6 +56,11 @@ type Interface interface {
 		ctx context.Context,
 		GetRequest *history.GetMutableStateRequest,
 	) (*history.GetMutableStateResponse, error)
+
+	GetReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetReplicationMessagesRequest,
+	) (*replicator.GetReplicationMessagesResponse, error)
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -219,6 +225,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.GetMutableState),
 				},
 				Signature:    "GetMutableState(GetRequest *history.GetMutableStateRequest) (*history.GetMutableStateResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "GetReplicationMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.GetReplicationMessages),
+				},
+				Signature:    "GetReplicationMessages(Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -466,7 +483,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 26)
+	procedures := make([]transport.Procedure, 0, 27)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -540,6 +557,25 @@ func (h handler) GetMutableState(ctx context.Context, body wire.Value) (thrift.R
 
 	hadError := err != nil
 	result, err := history.HistoryService_GetMutableState_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) GetReplicationMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_GetReplicationMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.GetReplicationMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_GetReplicationMessages_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

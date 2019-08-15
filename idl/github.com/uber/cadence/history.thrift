@@ -19,6 +19,7 @@
 // THE SOFTWARE.
 
 include "shared.thrift"
+include "replicator.thrift"
 
 namespace java com.uber.cadence.history
 
@@ -689,5 +690,14 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.AccessDeniedError accessDeniedError,
+    )
+
+  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.LimitExceededError limitExceededError,
+      4: shared.ServiceBusyError serviceBusyError,
+      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
     )
 }

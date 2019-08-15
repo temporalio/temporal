@@ -30,6 +30,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	history "github.com/uber/cadence/.gen/go/history"
 	historyserviceclient "github.com/uber/cadence/.gen/go/history/historyserviceclient"
+	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	yarpc "go.uber.org/yarpc"
 )
@@ -195,6 +196,39 @@ func (mr *_MockClientRecorder) GetMutableState(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _GetRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetMutableState", args...)
+}
+
+// GetReplicationMessages responds to a GetReplicationMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().GetReplicationMessages(gomock.Any(), ...).Return(...)
+// 	... := client.GetReplicationMessages(...)
+func (m *MockClient) GetReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetReplicationMessagesResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "GetReplicationMessages", args...)
+	success, _ = ret[i].(*replicator.GetReplicationMessagesResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) GetReplicationMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "GetReplicationMessages", args...)
 }
 
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This

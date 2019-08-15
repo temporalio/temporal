@@ -2,6 +2,13 @@
     dbname: integration_active
   clustermetadata:
     enableGlobalDomain: true
+    replicationConsumer:
+      type: rpc
+      fetcher:
+        rpcParallelism: 1
+        aggregationIntervalSecs: 2
+        errorRetryWaitSecs: 1
+        timerJitterCoefficient: 0.15
     failoverVersionIncrement: 10
     masterClusterName: "active"
     currentClusterName: "active"
@@ -54,6 +61,13 @@
     dbname: integration_standby
   clustermetadata:
     enableGlobalDomain: true
+    replicationConsumer:
+      type: rpc
+      fetcher:
+        rpcParallelism: 1
+        aggregationIntervalSecs: 2
+        errorRetryWaitSecs: 1
+        timerJitterCoefficient: 0.15
     failoverVersionIncrement: 10
     masterClusterName: "active"
     currentClusterName: "standby"

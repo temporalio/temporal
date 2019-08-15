@@ -23,6 +23,7 @@ package frontend
 import (
 	"context"
 
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/yarpc"
@@ -668,6 +669,23 @@ func (c *metricClient) UpdateDomain(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientUpdateDomainScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }

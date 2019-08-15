@@ -15,6 +15,8 @@ CREATE TYPE shard (
   -- Mapping of cluster to corresponding timer ack level
   cluster_timer_ack_level     map<text, timestamp>,
   domain_notification_version bigint, -- the global domain change version this shard is aware of
+  -- Mapping of (remote) cluster to corresponding replication level (last replicated task_id)
+  cluster_replication_level   map<text, bigint>,
 );
 
 --- Workflow execution and mutable state ---

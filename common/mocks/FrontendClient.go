@@ -25,6 +25,7 @@ package mocks
 import (
 	context "context"
 
+	"github.com/uber/cadence/.gen/go/replicator"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	shared "github.com/uber/cadence/.gen/go/shared"
@@ -964,6 +965,36 @@ func (_m *FrontendClient) UpdateDomain(ctx context.Context, UpdateRequest *share
 	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *shared.UpdateDomainRequest, ...yarpc.CallOption) error); ok {
 		r1 = rf(ctx, UpdateRequest, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetReplicationMessages provides a mock function with given fields: ctx, request, opts
+func (_m *FrontendClient) GetReplicationMessages(ctx context.Context, request *replicator.GetReplicationMessagesRequest, opts ...yarpc.CallOption) (*replicator.GetReplicationMessagesResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, request)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	var r0 *replicator.GetReplicationMessagesResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *replicator.GetReplicationMessagesRequest, ...yarpc.CallOption) *replicator.GetReplicationMessagesResponse); ok {
+		r0 = rf(ctx, request, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*replicator.GetReplicationMessagesResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *replicator.GetReplicationMessagesRequest, ...yarpc.CallOption) error); ok {
+		r1 = rf(ctx, request, opts...)
 	} else {
 		r1 = ret.Error(1)
 	}

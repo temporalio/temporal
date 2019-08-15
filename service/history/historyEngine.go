@@ -29,6 +29,7 @@ import (
 
 	"github.com/pborman/uuid"
 	h "github.com/uber/cadence/.gen/go/history"
+	r "github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
@@ -43,7 +44,9 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 	warchiver "github.com/uber/cadence/service/worker/archiver"
+	"github.com/uber/cadence/service/worker/replicator"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 )
 
@@ -56,29 +59,30 @@ const (
 
 type (
 	historyEngineImpl struct {
-		currentClusterName   string
-		shard                ShardContext
-		timeSource           clock.TimeSource
-		decisionHandler      decisionHandler
-		clusterMetadata      cluster.Metadata
-		historyMgr           persistence.HistoryManager
-		historyV2Mgr         persistence.HistoryV2Manager
-		executionManager     persistence.ExecutionManager
-		visibilityMgr        persistence.VisibilityManager
-		txProcessor          transferQueueProcessor
-		timerProcessor       timerQueueProcessor
-		taskAllocator        taskAllocator
-		replicator           *historyReplicator
-		replicatorProcessor  queueProcessor
-		historyEventNotifier historyEventNotifier
-		tokenSerializer      common.TaskTokenSerializer
-		historyCache         *historyCache
-		metricsClient        metrics.Client
-		logger               log.Logger
-		throttledLogger      log.Logger
-		config               *Config
-		archivalClient       warchiver.Client
-		resetor              workflowResetor
+		currentClusterName        string
+		shard                     ShardContext
+		timeSource                clock.TimeSource
+		decisionHandler           decisionHandler
+		clusterMetadata           cluster.Metadata
+		historyMgr                persistence.HistoryManager
+		historyV2Mgr              persistence.HistoryV2Manager
+		executionManager          persistence.ExecutionManager
+		visibilityMgr             persistence.VisibilityManager
+		txProcessor               transferQueueProcessor
+		timerProcessor            timerQueueProcessor
+		taskAllocator             taskAllocator
+		replicator                *historyReplicator
+		replicatorProcessor       ReplicatorQueueProcessor
+		historyEventNotifier      historyEventNotifier
+		tokenSerializer           common.TaskTokenSerializer
+		historyCache              *historyCache
+		metricsClient             metrics.Client
+		logger                    log.Logger
+		throttledLogger           log.Logger
+		config                    *Config
+		archivalClient            warchiver.Client
+		resetor                   workflowResetor
+		replicationTaskProcessors []*ReplicationTaskProcessor
 	}
 )
 
@@ -134,6 +138,8 @@ func NewEngineWithShardContext(
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
+	replicationTaskFetchers *ReplicationTaskFetchers,
+	domainReplicator replicator.DomainReplicator,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -181,6 +187,14 @@ func NewEngineWithShardContext(
 	}
 	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
+
+	var replicationTaskProcessors []*ReplicationTaskProcessor
+	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
+		replicationTaskProcessor := NewReplicationTaskProcessor(shard, historyEngImpl, domainReplicator, shard.GetMetricsClient(), replicationTaskFetcher)
+		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
+	}
+	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
+
 	shard.SetEngine(historyEngImpl)
 
 	return historyEngImpl
@@ -197,8 +211,14 @@ func (e *historyEngineImpl) Start() {
 
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
-	if e.replicatorProcessor != nil {
+
+	clusterMetadata := e.shard.GetClusterMetadata()
+	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC {
 		e.replicatorProcessor.Start()
+	}
+
+	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
+		replicationTaskProcessor.Start()
 	}
 }
 
@@ -211,6 +231,10 @@ func (e *historyEngineImpl) Stop() {
 	e.timerProcessor.Stop()
 	if e.replicatorProcessor != nil {
 		e.replicatorProcessor.Stop()
+	}
+
+	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
+		replicationTaskProcessor.Stop()
 	}
 
 	// unset the failover callback
@@ -2335,4 +2359,8 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 		StartRequestId: common.StringPtr(fmt.Sprintf("%v", createRequestID)),
 		RunId:          common.StringPtr(fmt.Sprintf("%v", runID)),
 	}
+}
+
+func (e *historyEngineImpl) GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error) {
+	return e.replicatorProcessor.getTasks(taskID)
 }

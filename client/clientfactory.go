@@ -23,8 +23,6 @@ package client
 import (
 	"time"
 
-	"go.uber.org/yarpc"
-
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
@@ -34,9 +32,11 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"go.uber.org/yarpc"
 )
 
 const (
@@ -74,6 +74,7 @@ type (
 		metricsClient         metrics.Client
 		dynConfig             *dynamicconfig.Collection
 		numberOfHistoryShards int
+		logger                log.Logger
 	}
 )
 
@@ -84,6 +85,7 @@ func NewRPCClientFactory(
 	metricsClient metrics.Client,
 	dc *dynamicconfig.Collection,
 	numberOfHistoryShards int,
+	logger log.Logger,
 ) Factory {
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
@@ -91,6 +93,7 @@ func NewRPCClientFactory(
 		metricsClient:         metricsClient,
 		dynConfig:             dc,
 		numberOfHistoryShards: numberOfHistoryShards,
+		logger:                logger,
 	}
 }
 
@@ -125,7 +128,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		return historyserviceclient.New(dispatcher.ClientConfig(common.HistoryServiceName)), nil
 	}
 
-	client := history.NewClient(cf.numberOfHistoryShards, timeout, common.NewClientCache(keyResolver, clientProvider))
+	client := history.NewClient(cf.numberOfHistoryShards, timeout, common.NewClientCache(keyResolver, clientProvider), cf.logger)
 	if cf.metricsClient != nil {
 		client = history.NewMetricClient(client, cf.metricsClient)
 	}

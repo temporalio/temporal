@@ -25,12 +25,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
@@ -55,6 +55,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		historyEngine            *historyEngineImpl
+		mockCtrl                 *gomock.Controller
 		mockMatchingClient       *mocks.MatchingClient
 		mockHistoryClient        *mocks.HistoryClient
 		mockMetadataMgr          *mocks.MetadataManager
@@ -72,7 +73,7 @@ type (
 		mockArchivalClient       *archiver.ClientMock
 		mockEventsCache          *MockEventsCache
 		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *mockQueueProcessor
+		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MockTimerQueueProcessor
 
 		shardClosedCh chan int
@@ -99,6 +100,7 @@ func (s *engine3Suite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	shardID := 0
+	s.mockCtrl = gomock.NewController(s.T())
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
@@ -144,8 +146,8 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = &mockQueueProcessor{}
-	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
@@ -177,6 +179,7 @@ func (s *engine3Suite) SetupTest() {
 }
 
 func (s *engine3Suite) TearDownTest() {
+	s.mockCtrl.Finish()
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
@@ -187,7 +190,6 @@ func (s *engine3Suite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockReplicationProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 

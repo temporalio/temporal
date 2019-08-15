@@ -28,6 +28,7 @@ package workflowserviceserver
 import (
 	context "context"
 	cadence "github.com/uber/cadence/.gen/go/cadence"
+	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	transport "go.uber.org/yarpc/api/transport"
@@ -60,6 +61,11 @@ type Interface interface {
 		ctx context.Context,
 		DescribeRequest *shared.DescribeWorkflowExecutionRequest,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
+
+	GetReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetReplicationMessagesRequest,
+	) (*replicator.GetReplicationMessagesResponse, error)
 
 	GetSearchAttributes(
 		ctx context.Context,
@@ -274,6 +280,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.DescribeWorkflowExecution),
 				},
 				Signature:    "DescribeWorkflowExecution(DescribeRequest *shared.DescribeWorkflowExecutionRequest) (*shared.DescribeWorkflowExecutionResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "GetReplicationMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.GetReplicationMessages),
+				},
+				Signature:    "GetReplicationMessages(Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse)",
 				ThriftModule: cadence.ThriftModule,
 			},
 
@@ -609,7 +626,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 35)
+	procedures := make([]transport.Procedure, 0, 36)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -702,6 +719,25 @@ func (h handler) DescribeWorkflowExecution(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_DescribeWorkflowExecution_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) GetReplicationMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_GetReplicationMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.GetReplicationMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_GetReplicationMessages_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {
