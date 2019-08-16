@@ -3,7 +3,7 @@
 set -ex
 
 # fetch codecov reporting tool
-go get github.com/mattn/goveralls
+go get github.com/dmetzgar/goveralls
 
 # download cover files from all the tests
 mkdir -p build/coverage
