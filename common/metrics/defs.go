@@ -1281,6 +1281,10 @@ const (
 	CadenceClientFailures
 	CadenceClientLatency
 
+	CadenceDcRedirectionClientRequests
+	CadenceDcRedirectionClientFailures
+	CadenceDcRedirectionClientLatency
+
 	DomainCachePrepareCallbacksLatency
 	DomainCacheCallbacksLatency
 
@@ -1573,6 +1577,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceClientRequests:                               {metricName: "cadence_client_requests", metricType: Counter},
 		CadenceClientFailures:                               {metricName: "cadence_client_errors", metricType: Counter},
 		CadenceClientLatency:                                {metricName: "cadence_client_latency", metricType: Timer},
+		CadenceDcRedirectionClientRequests:                  {metricName: "cadence_client_requests_redirection", metricType: Counter},
+		CadenceDcRedirectionClientFailures:                  {metricName: "cadence_client_errors_redirection", metricType: Counter},
+		CadenceDcRedirectionClientLatency:                   {metricName: "cadence_client_latency_redirection", metricType: Timer},
 		DomainCachePrepareCallbacksLatency:                  {metricName: "domain_cache_prepare_callbacks_latency", metricType: Timer},
 		DomainCacheCallbacksLatency:                         {metricName: "domain_cache_callbacks_latency", metricType: Timer},
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},

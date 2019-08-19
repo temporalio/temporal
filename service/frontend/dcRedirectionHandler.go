@@ -1136,9 +1136,9 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 	log.CapturePanic(handler.service.GetLogger(), retError)
 
 	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
-	scope.IncCounter(metrics.CadenceClientRequests)
-	scope.RecordTimer(metrics.CadenceClientLatency, handler.timeSource.Now().Sub(startTime))
+	scope.IncCounter(metrics.CadenceDcRedirectionClientRequests)
+	scope.RecordTimer(metrics.CadenceDcRedirectionClientLatency, handler.timeSource.Now().Sub(startTime))
 	if *retError != nil {
-		scope.IncCounter(metrics.CadenceClientFailures)
+		scope.IncCounter(metrics.CadenceDcRedirectionClientFailures)
 	}
 }
