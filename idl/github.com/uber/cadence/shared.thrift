@@ -293,6 +293,13 @@ enum EncodingType {
   ThriftRW,
 }
 
+enum QueryRejectCondition {
+  // NOT_OPEN indicates that query should be rejected if workflow is not open
+  NOT_OPEN
+  // NOT_COMPLETED_CLEANLY indicates that query should be rejected if workflow did not complete cleanly
+  NOT_COMPLETED_CLEANLY
+}
+
 struct DataBlob {
   10: optional EncodingType EncodingType
   20: optional binary Data
@@ -1316,10 +1323,17 @@ struct QueryWorkflowRequest {
   10: optional string domain
   20: optional WorkflowExecution execution
   30: optional WorkflowQuery query
+  // QueryRejectCondition can used to reject the query if workflow state does not satisify condition
+  40: optional QueryRejectCondition queryRejectCondition
+}
+
+struct QueryRejected {
+  10: optional WorkflowExecutionCloseStatus closeStatus
 }
 
 struct QueryWorkflowResponse {
   10: optional binary queryResult
+  20: optional QueryRejected queryRejected
 }
 
 struct WorkflowQuery {
