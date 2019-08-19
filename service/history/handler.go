@@ -1265,7 +1265,16 @@ func (h *Handler) SyncActivity(ctx context.Context, syncActivityRequest *hist.Sy
 func (h *Handler) GetReplicationMessages(
 	ctx context.Context,
 	request *r.GetReplicationMessagesRequest,
-) (*r.GetReplicationMessagesResponse, error) {
+) (resp *r.GetReplicationMessagesResponse, retError error) {
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	h.GetLogger().Debug("Received GetReplicationMessages call.")
+
+	scope := metrics.HistoryGetReplicationMessagesScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
 
 	var wg sync.WaitGroup
 	wg.Add(len(request.Tokens))
@@ -1277,13 +1286,13 @@ func (h *Handler) GetReplicationMessages(
 
 			engine, err := h.controller.getEngineForShard(int(token.GetShardID()))
 			if err != nil {
-				h.GetLogger().Warn("history engine not found for shard", tag.Error(err))
+				h.GetLogger().Warn("History engine not found for shard", tag.Error(err))
 				return
 			}
 
 			tasks, err := engine.GetReplicationMessages(ctx, token.GetLastRetrivedMessageId())
 			if err != nil {
-				h.GetLogger().Warn("failed to get replication tasks for shard", tag.Error(err))
+				h.GetLogger().Warn("Failed to get replication tasks for shard", tag.Error(err))
 				return
 			}
 
@@ -1300,6 +1309,8 @@ func (h *Handler) GetReplicationMessages(
 		messagesByShard[shardID] = tasks
 		return true
 	})
+
+	h.GetLogger().Debug("GetReplicationMessages succeeded.")
 
 	return &r.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
 }

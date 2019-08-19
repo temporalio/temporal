@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	fetchTaskRequestTimeout = 10 * time.Second
+	fetchTaskRequestTimeout = 60 * time.Second
 	requestChanBufferSize   = 1000
 )
 
@@ -171,6 +171,13 @@ func (f *ReplicationTaskFetcher) fetchTasks() {
 
 			requestByShard[request.token.GetShardID()] = request
 		case <-timer.C:
+			if len(requestByShard) == 0 {
+				// We don't receive tasks from previous fetch so processors are all sleeping.
+				f.logger.Debug("Skip fetching as no processor is asking for tasks.")
+				timer.Reset(jitter.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+				continue
+			}
+
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.
 			var tokens []*r.ReplicationToken
 			for _, request := range requestByShard {

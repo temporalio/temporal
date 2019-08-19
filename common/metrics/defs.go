@@ -678,6 +678,8 @@ const (
 	HistorySyncActivityScope
 	// HistoryDescribeMutableStateScope tracks HistoryActivity API calls received by service
 	HistoryDescribeMutableStateScope
+	// GetReplicationMessages tracks GetReplicationMessages API calls received by service
+	HistoryGetReplicationMessagesScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1150,6 +1152,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistorySyncShardStatusScope:                            {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                               {operation: "SyncActivity"},
 		HistoryDescribeMutableStateScope:                       {operation: "DescribeMutableState"},
+		HistoryGetReplicationMessagesScope:                     {operation: "GetReplicationMessages"},
 		HistoryShardControllerScope:                            {operation: "ShardController"},
 		TransferQueueProcessorScope:                            {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
@@ -1455,6 +1458,10 @@ const (
 	LastProcessedMessageID
 	ReplicationTasksApplied
 	ReplicationTasksFailed
+	ReplicationTasksLag
+	ReplicationTasksFetched
+	ReplicationTasksReturned
+	GetReplicationMessagesForShardLatency
 
 	NumHistoryMetrics
 )
@@ -1738,6 +1745,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		LastProcessedMessageID:                            {metricName: "last_processed_message_id", metricType: Gauge},
 		ReplicationTasksApplied:                           {metricName: "replication_tasks_applied", metricType: Counter},
 		ReplicationTasksFailed:                            {metricName: "replication_tasks_failed", metricType: Counter},
+		ReplicationTasksLag:                               {metricName: "replication_tasks_lag", metricType: Timer},
+		ReplicationTasksFetched:                           {metricName: "replication_tasks_fetched", metricType: Timer},
+		ReplicationTasksReturned:                          {metricName: "replication_tasks_returned", metricType: Timer},
+		GetReplicationMessagesForShardLatency:             {metricName: "get_replication_messages_for_shard", metricType: Timer},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},

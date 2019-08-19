@@ -261,6 +261,8 @@ type (
 		Type string `yaml:"type"`
 		// FetcherConfig is the config for replication task fetcher.
 		FetcherConfig *FetcherConfig `yaml:"fetcher"`
+		// ProcessorConfig is the config for replication task processor.
+		ProcessorConfig *ReplicationTaskProcessorConfig `yaml:"processor"`
 	}
 
 	// FetcherConfig is the config for replication task fetcher.
@@ -269,6 +271,13 @@ type (
 		AggregationIntervalSecs int     `yaml:"aggregationIntervalSecs"`
 		ErrorRetryWaitSecs      int     `yaml:"errorRetryWaitSecs"`
 		TimerJitterCoefficient  float64 `yaml:"timerJitterCoefficient"`
+	}
+
+	// ReplicationTaskProcessorConfig is the config for replication task processor.
+	ReplicationTaskProcessorConfig struct {
+		NoTaskInitialWaitIntervalSecs int     `yaml:"noTaskInitialWaitIntervalSecs"`
+		NoTaskWaitBackoffCoefficient  float64 `yaml:"noTaskWaitBackoffCoefficient"`
+		NoTaskMaxWaitIntervalSecs     int     `yaml:"noTaskMaxWaitIntervalSecs"`
 	}
 
 	// DCRedirectionPolicy contains the frontend datacenter redirection policy

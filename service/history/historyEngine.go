@@ -2362,5 +2362,16 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error) {
-	return e.replicatorProcessor.getTasks(taskID)
+	scope := metrics.HistoryGetReplicationMessagesScope
+	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
+	defer sw.Stop()
+
+	replicationMessages, err := e.replicatorProcessor.getTasks(taskID)
+	if err != nil {
+		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
+		return nil, err
+	}
+
+	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
+	return replicationMessages, nil
 }

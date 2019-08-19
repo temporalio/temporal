@@ -51,7 +51,7 @@ var (
 )
 
 type (
-	// ReplicationTaskProcessor is responsible for processing replication tasks for a shord.
+	// ReplicationTaskProcessor is responsible for processing replication tasks for a shard.
 	ReplicationTaskProcessor struct {
 		status                 int32
 		shard                  ShardContext
@@ -63,6 +63,7 @@ type (
 		metricsClient          metrics.Client
 		logger                 log.Logger
 		retryPolicy            backoff.RetryPolicy
+		noTaskBackoffRetrier   backoff.Retrier
 
 		requestChan chan<- *request
 		done        chan struct{}
@@ -86,17 +87,29 @@ func NewReplicationTaskProcessor(
 	retryPolicy.SetBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient)
 	retryPolicy.SetMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
+	var noTaskBackoffRetrier backoff.Retrier
+	config := shard.GetClusterMetadata().GetReplicationConsumerConfig().ProcessorConfig
+	// TODO: add a default noTaskBackoffRetrier?
+	if config != nil {
+		noTaskBackoffPolicy := backoff.NewExponentialRetryPolicy(time.Duration(config.NoTaskInitialWaitIntervalSecs) * time.Second)
+		noTaskBackoffPolicy.SetBackoffCoefficient(config.NoTaskWaitBackoffCoefficient)
+		noTaskBackoffPolicy.SetMaximumInterval(time.Duration(config.NoTaskMaxWaitIntervalSecs) * time.Second)
+		noTaskBackoffPolicy.SetExpirationInterval(backoff.NoInterval)
+		noTaskBackoffRetrier = backoff.NewRetrier(noTaskBackoffPolicy, backoff.SystemClock)
+	}
+
 	return &ReplicationTaskProcessor{
-		status:           common.DaemonStatusInitialized,
-		shard:            shard,
-		historyEngine:    historyEngine,
-		sourceCluster:    replicationTaskFetcher.GetSourceCluster(),
-		domainReplicator: domainReplicator,
-		metricsClient:    metricsClient,
-		logger:           shard.GetLogger(),
-		retryPolicy:      retryPolicy,
-		requestChan:      replicationTaskFetcher.GetRequestChan(),
-		done:             make(chan struct{}),
+		status:               common.DaemonStatusInitialized,
+		shard:                shard,
+		historyEngine:        historyEngine,
+		sourceCluster:        replicationTaskFetcher.GetSourceCluster(),
+		domainReplicator:     domainReplicator,
+		metricsClient:        metricsClient,
+		logger:               shard.GetLogger(),
+		retryPolicy:          retryPolicy,
+		noTaskBackoffRetrier: noTaskBackoffRetrier,
+		requestChan:          replicationTaskFetcher.GetRequestChan(),
+		done:                 make(chan struct{}),
 	}
 }
 
@@ -143,6 +156,15 @@ func (p *ReplicationTaskProcessor) processorLoop() {
 				tag.Counter(len(response.GetReplicationTasks())),
 			)
 
+			// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
+			// we will receive replication tasks but hasMore is false (meaning that we are always catching up).
+			// So hasMore might not be a good indicator for additional wait.
+			if len(response.ReplicationTasks) == 0 {
+				backoffDuration := p.noTaskBackoffRetrier.NextBackOff()
+				time.Sleep(backoffDuration)
+				continue
+			}
+
 			for _, replicationTask := range response.ReplicationTasks {
 				p.processTask(replicationTask)
 			}
@@ -155,7 +177,7 @@ func (p *ReplicationTaskProcessor) processorLoop() {
 			}
 
 			scope.UpdateGauge(metrics.LastRetrievedMessageID, float64(p.lastRetrievedMessageID))
-			scope.AddCounter(metrics.ReplicationTasksApplied, int64(len(response.GetReplicationTasks())))
+			p.noTaskBackoffRetrier.Reset()
 		case <-p.done:
 			p.logger.Info("Closing replication task processor.", tag.ReadLevel(p.lastRetrievedMessageID))
 			return
