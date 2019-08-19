@@ -381,8 +381,86 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	})
 	s.True(time.Now().After(start.Add(time.Second * 1)))
 	s.Nil(err)
-	s.Equal(int64(5), *pollResponse.NextEventId)
+	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
+}
+
+func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
+	ctx := context.Background()
+	domainID := validDomainID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		execution.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	// right now the next event ID is 4
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID, Name: "testDomain"},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	).Once()
+
+	// test long poll on next event ID change
+	asyncBranchTokenUpdate := func(delay time.Duration) {
+		timer := time.NewTimer(delay)
+		<-timer.C
+		newExecution := &workflow.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      execution.RunId,
+		}
+		s.mockHistoryEngine.historyEventNotifier.NotifyNewHistoryEvent(newHistoryEventNotification(
+			"domainID",
+			newExecution,
+			int64(1),
+			int64(4),
+			int64(1),
+			[]byte{1},
+			persistence.WorkflowStateCreated,
+			persistence.WorkflowCloseStatusNone))
+	}
+
+	// return immediately, since the expected next event ID appears
+	response0, err := s.mockHistoryEngine.GetMutableState(ctx, &history.GetMutableStateRequest{
+		DomainUUID:          common.StringPtr(domainID),
+		Execution:           &execution,
+		ExpectedNextEventId: common.Int64Ptr(3),
+	})
+	s.Nil(err)
+	s.Equal(int64(4), response0.GetNextEventId())
+
+	// long poll, new event happen before long poll timeout
+	go asyncBranchTokenUpdate(time.Second * 2)
+	start := time.Now()
+	response1, err := s.mockHistoryEngine.GetMutableState(ctx, &history.GetMutableStateRequest{
+		DomainUUID:          common.StringPtr(domainID),
+		Execution:           &execution,
+		ExpectedNextEventId: common.Int64Ptr(10),
+	})
+	s.True(time.Now().After(start.Add(time.Second * 1)))
+	s.Nil(err)
+	s.Equal(response0.GetCurrentBranchToken(), response1.GetCurrentBranchToken())
 }
 
 func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
@@ -426,7 +504,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 		ExpectedNextEventId: common.Int64Ptr(4),
 	})
 	s.Nil(err)
-	s.Equal(int64(4), *response.NextEventId)
+	s.Equal(int64(4), response.GetNextEventId())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
@@ -4900,7 +4978,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 		nil,
 	)
 	err = s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "EntityNotExistsError{Message: Workflow execution already completed.}")
+	s.EqualError(err, "EntityNotExistsError{Message: workflow execution already completed}")
 }
 
 func (s *engineSuite) TestRemoveSignalMutableState() {

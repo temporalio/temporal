@@ -21,6 +21,7 @@
 package history
 
 import (
+	"bytes"
 	ctx "context"
 	"encoding/json"
 	"errors"
@@ -90,30 +91,29 @@ var (
 	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDuplicate is exported temporarily for integration test
-	ErrDuplicate = errors.New("Duplicate task, completing it")
+	ErrDuplicate = errors.New("duplicate task, completing it")
 	// ErrConflict is exported temporarily for integration test
-	ErrConflict = errors.New("Conditional update failed")
+	ErrConflict = errors.New("conditional update failed")
 	// ErrMaxAttemptsExceeded is exported temporarily for integration test
-	ErrMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
+	ErrMaxAttemptsExceeded = errors.New("maximum attempts exceeded to update history")
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
-	ErrStaleState = errors.New("Cache mutable state could potentially be stale")
+	ErrStaleState = errors.New("cache mutable state could potentially be stale")
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
-	ErrActivityTaskNotFound = &workflow.EntityNotExistsError{Message: "Activity task not found."}
+	ErrActivityTaskNotFound = &workflow.EntityNotExistsError{Message: "activity task not found"}
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
-	ErrWorkflowCompleted = &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+	ErrWorkflowCompleted = &workflow.EntityNotExistsError{Message: "workflow execution already completed"}
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
-	ErrWorkflowParent = &workflow.EntityNotExistsError{Message: "Workflow parent does not match."}
+	ErrWorkflowParent = &workflow.EntityNotExistsError{Message: "workflow parent does not match"}
 	// ErrDeserializingToken is the error to indicate task token is invalid
-	ErrDeserializingToken = &workflow.BadRequestError{Message: "Error deserializing task token."}
+	ErrDeserializingToken = &workflow.BadRequestError{Message: "error deserializing task token"}
 	// ErrSignalOverSize is the error to indicate signal input size is > 256K
-	ErrSignalOverSize = &workflow.BadRequestError{Message: "Signal input size is over 256K."}
+	ErrSignalOverSize = &workflow.BadRequestError{Message: "signal input size is over 256K"}
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
-	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "Cancellation already requested for this workflow execution."}
+	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "cancellation already requested for this workflow execution"}
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
-	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for signal events"}
+	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "exceeded workflow execution limit for signal events"}
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
-	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event."}
-
+	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowCloseState = map[int]bool{
@@ -526,7 +526,9 @@ func (e *historyEngineImpl) PollMutableState(
 	response, err := e.getMutableStateOrPolling(ctx, &h.GetMutableStateRequest{
 		DomainUUID:          request.DomainUUID,
 		Execution:           request.Execution,
-		ExpectedNextEventId: request.ExpectedNextEventId})
+		ExpectedNextEventId: request.ExpectedNextEventId,
+		CurrentBranchToken:  request.CurrentBranchToken})
+
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +544,7 @@ func (e *historyEngineImpl) PollMutableState(
 		ClientFeatureVersion:                 response.ClientFeatureVersion,
 		ClientImpl:                           response.ClientImpl,
 		StickyTaskListScheduleToStartTimeout: response.StickyTaskListScheduleToStartTimeout,
-		BranchToken:                          response.BranchToken,
+		CurrentBranchToken:                   response.CurrentBranchToken,
 		ReplicationInfo:                      response.ReplicationInfo,
 		VersionHistories:                     response.VersionHistories,
 		WorkflowState:                        response.WorkflowState,
@@ -567,7 +569,14 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	if err != nil {
 		return nil, err
 	}
-
+	if request.CurrentBranchToken == nil {
+		request.CurrentBranchToken = response.CurrentBranchToken
+	}
+	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+		return nil, &workflow.CurrentBranchChangedError{
+			Message:            "current branch token and request branch token doesn't match.",
+			CurrentBranchToken: response.CurrentBranchToken}
+	}
 	// set the run id in case query the current running workflow
 	execution.RunId = response.Execution.RunId
 
@@ -590,9 +599,13 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-
-		if expectedNextEventID < response.GetNextEventId() ||
-			!response.GetIsWorkflowRunning() {
+		// check again if the current branch token changed
+		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+			return nil, &workflow.CurrentBranchChangedError{
+				Message:            "current branch token and request branch token doesn't match.",
+				CurrentBranchToken: response.CurrentBranchToken}
+		}
+		if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
 			return response, nil
 		}
 
@@ -607,10 +620,16 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			case event := <-channel:
 				response.LastFirstEventId = common.Int64Ptr(event.lastFirstEventID)
 				response.NextEventId = common.Int64Ptr(event.nextEventID)
-				response.IsWorkflowRunning = common.BoolPtr(event.isWorkflowRunning)
+				response.IsWorkflowRunning = common.BoolPtr(event.workflowExecutionCloseState == persistence.WorkflowCloseStatusNone)
 				response.PreviousStartedEventId = common.Int64Ptr(event.previousStartedEventID)
-				if expectedNextEventID < response.GetNextEventId() ||
-					!response.GetIsWorkflowRunning() {
+				response.WorkflowState = common.Int32Ptr(int32(event.workflowExecutionState))
+				response.WorkflowCloseState = common.Int32Ptr(int32(event.workflowExecutionCloseState))
+				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
+					return nil, &workflow.CurrentBranchChangedError{
+						Message:            "Current branch token and request branch token doesn't match.",
+						CurrentBranchToken: event.currentBranchToken}
+				}
+				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
 					return response, nil
 				}
 			case <-timer.C:
@@ -663,7 +682,7 @@ func (e *historyEngineImpl) getMutableState(
 		IsWorkflowRunning:                    common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
 		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
 		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
-		BranchToken:                          currentBranchToken,
+		CurrentBranchToken:                   currentBranchToken,
 		WorkflowState:                        common.Int32Ptr(int32(workflowState)),
 		WorkflowCloseState:                   common.Int32Ptr(int32(workflowCloseState)),
 	}

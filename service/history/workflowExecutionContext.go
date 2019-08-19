@@ -442,6 +442,24 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		return err
 	}
 
+	currentBranchToken, err := resetMutableState.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
+
+	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateCloseStatus()
+	// Current branch changed and notify the watchers
+	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+		c.domainID,
+		&c.workflowExecution,
+		resetMutableState.GetLastFirstEventID(),
+		resetMutableState.GetNextEventID(),
+		resetMutableState.GetPreviousStartedEventID(),
+		currentBranchToken,
+		workflowState,
+		workflowCloseState,
+	))
+
 	c.notifyTasks(
 		resetWorkflow.TransferTasks,
 		resetWorkflow.ReplicationTasks,
@@ -600,6 +618,12 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		CloseStatus: c.msBuilder.GetExecutionInfo().CloseStatus,
 	})
 
+	currentBranchToken, err := c.msBuilder.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
+
+	workflowState, workflowCloseState := c.msBuilder.GetWorkflowStateCloseStatus()
 	// for any change in the workflow, send a event
 	// TODO: @andrewjdawson2016 remove historyEventNotifier once plumbing for MutableStatePubSub is finished
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
@@ -608,7 +632,9 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		c.msBuilder.GetLastFirstEventID(),
 		c.msBuilder.GetNextEventID(),
 		c.msBuilder.GetPreviousStartedEventID(),
-		c.msBuilder.IsWorkflowExecutionRunning(),
+		currentBranchToken,
+		workflowState,
+		workflowCloseState,
 	))
 
 	// notify current workflow tasks

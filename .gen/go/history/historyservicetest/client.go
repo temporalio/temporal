@@ -205,11 +205,11 @@ func (mr *_MockClientRecorder) GetMutableState(
 // 	... := client.PollMutableState(...)
 func (m *MockClient) PollMutableState(
 	ctx context.Context,
-	_GetRequest *history.PollMutableStateRequest,
+	_PollRequest *history.PollMutableStateRequest,
 	opts ...yarpc.CallOption,
 ) (success *history.PollMutableStateResponse, err error) {
 
-	args := []interface{}{ctx, _GetRequest}
+	args := []interface{}{ctx, _PollRequest}
 	for _, o := range opts {
 		args = append(args, o)
 	}
@@ -223,10 +223,10 @@ func (m *MockClient) PollMutableState(
 
 func (mr *_MockClientRecorder) PollMutableState(
 	ctx interface{},
-	_GetRequest interface{},
+	_PollRequest interface{},
 	opts ...interface{},
 ) *gomock.Call {
-	args := append([]interface{}{ctx, _GetRequest}, opts...)
+	args := append([]interface{}{ctx, _PollRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "PollMutableState", args...)
 }
 

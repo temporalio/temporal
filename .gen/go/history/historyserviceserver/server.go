@@ -58,7 +58,7 @@ type Interface interface {
 
 	PollMutableState(
 		ctx context.Context,
-		GetRequest *history.PollMutableStateRequest,
+		PollRequest *history.PollMutableStateRequest,
 	) (*history.PollMutableStateResponse, error)
 
 	RecordActivityTaskHeartbeat(
@@ -234,7 +234,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Type:  transport.Unary,
 					Unary: thrift.UnaryHandler(h.PollMutableState),
 				},
-				Signature:    "PollMutableState(GetRequest *history.PollMutableStateRequest) (*history.PollMutableStateResponse)",
+				Signature:    "PollMutableState(PollRequest *history.PollMutableStateRequest) (*history.PollMutableStateResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -571,7 +571,7 @@ func (h handler) PollMutableState(ctx context.Context, body wire.Value) (thrift.
 		return thrift.Response{}, err
 	}
 
-	success, err := h.impl.PollMutableState(ctx, args.GetRequest)
+	success, err := h.impl.PollMutableState(ctx, args.PollRequest)
 
 	hadError := err != nil
 	result, err := history.HistoryService_PollMutableState_Helper.WrapResponse(success, err)

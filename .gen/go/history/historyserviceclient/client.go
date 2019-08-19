@@ -64,7 +64,7 @@ type Interface interface {
 
 	PollMutableState(
 		ctx context.Context,
-		GetRequest *history.PollMutableStateRequest,
+		PollRequest *history.PollMutableStateRequest,
 		opts ...yarpc.CallOption,
 	) (*history.PollMutableStateResponse, error)
 
@@ -319,11 +319,11 @@ func (c client) GetMutableState(
 
 func (c client) PollMutableState(
 	ctx context.Context,
-	_GetRequest *history.PollMutableStateRequest,
+	_PollRequest *history.PollMutableStateRequest,
 	opts ...yarpc.CallOption,
 ) (success *history.PollMutableStateResponse, err error) {
 
-	args := history.HistoryService_PollMutableState_Helper.Args(_GetRequest)
+	args := history.HistoryService_PollMutableState_Helper.Args(_PollRequest)
 
 	var body wire.Value
 	body, err = c.c.Call(ctx, args, opts...)

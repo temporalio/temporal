@@ -33,12 +33,14 @@ import (
 
 type (
 	historyEventNotification struct {
-		id                     definition.WorkflowIdentifier
-		lastFirstEventID       int64
-		nextEventID            int64
-		previousStartedEventID int64
-		isWorkflowRunning      bool
-		timestamp              time.Time
+		id                          definition.WorkflowIdentifier
+		lastFirstEventID            int64
+		nextEventID                 int64
+		previousStartedEventID      int64
+		timestamp                   time.Time
+		currentBranchToken          []byte
+		workflowExecutionState      int
+		workflowExecutionCloseState int
 	}
 
 	// Engine represents an interface for managing workflow execution history.

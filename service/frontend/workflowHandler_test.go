@@ -1128,13 +1128,14 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	domainID := uuid.New()
 	firstEventID := int64(100)
 	nextEventID := int64(101)
+	branchToken := []byte{1}
 	we := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("wid"),
 		RunId:      common.StringPtr("rid"),
 	}
 	shardID := common.WorkflowIDToHistoryShard(*we.WorkflowId, numHistoryShards)
 	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   []byte{},
+		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      0,
@@ -1156,7 +1157,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	wh := s.getWorkflowHandlerWithParams(mService, config, mMetadataManager)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	scope := wh.metricsClient.Scope(0)
-	history, token, err := wh.getHistory(scope, domainID, we, firstEventID, nextEventID, 0, []byte{}, nil, persistence.EventStoreVersionV2, []byte{})
+	history, token, err := wh.getHistory(scope, domainID, we, firstEventID, nextEventID, 0, []byte{}, nil, branchToken)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
 	s.NoError(err)

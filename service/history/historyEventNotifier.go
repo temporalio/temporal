@@ -60,22 +60,38 @@ type (
 
 var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
-func newHistoryEventNotification(domainID string, workflowExecution *gen.WorkflowExecution,
-	lastFirstEventID int64, nextEventID int64, previousStartedEventID int64, isWorkflowRunning bool) *historyEventNotification {
+func newHistoryEventNotification(
+	domainID string,
+	workflowExecution *gen.WorkflowExecution,
+	lastFirstEventID int64,
+	nextEventID int64,
+	previousStartedEventID int64,
+	currentBranchToken []byte,
+	workflowExecutionState int,
+	workflowExecutionCloseState int,
+) *historyEventNotification {
+
 	return &historyEventNotification{
 		id: definition.NewWorkflowIdentifier(
 			domainID,
 			workflowExecution.GetWorkflowId(),
 			workflowExecution.GetRunId(),
 		),
-		lastFirstEventID:       lastFirstEventID,
-		nextEventID:            nextEventID,
-		previousStartedEventID: previousStartedEventID,
-		isWorkflowRunning:      isWorkflowRunning,
+		lastFirstEventID:            lastFirstEventID,
+		nextEventID:                 nextEventID,
+		previousStartedEventID:      previousStartedEventID,
+		currentBranchToken:          currentBranchToken,
+		workflowExecutionState:      workflowExecutionState,
+		workflowExecutionCloseState: workflowExecutionCloseState,
 	}
 }
 
-func newHistoryEventNotifier(timeSource clock.TimeSource, metrics metrics.Client, workflowIDToShardID func(string) int) *historyEventNotifierImpl {
+func newHistoryEventNotifier(
+	timeSource clock.TimeSource,
+	metrics metrics.Client,
+	workflowIDToShardID func(string) int,
+) *historyEventNotifierImpl {
+
 	hashFn := func(key interface{}) uint32 {
 		notification, ok := key.(historyEventNotification)
 		if !ok {
