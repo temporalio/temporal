@@ -368,7 +368,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	schedule := "@every 30s"
 
 	builder := newMutableStateBuilderWithEventV2(s.mockShard, s.mockEventsCache, s.logger, we.GetRunId())
-	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Maybe()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything).Return().Once()
 	startRequest := &workflow.StartWorkflowExecutionRequest{
@@ -406,9 +405,9 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
 
 	ms := createMutableState(builder)
+	ms.ExecutionInfo.StartTimestamp = time.Now()
 	wfResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
-
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(2)
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Run(func(arguments mock.Arguments) {
 		// Done.
@@ -434,7 +433,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	s.timerQueueActiveProcessor.Start()
 	<-waitCh
 	<-waitCh
-
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil) // for lookAheadTask
 	s.timerQueueActiveProcessor.notifyNewTimers(
