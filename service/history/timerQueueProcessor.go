@@ -59,6 +59,7 @@ type (
 		isStarted              int32
 		isStopped              int32
 		shutdownChan           chan struct{}
+		taskProcessor          *taskProcessor
 		activeTimerProcessor   *timerQueueActiveProcessorImpl
 		standbyTimerProcessors map[string]*timerQueueStandbyProcessorImpl
 	}
@@ -74,6 +75,8 @@ func newTimerQueueProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
+	taskProcessor := newTaskProcessor(shard, historyService, logger)
+
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
@@ -93,7 +96,7 @@ func newTimerQueueProcessor(
 				logger,
 			)
 			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
-				shard, historyService, clusterName, taskAllocator, historyRereplicator, logger,
+				shard, historyService, clusterName, taskAllocator, taskProcessor, historyRereplicator, logger,
 			)
 		}
 	}
@@ -103,6 +106,7 @@ func newTimerQueueProcessor(
 		currentClusterName:     currentClusterName,
 		shard:                  shard,
 		taskAllocator:          taskAllocator,
+		taskProcessor:          taskProcessor,
 		config:                 shard.GetConfig(),
 		metricsClient:          historyService.metricsClient,
 		historyService:         historyService,
@@ -110,7 +114,7 @@ func newTimerQueueProcessor(
 		logger:                 logger,
 		matchingClient:         matchingClient,
 		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
+		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, taskProcessor, logger),
 		standbyTimerProcessors: standbyTimerProcessors,
 	}
 }
@@ -119,6 +123,7 @@ func (t *timerQueueProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&t.isStarted, 0, 1) {
 		return
 	}
+	t.taskProcessor.start()
 	t.activeTimerProcessor.Start()
 	if t.isGlobalDomainEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -138,6 +143,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 			standbyTimerProcessor.Stop()
 		}
 	}
+	t.taskProcessor.stop()
 	close(t.shutdownChan)
 }
 
@@ -186,8 +192,18 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 		tag.MinLevel(int64(minLevel.Nanosecond())),
 		tag.MaxLevel(int64(maxLevel.Nanosecond())))
 	// we should consider make the failover idempotent
-	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainIDs,
-		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.taskAllocator, t.logger)
+	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
+		t.shard,
+		t.historyService,
+		domainIDs,
+		standbyClusterName,
+		minLevel,
+		maxLevel,
+		t.matchingClient,
+		t.taskAllocator,
+		t.taskProcessor,
+		t.logger,
+	)
 
 	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 		standbyTimerProcessor.retryTasks()

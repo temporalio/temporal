@@ -58,6 +58,11 @@ func (_m *MockTimerProcessor) process(task *persistence.TimerTaskInfo, shouldPro
 	return r0, r1
 }
 
+// complete is mock implementation for complete of timerProcessor
+func (_m *MockTimerProcessor) complete(timerTask *persistence.TimerTaskInfo) {
+	_m.Called(timerTask)
+}
+
 // getTaskFilter is mock implementation for process of timerProcessor
 func (_m *MockTimerProcessor) getTaskFilter() timerTaskFilter {
 	ret := _m.Called()

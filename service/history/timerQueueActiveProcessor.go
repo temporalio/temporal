@@ -57,6 +57,7 @@ func newTimerQueueActiveProcessor(
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
+	taskProcessor *taskProcessor,
 	logger log.Logger,
 ) *timerQueueActiveProcessorImpl {
 
@@ -100,6 +101,7 @@ func newTimerQueueActiveProcessor(
 			historyService,
 			timerQueueAckMgr,
 			timerGate,
+			taskProcessor,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			logger,
 		),
@@ -118,6 +120,7 @@ func newTimerQueueFailoverProcessor(
 	maxLevel time.Time,
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
+	taskProcessor *taskProcessor,
 	logger log.Logger,
 ) (func(ackLevel TimerSequenceID) error, *timerQueueActiveProcessorImpl) {
 
@@ -182,6 +185,7 @@ func newTimerQueueFailoverProcessor(
 			historyService,
 			timerQueueAckMgr,
 			timerGate,
+			taskProcessor,
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 			logger,
 		),
@@ -220,6 +224,12 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
 	timerTasks []persistence.Task,
 ) {
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
+}
+
+func (t *timerQueueActiveProcessorImpl) complete(
+	timerTask *persistence.TimerTaskInfo,
+) {
+	t.timerQueueProcessorBase.complete(timerTask)
 }
 
 func (t *timerQueueActiveProcessorImpl) process(

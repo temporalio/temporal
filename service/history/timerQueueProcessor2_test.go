@@ -79,6 +79,7 @@ type (
 		domainEntry               *cache.DomainCacheEntry
 		clusterName               string
 		timerQueueActiveProcessor *timerQueueActiveProcessorImpl
+		taskProcessor             *taskProcessor
 	}
 )
 
@@ -188,7 +189,15 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestCurrentClusterName
-	s.timerQueueActiveProcessor = newTimerQueueActiveProcessor(s.mockShard, h, s.mockMatchingClient, newTaskAllocator(s.mockShard), s.logger)
+	s.taskProcessor = newTaskProcessor(s.mockShard, h, s.logger)
+	s.timerQueueActiveProcessor = newTimerQueueActiveProcessor(
+		s.mockShard,
+		h,
+		s.mockMatchingClient,
+		newTaskAllocator(s.mockShard),
+		s.taskProcessor,
+		s.logger,
+	)
 
 	s.domainID = testDomainActiveID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
@@ -207,6 +216,16 @@ func (s *timerQueueProcessor2Suite) TearDownTest() {
 	s.mockEventsCache.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
+}
+
+func (s *timerQueueProcessor2Suite) startProcessor() {
+	s.taskProcessor.start()
+	s.timerQueueActiveProcessor.Start()
+}
+
+func (s *timerQueueProcessor2Suite) stopProcessor() {
+	s.timerQueueActiveProcessor.Stop()
+	s.taskProcessor.stop()
 }
 
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
@@ -273,7 +292,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	}).Once()
 
 	// Start timer Processor.
-	s.timerQueueActiveProcessor.Start()
+	s.startProcessor()
 
 	s.timerQueueActiveProcessor.notifyNewTimers(
 		[]persistence.Task{&persistence.DecisionTimeoutTask{
@@ -282,7 +301,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 		}})
 
 	<-waitCh
-	s.timerQueueActiveProcessor.Stop()
+	s.stopProcessor()
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
@@ -346,7 +365,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
 		waitCh <- struct{}{}
 	}).Once() // for lookAheadTask
-	s.timerQueueActiveProcessor.Start()
+	s.startProcessor()
 	<-waitCh
 	<-waitCh
 
@@ -358,7 +377,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		}})
 
 	<-waitCh
-	s.timerQueueActiveProcessor.Stop()
+	s.stopProcessor()
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
@@ -430,7 +449,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
 		waitCh <- struct{}{}
 	}).Once() // for lookAheadTask
-	s.timerQueueActiveProcessor.Start()
+	s.startProcessor()
 	<-waitCh
 	<-waitCh
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
@@ -441,5 +460,5 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 		}})
 
 	<-waitCh
-	s.timerQueueActiveProcessor.Stop()
+	s.stopProcessor()
 }

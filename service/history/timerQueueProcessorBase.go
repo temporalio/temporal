@@ -22,7 +22,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,7 +58,6 @@ type (
 		status           int32
 		shutdownWG       sync.WaitGroup
 		shutdownCh       chan struct{}
-		tasksCh          chan *persistence.TimerTaskInfo
 		config           *Config
 		logger           log.Logger
 		metricsClient    metrics.Client
@@ -70,13 +68,8 @@ type (
 		timeSource       clock.TimeSource
 		rateLimiter      quotas.Limiter
 		retryPolicy      backoff.RetryPolicy
-
-		// worker coroutines notification
-		workerNotificationChans []chan struct{}
-		// duplicate numOfWorker from config.TimerTaskWorkerCount for dynamic config works correctly
-		numOfWorker int
-
-		lastPollTime time.Time
+		processor        *taskProcessor
+		lastPollTime     time.Time
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -91,37 +84,29 @@ func newTimerQueueProcessorBase(
 	historyService *historyEngineImpl,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate TimerGate,
+	taskProcessor *taskProcessor,
 	maxPollRPS dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 ) *timerQueueProcessorBase {
 
 	log := logger.WithTags(tag.ComponentTimerQueue)
-
-	workerNotificationChans := []chan struct{}{}
-	numOfWorker := shard.GetConfig().TimerTaskWorkerCount()
-	for index := 0; index < numOfWorker; index++ {
-		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
-	}
-
 	base := &timerQueueProcessorBase{
-		scope:                   scope,
-		shard:                   shard,
-		historyService:          historyService,
-		cache:                   historyService.historyCache,
-		executionManager:        shard.GetExecutionManager(),
-		status:                  common.DaemonStatusInitialized,
-		shutdownCh:              make(chan struct{}),
-		tasksCh:                 make(chan *persistence.TimerTaskInfo, 10*shard.GetConfig().TimerTaskBatchSize()),
-		config:                  shard.GetConfig(),
-		logger:                  log,
-		metricsClient:           historyService.metricsClient,
-		timerQueueAckMgr:        timerQueueAckMgr,
-		timerGate:               timerGate,
-		timeSource:              shard.GetTimeSource(),
-		numOfWorker:             numOfWorker,
-		workerNotificationChans: workerNotificationChans,
-		newTimerCh:              make(chan struct{}, 1),
-		lastPollTime:            time.Time{},
+		scope:            scope,
+		shard:            shard,
+		historyService:   historyService,
+		cache:            historyService.historyCache,
+		executionManager: shard.GetExecutionManager(),
+		status:           common.DaemonStatusInitialized,
+		shutdownCh:       make(chan struct{}),
+		config:           shard.GetConfig(),
+		logger:           log,
+		metricsClient:    historyService.metricsClient,
+		timerQueueAckMgr: timerQueueAckMgr,
+		timerGate:        timerGate,
+		timeSource:       shard.GetTimeSource(),
+		newTimerCh:       make(chan struct{}, 1),
+		lastPollTime:     time.Time{},
+		processor:        taskProcessor,
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(maxPollRPS())
@@ -165,13 +150,6 @@ func (t *timerQueueProcessorBase) Stop() {
 func (t *timerQueueProcessorBase) processorPump() {
 	defer t.shutdownWG.Done()
 
-	var workerWG sync.WaitGroup
-	for i := 0; i < t.numOfWorker; i++ {
-		workerWG.Add(1)
-		notificationChan := t.workerNotificationChans[i]
-		go t.taskWorker(&workerWG, notificationChan)
-	}
-
 RetryProcessor:
 	for {
 		select {
@@ -186,31 +164,7 @@ RetryProcessor:
 	}
 
 	t.logger.Info("Timer queue processor pump shutting down.")
-	// This is the only pump which writes to tasksCh, so it is safe to close channel here
-	close(t.tasksCh)
-	if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
-		t.logger.Warn("Timer queue processor timedout on worker shutdown.")
-	}
 	t.logger.Info("Timer processor exiting.")
-}
-
-func (t *timerQueueProcessorBase) taskWorker(
-	workerWG *sync.WaitGroup,
-	notificationChan chan struct{},
-) {
-	defer workerWG.Done()
-
-	for {
-		select {
-		case <-t.shutdownCh:
-			return
-		case task, ok := <-t.tasksCh:
-			if !ok {
-				return
-			}
-			t.processTaskAndAck(notificationChan, task)
-		}
-	}
 }
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.
@@ -387,11 +341,18 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 	}
 
 	for _, task := range timerTasks {
-		// We have a timer to fire.
+		if shutdown := t.processor.addTask(
+			&timerTask{
+				processor: t.timerProcessor,
+				task:      task,
+			},
+		); shutdown {
+			return nil, nil
+		}
 		select {
-		case t.tasksCh <- task:
 		case <-t.shutdownCh:
 			return nil, nil
+		default:
 		}
 	}
 
@@ -404,186 +365,12 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 }
 
 func (t *timerQueueProcessorBase) retryTasks() {
-	for _, workerNotificationChan := range t.workerNotificationChans {
-		select {
-		case workerNotificationChan <- struct{}{}:
-		default:
-		}
-	}
+	t.processor.retryTasks()
 }
 
-func (t *timerQueueProcessorBase) processTaskAndAck(
-	notificationChan <-chan struct{},
-	task *persistence.TimerTaskInfo,
-) {
-
-	var scope int
-	var shouldProcessTask bool
-	var err error
-	startTime := t.timeSource.Now()
-	logger := t.initializeLoggerForTask(task)
-	attempt := 0
-	incAttempt := func() {
-		attempt++
-		if attempt >= t.config.TimerTaskMaxRetryCount() {
-			t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-			logger.Error("Critical error processing timer task, retrying.", tag.Error(err), tag.OperationCritical)
-		}
-	}
-
-FilterLoop:
-	for {
-		select {
-		case <-t.shutdownCh:
-			// this must return without ack
-			return
-		default:
-			shouldProcessTask, err = t.timerProcessor.getTaskFilter()(task)
-			if err == nil {
-				break FilterLoop
-			}
-			incAttempt()
-			time.Sleep(loadDomainEntryForTimerTaskRetryDelay)
-		}
-	}
-
-	op := func() error {
-		scope, err = t.processTaskOnce(notificationChan, task, shouldProcessTask, logger)
-		return t.handleTaskError(scope, startTime, notificationChan, err, logger)
-	}
-	retryCondition := func(err error) bool {
-		select {
-		case <-t.shutdownCh:
-			return false
-		default:
-			return true
-		}
-	}
-
-	for {
-		select {
-		case <-t.shutdownCh:
-			// this must return without ack
-			return
-		default:
-			err = backoff.Retry(op, t.retryPolicy, retryCondition)
-			if err == nil {
-				t.ackTaskOnce(task, scope, shouldProcessTask, startTime, attempt)
-				return
-			}
-			incAttempt()
-		}
-	}
-}
-
-func (t *timerQueueProcessorBase) processTaskOnce(
-	notificationChan <-chan struct{},
-	task *persistence.TimerTaskInfo,
-	shouldProcessTask bool,
-	logger log.Logger,
-) (int, error) {
-
-	select {
-	case <-notificationChan:
-	default:
-	}
-
-	startTime := t.timeSource.Now()
-	scope, err := t.timerProcessor.process(task, shouldProcessTask)
-	if shouldProcessTask {
-		t.metricsClient.IncCounter(scope, metrics.TaskRequests)
-		t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
-	}
-
-	return scope, err
-}
-
-func (t *timerQueueProcessorBase) handleTaskError(
-	scope int,
-	startTime time.Time,
-	notificationChan <-chan struct{},
-	err error,
-	logger log.Logger,
-) error {
-
-	if err == nil {
-		return nil
-	}
-
-	if _, ok := err.(*workflow.EntityNotExistsError); ok {
-		return nil
-	}
-
-	// this is a transient error
-	if err == ErrTaskRetry {
-		t.metricsClient.IncCounter(scope, metrics.TaskStandbyRetryCounter)
-		<-notificationChan
-		return err
-	}
-
-	if err == ErrTaskDiscarded {
-		t.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
-		err = nil
-	}
-
-	// this is a transient error
-	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if t.timeSource.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
-			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
-			return nil
-		}
-
-		return err
-	}
-
-	t.metricsClient.IncCounter(scope, metrics.TaskFailures)
-
-	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-		logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
-		return nil
-	}
-
-	logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
-	return err
-}
-
-func (t *timerQueueProcessorBase) ackTaskOnce(
-	task *persistence.TimerTaskInfo,
-	scope int,
-	reportMetrics bool,
-	startTime time.Time,
-	attempt int,
-) {
-
-	t.timerQueueAckMgr.completeTimerTask(task)
-	if reportMetrics {
-		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime))
-		t.metricsClient.RecordTimer(
-			scope,
-			metrics.TaskQueueLatency,
-			time.Since(task.GetVisibilityTimestamp()),
-		)
-	}
+func (t *timerQueueProcessorBase) complete(timerTask *persistence.TimerTaskInfo) {
+	t.timerQueueAckMgr.completeTimerTask(timerTask)
 	atomic.AddUint64(&t.timerFiredCount, 1)
-}
-
-func (t *timerQueueProcessorBase) initializeLoggerForTask(
-	task *persistence.TimerTaskInfo,
-) log.Logger {
-
-	logger := t.logger.WithTags(
-		tag.ShardID(t.shard.GetShardID()),
-		tag.WorkflowDomainID(task.DomainID),
-		tag.WorkflowID(task.WorkflowID),
-		tag.WorkflowRunID(task.RunID),
-		tag.TaskID(task.GetTaskID()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowTimeoutType(int64(task.TimeoutType)),
-	)
-	logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
-	return logger
 }
 
 func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
