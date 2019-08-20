@@ -507,14 +507,30 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	if input != "" {
 		queryRequest.Query.QueryArgs = []byte(input)
 	}
+	if c.IsSet(FlagQueryRejectCondition) {
+		var rejectCondition s.QueryRejectCondition
+		switch c.String(FlagQueryRejectCondition) {
+		case "not_open":
+			rejectCondition = s.QueryRejectConditionNotOpen
+		case "not_completed_cleanly":
+			rejectCondition = s.QueryRejectConditionNotCompletedCleanly
+		default:
+			ErrorAndExit(fmt.Sprintf("invalid reject condition %v, valid values are \"not_open\" and \"not_completed_cleanly\"", c.String(FlagQueryRejectCondition)), nil)
+		}
+		queryRequest.QueryRejectCondition = &rejectCondition
+	}
 	queryResponse, err := serviceClient.QueryWorkflow(tcCtx, queryRequest)
 	if err != nil {
 		ErrorAndExit("Query workflow failed.", err)
 		return
 	}
 
-	// assume it is json encoded
-	fmt.Printf("Query result as JSON:\n%v\n", string(queryResponse.QueryResult))
+	if queryResponse.QueryRejected != nil {
+		fmt.Printf("Query was rejected, workflow is in state: %v\n", *queryResponse.QueryRejected.CloseStatus)
+	} else {
+		// assume it is json encoded
+		fmt.Printf("Query result as JSON:\n%v\n", string(queryResponse.QueryResult))
+	}
 }
 
 // ListWorkflow list workflow executions based on filters

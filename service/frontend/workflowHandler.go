@@ -2711,6 +2711,21 @@ func (wh *WorkflowHandler) QueryWorkflow(
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
+
+	// if workflow is closed and a rejection condition is given then check if query should be rejected before proceeding
+	if response.CloseStatus != nil && queryRequest.QueryRejectCondition != nil {
+		notOpenReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotOpen
+		notCompletedCleanlyReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotCompletedCleanly && response.GetCloseStatus() != shared.WorkflowExecutionCloseStatusCompleted
+		if notOpenReject || notCompletedCleanlyReject {
+			return &gen.QueryWorkflowResponse{
+				QueryResult: nil,
+				QueryRejected: &gen.QueryRejected{
+					CloseStatus: response.CloseStatus,
+				},
+			}, nil
+		}
+	}
+
 	clientFeature := client.NewFeatureImpl(
 		response.GetClientLibraryVersion(),
 		response.GetClientFeatureVersion(),

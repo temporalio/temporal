@@ -134,6 +134,8 @@ const (
 	FlagOutputFormat                      = "output"
 	FlagQueryType                         = "query_type"
 	FlagQueryTypeWithAlias                = FlagQueryType + ", qt"
+	FlagQueryRejectCondition              = "query_reject_condition"
+	FlagQueryRejectConditionWithAlias     = FlagQueryRejectCondition + ", qrc"
 	FlagShowDetail                        = "show_detail"
 	FlagShowDetailWithAlias               = FlagShowDetail + ", sd"
 	FlagActiveClusterName                 = "active_cluster"
@@ -435,6 +437,10 @@ func getFlagsForQuery() []cli.Flag {
 			Name: FlagInputFileWithAlias,
 			Usage: "Optional input for the query from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"Input from file will be overwrite by input from command line",
+		},
+		cli.StringFlag{
+			Name:  FlagQueryRejectConditionWithAlias,
+			Usage: "Optional flag to reject queries based on workflow state. Valid values are \"not_open\" and \"not_completed_cleanly\"",
 		},
 	}
 }

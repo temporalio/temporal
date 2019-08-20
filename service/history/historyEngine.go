@@ -637,6 +637,11 @@ func (e *historyEngineImpl) getMutableState(
 		BranchToken:            msBuilder.GetCurrentBranch(),
 	}
 
+	if executionInfo.CloseStatus != persistence.WorkflowCloseStatusNone {
+		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		retResp.CloseStatus = &closeStatus
+	}
+
 	if msBuilder.IsStickyTaskListEnabled() {
 		retResp.StickyTaskList = &workflow.TaskList{Name: common.StringPtr(executionInfo.StickyTaskList)}
 		retResp.StickyTaskListScheduleToStartTimeout = common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout)
