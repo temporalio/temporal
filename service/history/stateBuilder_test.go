@@ -553,20 +553,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent.GetEventId(),
 		domainID,
 		continueAsNewEvent,
-		newRunStartedEvent,
-		&decisionInfo{
-			Version:                    newRunDecisionEvent.GetVersion(),
-			ScheduleID:                 newRunDecisionEvent.GetEventId(),
-			StartedID:                  common.EmptyEventID,
-			RequestID:                  emptyUUID,
-			DecisionTimeout:            decisionTimeoutSecond,
-			TaskList:                   tasklist,
-			Attempt:                    newRunDecisionAttempt,
-			ScheduledTimestamp:         newRunDecisionEvent.GetTimestamp(),
-			OriginalScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
-		},
-		mock.Anything,
-		int32(0),
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
@@ -885,20 +871,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		continueAsNewEvent.GetEventId(),
 		domainID,
 		continueAsNewEvent,
-		newRunStartedEvent,
-		&decisionInfo{
-			Version:                    newRunDecisionEvent.GetVersion(),
-			ScheduleID:                 newRunDecisionEvent.GetEventId(),
-			StartedID:                  common.EmptyEventID,
-			RequestID:                  emptyUUID,
-			DecisionTimeout:            decisionTimeoutSecond,
-			TaskList:                   tasklist,
-			Attempt:                    newRunDecisionAttempt,
-			ScheduledTimestamp:         newRunDecisionEvent.GetTimestamp(),
-			OriginalScheduledTimestamp: newRunDecisionEvent.GetTimestamp(),
-		},
-		mock.Anything,
-		int32(persistence.EventStoreVersionV2),
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})

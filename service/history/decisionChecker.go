@@ -517,6 +517,11 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.DecisionTimeoutValue)
 	}
 
+	// Check next run decision task delay
+	if attributes.GetBackoffStartIntervalInSeconds() < 0 {
+		return &workflow.BadRequestError{Message: "BackoffStartInterval is less than 0."}
+	}
+
 	domainEntry, err := v.domainCache.GetDomainByID(executionInfo.DomainID)
 	if err != nil {
 		return err

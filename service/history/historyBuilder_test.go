@@ -43,6 +43,9 @@ type (
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
+
+		mockDomainCache *cache.DomainCacheMock
+
 		*require.Assertions
 		domainID        string
 		domainEntry     *cache.DomainCacheEntry
@@ -61,6 +64,7 @@ func TestHistoryBuilderSuite(t *testing.T) {
 
 func (s *historyBuilderSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.mockDomainCache = &cache.DomainCacheMock{}
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.domainID = validDomainID
@@ -73,11 +77,14 @@ func (s *historyBuilderSuite) SetupTest() {
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		timeSource:                clock.NewRealTimeSource(),
+		domainCache:               s.mockDomainCache,
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, "")
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
+
+	s.mockDomainCache.On("GetDomain", mock.Anything).Return(s.domainEntry, nil).Maybe()
 }
 
 func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
@@ -300,7 +307,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	s.Equal(common.EmptyEventID, di0.StartedID)
 	s.Equal(common.EmptyEventID, s.getPreviousDecisionStartedEventID())
 
-	_, err := s.msBuilder.AddDecisionTaskScheduledEvent()
+	_, err := s.msBuilder.AddDecisionTaskScheduledEvent(false)
 	s.NotNil(err)
 	s.Equal(int64(3), s.getNextEventID())
 	di1, decisionRunning1 := s.msBuilder.GetPendingDecision(2)
@@ -717,7 +724,7 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.Workf
 }
 
 func (s *historyBuilderSuite) addDecisionTaskScheduledEvent() *decisionInfo {
-	di, err := s.msBuilder.AddDecisionTaskScheduledEvent()
+	di, err := s.msBuilder.AddDecisionTaskScheduledEvent(false)
 	s.Nil(err)
 	return di
 }

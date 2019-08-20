@@ -322,12 +322,13 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 
 	// we always schedule a new decision after reset
-	di, err = newMutableState.AddDecisionTaskScheduledEvent()
+	di, err = newMutableState.AddDecisionTaskScheduledEvent(false)
 	if err != nil {
 		retError = &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 		return
 	}
 
+	// TODO workflow reset logic should use built-in task management
 	newTransferTasks = append(newTransferTasks,
 		&persistence.DecisionTask{
 			DomainID:   domainID,
@@ -588,6 +589,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 		if retError != nil {
 			return
 		}
+
 		for _, batch := range readResp.History {
 			history := batch.Events
 			firstEvent := history[0]

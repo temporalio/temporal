@@ -71,8 +71,9 @@ type (
 		AddDecisionTaskCompletedEvent(int64, int64, *workflow.RespondDecisionTaskCompletedRequest, int) (*workflow.HistoryEvent, error)
 		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause workflow.DecisionTaskFailedCause, details []byte, identity, reason, baseRunID, newRunID string, forkEventVersion int64) (*workflow.HistoryEvent, error)
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) (*workflow.HistoryEvent, error)
-		AddDecisionTaskScheduledEvent() (*decisionInfo, error)
-		AddDecisionTaskScheduledEventAsHeartbeat(originalScheduledTimestamp int64) (*decisionInfo, error)
+		AddFirstDecisionTaskScheduled(*workflow.HistoryEvent) error
+		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
+		AddDecisionTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*decisionInfo, error)
 		AddDecisionTaskStartedEvent(int64, string, *workflow.PollForDecisionTaskRequest) (*workflow.HistoryEvent, *decisionInfo, error)
 		AddDecisionTaskTimedOutEvent(int64, int64) (*workflow.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*workflow.HistoryEvent, error)
@@ -100,7 +101,7 @@ type (
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		CreateActivityRetryTimer(*persistence.ActivityInfo, string) persistence.Task
+		RetryActivity(*persistence.ActivityInfo, string) (bool, error)
 		CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
@@ -190,7 +191,7 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error

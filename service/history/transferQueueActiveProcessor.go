@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
@@ -1317,24 +1318,18 @@ func (t *transferQueueActiveProcessorImpl) updateWorkflowExecution(
 		return err
 	}
 
-	var transferTasks []persistence.Task
-	var timerTasks []persistence.Task
 	if err := action(msBuilder); err != nil {
 		return err
 	}
 
 	if createDecisionTask {
 		// Create a transfer task to schedule a decision task
-		err := scheduleDecision(msBuilder, t.shard.GetTimeSource(), t.logger)
+		err := scheduleDecision(msBuilder)
 		if err != nil {
 			return err
 		}
 	}
 
-	// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
-	// the history and try the operation again.
-	msBuilder.AddTransferTasks(transferTasks...)
-	msBuilder.AddTimerTasks(timerTasks...)
 	return context.updateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now())
 }
 

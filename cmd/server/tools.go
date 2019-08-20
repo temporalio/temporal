@@ -24,6 +24,8 @@ package tools
 
 // the 2 dependency below are used for yarpc / thriftrw compatible code generation
 import (
+	// thriftrw gode gen
 	_ "go.uber.org/thriftrw"
+	// yarpc plugin for thriftrw gode gen
 	_ "go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc"
 )

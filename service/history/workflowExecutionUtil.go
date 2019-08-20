@@ -22,9 +22,6 @@ package history
 
 import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/persistence"
 )
 
 func failDecision(
@@ -49,36 +46,15 @@ func failDecision(
 
 func scheduleDecision(
 	mutableState mutableState,
-	timeSource clock.TimeSource,
-	logger log.Logger,
 ) error {
 
 	if mutableState.HasPendingDecisionTask() {
 		return nil
 	}
 
-	di, err := mutableState.AddDecisionTaskScheduledEvent()
+	_, err := mutableState.AddDecisionTaskScheduledEvent(false)
 	if err != nil {
 		return &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 	}
-
-	executionInfo := mutableState.GetExecutionInfo()
-	transferTask := &persistence.DecisionTask{
-		DomainID:   executionInfo.DomainID,
-		TaskList:   di.TaskList,
-		ScheduleID: di.ScheduleID,
-	}
-	mutableState.AddTransferTasks(transferTask)
-
-	if mutableState.IsStickyTaskListEnabled() {
-		tBuilder := newTimerBuilder(logger, timeSource)
-		timerTask := tBuilder.AddScheduleToStartDecisionTimoutTask(
-			di.ScheduleID,
-			di.Attempt,
-			executionInfo.StickyScheduleToStartTimeout,
-		)
-		mutableState.AddTimerTasks(timerTask)
-	}
-
 	return nil
 }

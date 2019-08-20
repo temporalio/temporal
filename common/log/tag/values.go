@@ -53,6 +53,7 @@ var (
 	WorkflowActionActivityTaskCanceled        = workflowAction("add-activitytask-canceled-event")
 	WorkflowActionActivityTaskCancelRequested = workflowAction("add-activitytask-cancel-requested-event")
 	WorkflowActionActivityTaskCancelFailed    = workflowAction("add-activitytask-cancel-failed-event")
+	WorkflowActionActivityTaskRetry           = workflowAction("add-activitytask-retry-event")
 
 	// timer
 	WorkflowActionTimerStarted      = workflowAction("add-timer-started-event")

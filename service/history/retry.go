@@ -28,40 +28,20 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/persistence"
 )
 
-func prepareActivityNextRetryWithTime(version int64, a *persistence.ActivityInfo, errReason string, now time.Time) persistence.Task {
-	if !a.HasRetryPolicy || a.CancelRequested {
-		return nil
-	}
+func getBackoffInterval(
+	now time.Time,
+	expirationTime time.Time,
+	currAttempt int32,
+	maxAttempts int32,
+	initInterval int32,
+	maxInterval int32,
+	backoffCoefficient float64,
+	failureReason string,
+	nonRetriableErrors []string,
+) time.Duration {
 
-	backoffInterval := getBackoffInterval(a.Attempt, a.MaximumAttempts, a.InitialInterval, a.MaximumInterval, a.BackoffCoefficient, now, a.ExpirationTime, errReason, a.NonRetriableErrors)
-	if backoffInterval == backoff.NoBackoff {
-		return nil
-	}
-	nextScheduleTime := now.Add(backoffInterval)
-
-	// a retry is needed, update activity info for next retry
-	a.Version = version
-	a.Attempt++
-	a.ScheduledTime = nextScheduleTime // update to next schedule time
-	a.StartedID = common.EmptyEventID
-	a.RequestID = ""
-	a.StartedTime = time.Time{}
-	a.TimerTaskStatus = TimerTaskStatusNone
-	a.LastFailureReason = errReason
-	a.LastWorkerIdentity = a.StartedIdentity
-
-	return &persistence.ActivityRetryTimerTask{
-		Version:             a.Version,
-		VisibilityTimestamp: a.ScheduledTime,
-		EventID:             a.ScheduleID,
-		Attempt:             a.Attempt,
-	}
-}
-
-func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int32, backoffCoefficient float64, now, expirationTime time.Time, errReason string, nonRetriableErrors []string) time.Duration {
 	if maxAttempts == 0 && expirationTime.IsZero() {
 		return backoff.NoBackoff
 	}
@@ -94,16 +74,16 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 	}
 
 	// make sure we don't retry size exceeded error reasons. Note that FailureReasonFailureDetailsExceedsLimit is retryable.
-	if errReason == common.FailureReasonCancelDetailsExceedsLimit ||
-		errReason == common.FailureReasonCompleteResultExceedsLimit ||
-		errReason == common.FailureReasonHeartbeatExceedsLimit ||
-		errReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
+	if failureReason == common.FailureReasonCancelDetailsExceedsLimit ||
+		failureReason == common.FailureReasonCompleteResultExceedsLimit ||
+		failureReason == common.FailureReasonHeartbeatExceedsLimit ||
+		failureReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
 		return backoff.NoBackoff
 	}
 
 	// check if error is non-retriable
 	for _, er := range nonRetriableErrors {
-		if er == errReason {
+		if er == failureReason {
 			return backoff.NoBackoff
 		}
 	}
@@ -111,6 +91,9 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 	return backoffInterval
 }
 
-func getTimeoutErrorReason(timeoutType shared.TimeoutType) string {
+func getTimeoutErrorReason(
+	timeoutType shared.TimeoutType,
+) string {
+
 	return fmt.Sprintf("cadenceInternal:Timeout %v", timeoutType)
 }

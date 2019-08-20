@@ -113,25 +113,23 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 				return nil, ErrWorkflowCompleted
 			}
 
-			postActions := &updateWorkflowAction{
-				createDecision: true,
-				transferTasks:  []persistence.Task{&persistence.RecordWorkflowStartedTask{}},
+			if msBuilder.HasProcessedOrPendingDecisionTask() {
+				return &updateWorkflowAction{
+					noop: true,
+				}, nil
 			}
 
 			startEvent, found := msBuilder.GetStartEvent()
 			if !found {
 				return nil, &workflow.InternalServiceError{Message: "Failed to load start event."}
 			}
-			executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
-			if req.GetIsFirstDecision() && executionTimestamp.After(handler.timeSource.Now()) {
-				postActions.timerTasks = append(postActions.timerTasks, &persistence.WorkflowBackoffTimerTask{
-					VisibilityTimestamp: executionTimestamp,
-					TimeoutType:         persistence.WorkflowBackoffTimeoutTypeCron,
-				})
-				postActions.createDecision = false
+			if err := msBuilder.AddFirstDecisionTaskScheduled(
+				startEvent,
+			); err != nil {
+				return nil, err
 			}
 
-			return postActions, nil
+			return &updateWorkflowAction{}, nil
 		})
 }
 
@@ -180,13 +178,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 			}
 
-			updateAction := &updateWorkflowAction{
-				noop:           false,
-				deleteWorkflow: false,
-				createDecision: false,
-				timerTasks:     nil,
-				transferTasks:  nil,
-			}
+			updateAction := &updateWorkflowAction{}
 
 			if di.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
@@ -208,11 +200,6 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			}
 
 			resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
-			updateAction.timerTasks = []persistence.Task{tBuilder.AddStartToCloseDecisionTimoutTask(
-				di.ScheduleID,
-				di.Attempt,
-				di.DecisionTimeout,
-			)}
 			return updateAction, nil
 		})
 
@@ -244,21 +231,21 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, false, true,
-		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+		func(msBuilder mutableState, tBuilder *timerBuilder) error {
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
+				return ErrWorkflowCompleted
 			}
 
 			scheduleID := token.ScheduleID
 			di, isRunning := msBuilder.GetPendingDecision(scheduleID)
 			if !isRunning || di.Attempt != token.ScheduleAttempt || di.StartedID == common.EmptyEventID {
-				return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
+				return &workflow.EntityNotExistsError{Message: "Decision task not found."}
 			}
 
 			_, err := msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, request.GetCause(), request.Details,
 				request.GetIdentity(), "", "", "", 0)
-			return nil, err
+			return err
 		})
 }
 
@@ -347,7 +334,7 @@ Update_History_Loop:
 		if decisionHeartbeating {
 			domainName := domainEntry.GetInfo().Name
 			timeout := handler.config.DecisionHeartbeatTimeout(domainName)
-			if currentDecision.OriginalScheduledTimestamp > 0 && time.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
+			if currentDecision.OriginalScheduledTimestamp > 0 && handler.timeSource.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
 				decisionHeartbeatTimeout = true
 				scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.DomainTag(domainName))
 				scope.IncCounter(metrics.DecisionHeartbeatTimeoutCounter)
@@ -373,16 +360,11 @@ Update_History_Loop:
 			failDecision                bool
 			failCause                   workflow.DecisionTaskFailedCause
 			failMessage                 string
-			isComplete                  bool
 			activityNotStartedCancelled bool
-			transferTasks               []persistence.Task
-			timerTasks                  []persistence.Task
 			continueAsNewBuilder        mutableState
 
-			tBuilder           *timerBuilder
 			hasUnhandledEvents bool
 		)
-		tBuilder = timerBuilderProvider()
 		hasUnhandledEvents = msBuilder.HasBufferedEvents()
 
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskList == nil {
@@ -450,16 +432,11 @@ Update_History_Loop:
 			}
 
 			// failMessage is not used by decisionTaskHandler
-			isComplete = !msBuilder.IsWorkflowExecutionRunning()
 			activityNotStartedCancelled = decisionTaskHandler.activityNotStartedCancelled
 			// continueAsNewTimerTasks is not used by decisionTaskHandler
 
-			transferTasks = append(transferTasks, decisionTaskHandler.transferTasks...)
-			timerTasks = append(timerTasks, decisionTaskHandler.timerTasks...)
-
 			continueAsNewBuilder = decisionTaskHandler.continueAsNewBuilder
 
-			tBuilder = decisionTaskHandler.timerBuilder
 			hasUnhandledEvents = decisionTaskHandler.hasUnhandledEventsBeforeDecisions
 		}
 
@@ -473,30 +450,26 @@ Update_History_Loop:
 			if err != nil {
 				return nil, err
 			}
-			tBuilder = handler.historyEngine.getTimerBuilder(context.getExecution())
-			isComplete = false
 			hasUnhandledEvents = true
 			continueAsNewBuilder = nil
 		}
 
-		if tt := tBuilder.GetUserTimerTaskIfNeeded(msBuilder); tt != nil {
-			timerTasks = append(timerTasks, tt)
-		}
-		if tt := tBuilder.GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
-			timerTasks = append(timerTasks, tt)
-		}
-
 		// Schedule another decision task if new events came in during this decision or if request forced to
-		createNewDecisionTask := !isComplete && (hasUnhandledEvents ||
-			request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
+		createNewDecisionTask := msBuilder.IsWorkflowExecutionRunning() &&
+			(hasUnhandledEvents || request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
 		var newDecisionTaskScheduledID int64
 		if createNewDecisionTask {
 			var newDecision *decisionInfo
 			var err error
 			if decisionHeartbeating && !decisionHeartbeatTimeout {
-				newDecision, err = msBuilder.AddDecisionTaskScheduledEventAsHeartbeat(currentDecision.OriginalScheduledTimestamp)
+				newDecision, err = msBuilder.AddDecisionTaskScheduledEventAsHeartbeat(
+					request.GetReturnNewDecisionTask(),
+					currentDecision.OriginalScheduledTimestamp,
+				)
 			} else {
-				newDecision, err = msBuilder.AddDecisionTaskScheduledEvent()
+				newDecision, err = msBuilder.AddDecisionTaskScheduledEvent(
+					request.GetReturnNewDecisionTask(),
+				)
 			}
 			if err != nil {
 				return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
@@ -504,19 +477,7 @@ Update_History_Loop:
 
 			newDecisionTaskScheduledID = newDecision.ScheduleID
 			// skip transfer task for decision if request asking to return new decision task
-			if !request.GetReturnNewDecisionTask() {
-				transferTasks = append(transferTasks, &persistence.DecisionTask{
-					DomainID:   domainID,
-					TaskList:   newDecision.TaskList,
-					ScheduleID: newDecision.ScheduleID,
-				})
-				if msBuilder.IsStickyTaskListEnabled() {
-					tBuilder := handler.historyEngine.getTimerBuilder(context.getExecution())
-					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(newDecision.ScheduleID, newDecision.Attempt,
-						executionInfo.StickyScheduleToStartTimeout)
-					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
-				}
-			} else {
+			if request.GetReturnNewDecisionTask() {
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
@@ -526,25 +487,8 @@ Update_History_Loop:
 				if err != nil {
 					return nil, err
 				}
-				timeOutTask := tBuilder.AddStartToCloseDecisionTimoutTask(newDecision.ScheduleID, newDecision.Attempt, newDecision.DecisionTimeout)
-				timerTasks = append(timerTasks, timeOutTask)
 			}
 		}
-
-		if isComplete {
-			tranT, timerT, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(
-				domainID,
-				workflowExecution.GetWorkflowId(),
-				tBuilder)
-			if err != nil {
-				return nil, err
-			}
-			transferTasks = append(transferTasks, tranT)
-			timerTasks = append(timerTasks, timerT)
-		}
-
-		msBuilder.AddTransferTasks(transferTasks...)
-		msBuilder.AddTimerTasks(timerTasks...)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
@@ -585,21 +529,16 @@ Update_History_Loop:
 					return nil, err
 				}
 
-				_, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
+				if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
 					common.FailureReasonTransactionSizeExceedsLimit,
 					[]byte(updateErr.Error()),
 					"cadence-history-server",
-				)
-				if err != nil {
+				); err != nil {
 					return nil, err
 				}
-				transferTask, timerTask, err := handler.historyEngine.getWorkflowHistoryCleanupTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
-				if err != nil {
-					return nil, err
-				}
-				msBuilder.AddTransferTasks(transferTask)
-				msBuilder.AddTimerTasks(timerTask)
-				if err := context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now()); err != nil {
+				if err := context.updateWorkflowExecutionAsActive(
+					handler.shard.GetTimeSource().Now(),
+				); err != nil {
 					return nil, err
 				}
 			}

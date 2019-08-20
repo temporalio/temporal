@@ -194,7 +194,7 @@ func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder mutabl
 // GetUserTimerTaskIfNeeded - if we need create a timer task for the user timers
 func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder mutableState) persistence.Task {
 	if !tb.isLoadedUserTimers {
-		return nil
+		tb.loadUserTimers(msBuilder)
 	}
 	timerTask := tb.firstTimerTask()
 	if timerTask != nil {
