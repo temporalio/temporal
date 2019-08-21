@@ -883,7 +883,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Once()
-	msBuilderCurrent.On("HasPendingDecisionTask").Return(true)
+	msBuilderCurrent.On("HasPendingDecision").Return(true)
 
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
@@ -975,7 +975,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Once()
-	msBuilderCurrent.On("HasPendingDecisionTask").Return(false)
+	msBuilderCurrent.On("HasPendingDecision").Return(false)
 	newDecision := &decisionInfo{
 		Version:    currentVersion,
 		ScheduleID: 1234,
@@ -1571,7 +1571,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Once()
-	msBuilderCurrent.On("HasPendingDecisionTask").Return(true)
+	msBuilderCurrent.On("HasPendingDecision").Return(true)
 
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
@@ -1661,7 +1661,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Once()
-	msBuilderCurrent.On("HasPendingDecisionTask").Return(false)
+	msBuilderCurrent.On("HasPendingDecision").Return(false)
 
 	newDecision := &decisionInfo{
 		Version:    currentLastWriteVersion,
@@ -1751,7 +1751,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Once()
-	msBuilderIn.On("HasPendingDecisionTask").Return(true)
+	msBuilderIn.On("HasPendingDecision").Return(true)
 
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
@@ -1804,7 +1804,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Once()
-	msBuilderIn.On("HasPendingDecisionTask").Return(false)
+	msBuilderIn.On("HasPendingDecision").Return(false)
 
 	newDecision := &decisionInfo{
 		Version:    currentLastWriteVersion,
@@ -2260,11 +2260,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID,
 	}).Once()
 	msBuilderIn.On("HasBufferedEvents").Return(true).Once()
-	msBuilderIn.On("GetInFlightDecisionTask").Return(pendingDecisionInfo, true)
+	msBuilderIn.On("GetInFlightDecision").Return(pendingDecisionInfo, true)
 	msBuilderIn.On("UpdateReplicationStateVersion", currentLastWriteVersion, true).Once()
 	msBuilderIn.On("AddDecisionTaskFailedEvent", pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
 		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "", int64(0)).Return(&shared.HistoryEvent{}, nil).Once()
-	msBuilderIn.On("HasPendingDecisionTask").Return(false)
+	msBuilderIn.On("HasPendingDecision").Return(false)
 	currentState := persistence.WorkflowStateRunning
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:               startTimeStamp,
@@ -3450,7 +3450,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}, nil).Once()
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
-	msBuilderCurrent.On("HasPendingDecisionTask").Return(true)
+	msBuilderCurrent.On("HasPendingDecision").Return(true)
 	contextCurrent.On("updateWorkflowExecutionAsActive", mock.Anything).Return(nil).Once()
 
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentVersion).Return(cluster.TestCurrentClusterName)
@@ -3624,7 +3624,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		},
 	}, nil).Once()
 	msBuilderCurrent.On("UpdateReplicationStateVersion", currentVersion, true).Once()
-	msBuilderCurrent.On("HasPendingDecisionTask").Return(false)
+	msBuilderCurrent.On("HasPendingDecision").Return(false)
 
 	newDecision := &decisionInfo{
 		Version:    currentVersion,

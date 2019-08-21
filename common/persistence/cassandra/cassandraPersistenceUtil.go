@@ -1390,6 +1390,7 @@ func updateRequestCancelInfos(
 			c.InitiatedID,
 			c.Version,
 			c.InitiatedID,
+			c.InitiatedEventBatchID,
 			c.CancelRequestID,
 			shardID,
 			rowTypeExecution,
@@ -1449,6 +1450,7 @@ func updateSignalInfos(
 			c.InitiatedID,
 			c.Version,
 			c.InitiatedID,
+			c.InitiatedEventBatchID,
 			c.SignalRequestID,
 			c.SignalName,
 			c.Input,
@@ -2061,6 +2063,8 @@ func createRequestCancelInfo(
 			info.Version = v.(int64)
 		case "initiated_id":
 			info.InitiatedID = v.(int64)
+		case "initiated_event_batch_id":
+			info.InitiatedEventBatchID = v.(int64)
 		case "cancel_request_id":
 			info.CancelRequestID = v.(string)
 		}
@@ -2080,6 +2084,8 @@ func createSignalInfo(
 			info.Version = v.(int64)
 		case "initiated_id":
 			info.InitiatedID = v.(int64)
+		case "initiated_event_batch_id":
+			info.InitiatedEventBatchID = v.(int64)
 		case "signal_request_id":
 			info.SignalRequestID = v.(gocql.UUID).String()
 		case "signal_name":
@@ -2208,6 +2214,7 @@ func resetRequestCancelInfoMap(
 		rcInfo := make(map[string]interface{})
 		rcInfo["version"] = rc.Version
 		rcInfo["initiated_id"] = rc.InitiatedID
+		rcInfo["initiated_event_batch_id"] = rc.InitiatedEventBatchID
 		rcInfo["cancel_request_id"] = rc.CancelRequestID
 
 		rcMap[rc.InitiatedID] = rcInfo
@@ -2225,6 +2232,7 @@ func resetSignalInfoMap(
 		sInfo := make(map[string]interface{})
 		sInfo["version"] = s.Version
 		sInfo["initiated_id"] = s.InitiatedID
+		sInfo["initiated_event_batch_id"] = s.InitiatedEventBatchID
 		sInfo["signal_request_id"] = s.SignalRequestID
 		sInfo["signal_name"] = s.SignalName
 		sInfo["input"] = s.Input

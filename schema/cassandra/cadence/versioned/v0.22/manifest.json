@@ -3,6 +3,7 @@
   "MinCompatibleVersion": "0.22",
   "Description": "Add per cluster replication level (last replicated task_id) to shard info",
   "SchemaUpdateCqlFiles": [
+    "request_cancel_signal_batch_event_id.cql",
     "cluster_replication_level.cql"
   ]
 }

@@ -34,54 +34,59 @@ import (
 type (
 	mutableStateTaskGenerator interface {
 		generateWorkflowStartTasks(
+			now time.Time,
 			event *shared.HistoryEvent,
 		) error
 		generateWorkflowCloseTasks(
-			event *shared.HistoryEvent,
+			now time.Time,
 		) error
 		generateRecordWorkflowStartedTasks(
-			startEvent *shared.HistoryEvent,
+			now time.Time,
 		) error
 		generateDelayedDecisionTasks(
+			now time.Time,
 			startEvent *shared.HistoryEvent,
 		) error
 		generateDecisionScheduleTasks(
+			now time.Time,
 			decisionScheduleID int64,
-			decisionScheduleTimestamp int64,
-			isFirstDecision bool,
 		) error
 		generateDecisionStartTasks(
+			now time.Time,
 			decisionScheduleID int64,
-			decisionStartTimestamp int64,
 		) error
 		generateActivityTransferTasks(
+			now time.Time,
 			event *shared.HistoryEvent,
 		) error
 		generateActivityRetryTasks(
 			activityScheduleID int64,
 		) error
 		generateChildWorkflowTasks(
+			now time.Time,
 			event *shared.HistoryEvent,
 		) error
 		generateRequestCancelExternalTasks(
+			now time.Time,
 			event *shared.HistoryEvent,
 		) error
 		generateSignalExternalTasks(
+			now time.Time,
 			event *shared.HistoryEvent,
 		) error
 		generateWorkflowSearchAttrTasks(
-			event *shared.HistoryEvent,
+			now time.Time,
 		) error
 		generateWorkflowResetTasks(
-			nowTimestamp int64,
+			now time.Time,
 		) error
 
 		// these 2 APIs should only be called when mutable state transaction is being closed
 		generateActivityTimerTasks(
-			nowTimestamp int64,
+			now time.Time,
 		) error
 		generateUserTimerTasks(
-			nowTimestamp int64,
+			now time.Time,
 		) error
 	}
 
@@ -112,14 +117,9 @@ func newMutableStateTaskGenerator(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
+	now time.Time,
 	event *shared.HistoryEvent,
 ) error {
-
-	// TODO when refactoring workflow reset functionality,
-	//  the logic below should be changed slightly, i.e. 'now' should not be derived from
-	//  start event, but the reset time
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	attr := event.WorkflowExecutionStartedEventAttributes
 	firstDecisionDelayDuration := time.Duration(attr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
@@ -143,10 +143,8 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
-	event *shared.HistoryEvent,
+	now time.Time,
 ) error {
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 	executionInfo := r.mutableState.GetExecutionInfo()
@@ -179,10 +177,9 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
+	now time.Time,
 	startEvent *shared.HistoryEvent,
 ) error {
-
-	now := time.Unix(0, startEvent.GetTimestamp())
 
 	startVersion := r.mutableState.GetStartVersion()
 	startAttr := startEvent.WorkflowExecutionStartedEventAttributes
@@ -220,21 +217,33 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	return nil
 }
 
-func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
-	decisionScheduleID int64,
-	decisionScheduleTimestamp int64,
-	isFirstDecision bool,
+func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
+	now time.Time,
 ) error {
 
-	now := time.Unix(0, decisionScheduleTimestamp)
+	startVersion := r.mutableState.GetStartVersion()
+
+	r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: now,
+		Version:             startVersion,
+	})
+
+	return nil
+}
+
+func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
+	now time.Time,
+	decisionScheduleID int64,
+) error {
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	decision, ok := r.mutableState.GetPendingDecision(
+	decision, ok := r.mutableState.GetDecisionInfo(
 		decisionScheduleID,
 	)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending decision: %v", decisionScheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID),
 		}
 	}
 
@@ -260,36 +269,17 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 	return nil
 }
 
-func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
-	startEvent *shared.HistoryEvent,
-) error {
-
-	now := time.Unix(0, startEvent.GetTimestamp())
-
-	startVersion := r.mutableState.GetStartVersion()
-
-	r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		Version:             startVersion,
-	})
-
-	return nil
-}
-
 func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
+	now time.Time,
 	decisionScheduleID int64,
-	decisionStartTimestamp int64,
 ) error {
 
-	now := time.Unix(0, decisionStartTimestamp)
-
-	decision, ok := r.mutableState.GetPendingDecision(
+	decision, ok := r.mutableState.GetDecisionInfo(
 		decisionScheduleID,
 	)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending decision: %v", decisionScheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID),
 		}
 	}
 
@@ -305,10 +295,9 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
+	now time.Time,
 	event *shared.HistoryEvent,
 ) error {
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	attr := event.ActivityTaskScheduledEventAttributes
 	activityScheduleID := event.GetEventId()
@@ -317,7 +306,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending activity: %v", activityScheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID),
 		}
 	}
 
@@ -345,7 +334,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityRetryTasks(
 	ai, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending activity: %v", activityScheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID),
 		}
 	}
 
@@ -360,10 +349,9 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityRetryTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
+	now time.Time,
 	event *shared.HistoryEvent,
 ) error {
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	attr := event.StartChildWorkflowExecutionInitiatedEventAttributes
 	childWorkflowScheduleID := event.GetEventId()
@@ -372,7 +360,7 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending child workflow: %v", childWorkflowScheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID),
 		}
 	}
 
@@ -394,10 +382,9 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
+	now time.Time,
 	event *shared.HistoryEvent,
 ) error {
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	attr := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
 	scheduleID := event.GetEventId()
@@ -409,7 +396,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 	requestCancelExternalInfo, ok := r.mutableState.GetRequestCancelInfo(scheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending request cancel external workflow: %v", scheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID),
 		}
 	}
 
@@ -433,10 +420,9 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
+	now time.Time,
 	event *shared.HistoryEvent,
 ) error {
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	attr := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
 	scheduleID := event.GetEventId()
@@ -448,7 +434,7 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 	signalExternalInfo, ok := r.mutableState.GetSignalInfo(scheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("impossible case: cannot get pending signal external workflow: %v", scheduleID),
+			Message: fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID),
 		}
 	}
 
@@ -472,10 +458,8 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
-	event *shared.HistoryEvent,
+	now time.Time,
 ) error {
-
-	now := time.Unix(0, event.GetTimestamp())
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
@@ -489,10 +473,8 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowResetTasks(
-	nowTimestamp int64,
+	now time.Time,
 ) error {
-
-	now := time.Unix(0, nowTimestamp)
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
@@ -506,10 +488,8 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowResetTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateActivityTimerTasks(
-	nowTimestamp int64,
+	now time.Time,
 ) error {
-
-	now := time.Unix(0, nowTimestamp)
 
 	if timerTask := r.getTimerBuilder(now).GetActivityTimerTaskIfNeeded(
 		r.mutableState,
@@ -523,10 +503,8 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTimerTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateUserTimerTasks(
-	nowTimestamp int64,
+	now time.Time,
 ) error {
-
-	now := time.Unix(0, nowTimestamp)
 
 	if timerTask := r.getTimerBuilder(now).GetUserTimerTaskIfNeeded(
 		r.mutableState,

@@ -48,7 +48,7 @@ func scheduleDecision(
 	mutableState mutableState,
 ) error {
 
-	if mutableState.HasPendingDecisionTask() {
+	if mutableState.HasPendingDecision() {
 		return nil
 	}
 

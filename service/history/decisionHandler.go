@@ -113,7 +113,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 				return nil, ErrWorkflowCompleted
 			}
 
-			if msBuilder.HasProcessedOrPendingDecisionTask() {
+			if msBuilder.HasProcessedOrPendingDecision() {
 				return &updateWorkflowAction{
 					noop: true,
 				}, nil
@@ -159,7 +159,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, ErrWorkflowCompleted
 			}
 
-			di, isRunning := msBuilder.GetPendingDecision(scheduleID)
+			decision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
@@ -180,10 +180,10 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 
 			updateAction := &updateWorkflowAction{}
 
-			if di.StartedID != common.EmptyEventID {
+			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
-				if di.RequestID == requestID {
-					resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
+				if decision.RequestID == requestID {
+					resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, req.PollRequest.GetIdentity())
 					updateAction.noop = true
 					return updateAction, nil
 				}
@@ -193,13 +193,13 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, &h.EventAlreadyStartedError{Message: "Decision task already started."}
 			}
 
-			_, di, err = msBuilder.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
+			_, decision, err = msBuilder.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
 			if err != nil {
 				// Unable to add DecisionTaskStarted event to history
 				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskStarted event to history."}
 			}
 
-			resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, req.PollRequest.GetIdentity())
+			resp = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, req.PollRequest.GetIdentity())
 			return updateAction, nil
 		})
 
@@ -238,12 +238,12 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 			}
 
 			scheduleID := token.ScheduleID
-			di, isRunning := msBuilder.GetPendingDecision(scheduleID)
-			if !isRunning || di.Attempt != token.ScheduleAttempt || di.StartedID == common.EmptyEventID {
+			decision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
+			if !isRunning || decision.Attempt != token.ScheduleAttempt || decision.StartedID == common.EmptyEventID {
 				return &workflow.EntityNotExistsError{Message: "Decision task not found."}
 			}
 
-			_, err := msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID, request.GetCause(), request.Details,
+			_, err := msBuilder.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.Details,
 				request.GetIdentity(), "", "", "", 0)
 			return err
 		})
@@ -306,7 +306,7 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
-		currentDecision, isRunning := msBuilder.GetPendingDecision(scheduleID)
+		currentDecision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
@@ -555,8 +555,8 @@ Update_History_Loop:
 
 		resp = &h.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
-			di, _ := msBuilder.GetPendingDecision(newDecisionTaskScheduledID)
-			resp.StartedResponse = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, request.GetIdentity())
+			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
+			resp.StartedResponse = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, request.GetIdentity())
 			// sticky is always enabled when worker request for new decision task from RespondDecisionTaskCompleted
 			resp.StartedResponse.StickyExecutionEnabled = common.BoolPtr(true)
 		}
@@ -570,7 +570,7 @@ Update_History_Loop:
 func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	domainID string,
 	msBuilder mutableState,
-	di *decisionInfo,
+	decision *decisionInfo,
 	identity string,
 ) *h.RecordDecisionTaskStartedResponse {
 
@@ -583,22 +583,22 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 
 	// Starting decision could result in different scheduleID if decision was transient and new new events came in
 	// before it was started.
-	response.ScheduledEventId = common.Int64Ptr(di.ScheduleID)
-	response.StartedEventId = common.Int64Ptr(di.StartedID)
+	response.ScheduledEventId = common.Int64Ptr(decision.ScheduleID)
+	response.StartedEventId = common.Int64Ptr(decision.StartedID)
 	response.StickyExecutionEnabled = common.BoolPtr(msBuilder.IsStickyTaskListEnabled())
 	response.NextEventId = common.Int64Ptr(msBuilder.GetNextEventID())
-	response.Attempt = common.Int64Ptr(di.Attempt)
+	response.Attempt = common.Int64Ptr(decision.Attempt)
 	response.WorkflowExecutionTaskList = common.TaskListPtr(workflow.TaskList{
 		Name: &executionInfo.TaskList,
 		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
 	})
-	response.ScheduledTimestamp = common.Int64Ptr(di.ScheduledTimestamp)
-	response.StartedTimestamp = common.Int64Ptr(di.StartedTimestamp)
+	response.ScheduledTimestamp = common.Int64Ptr(decision.ScheduledTimestamp)
+	response.StartedTimestamp = common.Int64Ptr(decision.StartedTimestamp)
 
-	if di.Attempt > 0 {
+	if decision.Attempt > 0 {
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
-		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(di, identity)
+		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)
 		response.DecisionInfo = &workflow.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent

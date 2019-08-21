@@ -289,12 +289,14 @@ const (
 	templateRequestCancelInfoType = `{` +
 		`version: ?,` +
 		`initiated_id: ?, ` +
+		`initiated_event_batch_id: ?, ` +
 		`cancel_request_id: ? ` +
 		`}`
 
 	templateSignalInfoType = `{` +
 		`version: ?,` +
 		`initiated_id: ?, ` +
+		`initiated_event_batch_id: ?, ` +
 		`signal_request_id: ?, ` +
 		`signal_name: ?, ` +
 		`input: ?, ` +

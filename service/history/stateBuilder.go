@@ -176,7 +176,7 @@ func (b *stateBuilderImpl) applyEvents(
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes
 			// use event.GetTimestamp() as DecisionOriginalScheduledTimestamp, because the heartbeat is not happening here.
-			di, err := b.msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(),
+			decision, err := b.msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(),
 				attributes.TaskList.GetName(), attributes.GetStartToCloseTimeoutSeconds(), attributes.GetAttempt(),
 				event.GetTimestamp(), event.GetTimestamp())
 			if err != nil {
@@ -184,23 +184,23 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
-				di.ScheduleID))
+				decision.ScheduleID))
 			// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
 
-			lastDecision = di
+			lastDecision = decision
 
 		case shared.EventTypeDecisionTaskStarted:
 			attributes := event.DecisionTaskStartedEventAttributes
-			di, err := b.msBuilder.ReplicateDecisionTaskStartedEvent(nil, event.GetVersion(), attributes.GetScheduledEventId(),
+			decision, err := b.msBuilder.ReplicateDecisionTaskStartedEvent(nil, event.GetVersion(), attributes.GetScheduledEventId(),
 				event.GetEventId(), attributes.GetRequestId(), event.GetTimestamp())
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
-			b.timerTasks = append(b.timerTasks, b.scheduleDecisionTimerTask(event, di.ScheduleID, di.Attempt,
-				di.DecisionTimeout))
+			b.timerTasks = append(b.timerTasks, b.scheduleDecisionTimerTask(event, decision.ScheduleID, decision.Attempt,
+				decision.DecisionTimeout))
 
-			lastDecision = di
+			lastDecision = decision
 
 		case shared.EventTypeDecisionTaskCompleted:
 			err := b.msBuilder.ReplicateDecisionTaskCompletedEvent(event)
@@ -216,16 +216,16 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			// this is for transient decision
-			di, err := b.msBuilder.ReplicateTransientDecisionTaskScheduled()
+			decision, err := b.msBuilder.ReplicateTransientDecisionTaskScheduled()
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
-			if di != nil {
+			if decision != nil {
 				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
-					di.ScheduleID))
+					decision.ScheduleID))
 				// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
-				lastDecision = di
+				lastDecision = decision
 			}
 
 		case shared.EventTypeDecisionTaskFailed:
@@ -234,16 +234,16 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			// this is for transient decision
-			di, err := b.msBuilder.ReplicateTransientDecisionTaskScheduled()
+			decision, err := b.msBuilder.ReplicateTransientDecisionTaskScheduled()
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
-			if di != nil {
+			if decision != nil {
 				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
-					di.ScheduleID))
+					decision.ScheduleID))
 				// since we do not use stickiness on the standby side, there shall be no decision schedule to start timeout
-				lastDecision = di
+				lastDecision = decision
 			}
 
 		case shared.EventTypeActivityTaskScheduled:

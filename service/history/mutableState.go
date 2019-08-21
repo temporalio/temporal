@@ -120,37 +120,38 @@ type (
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
+		GetDecisionInfo(int64) (*decisionInfo, bool)
 		GetStartEvent() (*workflow.HistoryEvent, bool)
 		GetCurrentBranch() []byte
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetEventStoreVersion() int32
 		GetHistoryBuilder() *historyBuilder
-		GetInFlightDecisionTask() (*decisionInfo, bool)
+		GetInFlightDecision() (*decisionInfo, bool)
+		GetPendingDecision() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastWriteVersion() int64
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
-		GetPendingDecision(int64) (*decisionInfo, bool)
 		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistence.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
+		GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo
+		GetPendingSignalExtrenalInfos() map[int64]*persistence.SignalInfo
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
 		GetCronBackoffDuration() (time.Duration, error)
 		GetScheduleIDByActivityID(string) (int64, bool)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
-		GetAllSignalsToSend() map[int64]*persistence.SignalInfo
-		GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo
 		GetStartVersion() int64
 		GetUserTimer(string) (bool, *persistence.TimerInfo)
 		GetWorkflowType() *workflow.WorkflowType
 		HasBufferedEvents() bool
-		HasInFlightDecisionTask() bool
+		HasInFlightDecision() bool
 		HasParentExecution() bool
-		HasPendingDecisionTask() bool
-		HasProcessedOrPendingDecisionTask() bool
+		HasPendingDecision() bool
+		HasProcessedOrPendingDecision() bool
 		IsCancelRequested() (bool, string)
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool

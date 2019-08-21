@@ -1206,13 +1206,13 @@ func (r *historyReplicator) flushEventsBuffer(
 		return err
 	}
 
-	di, ok := msBuilder.GetInFlightDecisionTask()
+	decision, ok := msBuilder.GetInFlightDecision()
 	if !ok {
 		return ErrCorruptedMutableStateDecision
 	}
 	if _, err = msBuilder.AddDecisionTaskFailedEvent(
-		di.ScheduleID,
-		di.StartedID,
+		decision.ScheduleID,
+		decision.StartedID,
 		workflow.DecisionTaskFailedCauseFailoverCloseDecision,
 		nil, identityHistoryService,
 		"",
@@ -1396,7 +1396,7 @@ func (r *historyReplicator) persistWorkflowMutation(
 	timerTasks []persistence.Task,
 ) error {
 
-	if !msBuilder.HasPendingDecisionTask() {
+	if !msBuilder.HasPendingDecision() {
 		_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
 		if err != nil {
 			return ErrWorkflowMutationDecision

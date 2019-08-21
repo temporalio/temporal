@@ -1129,7 +1129,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(p.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {

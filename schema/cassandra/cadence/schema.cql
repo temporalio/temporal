@@ -208,19 +208,21 @@ CREATE TYPE child_execution_info (
 
 -- External workflow cancellation in progress mutable state
 CREATE TYPE request_cancel_info (
-  version           bigint,
-  initiated_id      bigint,
-  cancel_request_id text,
+  version                   bigint,
+  initiated_event_batch_id  bigint,
+  initiated_id              bigint,
+  cancel_request_id         text,
 );
 
 -- External workflow signal in progress mutable state
 CREATE TYPE signal_info (
-  version           bigint,
-  initiated_id      bigint,
-  signal_request_id uuid,
-  signal_name       text,
-  input             blob,
-  control           blob,
+  version                   bigint,
+  initiated_event_batch_id  bigint,
+  initiated_id              bigint,
+  signal_request_id         uuid,
+  signal_name               text,
+  input                     blob,
+  control                   blob,
 );
 
 -- Activity or workflow task in a task list

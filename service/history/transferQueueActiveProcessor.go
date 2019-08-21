@@ -362,12 +362,12 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(
 		return nil
 	}
 
-	di, found := msBuilder.GetPendingDecision(task.ScheduleID)
+	decision, found := msBuilder.GetDecisionInfo(task.ScheduleID)
 	if !found {
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, di.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {

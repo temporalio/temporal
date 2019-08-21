@@ -249,7 +249,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(
 	processTaskIfClosed := false
 
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
-		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
+		decisionInfo, isPending := msBuilder.GetDecisionInfo(transferTask.ScheduleID)
 		if !isPending {
 			return nil
 		}

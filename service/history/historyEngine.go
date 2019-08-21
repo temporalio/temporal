@@ -1317,7 +1317,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 		executionInfo := msBuilder.GetExecutionInfo()
 		createDecisionTask := true
 		// Do not create decision task when the workflow is cron and the cron has not been started yet
-		if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingDecisionTask() {
+		if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingDecision() {
 			createDecisionTask = false
 		}
 		postActions := &updateWorkflowAction{
@@ -1422,7 +1422,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 
 			// Create a transfer task to schedule a decision task
-			if !msBuilder.HasPendingDecisionTask() {
+			if !msBuilder.HasPendingDecision() {
 				_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
 				if err != nil {
 					return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
@@ -1889,7 +1889,7 @@ Update_History_Loop:
 
 		if postActions.createDecision {
 			// Create a transfer task to schedule a decision task
-			if !msBuilder.HasPendingDecisionTask() {
+			if !msBuilder.HasPendingDecision() {
 				_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
 				if err != nil {
 					return &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}

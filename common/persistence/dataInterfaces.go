@@ -482,7 +482,9 @@ type (
 	UpsertWorkflowSearchAttributesTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		Version             int64
+		// this version is not used by task processing for validation,
+		// instead, the version is used by elastic search
+		Version int64
 	}
 
 	// StartChildExecutionTask identifies a transfer task for starting child execution
@@ -639,19 +641,21 @@ type (
 
 	// RequestCancelInfo has details for pending external workflow cancellations
 	RequestCancelInfo struct {
-		Version         int64
-		InitiatedID     int64
-		CancelRequestID string
+		Version               int64
+		InitiatedEventBatchID int64
+		InitiatedID           int64
+		CancelRequestID       string
 	}
 
 	// SignalInfo has details for pending external workflow signal
 	SignalInfo struct {
-		Version         int64
-		InitiatedID     int64
-		SignalRequestID string
-		SignalName      string
-		Input           []byte
-		Control         []byte
+		Version               int64
+		InitiatedEventBatchID int64
+		InitiatedID           int64
+		SignalRequestID       string
+		SignalName            string
+		Input                 []byte
+		Control               []byte
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
