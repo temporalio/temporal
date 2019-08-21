@@ -172,9 +172,20 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
+	options := taskProcessorOptions{
+		queueSize:   s.mockShard.GetConfig().TransferTaskBatchSize(),
+		workerCount: s.mockShard.GetConfig().TransferTaskWorkerCount(),
+	}
 	s.transferQueueStandbyProcessor = newTransferQueueStandbyProcessor(
-		s.clusterName, s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient,
-		newTaskAllocator(s.mockShard), s.mockHistoryRereplicator, s.logger,
+		s.clusterName,
+		s.mockShard,
+		h,
+		s.mockVisibilityMgr,
+		s.mockMatchingClient,
+		newTaskAllocator(s.mockShard),
+		s.mockHistoryRereplicator,
+		newTaskProcessor(options, s.mockShard, h.historyCache, s.logger),
+		s.logger,
 	)
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
 	s.transferQueueStandbyProcessor.queueAckMgr = s.mockQueueAckMgr

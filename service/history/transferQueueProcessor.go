@@ -60,6 +60,7 @@ type (
 		isStarted             int32
 		isStopped             int32
 		shutdownChan          chan struct{}
+		taskProcessor         *taskProcessor
 		activeTaskProcessor   *transferQueueActiveProcessorImpl
 		standbyTaskProcessors map[string]*transferQueueStandbyProcessorImpl
 	}
@@ -77,6 +78,11 @@ func newTransferQueueProcessor(
 	logger = logger.WithTags(tag.ComponentTransferQueue)
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	taskAllocator := newTaskAllocator(shard)
+	options := taskProcessorOptions{
+		workerCount: shard.GetConfig().TransferTaskWorkerCount(),
+		queueSize:   shard.GetConfig().TransferTaskBatchSize(),
+	}
+	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, logger)
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
@@ -96,8 +102,15 @@ func newTransferQueueProcessor(
 				logger,
 			)
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
-				clusterName, shard, historyService, visibilityMgr,
-				matchingClient, taskAllocator, historyRereplicator, logger,
+				clusterName,
+				shard,
+				historyService,
+				visibilityMgr,
+				matchingClient,
+				taskAllocator,
+				historyRereplicator,
+				taskProcessor,
+				logger,
 			)
 		}
 	}
@@ -116,7 +129,17 @@ func newTransferQueueProcessor(
 		ackLevel:              shard.GetTransferAckLevel(),
 		logger:                logger,
 		shutdownChan:          make(chan struct{}),
-		activeTaskProcessor:   newTransferQueueActiveProcessor(shard, historyService, visibilityMgr, matchingClient, historyClient, taskAllocator, logger),
+		taskProcessor:         taskProcessor,
+		activeTaskProcessor: newTransferQueueActiveProcessor(
+			shard,
+			historyService,
+			visibilityMgr,
+			matchingClient,
+			historyClient,
+			taskAllocator,
+			taskProcessor,
+			logger,
+		),
 		standbyTaskProcessors: standbyTaskProcessors,
 	}
 }
@@ -125,6 +148,7 @@ func (t *transferQueueProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&t.isStarted, 0, 1) {
 		return
 	}
+	t.taskProcessor.start()
 	t.activeTaskProcessor.Start()
 	if t.isGlobalDomainEnabled {
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
@@ -146,6 +170,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		}
 	}
 	close(t.shutdownChan)
+	t.taskProcessor.stop()
 }
 
 // NotifyNewTask - Notify the processor about the new active / standby transfer task arrival.
@@ -197,8 +222,18 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 		tag.MinLevel(minLevel),
 		tag.MaxLevel(maxLevel))
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
-		t.shard, t.historyService, t.visibilityMgr, t.matchingClient, t.historyClient,
-		domainIDs, standbyClusterName, minLevel, maxLevel, t.taskAllocator, t.logger,
+		t.shard,
+		t.historyService,
+		t.visibilityMgr,
+		t.matchingClient,
+		t.historyClient,
+		domainIDs,
+		standbyClusterName,
+		minLevel,
+		maxLevel,
+		t.taskAllocator,
+		t.taskProcessor,
+		t.logger,
 	)
 
 	for _, standbyTaskProcessor := range t.standbyTaskProcessors {

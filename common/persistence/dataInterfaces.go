@@ -2177,6 +2177,21 @@ func (t *TransferTaskInfo) GetVisibilityTimestamp() time.Time {
 	return t.VisibilityTimestamp
 }
 
+// GetWorkflowID returns the workflow ID for transfer task
+func (t *TransferTaskInfo) GetWorkflowID() string {
+	return t.WorkflowID
+}
+
+// GetRunID returns the run ID for transfer task
+func (t *TransferTaskInfo) GetRunID() string {
+	return t.RunID
+}
+
+// GetDomainID returns the domain ID for transfer task
+func (t *TransferTaskInfo) GetDomainID() string {
+	return t.DomainID
+}
+
 // String returns string
 func (t *TransferTaskInfo) String() string {
 	return fmt.Sprintf(
@@ -2200,9 +2215,24 @@ func (t *ReplicationTaskInfo) GetTaskType() int {
 	return t.TaskType
 }
 
-// GetVisibilityTimestamp returns the task type for transfer task
+// GetVisibilityTimestamp returns the task type for replication task
 func (t *ReplicationTaskInfo) GetVisibilityTimestamp() time.Time {
 	return time.Time{}
+}
+
+// GetWorkflowID returns the workflow ID for replication task
+func (t *ReplicationTaskInfo) GetWorkflowID() string {
+	return t.WorkflowID
+}
+
+// GetRunID returns the run ID for replication task
+func (t *ReplicationTaskInfo) GetRunID() string {
+	return t.RunID
+}
+
+// GetDomainID returns the domain ID for replication task
+func (t *ReplicationTaskInfo) GetDomainID() string {
+	return t.DomainID
 }
 
 // GetTaskID returns the task ID for timer task
@@ -2223,6 +2253,21 @@ func (t *TimerTaskInfo) GetTaskType() int {
 // GetVisibilityTimestamp returns the task type for timer task
 func (t *TimerTaskInfo) GetVisibilityTimestamp() time.Time {
 	return t.VisibilityTimestamp
+}
+
+// GetWorkflowID returns the workflow ID for timer task
+func (t *TimerTaskInfo) GetWorkflowID() string {
+	return t.WorkflowID
+}
+
+// GetRunID returns the run ID for timer task
+func (t *TimerTaskInfo) GetRunID() string {
+	return t.RunID
+}
+
+// GetDomainID returns the domain ID for timer task
+func (t *TimerTaskInfo) GetDomainID() string {
+	return t.DomainID
 }
 
 // GetTaskType returns the task type for timer task

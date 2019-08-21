@@ -125,13 +125,17 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		archivalClient: s.mockArchivalClient,
 	}
 
+	options := taskProcessorOptions{
+		queueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
+		workerCount: s.mockShard.GetConfig().TimerTaskWorkerCount(),
+	}
 	s.timerQueueProcessor = newTimerQueueProcessorBase(
 		s.scope,
 		s.mockShard,
 		h,
 		s.mockQueueAckMgr,
 		NewLocalTimerGate(clock.NewRealTimeSource()),
-		newTaskProcessor(s.mockShard, h, s.logger),
+		newTaskProcessor(options, s.mockShard, h.historyCache, s.logger),
 		dynamicconfig.GetIntPropertyFn(10),
 		s.logger,
 	)

@@ -100,7 +100,11 @@ func (s *taskProcessorSuite) SetupTest() {
 		logger:        s.logger,
 		metricsClient: metricsClient,
 	}
-	s.taskProcessor = newTaskProcessor(s.mockShard, h, s.logger)
+	options := taskProcessorOptions{
+		queueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
+		workerCount: s.mockShard.GetConfig().TimerTaskWorkerCount(),
+	}
+	s.taskProcessor = newTaskProcessor(options, s.mockShard, h.historyCache, s.logger)
 }
 
 func (s *taskProcessorSuite) TearDownTest() {
@@ -113,7 +117,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 	close(s.taskProcessor.shutdownCh)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
-		&timerTask{
+		&taskInfo{
 			processor: s.mockProcessor,
 			task:      &persistence.TimerTaskInfo{},
 		},
@@ -122,10 +126,10 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr() {
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
-	var taskFilterErr timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+	var taskFilterErr queueTaskFilter = func(timer queueTaskInfo) (bool, error) {
 		return false, errors.New("some random error")
 	}
-	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+	var taskFilter queueTaskFilter = func(timer queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilterErr).Once()
@@ -134,7 +138,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 	s.mockProcessor.On("complete", task).Once()
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
-		&timerTask{
+		&taskInfo{
 			processor: s.mockProcessor,
 			task:      task,
 		},
@@ -143,7 +147,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
-	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+	var taskFilter queueTaskFilter = func(timer queueTaskInfo) (bool, error) {
 		return false, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
@@ -151,7 +155,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 	s.mockProcessor.On("complete", task).Once()
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
-		&timerTask{
+		&taskInfo{
 			processor: s.mockProcessor,
 			task:      task,
 		},
@@ -160,7 +164,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
-	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+	var taskFilter queueTaskFilter = func(timer queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
@@ -168,7 +172,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 	s.mockProcessor.On("complete", task).Once()
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
-		&timerTask{
+		&taskInfo{
 			processor: s.mockProcessor,
 			task:      task,
 		},
@@ -178,7 +182,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
 	task := &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}
-	var taskFilter timerTaskFilter = func(timer *persistence.TimerTaskInfo) (bool, error) {
+	var taskFilter queueTaskFilter = func(timer queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
@@ -187,7 +191,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() 
 	s.mockProcessor.On("complete", task).Once()
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
-		&timerTask{
+		&taskInfo{
 			processor: s.mockProcessor,
 			task:      task,
 		},

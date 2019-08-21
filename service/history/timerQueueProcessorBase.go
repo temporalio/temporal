@@ -342,7 +342,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 
 	for _, task := range timerTasks {
 		if shutdown := t.processor.addTask(
-			&timerTask{
+			&taskInfo{
 				processor: t.timerProcessor,
 				task:      task,
 			},

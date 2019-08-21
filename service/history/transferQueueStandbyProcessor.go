@@ -57,6 +57,7 @@ func newTransferQueueStandbyProcessor(
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
+	taskProcessor *taskProcessor,
 	logger log.Logger,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -109,7 +110,7 @@ func newTransferQueueStandbyProcessor(
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, taskProcessor, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -122,6 +123,10 @@ func (t *transferQueueStandbyProcessorImpl) getTaskFilter() queueTaskFilter {
 
 func (t *transferQueueStandbyProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
+}
+
+func (t *transferQueueStandbyProcessorImpl) complete(qTask queueTaskInfo) {
+	t.queueProcessorBase.complete(qTask)
 }
 
 func (t *transferQueueStandbyProcessorImpl) process(

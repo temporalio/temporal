@@ -50,7 +50,12 @@ func (_m *MockProcessor) process(task queueTaskInfo, shouldProcessTask bool) (in
 	return r0, r1
 }
 
-// getTaskFilter is mock implementation for process of timerProcessor
+// complete is mock implementation for complete of Processor
+func (_m *MockProcessor) complete(timerTask queueTaskInfo) {
+	_m.Called(timerTask)
+}
+
+// getTaskFilter is mock implementation for process of Processor
 func (_m *MockProcessor) getTaskFilter() queueTaskFilter {
 	ret := _m.Called()
 

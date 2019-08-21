@@ -22,12 +22,12 @@ package history
 
 import (
 	"errors"
-	"github.com/uber/cadence/common/backoff"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -50,6 +50,7 @@ type (
 		options               *QueueProcessorOptions
 		logger                log.Logger
 		retryPolicy           backoff.RetryPolicy
+		taskProcessor         *taskProcessor
 		// This is the batch size used by pull based RPC replicator.
 		fetchTasksBatchSize int
 		*queueProcessorBase
@@ -100,6 +101,12 @@ func newReplicatorQueueProcessor(
 	retryPolicy.SetMaximumAttempts(10)
 	retryPolicy.SetBackoffCoefficient(1)
 
+	taskProcessorOptions := taskProcessorOptions{
+		queueSize:   options.BatchSize(),
+		workerCount: options.WorkerCount(),
+	}
+	taskProcessor := newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
+
 	processor := &replicatorQueueProcessorImpl{
 		currentClusterNamer:   currentClusterName,
 		shard:                 shard,
@@ -114,18 +121,33 @@ func newReplicatorQueueProcessor(
 		logger:                logger,
 		retryPolicy:           retryPolicy,
 		fetchTasksBatchSize:   config.ReplicatorProcessorFetchTasksBatchSize(),
+		taskProcessor:         taskProcessor,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, taskProcessor, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
 	return processor
 }
 
+func (p *replicatorQueueProcessorImpl) Start() {
+	p.taskProcessor.start()
+	p.queueProcessorBase.Start()
+}
+
+func (p *replicatorQueueProcessorImpl) Stop() {
+	p.queueProcessorBase.Stop()
+	p.taskProcessor.stop()
+}
+
 func (p *replicatorQueueProcessorImpl) getTaskFilter() queueTaskFilter {
 	return p.replicationTaskFilter
+}
+
+func (p *replicatorQueueProcessorImpl) complete(qTask queueTaskInfo) {
+	p.queueProcessorBase.complete(qTask)
 }
 
 func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo, shouldProcessTask bool) (int, error) {

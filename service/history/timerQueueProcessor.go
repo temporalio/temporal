@@ -44,7 +44,6 @@ type (
 	timeNow                 func() time.Time
 	updateTimerAckLevel     func(TimerSequenceID) error
 	timerQueueShutdown      func() error
-	timerTaskFilter         func(timer *persistence.TimerTaskInfo) (bool, error)
 	timerQueueProcessorImpl struct {
 		isGlobalDomainEnabled  bool
 		currentClusterName     string
@@ -75,7 +74,11 @@ func newTimerQueueProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
-	taskProcessor := newTaskProcessor(shard, historyService, logger)
+	options := taskProcessorOptions{
+		workerCount: shard.GetConfig().TimerTaskWorkerCount(),
+		queueSize:   shard.GetConfig().TimerTaskWorkerCount() * shard.GetConfig().TimerTaskBatchSize(),
+	}
+	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, logger)
 
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
@@ -143,8 +146,8 @@ func (t *timerQueueProcessorImpl) Stop() {
 			standbyTimerProcessor.Stop()
 		}
 	}
-	t.taskProcessor.stop()
 	close(t.shutdownChan)
+	t.taskProcessor.stop()
 }
 
 // NotifyNewTimers - Notify the processor about the new active / standby timer arrival.

@@ -41,7 +41,7 @@ type (
 		shard                   ShardContext
 		historyService          *historyEngineImpl
 		cache                   *historyCache
-		timerTaskFilter         timerTaskFilter
+		timerTaskFilter         queueTaskFilter
 		now                     timeNow
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -69,7 +69,11 @@ func newTimerQueueActiveProcessor(
 		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
-	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
+	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		timer, ok := qTask.(*persistence.TimerTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyActiveTask(timer.DomainID, timer)
 	}
 
@@ -153,7 +157,11 @@ func newTimerQueueFailoverProcessor(
 		tag.WorkflowDomainIDs(domainIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
-	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
+	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		timer, ok := qTask.(*persistence.TimerTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyFailoverActiveTask(domainIDs, timer.DomainID, timer)
 	}
 
@@ -206,7 +214,7 @@ func (t *timerQueueActiveProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
 }
 
-func (t *timerQueueActiveProcessorImpl) getTaskFilter() timerTaskFilter {
+func (t *timerQueueActiveProcessorImpl) getTaskFilter() queueTaskFilter {
 	return t.timerTaskFilter
 }
 
@@ -227,15 +235,23 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
 }
 
 func (t *timerQueueActiveProcessorImpl) complete(
-	timerTask *persistence.TimerTaskInfo,
+	qTask queueTaskInfo,
 ) {
+	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+	if !ok {
+		return
+	}
 	t.timerQueueProcessorBase.complete(timerTask)
 }
 
 func (t *timerQueueActiveProcessorImpl) process(
-	timerTask *persistence.TimerTaskInfo,
+	qTask queueTaskInfo,
 	shouldProcessTask bool,
 ) (int, error) {
+	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+	if !ok {
+		return metrics.TimerActiveQueueProcessorScope, errUnexpectedQueueTask
+	}
 
 	var err error
 	switch timerTask.TaskType {

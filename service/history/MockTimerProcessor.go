@@ -38,18 +38,18 @@ func (_m *MockTimerProcessor) notifyNewTimers(timerTask []persistence.Task) {
 }
 
 // process is mock implementation for process of timerProcessor
-func (_m *MockTimerProcessor) process(task *persistence.TimerTaskInfo, shouldProcessTask bool) (int, error) {
+func (_m *MockTimerProcessor) process(task queueTaskInfo, shouldProcessTask bool) (int, error) {
 	ret := _m.Called(task, shouldProcessTask)
 
 	var r0 int
-	if rf, ok := ret.Get(0).(func(*persistence.TimerTaskInfo, bool) int); ok {
+	if rf, ok := ret.Get(0).(func(queueTaskInfo, bool) int); ok {
 		r0 = rf(task, shouldProcessTask)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.TimerTaskInfo, bool) error); ok {
+	if rf, ok := ret.Get(1).(func(queueTaskInfo, bool) error); ok {
 		r1 = rf(task, shouldProcessTask)
 	} else {
 		r1 = ret.Error(1)
@@ -59,20 +59,20 @@ func (_m *MockTimerProcessor) process(task *persistence.TimerTaskInfo, shouldPro
 }
 
 // complete is mock implementation for complete of timerProcessor
-func (_m *MockTimerProcessor) complete(timerTask *persistence.TimerTaskInfo) {
+func (_m *MockTimerProcessor) complete(timerTask queueTaskInfo) {
 	_m.Called(timerTask)
 }
 
 // getTaskFilter is mock implementation for process of timerProcessor
-func (_m *MockTimerProcessor) getTaskFilter() timerTaskFilter {
+func (_m *MockTimerProcessor) getTaskFilter() queueTaskFilter {
 	ret := _m.Called()
 
-	var r0 timerTaskFilter
-	if rf, ok := ret.Get(0).(func() timerTaskFilter); ok {
+	var r0 queueTaskFilter
+	if rf, ok := ret.Get(0).(func() queueTaskFilter); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(timerTaskFilter)
+			r0 = ret.Get(0).(queueTaskFilter)
 		}
 	}
 

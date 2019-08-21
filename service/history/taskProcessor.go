@@ -36,56 +36,63 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-type timerTask struct {
-	processor timerProcessor
-	task      *persistence.TimerTaskInfo
-}
+type (
+	taskProcessorOptions struct {
+		queueSize   int
+		workerCount int
+	}
 
-type taskProcessor struct {
-	shard         ShardContext
-	cache         *historyCache
-	shutdownWG    sync.WaitGroup
-	shutdownCh    chan struct{}
-	tasksCh       chan *timerTask
-	config        *Config
-	logger        log.Logger
-	metricsClient metrics.Client
-	timeSource    clock.TimeSource
-	retryPolicy   backoff.RetryPolicy
-	workerWG      sync.WaitGroup
+	taskInfo struct {
+		processor taskExecutor
+		task      queueTaskInfo
+	}
 
-	// worker coroutines notification
-	workerNotificationChans []chan struct{}
-	// duplicate numOfWorker from config.TimerTaskWorkerCount for dynamic config works correctly
-	numOfWorker int
-}
+	taskProcessor struct {
+		shard         ShardContext
+		cache         *historyCache
+		shutdownWG    sync.WaitGroup
+		shutdownCh    chan struct{}
+		tasksCh       chan *taskInfo
+		config        *Config
+		logger        log.Logger
+		metricsClient metrics.Client
+		timeSource    clock.TimeSource
+		retryPolicy   backoff.RetryPolicy
+		workerWG      sync.WaitGroup
+
+		// worker coroutines notification
+		workerNotificationChans []chan struct{}
+		// duplicate numOfWorker from config.TimerTaskWorkerCount for dynamic config works correctly
+		numOfWorker int
+	}
+)
 
 func newTaskProcessor(
+	options taskProcessorOptions,
 	shard ShardContext,
-	historyService *historyEngineImpl,
+	historyCache *historyCache,
 	logger log.Logger,
 ) *taskProcessor {
 
 	log := logger.WithTags(tag.ComponentTimerQueue)
 
 	workerNotificationChans := []chan struct{}{}
-	numOfWorker := shard.GetConfig().TimerTaskWorkerCount()
-	for index := 0; index < numOfWorker; index++ {
+	for index := 0; index < options.workerCount; index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
 	}
 
 	base := &taskProcessor{
 		shard:                   shard,
-		cache:                   historyService.historyCache,
+		cache:                   historyCache,
 		shutdownCh:              make(chan struct{}),
-		tasksCh:                 make(chan *timerTask, 10*shard.GetConfig().TimerTaskBatchSize()),
+		tasksCh:                 make(chan *taskInfo, options.queueSize),
 		config:                  shard.GetConfig(),
 		logger:                  log,
-		metricsClient:           historyService.metricsClient,
+		metricsClient:           shard.GetMetricsClient(),
 		timeSource:              shard.GetTimeSource(),
 		workerNotificationChans: workerNotificationChans,
 		retryPolicy:             common.CreatePersistanceRetryPolicy(),
-		numOfWorker:             numOfWorker,
+		numOfWorker:             options.workerCount,
 	}
 
 	return base
@@ -137,7 +144,7 @@ func (t *taskProcessor) retryTasks() {
 }
 
 func (t *taskProcessor) addTask(
-	task *timerTask,
+	task *taskInfo,
 ) bool {
 	// We have a timer to fire.
 	select {
@@ -150,7 +157,7 @@ func (t *taskProcessor) addTask(
 
 func (t *taskProcessor) processTaskAndAck(
 	notificationChan <-chan struct{},
-	task *timerTask,
+	task *taskInfo,
 ) {
 
 	var scope int
@@ -214,7 +221,7 @@ FilterLoop:
 
 func (t *taskProcessor) processTaskOnce(
 	notificationChan <-chan struct{},
-	task *timerTask,
+	task *taskInfo,
 	shouldProcessTask bool,
 	logger log.Logger,
 ) (int, error) {
@@ -284,7 +291,7 @@ func (t *taskProcessor) handleTaskError(
 }
 
 func (t *taskProcessor) ackTaskOnce(
-	task *timerTask,
+	task *taskInfo,
 	scope int,
 	reportMetrics bool,
 	startTime time.Time,
@@ -304,19 +311,32 @@ func (t *taskProcessor) ackTaskOnce(
 }
 
 func (t *taskProcessor) initializeLoggerForTask(
-	task *persistence.TimerTaskInfo,
+	task queueTaskInfo,
 ) log.Logger {
 
 	logger := t.logger.WithTags(
 		tag.ShardID(t.shard.GetShardID()),
-		tag.WorkflowDomainID(task.DomainID),
-		tag.WorkflowID(task.WorkflowID),
-		tag.WorkflowRunID(task.RunID),
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+		tag.WorkflowDomainID(task.GetDomainID()),
+		tag.WorkflowID(task.GetWorkflowID()),
+		tag.WorkflowRunID(task.GetRunID()),
 	)
-	logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
+
+	switch task := task.(type) {
+	case *persistence.TimerTaskInfo:
+		logger = logger.WithTags(
+			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+		)
+		logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
+
+	case *persistence.TransferTaskInfo:
+		logger.Debug(fmt.Sprintf("Processing transfer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
+
+	case *persistence.ReplicationTaskInfo:
+		logger.Debug(fmt.Sprintf("Processing replication task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
+	}
+
 	return logger
 }

@@ -174,9 +174,8 @@ func NewEngineWithShardContext(
 		),
 	}
 
-	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
-	historyEngImpl.txProcessor = txProcessor
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
