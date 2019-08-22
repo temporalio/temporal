@@ -205,6 +205,7 @@ func AdminIndex(c *cli.Context) {
 	}
 }
 
+// AdminDelete used to delete documents from ElasticSearch with input of list result
 func AdminDelete(c *cli.Context) {
 	esClient := getESClient(c)
 	indexName := getRequiredOption(c, FlagIndex)

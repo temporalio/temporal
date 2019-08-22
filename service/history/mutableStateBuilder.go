@@ -4007,13 +4007,9 @@ func (e *mutableStateBuilder) closeTransactionHandleActivityUserTimerTasks(
 		return err
 	}
 
-	if err := e.taskGenerator.generateUserTimerTasks(
+	return e.taskGenerator.generateUserTimerTasks(
 		e.unixNanoToTime(now.UnixNano()),
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (e *mutableStateBuilder) prepareTransaction(
@@ -4058,14 +4054,10 @@ func (e *mutableStateBuilder) prepareTransaction(
 	//  since we only generate at most one activity & user timer,
 	//  regardless of how many activity & user timer created
 	//  so the calculation must be at the very end
-	if err := e.closeTransactionHandleActivityUserTimerTasks(
+	return e.closeTransactionHandleActivityUserTimerTasks(
 		now,
 		transactionPolicy,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (e *mutableStateBuilder) cleanupTransaction(

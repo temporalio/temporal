@@ -107,11 +107,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasks(now time.Time) error {
 		return err
 	}
 
-	if err := r.refreshTasksForWorkflowSearchAttr(now); err != nil {
-		return err
-	}
-
-	return nil
+	return r.refreshTasksForWorkflowSearchAttr(now)
 }
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
