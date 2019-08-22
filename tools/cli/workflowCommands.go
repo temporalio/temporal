@@ -30,6 +30,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -617,6 +618,45 @@ func ListAllWorkflow(c *cli.Context) {
 	table.Render()
 }
 
+// ScanAllWorkflow list all workflow executions using Scan API.
+// It should be faster than ListAllWorkflow, but result are not sorted.
+func ScanAllWorkflow(c *cli.Context) {
+	printJSON := c.Bool(FlagPrintJSON)
+	printDecodedRaw := c.Bool(FlagPrintFullyDetail)
+
+	if printJSON || printDecodedRaw {
+		var results []*s.WorkflowExecutionInfo
+		var nextPageToken []byte
+		fmt.Println("[")
+		for {
+			results, nextPageToken = getScanResultInRaw(c, nextPageToken)
+			printListResults(results, printJSON)
+			if len(nextPageToken) == 0 {
+				break
+			}
+		}
+		fmt.Println("]")
+		return
+	}
+
+	isQueryOpen := isQueryOpen(c.String(FlagListQuery))
+	table := createTableForListWorkflow(c, true, isQueryOpen)
+	prepareTable := scanWorkflow(c, table, isQueryOpen)
+	var nextPageToken []byte
+	for {
+		nextPageToken, _ = prepareTable(nextPageToken)
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+	table.Render()
+}
+
+func isQueryOpen(query string) bool {
+	var openWFPattern = regexp.MustCompile(`CloseTime[ ]*=[ ]*missing`)
+	return openWFPattern.MatchString(query)
+}
+
 // CountWorkflow count number of workflows
 func CountWorkflow(c *cli.Context) {
 	wfClient := getWorkflowClient(c)
@@ -1081,7 +1121,10 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 	}
 
 	var result []*s.WorkflowExecutionInfo
-	if queryOpen {
+	if c.IsSet(FlagListQuery) {
+		listQuery := c.String(FlagListQuery)
+		result, nextPageToken = listWorkflowExecutions(wfClient, pageSize, nextPageToken, listQuery, c)
+	} else if queryOpen {
 		result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, nextPageToken, c)
 	} else {
 		result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, nextPageToken, c)
@@ -1090,6 +1133,80 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 	return result, nextPageToken
 }
 
+func getScanResultInRaw(c *cli.Context, nextPageToken []byte) ([]*s.WorkflowExecutionInfo, []byte) {
+	wfClient := getWorkflowClient(c)
+	listQuery := c.String(FlagListQuery)
+	pageSize := c.Int(FlagPageSize)
+	if pageSize <= 0 {
+		pageSize = defaultPageSizeForScan
+	}
+
+	return scanWorkflowExecutions(wfClient, pageSize, nextPageToken, listQuery, c)
+}
+
+func scanWorkflowExecutions(client client.Client, pageSize int, nextPageToken []byte, query string, c *cli.Context) ([]*s.WorkflowExecutionInfo, []byte) {
+
+	request := &s.ListWorkflowExecutionsRequest{
+		PageSize:      common.Int32Ptr(int32(pageSize)),
+		NextPageToken: nextPageToken,
+		Query:         common.StringPtr(query),
+	}
+
+	ctx, cancel := newContextForLongPoll(c)
+	defer cancel()
+	response, err := client.ScanWorkflow(ctx, request)
+	if err != nil {
+		ErrorAndExit("Failed to list workflow.", err)
+	}
+	return response.Executions, response.NextPageToken
+}
+
+func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
+	wfClient := getWorkflowClient(c)
+
+	printRawTime := c.Bool(FlagPrintRawTime)
+	printDateTime := c.Bool(FlagPrintDateTime)
+	printMemo := c.Bool(FlagPrintMemo)
+	printSearchAttr := c.Bool(FlagPrintSearchAttr)
+	pageSize := c.Int(FlagPageSize)
+	if pageSize <= 0 {
+		pageSize = defaultPageSizeForScan
+	}
+
+	prepareTable := func(next []byte) ([]byte, int) {
+		var result []*s.WorkflowExecutionInfo
+		var nextPageToken []byte
+		listQuery := c.String(FlagListQuery)
+		result, nextPageToken = scanWorkflowExecutions(wfClient, pageSize, next, listQuery, c)
+
+		for _, e := range result {
+			var startTime, executionTime, closeTime string
+			if printRawTime {
+				startTime = fmt.Sprintf("%d", e.GetStartTime())
+				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
+				closeTime = fmt.Sprintf("%d", e.GetCloseTime())
+			} else {
+				startTime = convertTime(e.GetStartTime(), !printDateTime)
+				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
+				closeTime = convertTime(e.GetCloseTime(), !printDateTime)
+			}
+			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
+			if !queryOpen {
+				row = append(row, closeTime)
+			}
+			if printMemo {
+				row = append(row, getPrintableMemo(e.Memo))
+			}
+			if printSearchAttr {
+				row = append(row, getPrintableSearchAttr(e.SearchAttributes))
+			}
+			table.Append(row)
+		}
+
+		return nextPageToken, len(result)
+	}
+	return prepareTable
+}
 func getWorkflowStatus(statusStr string) s.WorkflowExecutionCloseStatus {
 	if status, ok := workflowClosedStatusMap[strings.ToLower(statusStr)]; ok {
 		return status

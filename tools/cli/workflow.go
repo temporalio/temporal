@@ -149,9 +149,19 @@ func newWorkflowCommands() []cli.Command {
 			},
 		},
 		{
+			Name:    "scan",
+			Aliases: []string{"sc", "scanall"},
+			Usage: "scan workflow executions (need to enable Cadence server on ElasticSearch). " +
+				"It will be faster than listall, but result are not sorted.",
+			Flags: getFlagsForScan(),
+			Action: func(c *cli.Context) {
+				ScanAllWorkflow(c)
+			},
+		},
+		{
 			Name:    "count",
 			Aliases: []string{"cnt"},
-			Usage:   "count number of workflow executions (only work with ElasticSearch)",
+			Usage:   "count number of workflow executions (need to enable Cadence server on ElasticSearch)",
 			Flags:   getFlagsForCount(),
 			Action: func(c *cli.Context) {
 				CountWorkflow(c)

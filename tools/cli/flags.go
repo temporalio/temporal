@@ -406,6 +406,44 @@ func getFlagsForListAll() []cli.Flag {
 	}
 }
 
+func getFlagsForScan() []cli.Flag {
+	return []cli.Flag{
+		cli.IntFlag{
+			Name:  FlagPageSizeWithAlias,
+			Value: 2000,
+			Usage: "Page size for each Scan API call",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintRawTimeWithAlias,
+			Usage: "Print raw time stamp",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintDateTimeWithAlias,
+			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintMemoWithAlias,
+			Usage: "Print memo",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintSearchAttrWithAlias,
+			Usage: "Print search attributes",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintFullyDetailWithAlias,
+			Usage: "Print full message without table format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintJSONWithAlias,
+			Usage: "Print in raw json format",
+		},
+		cli.StringFlag{
+			Name:  FlagListQueryWithAlias,
+			Usage: "Optional SQL like query",
+		},
+	}
+}
+
 func getFlagsForCount() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{

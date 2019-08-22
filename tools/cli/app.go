@@ -27,7 +27,7 @@ import (
 const (
 	// Version is the controlled version string. It should be updated every time
 	// before we release a new version.
-	Version = "0.8.1"
+	Version = "0.8.2"
 )
 
 // SetFactory is used to set the ClientFactory global
