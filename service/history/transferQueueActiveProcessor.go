@@ -65,7 +65,6 @@ func newTransferQueueActiveProcessor(
 	matchingClient matching.Client,
 	historyClient history.Client,
 	taskAllocator taskAllocator,
-	taskProcessor *taskProcessor,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
 
@@ -112,12 +111,19 @@ func newTransferQueueActiveProcessor(
 		cache:              historyService.historyCache,
 		transferTaskFilter: transferTaskFilter,
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
-			shard, options, visibilityMgr, matchingClient, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown, logger,
+			shard,
+			options,
+			visibilityMgr,
+			matchingClient,
+			maxReadAckLevel,
+			updateTransferAckLevel,
+			transferQueueShutdown,
+			logger,
 		),
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(currentClusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, taskProcessor, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -135,7 +141,6 @@ func newTransferQueueFailoverProcessor(
 	minLevel int64,
 	maxLevel int64,
 	taskAllocator taskAllocator,
-	taskProcessor *taskProcessor,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
@@ -203,7 +208,7 @@ func newTransferQueueFailoverProcessor(
 	}
 
 	queueAckMgr := newQueueFailoverAckMgr(shard, options, processor, minLevel, logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, taskProcessor, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 	return updateTransferAckLevel, processor

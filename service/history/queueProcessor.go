@@ -85,10 +85,15 @@ func newQueueProcessorBase(
 	options *QueueProcessorOptions,
 	processor processor,
 	queueAckMgr queueAckMgr,
-	taskProcessor *taskProcessor,
+	historyCache *historyCache,
 	logger log.Logger,
 ) *queueProcessorBase {
 
+	taskProcessorOptions := taskProcessorOptions{
+		queueSize:   options.BatchSize(),
+		workerCount: options.WorkerCount(),
+	}
+	taskProcessor := newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
 	p := &queueProcessorBase{
 		clusterName: clusterName,
 		shard:       shard,
@@ -121,6 +126,7 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
+	p.taskProcessor.start()
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -140,6 +146,7 @@ func (p *queueProcessorBase) Stop() {
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 		p.logger.Warn("", tag.LifeCycleStopTimedout, tag.ComponentTransferQueue)
 	}
+	p.taskProcessor.stop()
 }
 
 func (p *queueProcessorBase) notifyNewTask() {

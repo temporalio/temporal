@@ -50,7 +50,6 @@ type (
 		options               *QueueProcessorOptions
 		logger                log.Logger
 		retryPolicy           backoff.RetryPolicy
-		taskProcessor         *taskProcessor
 		// This is the batch size used by pull based RPC replicator.
 		fetchTasksBatchSize int
 		*queueProcessorBase
@@ -101,12 +100,6 @@ func newReplicatorQueueProcessor(
 	retryPolicy.SetMaximumAttempts(10)
 	retryPolicy.SetBackoffCoefficient(1)
 
-	taskProcessorOptions := taskProcessorOptions{
-		queueSize:   options.BatchSize(),
-		workerCount: options.WorkerCount(),
-	}
-	taskProcessor := newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
-
 	processor := &replicatorQueueProcessorImpl{
 		currentClusterNamer:   currentClusterName,
 		shard:                 shard,
@@ -121,25 +114,14 @@ func newReplicatorQueueProcessor(
 		logger:                logger,
 		retryPolicy:           retryPolicy,
 		fetchTasksBatchSize:   config.ReplicatorProcessorFetchTasksBatchSize(),
-		taskProcessor:         taskProcessor,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, taskProcessor, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, historyCache, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
 	return processor
-}
-
-func (p *replicatorQueueProcessorImpl) Start() {
-	p.taskProcessor.start()
-	p.queueProcessorBase.Start()
-}
-
-func (p *replicatorQueueProcessorImpl) Stop() {
-	p.queueProcessorBase.Stop()
-	p.taskProcessor.stop()
 }
 
 func (p *replicatorQueueProcessorImpl) getTaskFilter() queueTaskFilter {

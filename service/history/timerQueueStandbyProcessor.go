@@ -60,7 +60,6 @@ func newTimerQueueStandbyProcessor(
 	historyService *historyEngineImpl,
 	clusterName string,
 	taskAllocator taskAllocator,
-	taskProcessor *taskProcessor,
 	historyRereplicator xdc.HistoryRereplicator,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
@@ -108,7 +107,6 @@ func newTimerQueueStandbyProcessor(
 			historyService,
 			timerQueueAckMgr,
 			timerGate,
-			taskProcessor,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			logger,
 		),

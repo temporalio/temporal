@@ -57,7 +57,6 @@ func newTransferQueueStandbyProcessor(
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
-	taskProcessor *taskProcessor,
 	logger log.Logger,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -103,14 +102,20 @@ func newTransferQueueStandbyProcessor(
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
-			shard, options, visibilityMgr, matchingClient,
-			maxReadAckLevel, updateClusterAckLevel, transferQueueShutdown, logger,
+			shard,
+			options,
+			visibilityMgr,
+			matchingClient,
+			maxReadAckLevel,
+			updateClusterAckLevel,
+			transferQueueShutdown,
+			logger,
 		),
 		historyRereplicator: historyRereplicator,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, taskProcessor, logger)
+	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

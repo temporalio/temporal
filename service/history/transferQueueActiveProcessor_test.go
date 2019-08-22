@@ -177,10 +177,6 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
-	options := taskProcessorOptions{
-		queueSize:   s.mockShard.GetConfig().TransferTaskBatchSize(),
-		workerCount: s.mockShard.GetConfig().TransferTaskWorkerCount(),
-	}
 	s.transferQueueActiveProcessor = newTransferQueueActiveProcessor(
 		s.mockShard,
 		h,
@@ -188,7 +184,6 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		s.mockMatchingClient,
 		s.mockHistoryClient,
 		newTaskAllocator(s.mockShard),
-		newTaskProcessor(options, s.mockShard, h.historyCache, s.logger),
 		s.logger,
 	)
 	s.transferQueueActiveProcessor.queueAckMgr = s.mockQueueAckMgr

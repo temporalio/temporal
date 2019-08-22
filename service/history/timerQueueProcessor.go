@@ -58,7 +58,6 @@ type (
 		isStarted              int32
 		isStopped              int32
 		shutdownChan           chan struct{}
-		taskProcessor          *taskProcessor
 		activeTimerProcessor   *timerQueueActiveProcessorImpl
 		standbyTimerProcessors map[string]*timerQueueStandbyProcessorImpl
 	}
@@ -74,11 +73,6 @@ func newTimerQueueProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
-	options := taskProcessorOptions{
-		workerCount: shard.GetConfig().TimerTaskWorkerCount(),
-		queueSize:   shard.GetConfig().TimerTaskWorkerCount() * shard.GetConfig().TimerTaskBatchSize(),
-	}
-	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, logger)
 
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
@@ -99,7 +93,12 @@ func newTimerQueueProcessor(
 				logger,
 			)
 			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
-				shard, historyService, clusterName, taskAllocator, taskProcessor, historyRereplicator, logger,
+				shard,
+				historyService,
+				clusterName,
+				taskAllocator,
+				historyRereplicator,
+				logger,
 			)
 		}
 	}
@@ -109,7 +108,6 @@ func newTimerQueueProcessor(
 		currentClusterName:     currentClusterName,
 		shard:                  shard,
 		taskAllocator:          taskAllocator,
-		taskProcessor:          taskProcessor,
 		config:                 shard.GetConfig(),
 		metricsClient:          historyService.metricsClient,
 		historyService:         historyService,
@@ -117,7 +115,7 @@ func newTimerQueueProcessor(
 		logger:                 logger,
 		matchingClient:         matchingClient,
 		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, taskProcessor, logger),
+		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
 		standbyTimerProcessors: standbyTimerProcessors,
 	}
 }
@@ -126,7 +124,6 @@ func (t *timerQueueProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&t.isStarted, 0, 1) {
 		return
 	}
-	t.taskProcessor.start()
 	t.activeTimerProcessor.Start()
 	if t.isGlobalDomainEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -147,7 +144,6 @@ func (t *timerQueueProcessorImpl) Stop() {
 		}
 	}
 	close(t.shutdownChan)
-	t.taskProcessor.stop()
 }
 
 // NotifyNewTimers - Notify the processor about the new active / standby timer arrival.
@@ -204,7 +200,6 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 		maxLevel,
 		t.matchingClient,
 		t.taskAllocator,
-		t.taskProcessor,
 		t.logger,
 	)
 

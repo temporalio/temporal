@@ -166,16 +166,11 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	s.mockShard.SetEngine(h)
 	s.mockHistoryEngine = h
 	s.clusterName = cluster.TestAlternativeClusterName
-	options := taskProcessorOptions{
-		queueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
-		workerCount: s.mockShard.GetConfig().TimerTaskWorkerCount(),
-	}
 	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(
 		s.mockShard,
 		h,
 		s.clusterName,
 		newTaskAllocator(s.mockShard),
-		newTaskProcessor(options, s.mockShard, h.historyCache, s.logger),
 		s.mockHistoryRereplicator,
 		s.logger,
 	)
