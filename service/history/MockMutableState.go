@@ -1727,7 +1727,7 @@ func (_m *mockMutableState) GetPendingRequestCancelExternalInfos() map[int64]*pe
 }
 
 // GetPendingSignalInfos provides a mock function with given fields:
-func (_m *mockMutableState) GetPendingSignalExtrenalInfos() map[int64]*persistence.SignalInfo {
+func (_m *mockMutableState) GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo {
 	ret := _m.Called()
 
 	var r0 map[int64]*persistence.SignalInfo

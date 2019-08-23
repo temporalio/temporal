@@ -137,7 +137,7 @@ type (
 		GetPendingTimerInfos() map[string]*persistence.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo
-		GetPendingSignalExtrenalInfos() map[int64]*persistence.SignalInfo
+		GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration

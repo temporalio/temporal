@@ -1307,7 +1307,17 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	resetRequestID := uuid.New()
 	// workflow event buffer guarantee that the event immediately
 	// after the decision task started is decision task finished event
-	resetDecisionID := msBuilder.GetPreviousStartedEventID() + 1
+	lastDecisionTaskStartEventID := msBuilder.GetPreviousStartedEventID()
+	if lastDecisionTaskStartEventID == common.EmptyEventID {
+		// TODO when https://github.com/uber/cadence/issues/2420 is finished
+		//  reset to workflow finish event
+		errStr := "cannot reapply signal due to workflow missing decision"
+		logger.Error(errStr)
+		return &shared.BadRequestError{Message: errStr}
+
+	}
+
+	resetDecisionFinishID := lastDecisionTaskStartEventID + 1
 
 	baseContext := context
 	baseMutableState := msBuilder
@@ -1319,7 +1329,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 			Domain:                common.StringPtr(domainEntry.GetInfo().Name),
 			WorkflowExecution:     context.getExecution(),
 			Reason:                common.StringPtr(workflowResetReason),
-			DecisionFinishEventId: common.Int64Ptr(resetDecisionID),
+			DecisionFinishEventId: common.Int64Ptr(resetDecisionFinishID),
 			RequestId:             common.StringPtr(resetRequestID),
 		},
 		baseContext,

@@ -1133,7 +1133,7 @@ func (e *mutableStateBuilder) GetPendingRequestCancelExternalInfos() map[int64]*
 	return e.pendingRequestCancelInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingSignalExtrenalInfos() map[int64]*persistence.SignalInfo {
+func (e *mutableStateBuilder) GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo {
 	return e.pendingSignalInfoIDs
 }
 
@@ -1955,7 +1955,7 @@ func (e *mutableStateBuilder) CheckResettable() error {
 			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending request cancel."),
 		}
 	}
-	if len(e.GetPendingSignalExtrenalInfos()) > 0 {
+	if len(e.GetPendingSignalExternalInfos()) > 0 {
 		return &workflow.BadRequestError{
 			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending signals to send."),
 		}

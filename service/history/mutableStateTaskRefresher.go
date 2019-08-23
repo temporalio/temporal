@@ -344,7 +344,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 ) error {
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	pendingSignalInfos := r.mutableState.GetPendingSignalExtrenalInfos()
+	pendingSignalInfos := r.mutableState.GetPendingSignalExternalInfos()
 
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.getEvent(
