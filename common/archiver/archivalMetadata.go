@@ -53,10 +53,11 @@ type (
 	}
 
 	archivalConfig struct {
-		clusterStatus       ArchivalStatus
-		enableRead          bool
-		domainDefaultStatus shared.ArchivalStatus
-		domainDefaultURI    string
+		staticClusterStatus  ArchivalStatus
+		dynamicClusterStatus dynamicconfig.StringPropertyFn
+		enableRead           dynamicconfig.BoolPropertyFn
+		domainDefaultStatus  shared.ArchivalStatus
+		domainDefaultURI     string
 	}
 
 	// ArchivalStatus represents the archival status of the cluster
@@ -84,38 +85,11 @@ func NewArchivalMetadata(
 ) ArchivalMetadata {
 	historyConfig := NewArchivalConfig(
 		historyStatus,
-		historyReadEnabled,
+		dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, historyStatus),
+		dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, historyReadEnabled),
 		domainDefaults.History.Status,
 		domainDefaults.History.URI,
 	)
-	if historyConfig.ClusterConfiguredForArchival() {
-		// Only check dynamic config when archival is enabled in static config.
-		// If archival is disabled in static config, there will be no provider section in the static config
-		// and the archiver provider can not create any archiver.
-		// Therefore, even dynamic config says archival is enabled, we should ignore that.
-		// Only when archival is enabled in static config,  should we check if there's any difference between static config and dynamic config.
-
-		// Dynamic archival config is accessed once on cluster startup than never accessed again.
-		// This is done so as to keep archival status and and the initialization of archiver.Provider in sync.
-		// TODO: Once archival pause is implemented archival config can be made truly dynamic.
-		dynamicHistoryStatusString := dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, historyStatus)()
-		dynamicHistoryStatus, err := getClusterArchivalStatus(dynamicHistoryStatusString)
-		if err != nil {
-			dynamicHistoryStatus = ArchivalDisabled
-		}
-		if dynamicHistoryStatus != ArchivalEnabled {
-			// apply status override
-			historyConfig = NewDisabledArchvialConfig()
-		} else {
-			// apply read override
-			historyConfig = NewArchivalConfig(
-				dynamicHistoryStatusString,
-				dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, historyReadEnabled)(),
-				domainDefaults.History.Status,
-				domainDefaults.History.URI,
-			)
-		}
-	}
 
 	return &archivalMetadata{
 		historyConfig:    historyConfig,
@@ -133,12 +107,13 @@ func (metadata *archivalMetadata) GetVisibilityConfig() ArchivalConfig {
 
 // NewArchivalConfig constructs a new valid ArchivalConfig
 func NewArchivalConfig(
-	clusterStatusStr string,
-	enableRead bool,
+	staticClusterStatusStr string,
+	dynamicClusterStatus dynamicconfig.StringPropertyFn,
+	enableRead dynamicconfig.BoolPropertyFn,
 	domainDefaultStatusStr string,
 	domainDefaultURI string,
 ) ArchivalConfig {
-	clusterStatus, err := getClusterArchivalStatus(clusterStatusStr)
+	staticClusterStatus, err := getClusterArchivalStatus(staticClusterStatusStr)
 	if err != nil {
 		panic(err)
 	}
@@ -148,34 +123,53 @@ func NewArchivalConfig(
 	}
 
 	return &archivalConfig{
-		clusterStatus:       clusterStatus,
-		enableRead:          enableRead,
-		domainDefaultStatus: domainDefaultStatus,
-		domainDefaultURI:    domainDefaultURI,
+		staticClusterStatus:  staticClusterStatus,
+		dynamicClusterStatus: dynamicClusterStatus,
+		enableRead:           enableRead,
+		domainDefaultStatus:  domainDefaultStatus,
+		domainDefaultURI:     domainDefaultURI,
 	}
 }
 
 // NewDisabledArchvialConfig returns a disabled ArchivalConfig
 func NewDisabledArchvialConfig() ArchivalConfig {
 	return &archivalConfig{
-		clusterStatus:       ArchivalDisabled,
-		enableRead:          false,
-		domainDefaultStatus: shared.ArchivalStatusDisabled,
-		domainDefaultURI:    "",
+		staticClusterStatus:  ArchivalDisabled,
+		dynamicClusterStatus: nil,
+		enableRead:           nil,
+		domainDefaultStatus:  shared.ArchivalStatusDisabled,
+		domainDefaultURI:     "",
 	}
 }
 
 // ClusterConfiguredForArchival returns true if cluster is configured to handle archival, false otherwise
 func (a *archivalConfig) ClusterConfiguredForArchival() bool {
-	return a.clusterStatus == ArchivalEnabled
+	return a.GetClusterStatus() == ArchivalEnabled
 }
 
 func (a *archivalConfig) GetClusterStatus() ArchivalStatus {
-	return a.clusterStatus
+	// Only check dynamic config when archival is enabled in static config.
+	// If archival is disabled in static config, there will be no provider section in the static config
+	// and the archiver provider can not create any archiver. Therefore, in that case,
+	// even dynamic config says archival is enabled, we should ignore that.
+	// Only when archival is enabled in static config, should we check if there's any difference between static config and dynamic config.
+	if a.staticClusterStatus != ArchivalEnabled {
+		return a.staticClusterStatus
+	}
+
+	dynamicStatusStr := a.dynamicClusterStatus()
+	dynamicStatus, err := getClusterArchivalStatus(dynamicStatusStr)
+	if err != nil {
+		return ArchivalDisabled
+	}
+	return dynamicStatus
 }
 
 func (a *archivalConfig) ReadEnabled() bool {
-	return a.enableRead
+	if !a.ClusterConfiguredForArchival() {
+		return false
+	}
+	return a.enableRead()
 }
 
 func (a *archivalConfig) GetDomainDefaultStatus() shared.ArchivalStatus {
