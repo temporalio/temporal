@@ -36,7 +36,7 @@ func ValidateSchedule(cronSchedule string) error {
 	if cronSchedule == "" {
 		return nil
 	}
-	if _, err := cron.Parse(cronSchedule); err != nil {
+	if _, err := cron.ParseStandard(cronSchedule); err != nil {
 		return &workflow.BadRequestError{Message: "Invalid CronSchedule."}
 	}
 	return nil
