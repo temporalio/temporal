@@ -39,6 +39,7 @@ type (
 		nextEventID            int64
 		previousStartedEventID int64
 		isWorkflowRunning      bool
+		closeStatus            int
 		timestamp              time.Time
 	}
 

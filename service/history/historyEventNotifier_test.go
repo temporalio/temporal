@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -79,7 +80,8 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	var previousStartedEventID int64 = 5
 	var nextEventID int64 = 18
 	isRunning := true
-	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, isRunning)
+	closeStatus := persistence.WorkflowCloseStatusNone
+	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, isRunning, closeStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()))
@@ -110,7 +112,8 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	var previousStartedEventID int64 = 5
 	var nextEventID int64 = 18
 	isRunning := true
-	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, isRunning)
+	closeStatus := persistence.WorkflowCloseStatusNone
+	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, isRunning, closeStatus)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100
