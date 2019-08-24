@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -152,7 +153,7 @@ func (s *versionHistorySuite) TestSetBranchToken() {
 	s.NoError(err)
 }
 
-func (s *versionHistorySuite) TestUpdateItem_VersionIncrease() {
+func (s *versionHistorySuite) TestAddOrUpdateItem_VersionIncrease() {
 	branchToken := []byte("some random branch token")
 	items := []*VersionHistoryItem{
 		{eventID: 3, version: 0},
@@ -178,7 +179,7 @@ func (s *versionHistorySuite) TestUpdateItem_VersionIncrease() {
 
 }
 
-func (s *versionHistorySuite) TestUpdateItem_EventIDIncrease() {
+func (s *versionHistorySuite) TestAddOrUpdateItem_EventIDIncrease() {
 	branchToken := []byte("some random branch token")
 	items := []*VersionHistoryItem{
 		{eventID: 3, version: 0},
@@ -202,7 +203,7 @@ func (s *versionHistorySuite) TestUpdateItem_EventIDIncrease() {
 	), history)
 }
 
-func (s *versionHistorySuite) TestUpdateItem_Failed_LowerVersion() {
+func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_LowerVersion() {
 	branchToken := []byte("some random branch token")
 	items := []*VersionHistoryItem{
 		{eventID: 3, version: 0},
@@ -214,7 +215,7 @@ func (s *versionHistorySuite) TestUpdateItem_Failed_LowerVersion() {
 	s.Error(err)
 }
 
-func (s *versionHistorySuite) TestUpdateItem_Failed_SameVersion_EventIDNotIncreasing() {
+func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_SameVersion_EventIDNotIncreasing() {
 	branchToken := []byte("some random branch token")
 	items := []*VersionHistoryItem{
 		{eventID: 3, version: 0},
@@ -229,7 +230,7 @@ func (s *versionHistorySuite) TestUpdateItem_Failed_SameVersion_EventIDNotIncrea
 	s.Error(err)
 }
 
-func (s *versionHistorySuite) TestUpdateItem_Failed_VersionNoIncreasing() {
+func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_VersionNoIncreasing() {
 	branchToken := []byte("some random branch token")
 	items := []*VersionHistoryItem{
 		{eventID: 3, version: 0},
@@ -245,6 +246,38 @@ func (s *versionHistorySuite) TestUpdateItem_Failed_VersionNoIncreasing() {
 
 	err = history.AddOrUpdateItem(NewVersionHistoryItem(7, 3))
 	s.Error(err)
+}
+
+func (s *versionHistoriesSuite) TestContainsItem_True() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	prevEventID := common.FirstEventID - 1
+	for _, item := range items {
+		for eventID := prevEventID + 1; eventID <= item.GetEventID(); eventID++ {
+			s.True(history.ContainsItem(NewVersionHistoryItem(eventID, item.GetVersion())))
+		}
+		prevEventID = item.GetEventID()
+	}
+}
+
+func (s *versionHistoriesSuite) TestContainsItem_False() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	s.False(history.ContainsItem(NewVersionHistoryItem(4, 0)))
+	s.False(history.ContainsItem(NewVersionHistoryItem(3, 1)))
+
+	s.False(history.ContainsItem(NewVersionHistoryItem(7, 4)))
+	s.False(history.ContainsItem(NewVersionHistoryItem(6, 5)))
 }
 
 func (s *versionHistorySuite) TestIsLCAAppendable_True() {
@@ -549,6 +582,35 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 	s.Nil(err)
 	s.Equal(1, index)
 	s.Equal(NewVersionHistoryItem(7, 6), item)
+}
+
+func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
+	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+	})
+	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 5, version: 4},
+		{eventID: 7, version: 6},
+		{eventID: 9, version: 10},
+	})
+
+	histories := NewVersionHistories(versionHistory1)
+	_, _, err := histories.AddVersionHistory(versionHistory2)
+	s.Nil(err)
+
+	index, err := histories.FindFirstVersionHistoryIndexByItem(NewVersionHistoryItem(8, 10))
+	s.NoError(err)
+	s.Equal(1, index)
+
+	index, err = histories.FindFirstVersionHistoryIndexByItem(NewVersionHistoryItem(4, 4))
+	s.NoError(err)
+	s.Equal(0, index)
+
+	index, err = histories.FindFirstVersionHistoryIndexByItem(NewVersionHistoryItem(41, 4))
+	s.Error(err)
 }
 
 func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {

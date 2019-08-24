@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination nDCTransactionMgrForNewWorkflow_mock.go
+
 package history
 
 import (
@@ -59,7 +61,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 ) error {
-
 	// NOTE: this function does NOT mutate current workflow or target workflow,
 	//  workflow mutation is done in methods within executeTransaction function
 

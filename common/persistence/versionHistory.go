@@ -235,17 +235,36 @@ func (v *VersionHistory) AddOrUpdateItem(
 	return nil
 }
 
+// ContainsItem check whether given version history item is included
+func (v *VersionHistory) ContainsItem(
+	item *VersionHistoryItem,
+) bool {
+
+	prevEventID := common.FirstEventID - 1
+	for _, currentItem := range v.items {
+		if item.GetVersion() == currentItem.GetVersion() {
+			if prevEventID < item.GetEventID() && item.GetEventID() <= currentItem.GetEventID() {
+				return true
+			}
+		} else if item.GetVersion() < currentItem.GetVersion() {
+			return false
+		}
+		prevEventID = currentItem.GetEventID()
+	}
+	return false
+}
+
 // FindLCAItem returns the lowest common ancestor version history item
 func (v *VersionHistory) FindLCAItem(
 	remote *VersionHistory,
 ) (*VersionHistoryItem, error) {
 
-	localIdx := len(v.items) - 1
-	remoteIdx := len(remote.items) - 1
+	localIndex := len(v.items) - 1
+	remoteIndex := len(remote.items) - 1
 
-	for localIdx >= 0 && remoteIdx >= 0 {
-		localVersionItem := v.items[localIdx]
-		remoteVersionItem := remote.items[remoteIdx]
+	for localIndex >= 0 && remoteIndex >= 0 {
+		localVersionItem := v.items[localIndex]
+		remoteVersionItem := remote.items[remoteIndex]
 
 		if localVersionItem.version == remoteVersionItem.version {
 			if localVersionItem.eventID > remoteVersionItem.eventID {
@@ -253,10 +272,10 @@ func (v *VersionHistory) FindLCAItem(
 			}
 			return localVersionItem.Duplicate(), nil
 		} else if localVersionItem.version > remoteVersionItem.version {
-			localIdx--
+			localIndex--
 		} else {
 			// localVersionItem.version < remoteVersionItem.version
-			remoteIdx--
+			remoteIndex--
 		}
 	}
 
@@ -487,6 +506,20 @@ func (h *VersionHistories) FindLCAVersionHistoryIndexAndItem(
 		}
 	}
 	return versionHistoryIndex, versionHistoryItem, nil
+}
+
+// FindFirstVersionHistoryIndexByItem find the first version history index which
+// contains the given version history item
+func (h *VersionHistories) FindFirstVersionHistoryIndexByItem(
+	item *VersionHistoryItem,
+) (int, error) {
+
+	for index, localHistory := range h.histories {
+		if localHistory.ContainsItem(item) {
+			return index, nil
+		}
+	}
+	return 0, &shared.BadRequestError{Message: "version histories does not contains given item."}
 }
 
 // IsRebuilt returns true if the current branch index's last write version is not the largest

@@ -301,10 +301,10 @@ func (e *mutableStateBuilder) SetHistoryTree(
 	if err != nil {
 		return err
 	}
-	return e.SetBranchToken(initialBranchToken)
+	return e.SetCurrentBranchToken(initialBranchToken)
 }
 
-func (e *mutableStateBuilder) SetBranchToken(
+func (e *mutableStateBuilder) SetCurrentBranchToken(
 	branchToken []byte,
 ) error {
 

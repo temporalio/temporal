@@ -358,7 +358,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 		return
 	}
 
-	retError = newMutableState.SetBranchToken(forkResp.NewBranchToken)
+	retError = newMutableState.SetCurrentBranchToken(forkResp.NewBranchToken)
 	return
 }
 
@@ -819,7 +819,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 			})
 		}
 	}()
-	retError = newMsBuilder.SetBranchToken(forkResp.NewBranchToken)
+	retError = newMsBuilder.SetCurrentBranchToken(forkResp.NewBranchToken)
 	if retError != nil {
 		return retError
 	}

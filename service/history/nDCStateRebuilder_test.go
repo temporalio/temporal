@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// +build test
+
 package history
 
 import (
@@ -35,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/collection"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
@@ -63,12 +66,10 @@ type (
 		mockClientBean      *client.MockClientBean
 		mockEventsCache     *MockEventsCache
 
-		mockContext      *mockWorkflowExecutionContext
-		mockMutableState *mockMutableState
-		domainID         string
-		domainName       string
-		workflowID       string
-		runID            string
+		domainID   string
+		domainName string
+		workflowID string
+		runID      string
 
 		nDCStateRebuilder *nDCStateRebuilderImpl
 	}
@@ -117,10 +118,8 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.domainName = "some random domain name"
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
-	s.mockContext = &mockWorkflowExecutionContext{}
-	s.mockMutableState = &mockMutableState{}
 	s.nDCStateRebuilder = newNDCStateRebuilder(
-		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
+		s.mockShard, s.logger,
 	)
 }
 
@@ -133,8 +132,6 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())
-
-	s.mockMutableState.AssertExpectations(s.T())
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
@@ -161,11 +158,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 	}
 
-	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
-	})
+	workflowIdentifier := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID)
 
 	mockStateBuilder := &mockStateBuilder{}
 	defer mockStateBuilder.AssertExpectations(s.T())
@@ -182,7 +175,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		int32(nDCMutableStateEventStoreVersion),
 	).Return(nil, nil, nil, nil).Once()
 
-	err := s.nDCStateRebuilder.applyEvents(mockStateBuilder, events, requestID)
+	err := s.nDCStateRebuilder.applyEvents(workflowIdentifier, mockStateBuilder, events, requestID)
 	s.NoError(err)
 }
 
@@ -190,11 +183,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	firstEventID := common.FirstEventID
 	nextEventID := int64(101)
 	branchToken := []byte("some random branch token")
-	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
-	})
+	workflowIdentifier := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID)
 
 	event1 := &shared.HistoryEvent{
 		EventId:                                 common.Int64Ptr(1),
@@ -246,7 +235,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		Size:          67890,
 	}, nil).Once()
 
-	paginationFn := s.nDCStateRebuilder.getPaginationFn(common.FirstEventID, nextEventID, branchToken)
+	paginationFn := s.nDCStateRebuilder.getPaginationFn(workflowIdentifier, common.FirstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
 	result := []*shared.History{}
@@ -262,35 +251,16 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 func (s *nDCStateRebuilderSuite) TestRebuild() {
 	requestID := uuid.New()
 	version := int64(12)
+	lastEventID := int64(2)
+	branchToken := []byte("other random branch token")
 
-	branchToken0 := []byte("some random branch token")
-	lastEventID0 := int64(5)
-	versionHistory0 := persistence.NewVersionHistory(
-		branchToken0,
-		[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID0, version)},
-	)
-	branchToken1 := []byte("other random branch token")
-	lastEventID1 := int64(2)
-	versionHistory1 := persistence.NewVersionHistory(
-		branchToken1,
-		[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID1, version)},
-	)
-	versionHistories := persistence.NewVersionHistories(versionHistory0)
-	_, _, err := versionHistories.AddVersionHistory(versionHistory1)
-	s.NoError(err)
-
-	updateCondition := int64(59)
-	s.mockContext.On("getDomainName").Return(s.domainName)
-	s.mockMutableState.On("GetUpdateCondition").Return(updateCondition)
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
-	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
-	})
+	targetDomainID := uuid.New()
+	targetDomainName := "other random domain name"
+	targetWorkflowID := "other random workflow ID"
+	targetRunID := uuid.New()
 
 	firstEventID := common.FirstEventID
-	nextEventID := lastEventID1 + 1
+	nextEventID := lastEventID + 1
 	events1 := []*shared.HistoryEvent{{
 		EventId:   common.Int64Ptr(1),
 		Version:   common.Int64Ptr(version),
@@ -321,7 +291,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	historySize1 := 12345
 	historySize2 := 67890
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken1,
+		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
@@ -333,7 +303,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          historySize1,
 	}, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken1,
+		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
@@ -345,8 +315,8 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          historySize2,
 	}, nil).Once()
 
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID},
+	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+		&persistence.DomainInfo{ID: targetDomainID, Name: targetDomainName},
 		&persistence.DomainConfig{},
 		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -359,124 +329,26 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		s.mockClusterMetadata,
 	), nil)
 
-	s.mockContext.On("clear").Once()
-	s.mockContext.On("setHistorySize", int64(historySize1+historySize2)).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-	rebuildMutableState, err := s.nDCStateRebuilder.rebuild(ctx.Background(), 1, requestID)
-	s.NoError(err)
-	s.NotNil(rebuildMutableState)
-	s.Equal(versionHistories, rebuildMutableState.GetVersionHistories())
-	s.Equal(1, versionHistories.GetCurrentVersionHistoryIndex())
-	s.Equal(updateCondition, rebuildMutableState.GetUpdateCondition())
-}
-
-func (s *nDCStateRebuilderSuite) TestPrepareMutableState_NoRebuild() {
-	branchToken := []byte("some random branch token")
-	lastEventID := int64(2)
-	version := int64(12)
-	versionHistoryItem := persistence.NewVersionHistoryItem(lastEventID, version)
-	versionHistory := persistence.NewVersionHistory(
+	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
+		ctx.Background(),
+		definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID),
 		branchToken,
-		[]*persistence.VersionHistoryItem{versionHistoryItem},
+		nextEventID,
+		definition.NewWorkflowIdentifier(targetDomainID, targetWorkflowID, targetRunID),
+		requestID,
 	)
-	versionHistories := persistence.NewVersionHistories(versionHistory)
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
-
-	rebuildMutableState, isRebuilt, err := s.nDCStateRebuilder.prepareMutableState(ctx.Background(), 0, version)
-	s.NoError(err)
-	s.False(isRebuilt)
-	s.Equal(s.mockMutableState, rebuildMutableState)
-}
-
-func (s *nDCStateRebuilderSuite) TestPrepareMutableState_Rebuild() {
-	version := int64(12)
-	incomingVersion := version + 1
-
-	// current branch
-	branchToken0 := []byte("some random branch token")
-	lastEventID0 := int64(2)
-
-	versionHistoryItem0 := persistence.NewVersionHistoryItem(lastEventID0, version)
-	versionHistory0 := persistence.NewVersionHistory(
-		branchToken0,
-		[]*persistence.VersionHistoryItem{versionHistoryItem0},
-	)
-
-	// stale branch, used for rebuild
-	branchToken1 := []byte("other random branch token")
-	lastEventID1 := lastEventID0 - 1
-	versionHistoryItem1 := persistence.NewVersionHistoryItem(lastEventID1, version)
-	versionHistory1 := persistence.NewVersionHistory(
-		branchToken1,
-		[]*persistence.VersionHistoryItem{versionHistoryItem1},
-	)
-
-	versionHistories := persistence.NewVersionHistories(versionHistory0)
-	_, _, err := versionHistories.AddVersionHistory(versionHistory1)
-	s.Nil(err)
-
-	updateCondition := int64(59)
-	s.mockContext.On("getDomainName").Return(s.domainName)
-	s.mockMutableState.On("GetUpdateCondition").Return(updateCondition)
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
-	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
-	})
-
-	firstEventID := common.FirstEventID
-	nextEventID := lastEventID1 + 1
-	events := []*shared.HistoryEvent{{
-		EventId:   common.Int64Ptr(1),
-		Version:   common.Int64Ptr(version),
-		EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
-		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr("some random workflow type")},
-			TaskList:                            &shared.TaskList{Name: common.StringPtr("some random workflow type")},
-			Input:                               []byte("some random input"),
-			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(123),
-			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(233),
-			Identity:                            common.StringPtr("some random identity"),
-		},
-	}}
-	history := []*shared.History{{events}}
-
-	historySize := 12345
-	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken1,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      nDCDefaultPageSize,
-		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.mockShard.GetShardID()),
-	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       history,
-		NextPageToken: nil,
-		Size:          historySize,
-	}, nil).Once()
-
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID},
-		&persistence.DomainConfig{},
-		&persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
-			},
-		},
-		1234,
-		s.mockClusterMetadata,
-	), nil)
-
-	s.mockContext.On("clear").Once()
-	s.mockContext.On("setHistorySize", int64(historySize)).Once()
-	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-	rebuildMutableState, isRebuilt, err := s.nDCStateRebuilder.prepareMutableState(ctx.Background(), 1, incomingVersion)
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
-	s.True(isRebuilt)
-	s.Equal(versionHistories, rebuildMutableState.GetVersionHistories())
-	s.Equal(updateCondition, rebuildMutableState.GetUpdateCondition())
+	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
+	s.Equal(targetDomainID, rebuildExecutionInfo.DomainID)
+	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowID)
+	s.Equal(targetRunID, rebuildExecutionInfo.RunID)
+	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
+	s.Equal(persistence.NewVersionHistories(
+		persistence.NewVersionHistory(
+			nil,
+			[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
+		),
+	), rebuildMutableState.GetVersionHistories())
 }

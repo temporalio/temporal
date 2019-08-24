@@ -44,11 +44,20 @@ type (
 		logger log.Logger,
 	) nDCBranchMgr
 
-	nDCStateRebuilderProvider func(
+	nDCConflictResolverProvider func(
 		context workflowExecutionContext,
 		mutableState mutableState,
 		logger log.Logger,
-	) nDCStateRebuilder
+	) nDCConflictResolver
+
+	nDCWorkflowResetterProvider func(
+		domainID string,
+		workflowID string,
+		baseRunID string,
+		newContext workflowExecutionContext,
+		newRunID string,
+		logger log.Logger,
+	) nDCWorkflowResetter
 
 	nDCHistoryReplicator struct {
 		shard           ShardContext
@@ -59,12 +68,12 @@ type (
 		historyCache    *historyCache
 		transactionMgr  nDCTransactionMgr
 		logger          log.Logger
-		resetor         workflowResetor
 
-		getNewBranchMgr      nDCBranchMgrProvider
-		getNewStateRebuilder nDCStateRebuilderProvider
-		getNewStateBuilder   stateBuilderProvider
-		getNewMutableState   mutableStateProvider
+		newBranchMgr        nDCBranchMgrProvider
+		newConflictResolver nDCConflictResolverProvider
+		newWorkflowResetter nDCWorkflowResetterProvider
+		newStateBuilder     stateBuilderProvider
+		newMutableState     mutableStateProvider
 	}
 )
 
@@ -74,6 +83,7 @@ func newNDCHistoryReplicator(
 	logger log.Logger,
 ) *nDCHistoryReplicator {
 
+	transactionMgr := newNDCTransactionMgr(shard, historyCache, logger)
 	replicator := &nDCHistoryReplicator{
 		shard:           shard,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
@@ -81,19 +91,44 @@ func newNDCHistoryReplicator(
 		metricsClient:   shard.GetMetricsClient(),
 		domainCache:     shard.GetDomainCache(),
 		historyCache:    historyCache,
-		transactionMgr:  newNDCTransactionMgr(shard, historyCache, logger),
+		transactionMgr:  transactionMgr,
 		logger:          logger.WithTags(tag.ComponentHistoryReplicator),
 
-		getNewBranchMgr: func(context workflowExecutionContext, mutableState mutableState, logger log.Logger) nDCBranchMgr {
+		newBranchMgr: func(
+			context workflowExecutionContext,
+			mutableState mutableState,
+			logger log.Logger,
+		) nDCBranchMgr {
 			return newNDCBranchMgr(shard, context, mutableState, logger)
 		},
-		getNewStateRebuilder: func(context workflowExecutionContext, mutableState mutableState, logger log.Logger) nDCStateRebuilder {
-			return newNDCStateRebuilder(shard, context, mutableState, logger)
+		newConflictResolver: func(
+			context workflowExecutionContext,
+			mutableState mutableState,
+			logger log.Logger,
+		) nDCConflictResolver {
+			return newNDCConflictResolver(shard, context, mutableState, logger)
 		},
-		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
+		newWorkflowResetter: func(
+			domainID string,
+			workflowID string,
+			baseRunID string,
+			newContext workflowExecutionContext,
+			newRunID string,
+			logger log.Logger,
+		) nDCWorkflowResetter {
+			return newNDCWorkflowResetter(shard, transactionMgr, domainID, workflowID, baseRunID, newContext, newRunID, logger)
+		},
+		newStateBuilder: func(
+			msBuilder mutableState,
+			logger log.Logger,
+		) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
 		},
-		getNewMutableState: func(version int64, domainName string, logger log.Logger) mutableState {
+		newMutableState: func(
+			version int64,
+			domainName string,
+			logger log.Logger,
+		) mutableState {
 			return newMutableStateBuilderWithVersionHistories(
 				shard,
 				shard.GetEventsCache(),
@@ -106,7 +141,6 @@ func newNDCHistoryReplicator(
 			)
 		},
 	}
-	replicator.resetor = nil // TODO wire v2 history replicator with workflow reseter
 
 	return replicator
 }
@@ -171,9 +205,16 @@ func (r *nDCHistoryReplicator) applyEvents(
 				return r.applyNonStartEventsToCurrentBranch(ctx, context, mutableState, isRebuilt, releaseFn, task)
 			}
 			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
+
 		case *shared.EntityNotExistsError:
-			// mutable state not created, proceed
-			return r.applyNonStartEventsMissingMutableState(ctx, context, task)
+			// mutable state not created, check if is workflow reset
+			mutableState, completeFn, err := r.applyNonStartEventsMissingMutableState(ctx, context, task)
+			if err != nil {
+				return err
+			}
+
+			return r.applyNonStartEventsResetWorkflow(ctx, context, mutableState, completeFn, task)
+
 		default:
 			// unable to get mutable state, return err so we can retry the task later
 			return err
@@ -189,8 +230,8 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 ) (retError error) {
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	mutableState := r.getNewMutableState(task.getVersion(), context.getDomainName(), task.getLogger())
-	stateBuilder := r.getNewStateBuilder(mutableState, task.getLogger())
+	mutableState := r.newMutableState(task.getVersion(), context.getDomainName(), task.getLogger())
+	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 
 	// use state builder for workflow mutable state mutation
 	_, _, _, err := stateBuilder.applyEvents(
@@ -206,10 +247,9 @@ func (r *nDCHistoryReplicator) applyStartEvents(
 		return err
 	}
 
-	now := time.Unix(0, task.getLastEvent().GetTimestamp())
 	err = r.transactionMgr.createWorkflow(
 		ctx,
-		now,
+		task.getEventTime(),
 		newNDCWorkflow(
 			ctx,
 			r.domainCache,
@@ -233,7 +273,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsPrepareBranch(
 ) (int, error) {
 
 	incomingVersionHistory := task.getVersionHistory()
-	branchMgr := r.getNewBranchMgr(context, mutableState, task.getLogger())
+	branchMgr := r.newBranchMgr(context, mutableState, task.getLogger())
 	versionHistoryIndex, err := branchMgr.prepareVersionHistory(
 		ctx,
 		incomingVersionHistory,
@@ -270,6 +310,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsPrepareReorder(
 		return false, nil
 	}
 	if task.getFirstEvent().GetEventId() > nextEventID {
+		// TODO we should use a new retry error for 3+DC
 		return false, newRetryTaskErrorWithHint(
 			ErrRetryBufferEventsMsg,
 			task.getDomainID(),
@@ -291,8 +332,8 @@ func (r *nDCHistoryReplicator) applyNonStartEventsPrepareMutableState(
 ) (mutableState, bool, error) {
 
 	incomingVersion := task.getVersion()
-	stateRebuilder := r.getNewStateRebuilder(context, mutableState, task.getLogger())
-	return stateRebuilder.prepareMutableState(
+	conflictResolver := r.newConflictResolver(context, mutableState, task.getLogger())
+	return conflictResolver.prepareMutableState(
 		ctx,
 		branchIndex,
 		incomingVersion,
@@ -309,7 +350,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToCurrentBranch(
 ) error {
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	stateBuilder := r.getNewStateBuilder(mutableState, task.getLogger())
+	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 	_, _, newMutableState, err := stateBuilder.applyEvents(
 		task.getDomainID(),
 		requestID,
@@ -323,7 +364,6 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToCurrentBranch(
 		return err
 	}
 
-	now := time.Unix(0, task.getLastEvent().GetTimestamp())
 	targetWorkflow := newNDCWorkflow(
 		ctx,
 		r.domainCache,
@@ -359,7 +399,7 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToCurrentBranch(
 
 	err = r.transactionMgr.updateWorkflow(
 		ctx,
-		now,
+		task.getEventTime(),
 		isRebuilt,
 		targetWorkflow,
 		newWorkflow,
@@ -405,10 +445,9 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToNoneCurrentBranch(
 		return err
 	}
 
-	now := time.Unix(0, task.getLastEvent().GetTimestamp())
 	return r.transactionMgr.backfillWorkflow(
 		ctx,
-		now,
+		task.getEventTime(),
 		newNDCWorkflow(
 			ctx,
 			r.domainCache,
@@ -429,33 +468,84 @@ func (r *nDCHistoryReplicator) applyNonStartEventsToNoneCurrentBranch(
 
 func (r *nDCHistoryReplicator) applyNonStartEventsMissingMutableState(
 	ctx ctx.Context,
-	context workflowExecutionContext,
+	newContext workflowExecutionContext,
 	task nDCReplicationTask,
-) error {
-
-	resendTaskErr := newRetryTaskErrorWithHint(
-		ErrWorkflowNotFoundMsg,
-		task.getDomainID(),
-		task.getWorkflowID(),
-		task.getRunID(),
-		common.FirstEventID,
-	)
+) (mutableState, nDCWorkflowResetterCompleteFn, error) {
 
 	// for non reset workflow execution replication task, just do re-application
 	if !task.getRequest().GetResetWorkflow() {
-		return resendTaskErr
+		// TODO we should use a new retry error for 3+DC
+		return nil, nil, newRetryTaskErrorWithHint(
+			ErrWorkflowNotFoundMsg,
+			task.getDomainID(),
+			task.getWorkflowID(),
+			task.getRunID(),
+			common.FirstEventID,
+		)
 	}
 
-	// TODO nDC: to successfully & correctly do workflow reset
-	//  the apply reset event functionality needs to be refactored
-	//  currently, just use re-send, although it is inefficient
-	return newRetryTaskErrorWithHint(
-		ErrWorkflowNotFoundMsg,
+	decisionTaskFailedEvent := task.getFirstEvent()
+	attr := decisionTaskFailedEvent.DecisionTaskFailedEventAttributes
+	baseRunID := attr.GetBaseRunId()
+	baseEventID := decisionTaskFailedEvent.GetEventId() - 1
+	baseEventVersion := attr.GetForkEventVersion()
+	newRunID := attr.GetNewRunId()
+
+	workflowResetter := r.newWorkflowResetter(
 		task.getDomainID(),
 		task.getWorkflowID(),
-		task.getRunID(),
-		common.FirstEventID,
+		baseRunID,
+		newContext,
+		newRunID,
+		task.getLogger(),
 	)
+
+	return workflowResetter.resetWorkflow(ctx, baseEventID, baseEventVersion)
+}
+
+func (r *nDCHistoryReplicator) applyNonStartEventsResetWorkflow(
+	ctx ctx.Context,
+	context workflowExecutionContext,
+	mutableState mutableState,
+	completeFn nDCWorkflowResetterCompleteFn,
+	task nDCReplicationTask,
+) error {
+
+	defer completeFn()
+
+	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
+	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
+	_, _, _, err := stateBuilder.applyEvents(
+		task.getDomainID(),
+		requestID,
+		*task.getExecution(),
+		task.getEvents(),
+		task.getNewEvents(),
+		nDCMutableStateEventStoreVersion,
+		nDCMutableStateEventStoreVersion,
+	)
+	if err != nil {
+		return err
+	}
+
+	targetWorkflow := newNDCWorkflow(
+		ctx,
+		r.domainCache,
+		r.clusterMetadata,
+		context,
+		mutableState,
+		noopReleaseFn,
+	)
+
+	err = r.transactionMgr.createWorkflow(
+		ctx,
+		task.getEventTime(),
+		targetWorkflow,
+	)
+	if err == nil {
+		r.notify(task.getSourceCluster(), task.getEventTime())
+	}
+	return err
 }
 
 func (r *nDCHistoryReplicator) notify(

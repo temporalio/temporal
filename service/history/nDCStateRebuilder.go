@@ -18,18 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination nDCStateRebuilder_mock.go
+
 package history
 
 import (
 	ctx "context"
-
-	"github.com/pborman/uuid"
+	"fmt"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/collection"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
@@ -37,11 +39,14 @@ import (
 
 type (
 	nDCStateRebuilder interface {
-		prepareMutableState(
+		rebuild(
 			ctx ctx.Context,
-			branchIndex int,
-			incomingVersion int64,
-		) (mutableState, bool, error)
+			baseWorkflowIdentifier definition.WorkflowIdentifier,
+			baseBranchToken []byte,
+			baseNextEventID int64,
+			targetWorkflowIdentifier definition.WorkflowIdentifier,
+			requestID string,
+		) (mutableState, int64, error)
 	}
 
 	nDCStateRebuilderImpl struct {
@@ -50,10 +55,8 @@ type (
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
 
-		context      workflowExecutionContext
-		mutableState mutableState
-		historySize  int64
-		logger       log.Logger
+		rebuiltHistorySize int64
+		logger             log.Logger
 	}
 )
 
@@ -61,9 +64,6 @@ var _ nDCStateRebuilder = (*nDCStateRebuilderImpl)(nil)
 
 func newNDCStateRebuilder(
 	shard ShardContext,
-
-	context workflowExecutionContext,
-	mutableState mutableState,
 	logger log.Logger,
 ) *nDCStateRebuilderImpl {
 
@@ -73,143 +73,70 @@ func newNDCStateRebuilder(
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
 
-		context:      context,
-		mutableState: mutableState,
-		logger:       logger,
+		rebuiltHistorySize: 0,
+		logger:             logger,
 	}
-}
-
-func (r *nDCStateRebuilderImpl) prepareMutableState(
-	ctx ctx.Context,
-	branchIndex int,
-	incomingVersion int64,
-) (mutableState, bool, error) {
-
-	// NOTE: this function also need to preserve whether a workflow is a zombie or not
-	//  this is done by the rebuild function below
-	versionHistories := r.mutableState.GetVersionHistories()
-	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
-
-	// replication task to be applied to current branch
-	if branchIndex == currentVersionHistoryIndex {
-		return r.mutableState, false, nil
-	}
-
-	currentVersionHistory, err := versionHistories.GetVersionHistory(currentVersionHistoryIndex)
-	if err != nil {
-		return nil, false, err
-	}
-	currentLastItem, err := currentVersionHistory.GetLastItem()
-	if err != nil {
-		return nil, false, err
-	}
-
-	// mutable state does not need rebuild
-	if incomingVersion < currentLastItem.GetVersion() {
-		return r.mutableState, false, nil
-	}
-
-	if incomingVersion == currentLastItem.GetVersion() {
-		return nil, false, &shared.BadRequestError{
-			Message: "nDCStateRebuilder encounter replication task version == current branch last write version",
-		}
-	}
-
-	// task.getVersion() > currentLastItem
-	// incoming replication task, after application, will become the current branch
-	// (because higher version wins), we need to rebuild the mutable state for that
-	rebuildMutableState, err := r.rebuild(ctx, branchIndex, uuid.New())
-	if err != nil {
-		return nil, false, err
-	}
-	return rebuildMutableState, true, nil
 }
 
 func (r *nDCStateRebuilderImpl) rebuild(
 	ctx ctx.Context,
-	branchIndex int,
+	baseWorkflowIdentifier definition.WorkflowIdentifier,
+	baseBranchToken []byte,
+	baseNextEventID int64,
+	targetWorkflowIdentifier definition.WorkflowIdentifier,
 	requestID string,
-) (mutableState, error) {
-
-	versionHistories := r.mutableState.GetVersionHistories()
-	replayVersionHistory, err := versionHistories.GetVersionHistory(branchIndex)
-	if err != nil {
-		return nil, err
-	}
-	lastItem, err := replayVersionHistory.GetLastItem()
-	if err != nil {
-		return nil, err
-	}
+) (mutableState, int64, error) {
 
 	iter := collection.NewPagingIterator(r.getPaginationFn(
+		baseWorkflowIdentifier,
 		common.FirstEventID,
-		lastItem.GetEventID()+1,
-		replayVersionHistory.GetBranchToken(),
+		baseNextEventID,
+		baseBranchToken,
 	))
+
+	domainEntry, err := r.domainCache.GetDomainByID(targetWorkflowIdentifier.DomainID)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	// need to specially handling the first batch, to initialize mutable state & state builder
 	batch, err := iter.Next()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	firstEventBatch := batch.(*shared.History).Events
-	rebuildMutableState, stateBuilder := r.initializeBuilders(
+	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		firstEventBatch[0].GetVersion(),
-		r.context.getDomainName(),
+		domainEntry.GetInfo().Name,
 	)
-	if err := r.applyEvents(stateBuilder, firstEventBatch, requestID); err != nil {
-		return nil, err
+	if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, firstEventBatch, requestID); err != nil {
+		return nil, 0, err
 	}
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		events := batch.(*shared.History).Events
-		if err := r.applyEvents(stateBuilder, events, requestID); err != nil {
-			return nil, err
+		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
+			return nil, 0, err
 		}
 	}
 
-	// after rebuilt verification
-	rebuildVersionHistories := rebuildMutableState.GetVersionHistories()
-	rebuildVersionHistory, err := rebuildVersionHistories.GetCurrentVersionHistory()
-	if err != nil {
-		return nil, err
-	}
-	err = rebuildVersionHistory.SetBranchToken(replayVersionHistory.GetBranchToken())
-	if err != nil {
-		return nil, err
-	}
-
-	if !rebuildVersionHistory.Equals(replayVersionHistory) {
-		return nil, &shared.InternalServiceError{
-			Message: "nDCStateRebuilder encounter mismatch version history after rebuild",
+	if rebuiltMutableState.GetNextEventID() != baseNextEventID {
+		return nil, 0, &shared.InternalServiceError{
+			Message: fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v", baseNextEventID),
 		}
 	}
-
-	// set the current branch index to target branch index
-	// set the version history back
-	//
-	// caller can use the IsRebuilt function in VersionHistories
-	// telling whether mutable state is rebuilt, before apply new history events
-	if err := versionHistories.SetCurrentVersionHistoryIndex(branchIndex); err != nil {
-		return nil, err
-	}
-	if err = rebuildMutableState.SetVersionHistories(versionHistories); err != nil {
-		return nil, err
-	}
-	// set the update condition from original mutable state
-	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
-	if r.shard.GetConfig().EnableVisibilityToKafka() {
-		// whenever a reset of mutable state is done, we need to sync the workflow search attribute
-		rebuildMutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
+	if err := rebuiltMutableState.SetCurrentBranchToken(nil); err != nil {
+		return nil, 0, err
 	}
 
-	r.context.clear()
-	r.context.setHistorySize(r.historySize)
-	return rebuildMutableState, nil
+	// TODO refresh tasks before return
+	//  this includes UpsertWorkflowSearchAttributesTask
+
+	return rebuiltMutableState, r.rebuiltHistorySize, nil
 }
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
@@ -232,18 +159,18 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 }
 
 func (r *nDCStateRebuilderImpl) applyEvents(
+	workflowIdentifier definition.WorkflowIdentifier,
 	stateBuilder stateBuilder,
 	events []*shared.HistoryEvent,
 	requestID string,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
 	_, _, _, err := stateBuilder.applyEvents(
-		executionInfo.DomainID,
+		workflowIdentifier.DomainID,
 		requestID,
 		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
-			RunId:      common.StringPtr(executionInfo.RunID),
+			WorkflowId: common.StringPtr(workflowIdentifier.WorkflowID),
+			RunId:      common.StringPtr(workflowIdentifier.RunID),
 		},
 		events,
 		nil, // no new run history when rebuilding mutable state
@@ -258,12 +185,12 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 }
 
 func (r *nDCStateRebuilderImpl) getPaginationFn(
+	workflowIdentifier definition.WorkflowIdentifier,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
 ) collection.PaginationFn {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
 		_, historyBatches, token, size, err := PaginateHistory(
@@ -272,9 +199,9 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 			nil,
 			r.logger,
 			true,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			executionInfo.RunID,
+			workflowIdentifier.DomainID,
+			workflowIdentifier.WorkflowID,
+			workflowIdentifier.RunID,
 			firstEventID,
 			nextEventID,
 			paginationToken,
@@ -286,7 +213,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-		r.historySize += int64(size)
+		r.rebuiltHistorySize += int64(size)
 
 		var paginateItems []interface{}
 		for _, history := range historyBatches {

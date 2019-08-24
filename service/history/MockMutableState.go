@@ -2731,8 +2731,8 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionTimedoutEvent(_a0 int64, _
 	return r0
 }
 
-// SetHistoryBuilder provides a mock function with given fields: _a0
-func (_m *mockMutableState) SetBranchToken(_a0 []byte) error {
+// SetCurrentBranchToken provides a mock function with given fields: _a0
+func (_m *mockMutableState) SetCurrentBranchToken(_a0 []byte) error {
 	ret := _m.Called(_a0)
 
 	var r0 error

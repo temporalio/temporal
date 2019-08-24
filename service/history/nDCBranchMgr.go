@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination nDCBranchMgr_mock.go
+
 package history
 
 import (
@@ -56,7 +58,6 @@ var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
 	shard ShardContext,
-
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,
@@ -139,7 +140,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 	defer func() {
 		if errComplete := r.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
 			BranchToken: newBranchToken,
-			Success:     retError == nil || persistence.IsTimeoutError(retError),
+			Success:     true, // past lessons learnt from Cassandra & gocql tells that we cannot possibly find all timeout errors
 			ShardID:     common.IntPtr(shardID),
 		}); errComplete != nil {
 			r.logger.WithTags(

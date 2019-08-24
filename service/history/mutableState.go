@@ -199,7 +199,7 @@ type (
 		ReplicateWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *workflow.HistoryEvent) error
-		SetBranchToken(branchToken []byte) error
+		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		SetHistoryTree(treeID string) error
 		SetVersionHistories(*persistence.VersionHistories) error
