@@ -26,11 +26,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -66,6 +68,7 @@ type (
 		testDomainID         string
 		logger               log.Logger
 		config               *Config
+		controller           *gomock.Controller
 		mockClusterMetadata  *mocks.ClusterMetadata
 		mockProducer         *mocks.KafkaProducer
 		mockMetricClient     metrics.Client
@@ -98,6 +101,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.testDomain = "test-domain"
 	s.testDomainID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
 	s.logger = loggerimpl.NewNopLogger()
+	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.Frontend)
@@ -130,6 +134,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalMetadata.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
@@ -986,8 +991,8 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	mockHistoryClient := &mocks.HistoryClient{}
-	mockHistoryClient.On("GetMutableState", mock.Anything, mock.Anything).Return(nil, nil).Once()
+	mockHistoryClient := historyservicetest.NewMockClient(s.controller)
+	mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 	wh = &WorkflowHandler{
 		history: mockHistoryClient,
 	}
@@ -999,7 +1004,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	mockHistoryClient.On("GetMutableState", mock.Anything, mock.Anything).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Once()
+	mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
 	wh = &WorkflowHandler{
 		history: mockHistoryClient,
 	}
@@ -1011,7 +1016,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	mockHistoryClient.On("GetMutableState", mock.Anything, mock.Anything).Return(nil, errors.New("got non-archival indication error")).Once()
+	mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
 	wh = &WorkflowHandler{
 		history: mockHistoryClient,
 	}

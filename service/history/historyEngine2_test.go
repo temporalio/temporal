@@ -34,6 +34,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/history/historyservicetest"
+	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -58,10 +60,10 @@ type (
 		// not merely log an error
 		*require.Assertions
 		historyEngine            *historyEngineImpl
-		mockCtrl                 *gomock.Controller
-		mockMatchingClient       *mocks.MatchingClient
+		controller               *gomock.Controller
 		mockArchivalClient       *archiver.ClientMock
-		mockHistoryClient        *mocks.HistoryClient
+		mockMatchingClient       *matchingservicetest.MockClient
+		mockHistoryClient        *historyservicetest.MockClient
 		mockMetadataMgr          *mocks.MetadataManager
 		mockVisibilityMgr        *mocks.VisibilityManager
 		mockExecutionMgr         *mocks.ExecutionManager
@@ -103,10 +105,10 @@ func (s *engine2Suite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	shardID := 0
-	s.mockCtrl = gomock.NewController(s.T())
-	s.mockMatchingClient = &mocks.MatchingClient{}
+	s.controller = gomock.NewController(s.T())
 	s.mockArchivalClient = &archiver.ClientMock{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
@@ -152,7 +154,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
@@ -185,8 +187,7 @@ func (s *engine2Suite) SetupTest() {
 }
 
 func (s *engine2Suite) TearDownTest() {
-	s.mockCtrl.Finish()
-	s.mockMatchingClient.AssertExpectations(s.T())
+	s.controller.Finish()
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())

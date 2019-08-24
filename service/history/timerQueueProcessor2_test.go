@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
@@ -56,9 +57,9 @@ type (
 		config           *Config
 		logger           log.Logger
 
-		mockCtrl                 *gomock.Controller
+		controller               *gomock.Controller
 		mockHistoryEngine        *historyEngineImpl
-		mockMatchingClient       *mocks.MatchingClient
+		mockMatchingClient       *matchingservicetest.MockClient
 		mockMetadataMgr          *mocks.MetadataManager
 		mockVisibilityMgr        *mocks.VisibilityManager
 		mockExecutionMgr         *mocks.ExecutionManager
@@ -96,8 +97,8 @@ func (s *timerQueueProcessor2Suite) SetupSuite() {
 
 func (s *timerQueueProcessor2Suite) SetupTest() {
 	shardID := 0
-	s.mockCtrl = gomock.NewController(s.T())
-	s.mockMatchingClient = &mocks.MatchingClient{}
+	s.controller = gomock.NewController(s.T())
+	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
@@ -163,7 +164,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
@@ -201,9 +202,8 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 }
 
 func (s *timerQueueProcessor2Suite) TearDownTest() {
-	s.mockCtrl.Finish()
+	s.controller.Finish()
 	s.mockShardManager.AssertExpectations(s.T())
-	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())

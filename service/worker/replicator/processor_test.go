@@ -25,10 +25,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -38,7 +40,6 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	messageMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/common/xdc"
@@ -57,11 +58,12 @@ type (
 
 		mockMsg                     *messageMocks.Message
 		mockDomainReplicator        *MockDomainReplicator
-		mockHistoryClient           *mocks.HistoryClient
+		mockHistoryClient           *historyservicetest.MockClient
 		mockRereplicator            *xdc.MockHistoryRereplicator
 		mockSequentialTaskProcessor *task.MockSequentialTaskProcessor
 
-		processor *replicationTaskProcessor
+		controller *gomock.Controller
+		processor  *replicationTaskProcessor
 	}
 )
 
@@ -87,11 +89,12 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.msgEncoder = codec.NewThriftRWEncoder()
 
+	s.controller = gomock.NewController(s.T())
 	s.mockMsg = &messageMocks.Message{}
 	s.mockMsg.On("Partition").Return(int32(0))
 	s.mockMsg.On("Offset").Return(int64(0))
 	s.mockDomainReplicator = &MockDomainReplicator{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 	s.mockSequentialTaskProcessor = &task.MockSequentialTaskProcessor{}
 
@@ -113,10 +116,10 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 func (s *replicationTaskProcessorSuite) TearDownTest() {
 	s.mockMsg.AssertExpectations(s.T())
 	s.mockDomainReplicator.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
 	s.mockRereplicator.AssertExpectations(s.T())
 	s.mockSequentialTaskProcessor.AssertExpectations(s.T())
 
+	s.controller.Finish()
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
@@ -176,15 +179,14 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockHistoryClient.On(
-		"SyncShardStatus",
-		mock.Anything,
+	s.mockHistoryClient.EXPECT().SyncShardStatus(
+		gomock.Any(),
 		&h.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
 			Timestamp:     replicationAttr.Timestamp,
 		},
-	).Return(nil).Once()
+	).Return(nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
@@ -221,16 +223,15 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockHistoryClient.On("SyncShardStatus", mock.Anything, mock.Anything).Return(errors.New("some random error")).Once()
-	s.mockHistoryClient.On(
-		"SyncShardStatus",
-		mock.Anything,
+	s.mockHistoryClient.EXPECT().SyncShardStatus(gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.mockHistoryClient.EXPECT().SyncShardStatus(
+		gomock.Any(),
 		&h.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
 			Timestamp:     replicationAttr.Timestamp,
 		},
-	).Return(nil).Once()
+	).Return(nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)

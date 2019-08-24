@@ -26,25 +26,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	gen "github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type MatcherTestSuite struct {
 	suite.Suite
-	client   *mocks.MatchingClient
-	fwdr     *Forwarder
-	cfg      *taskListConfig
-	taskList *taskListID
-	matcher  *TaskMatcher
+	controller *gomock.Controller
+	client     *matchingservicetest.MockClient
+	fwdr       *Forwarder
+	cfg        *taskListConfig
+	taskList   *taskListID
+	matcher    *TaskMatcher
 }
 
 func TestMatcherSuite(t *testing.T) {
@@ -52,7 +54,8 @@ func TestMatcherSuite(t *testing.T) {
 }
 
 func (t *MatcherTestSuite) SetupTest() {
-	t.client = new(mocks.MatchingClient)
+	t.controller = gomock.NewController(t.T())
+	t.client = matchingservicetest.NewMockClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNopCollection())
 	t.taskList = newTestTaskListID(uuid.New(), taskListPartitionPrefix+"tl0/1", persistence.TaskListTypeDecision)
 	tlCfg, err := newTaskListConfig(t.taskList, cfg, t.newDomainCache())
@@ -67,6 +70,10 @@ func (t *MatcherTestSuite) SetupTest() {
 	scope := func() metrics.Scope { return metrics.NoopScope(metrics.Matching) }
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, shared.TaskListKindNormal, t.client, scope)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
+}
+
+func (t *MatcherTestSuite) TearDownTest() {
+	t.controller.Finish()
 }
 
 func (t *MatcherTestSuite) TestLocalSyncMatch() {
@@ -117,13 +124,15 @@ func (t *MatcherTestSuite) TestRemoteSyncMatch() {
 	var err error
 	var syncMatch bool
 	var req *gen.AddDecisionTaskRequest
-	t.client.On("AddDecisionTask", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.AddDecisionTaskRequest)
-		task.forwardedFrom = req.GetForwardedFrom()
-		close(pollSigC)
-		time.Sleep(10 * time.Millisecond)
-		syncMatch, err = t.matcher.Offer(ctx, task)
-	}).Return(nil)
+	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.AddDecisionTaskRequest) {
+			req = arg1
+			task.forwardedFrom = req.GetForwardedFrom()
+			close(pollSigC)
+			time.Sleep(10 * time.Millisecond)
+			syncMatch, err = t.matcher.Offer(ctx, task)
+		},
+	).Return(nil)
 
 	t.matcher.Offer(ctx, task)
 	cancel()
@@ -139,9 +148,11 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *gen.AddDecisionTaskRequest
-	t.client.On("AddDecisionTask", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.AddDecisionTaskRequest)
-	}).Return(errMatchingHostThrottle)
+	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.AddDecisionTaskRequest) {
+			req = arg1
+		},
+	).Return(errMatchingHostThrottle)
 
 	syncMatch, err := t.matcher.Offer(ctx, task)
 	cancel()
@@ -197,13 +208,15 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *gen.QueryWorkflowRequest
-	t.client.On("QueryWorkflow", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.QueryWorkflowRequest)
-		task.forwardedFrom = req.GetForwardedFrom()
-		close(pollSigC)
-		time.Sleep(10 * time.Millisecond)
-		t.matcher.OfferQuery(ctx, task)
-	}).Return(&shared.QueryWorkflowResponse{QueryResult: []byte("answer")}, nil)
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.QueryWorkflowRequest) {
+			req = arg1
+			task.forwardedFrom = req.GetForwardedFrom()
+			close(pollSigC)
+			time.Sleep(10 * time.Millisecond)
+			t.matcher.OfferQuery(ctx, task)
+		},
+	).Return(&shared.QueryWorkflowResponse{QueryResult: []byte("answer")}, nil)
 
 	go func() {
 		time.Sleep(time.Millisecond * 5)
@@ -241,11 +254,13 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *gen.QueryWorkflowRequest
-	t.client.On("QueryWorkflow", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.QueryWorkflowRequest)
-		close(pollSigC)
-		time.Sleep(10 * time.Millisecond)
-	}).Return(nil, errMatchingHostThrottle)
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.QueryWorkflowRequest) {
+			req = arg1
+			close(pollSigC)
+			time.Sleep(10 * time.Millisecond)
+		},
+	).Return(nil, errMatchingHostThrottle)
 
 	result, err := t.matcher.OfferQuery(ctx, task)
 	cancel()
@@ -302,14 +317,16 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	var err error
 	var syncMatch bool
 	var req *gen.AddDecisionTaskRequest
-	t.client.On("AddDecisionTask", mock.Anything, mock.Anything).Return(errMatchingHostThrottle).Once()
-	t.client.On("AddDecisionTask", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.AddDecisionTaskRequest)
-		task.forwardedFrom = req.GetForwardedFrom()
-		close(pollSigC)
-		time.Sleep(10 * time.Millisecond)
-		syncMatch, err = t.matcher.Offer(ctx, task)
-	}).Return(nil)
+	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Return(errMatchingHostThrottle).Times(1)
+	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.AddDecisionTaskRequest) {
+			req = arg1
+			task.forwardedFrom = req.GetForwardedFrom()
+			close(pollSigC)
+			time.Sleep(10 * time.Millisecond)
+			syncMatch, err = t.matcher.Offer(ctx, task)
+		},
+	).Return(nil)
 
 	t.matcher.MustOffer(ctx, task)
 	cancel()
@@ -324,9 +341,11 @@ func (t *MatcherTestSuite) TestRemotePoll() {
 	pollToken := <-t.fwdr.PollReqTokenC()
 
 	var req *gen.PollForDecisionTaskRequest
-	t.client.On("PollForDecisionTask", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.PollForDecisionTaskRequest)
-	}).Return(&gen.PollForDecisionTaskResponse{}, nil)
+	t.client.EXPECT().PollForDecisionTask(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.PollForDecisionTaskRequest) {
+			req = arg1
+		},
+	).Return(&gen.PollForDecisionTaskResponse{}, nil)
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
@@ -346,9 +365,11 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	pollToken := <-t.fwdr.PollReqTokenC()
 
 	var req *gen.PollForDecisionTaskRequest
-	t.client.On("PollForDecisionTask", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		req = args.Get(1).(*gen.PollForDecisionTaskRequest)
-	}).Return(&gen.PollForDecisionTaskResponse{}, nil)
+	t.client.EXPECT().PollForDecisionTask(gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *gen.PollForDecisionTaskRequest) {
+			req = arg1
+		},
+	).Return(&gen.PollForDecisionTaskResponse{}, nil)
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)

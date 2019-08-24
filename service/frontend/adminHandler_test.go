@@ -21,9 +21,10 @@
 package frontend
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"github.com/uber/cadence/.gen/go/shared"
-	"testing"
 )
 
 func Test_ConvertIndexedValueTypeToESDataType(t *testing.T) {
