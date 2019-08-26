@@ -217,6 +217,9 @@ enum ChildWorkflowExecutionFailedCause {
   WORKFLOW_ALREADY_RUNNING,
 }
 
+// TODO: when migrating to gRPC, add a running / none status,
+//  currently, customer is using null / nil as an indication
+//  that workflow is still running
 enum WorkflowExecutionCloseStatus {
   COMPLETED,
   FAILED,

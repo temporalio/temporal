@@ -450,7 +450,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 	workflowCloseTimestamp := wfCloseTime
-	workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+	workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 	workflowHistoryLength := msBuilder.GetNextEventID() - 1
 
 	startEvent, ok := msBuilder.GetStartEvent()
@@ -1353,26 +1353,4 @@ func (t *transferQueueActiveProcessorImpl) SignalExecutionWithRetry(
 	}
 
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func getWorkflowExecutionCloseStatus(
-	status int,
-) workflow.WorkflowExecutionCloseStatus {
-
-	switch status {
-	case persistence.WorkflowCloseStatusCompleted:
-		return workflow.WorkflowExecutionCloseStatusCompleted
-	case persistence.WorkflowCloseStatusFailed:
-		return workflow.WorkflowExecutionCloseStatusFailed
-	case persistence.WorkflowCloseStatusCanceled:
-		return workflow.WorkflowExecutionCloseStatusCanceled
-	case persistence.WorkflowCloseStatusTerminated:
-		return workflow.WorkflowExecutionCloseStatusTerminated
-	case persistence.WorkflowCloseStatusContinuedAsNew:
-		return workflow.WorkflowExecutionCloseStatusContinuedAsNew
-	case persistence.WorkflowCloseStatusTimedOut:
-		return workflow.WorkflowExecutionCloseStatusTimedOut
-	default:
-		panic("Invalid value for enum WorkflowExecutionCloseStatus")
-	}
 }

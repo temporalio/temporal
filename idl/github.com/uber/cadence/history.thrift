@@ -84,7 +84,11 @@ struct GetMutableStateResponse {
   120: optional i32 eventStoreVersion
   130: optional binary branchToken
   140: optional map<string, shared.ReplicationInfo> replicationInfo
-  150: optional shared.WorkflowExecutionCloseStatus closeStatus
+  // TODO: when migrating to gRPC, make this a enum
+  // TODO: when migrating to gRPC, unify internal & external representation
+  // NOTE: workflowState & workflowCloseState are the same as persistence representation
+  150: optional i32 workflowState
+  160: optional i32 workflowCloseState
 }
 
 struct ResetStickyTaskListRequest {

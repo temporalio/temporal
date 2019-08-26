@@ -321,7 +321,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		workflowTypeName := executionInfo.WorkflowTypeName
 		workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 		workflowCloseTimestamp := wfCloseTime
-		workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := msBuilder.GetNextEventID() - 1
 		startEvent, found := msBuilder.GetStartEvent()
 		if !found {

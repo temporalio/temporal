@@ -64,3 +64,25 @@ func ValidateUpdateWorkflowStateCloseStatus(state int, closeStatus int) error {
 	}
 	return nil
 }
+
+func ToThriftWorkflowExecutionCloseStatus(
+	closeStatus int,
+) workflow.WorkflowExecutionCloseStatus {
+
+	switch closeStatus {
+	case WorkflowCloseStatusCompleted:
+		return workflow.WorkflowExecutionCloseStatusCompleted
+	case WorkflowCloseStatusFailed:
+		return workflow.WorkflowExecutionCloseStatusFailed
+	case WorkflowCloseStatusCanceled:
+		return workflow.WorkflowExecutionCloseStatusCanceled
+	case WorkflowCloseStatusTerminated:
+		return workflow.WorkflowExecutionCloseStatusTerminated
+	case WorkflowCloseStatusContinuedAsNew:
+		return workflow.WorkflowExecutionCloseStatusContinuedAsNew
+	case WorkflowCloseStatusTimedOut:
+		return workflow.WorkflowExecutionCloseStatusTimedOut
+	default:
+		panic("Invalid value for enum WorkflowExecutionCloseStatus")
+	}
+}

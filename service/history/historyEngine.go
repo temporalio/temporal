@@ -613,11 +613,8 @@ func (e *historyEngineImpl) getMutableState(
 		IsWorkflowRunning:      common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
 		EventStoreVersion:      common.Int32Ptr(msBuilder.GetEventStoreVersion()),
 		BranchToken:            msBuilder.GetCurrentBranch(),
-	}
-
-	if executionInfo.CloseStatus != persistence.WorkflowCloseStatusNone {
-		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
-		retResp.CloseStatus = &closeStatus
+		WorkflowState:          common.Int32Ptr(int32(executionInfo.State)),
+		WorkflowCloseState:     common.Int32Ptr(int32(executionInfo.CloseStatus)),
 	}
 
 	if msBuilder.IsStickyTaskListEnabled() {
@@ -778,7 +775,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
-		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		closeStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		result.WorkflowExecutionInfo.CloseStatus = &closeStatus
 		completionEvent, ok := msBuilder.GetCompletionEvent()
 		if !ok {

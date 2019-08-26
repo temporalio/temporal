@@ -2714,14 +2714,18 @@ func (wh *WorkflowHandler) QueryWorkflow(
 	}
 
 	// if workflow is closed and a rejection condition is given then check if query should be rejected before proceeding
-	if response.CloseStatus != nil && queryRequest.QueryRejectCondition != nil {
+	workflowCloseStatus := response.GetWorkflowCloseState()
+	if workflowCloseStatus != persistence.WorkflowCloseStatusNone && queryRequest.QueryRejectCondition != nil {
 		notOpenReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotOpen
-		notCompletedCleanlyReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotCompletedCleanly && response.GetCloseStatus() != shared.WorkflowExecutionCloseStatusCompleted
+		notCompletedCleanlyReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotCompletedCleanly &&
+			workflowCloseStatus != persistence.WorkflowCloseStatusCompleted
 		if notOpenReject || notCompletedCleanlyReject {
 			return &gen.QueryWorkflowResponse{
 				QueryResult: nil,
 				QueryRejected: &gen.QueryRejected{
-					CloseStatus: response.CloseStatus,
+					CloseStatus: persistence.ToThriftWorkflowExecutionCloseStatus(
+						int(response.GetWorkflowCloseState()),
+					).Ptr(),
 				},
 			}, nil
 		}
