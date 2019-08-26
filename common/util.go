@@ -424,15 +424,16 @@ func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, wo
 // ValidateLongPollContextTimeout check if the context timeout for a long poll handler is too short or below a normal value.
 // If the timeout is not set or too short, it logs an error, and return ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
 // accordingly. If the timeout is only below a normal value, it just logs an info and return nil.
-func ValidateLongPollContextTimeout(ctx context.Context, handlerName string, logger log.Logger) error {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		err := ErrContextTimeoutNotSet
-		logger.Error("Context timeout not set for long poll API.",
-			tag.WorkflowHandlerName(handlerName), tag.Error(err))
+func ValidateLongPollContextTimeout(
+	ctx context.Context,
+	handlerName string,
+	logger log.Logger,
+) error {
+
+	deadline, err := ValidateLongPollContextTimeoutIsSet(ctx, handlerName, logger)
+	if err != nil {
 		return err
 	}
-
 	timeout := deadline.Sub(time.Now())
 	if timeout < MinLongPollTimeout {
 		err := ErrContextTimeoutTooShort
@@ -445,6 +446,23 @@ func ValidateLongPollContextTimeout(ctx context.Context, handlerName string, log
 			tag.WorkflowHandlerName(handlerName), tag.WorkflowPollContextTimeout(timeout))
 	}
 	return nil
+}
+
+// ValidateLongPollContextTimeoutIsSet checks if the context timeout is set for long poll requests.
+func ValidateLongPollContextTimeoutIsSet(
+	ctx context.Context,
+	handlerName string,
+	logger log.Logger,
+) (time.Time, error) {
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		err := ErrContextTimeoutNotSet
+		logger.Error("Context timeout not set for long poll API.",
+			tag.WorkflowHandlerName(handlerName), tag.Error(err))
+		return deadline, err
+	}
+	return deadline, nil
 }
 
 // GetSizeOfMapStringToByteArray get size of map[string][]byte
