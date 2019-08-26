@@ -637,6 +637,7 @@ type (
 		CreateRequestID       string
 		DomainName            string
 		WorkflowTypeName      string
+		ParentClosePolicy     workflow.ParentClosePolicy
 	}
 
 	// RequestCancelInfo has details for pending external workflow cancellations

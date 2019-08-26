@@ -64,6 +64,7 @@ type (
 		timerBuilderProvider timerBuilderProvider
 		domainCache          cache.DomainCache
 		metricsClient        metrics.Client
+		config               *Config
 	}
 )
 
@@ -79,6 +80,7 @@ func newDecisionTaskHandler(
 	timerBuilderProvider timerBuilderProvider,
 	domainCache cache.DomainCache,
 	metricsClient metrics.Client,
+	config *Config,
 ) *decisionTaskHandlerImpl {
 
 	return &decisionTaskHandlerImpl{
@@ -106,6 +108,7 @@ func newDecisionTaskHandler(
 		timerBuilderProvider: timerBuilderProvider,
 		domainCache:          domainCache,
 		metricsClient:        metricsClient,
+		config:               config,
 	}
 }
 
@@ -758,6 +761,15 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
 		return err
+	}
+
+	if attr.ParentClosePolicy == nil {
+		useTerminate := handler.config.UseTerminateAsDefaultParentClosePolicy(handler.domainEntry.GetInfo().Name)
+		if useTerminate {
+			attr.ParentClosePolicy = common.ParentClosePolicyPtr(workflow.ParentClosePolicyTerminate)
+		} else {
+			attr.ParentClosePolicy = common.ParentClosePolicyPtr(workflow.ParentClosePolicyAbandon)
+		}
 	}
 
 	requestID := uuid.New()

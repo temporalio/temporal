@@ -1326,6 +1326,7 @@ func updateChildExecutionInfos(
 			initiatedEncoding,
 			c.DomainName,
 			c.WorkflowTypeName,
+			int32(c.ParentClosePolicy),
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -2045,6 +2046,8 @@ func createChildExecutionInfo(
 			info.DomainName = v.(string)
 		case "workflow_type_name":
 			info.WorkflowTypeName = v.(string)
+		case "parent_close_policy":
+			info.ParentClosePolicy = workflow.ParentClosePolicy(v.(int))
 		}
 	}
 	info.InitiatedEvent = p.NewDataBlob(initiatedData, encoding)
@@ -2198,6 +2201,7 @@ func resetChildExecutionInfoMap(
 		cInfo["started_run_id"] = startedRunID
 		cInfo["domain_name"] = c.DomainName
 		cInfo["workflow_type_name"] = c.WorkflowTypeName
+		cInfo["parent_close_policy"] = int32(c.ParentClosePolicy)
 
 		cMap[c.InitiatedID] = cInfo
 	}

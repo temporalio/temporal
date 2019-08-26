@@ -114,6 +114,13 @@ enum TimeoutType {
   HEARTBEAT,
 }
 
+enum ParentClosePolicy {
+	ABANDON,
+	REQUEST_CANCEL,
+	TERMINATE,
+}
+
+
 // whenever this list of decision is changed
 // do change the mutableStateBuilder.go
 // function shouldBufferEvent
@@ -445,6 +452,7 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   60: optional i32 executionStartToCloseTimeoutSeconds
   70: optional i32 taskStartToCloseTimeoutSeconds
 //  80: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
+  81: optional ParentClosePolicy parentClosePolicy
   90: optional binary control
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional RetryPolicy retryPolicy
@@ -773,6 +781,7 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   60:  optional i32 executionStartToCloseTimeoutSeconds
   70:  optional i32 taskStartToCloseTimeoutSeconds
 //  80:  optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
+  81:  optional ParentClosePolicy parentClosePolicy
   90:  optional binary control
   100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   110: optional WorkflowIdReusePolicy workflowIdReusePolicy
@@ -1387,6 +1396,7 @@ struct PendingChildExecutionInfo {
   20: optional string runID
   30: optional string workflowTypName
   40: optional i64 (js.type = "Long") initiatedID
+  50: optional ParentClosePolicy parentClosePolicy
 }
 
 struct DescribeWorkflowExecutionResponse {

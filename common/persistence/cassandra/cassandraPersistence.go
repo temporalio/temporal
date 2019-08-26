@@ -283,7 +283,8 @@ const (
 		`create_request_id: ?, ` +
 		`event_data_encoding: ?, ` +
 		`domain_name: ?, ` +
-		`workflow_type_name: ?` +
+		`workflow_type_name: ?, ` +
+		`parent_close_policy: ?` +
 		`}`
 
 	templateRequestCancelInfoType = `{` +

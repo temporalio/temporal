@@ -897,6 +897,7 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 	attributes.CronSchedule = startAttributes.CronSchedule
 	attributes.Memo = startAttributes.Memo
 	attributes.SearchAttributes = startAttributes.SearchAttributes
+	attributes.ParentClosePolicy = common.ParentClosePolicyPtr(startAttributes.GetParentClosePolicy())
 	historyEvent.StartChildWorkflowExecutionInitiatedEventAttributes = attributes
 
 	return historyEvent

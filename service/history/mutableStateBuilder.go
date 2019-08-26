@@ -3449,6 +3449,7 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 		CreateRequestID:       createRequestID,
 		DomainName:            attributes.GetDomain(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
+		ParentClosePolicy:     attributes.GetParentClosePolicy(),
 	}
 
 	e.pendingChildExecutionInfoIDs[initiatedEventID] = ci

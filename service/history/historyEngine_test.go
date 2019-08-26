@@ -5555,6 +5555,7 @@ func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.Chil
 		CreateRequestID:       sourceInfo.CreateRequestID,
 		DomainName:            sourceInfo.DomainName,
 		WorkflowTypeName:      sourceInfo.WorkflowTypeName,
+		ParentClosePolicy:     sourceInfo.ParentClosePolicy,
 	}
 
 	if sourceInfo.InitiatedEvent != nil {

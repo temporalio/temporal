@@ -414,6 +414,7 @@ Update_History_Loop:
 				timerBuilderProvider,
 				handler.domainCache,
 				handler.metricsClient,
+				handler.config,
 			)
 
 			if err := decisionTaskHandler.handleDecisions(

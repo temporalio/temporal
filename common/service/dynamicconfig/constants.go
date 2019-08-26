@@ -177,6 +177,7 @@ var keys = map[Key]string{
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
+	UseTerminateAsDefaultParentClosePolicy:                "history.useTerminateAsDefaultParentClosePolicy",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
 	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
@@ -483,6 +484,9 @@ const (
 
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2
+	// UseTerminateAsDefaultParentClosePolicy whether to use Terminate as default ParentClosePolicy, otherwise use Abandon for backward compatibility
+	UseTerminateAsDefaultParentClosePolicy
+
 	// HistoryThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	HistoryThrottledLogRPS
 	// StickyTTL is to expire a sticky tasklist if no update more than this duration

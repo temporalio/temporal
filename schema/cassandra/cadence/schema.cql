@@ -204,6 +204,7 @@ CREATE TYPE child_execution_info (
   event_data_encoding       text, -- Protocol used for history serialization
   domain_name               text,
   workflow_type_name        text,
+  parent_close_policy       int,
 );
 
 -- External workflow cancellation in progress mutable state

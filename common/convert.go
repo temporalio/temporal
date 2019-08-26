@@ -93,6 +93,11 @@ func DecisionTypePtr(t s.DecisionType) *s.DecisionType {
 	return &t
 }
 
+// ParentClosePolicyPtr makes a copy and returns the pointer to a DecisionType.
+func ParentClosePolicyPtr(t s.ParentClosePolicy) *s.ParentClosePolicy {
+	return &t
+}
+
 // EventTypePtr makes a copy and returns the pointer to a EventType.
 func EventTypePtr(t s.EventType) *s.EventType {
 	return &t
