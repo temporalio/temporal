@@ -1617,7 +1617,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		Header:                              header,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 		Identity:                            common.StringPtr(identity),
 	}
 
@@ -1628,7 +1627,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	// decider logic
 	childComplete := false
 	childExecutionStarted := false
-	var parentStartedEvent *workflow.HistoryEvent
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 
@@ -1654,7 +1652,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 			if !childExecutionStarted {
 				s.Logger.Info("Starting child execution.")
 				childExecutionStarted = true
-				parentStartedEvent = history.Events[0]
 
 				return nil, []*workflow.Decision{{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
@@ -1666,7 +1663,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						Header:                              header,
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
-						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 						Control:                             nil,
 						Memo:                                memo,
 						SearchAttributes:                    searchAttr,
@@ -1738,8 +1734,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(childExecutionStarted)
-	s.Equal(workflow.ChildPolicyRequestCancel,
-		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
@@ -1758,7 +1752,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(we.GetRunId(), childStartedEvent.WorkflowExecutionStartedEventAttributes.ParentWorkflowExecution.GetRunId())
 	s.Equal(startedEvent.ChildWorkflowExecutionStartedEventAttributes.GetInitiatedEventId(),
 		childStartedEvent.WorkflowExecutionStartedEventAttributes.GetParentInitiatedEventId())
-	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 	s.Equal(header, startedEvent.ChildWorkflowExecutionStartedEventAttributes.Header)
 	s.Equal(header, childStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
 	s.Equal(memo, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetMemo())
@@ -1809,7 +1802,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		Input:                               nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 		Identity:                            common.StringPtr(identity),
 	}
 
@@ -1820,7 +1812,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	// decider logic
 	childExecutionStarted := false
-	var parentStartedEvent *workflow.HistoryEvent
 	var terminatedEvent *workflow.HistoryEvent
 	var startChildWorkflowTS time.Time
 	// Parent Decider Logic
@@ -1831,7 +1822,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution.")
 			childExecutionStarted = true
-			parentStartedEvent = history.Events[0]
 			startChildWorkflowTS = time.Now()
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
@@ -1842,7 +1832,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 					Input:                               nil,
 					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
 					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
-					ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 					Control:                             nil,
 					CronSchedule:                        common.StringPtr(cronSchedule),
 				},
@@ -1898,8 +1887,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(childExecutionStarted)
-	s.Equal(workflow.ChildPolicyRequestCancel,
-		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution Started event
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)

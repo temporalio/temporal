@@ -555,10 +555,6 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return &workflow.BadRequestError{Message: "Required field WorkflowType is not set on decision."}
 	}
 
-	if attributes.ChildPolicy == nil {
-		return &workflow.BadRequestError{Message: "Required field ChildPolicy is not set on decision."}
-	}
-
 	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
 		return &workflow.BadRequestError{Message: "Domain exceeds length limit."}
 	}

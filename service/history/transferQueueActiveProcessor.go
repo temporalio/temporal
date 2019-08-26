@@ -835,7 +835,6 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 				// Use the same request ID to dedupe StartWorkflowExecution calls
 				RequestId:             common.StringPtr(ci.CreateRequestID),
 				WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-				ChildPolicy:           attributes.ChildPolicy,
 				RetryPolicy:           attributes.RetryPolicy,
 				CronSchedule:          attributes.CronSchedule,
 				Memo:                  attributes.Memo,

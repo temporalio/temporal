@@ -481,7 +481,6 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.Input = request.Input
 	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(*request.ExecutionStartToCloseTimeoutSeconds)
 	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(*request.TaskStartToCloseTimeoutSeconds)
-	attributes.ChildPolicy = request.ChildPolicy
 	attributes.ContinuedExecutionRunId = prevRunID
 	attributes.PrevAutoResetPoints = resetPoints
 	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
@@ -891,7 +890,6 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 	attributes.Input = startAttributes.Input
 	attributes.ExecutionStartToCloseTimeoutSeconds = startAttributes.ExecutionStartToCloseTimeoutSeconds
 	attributes.TaskStartToCloseTimeoutSeconds = startAttributes.TaskStartToCloseTimeoutSeconds
-	attributes.ChildPolicy = startAttributes.ChildPolicy
 	attributes.Control = startAttributes.Control
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	attributes.WorkflowIdReusePolicy = startAttributes.WorkflowIdReusePolicy

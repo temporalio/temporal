@@ -229,12 +229,6 @@ enum WorkflowExecutionCloseStatus {
   TIMED_OUT,
 }
 
-enum ChildPolicy {
-  TERMINATE,
-  REQUEST_CANCEL,
-  ABANDON,
-}
-
 enum QueryTaskCompletedType {
   COMPLETED,
   FAILED,
@@ -349,7 +343,7 @@ struct WorkflowExecutionConfiguration {
   10: optional TaskList taskList
   20: optional i32 executionStartToCloseTimeoutSeconds
   30: optional i32 taskStartToCloseTimeoutSeconds
-  40: optional ChildPolicy childPolicy
+//  40: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
 }
 
 struct TransientDecisionInfo {
@@ -450,7 +444,7 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   50: optional binary input
   60: optional i32 executionStartToCloseTimeoutSeconds
   70: optional i32 taskStartToCloseTimeoutSeconds
-  80: optional ChildPolicy childPolicy
+//  80: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
   90: optional binary control
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional RetryPolicy retryPolicy
@@ -486,7 +480,7 @@ struct WorkflowExecutionStartedEventAttributes {
   30: optional binary input
   40: optional i32 executionStartToCloseTimeoutSeconds
   50: optional i32 taskStartToCloseTimeoutSeconds
-  52: optional ChildPolicy childPolicy
+//  52: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
   54: optional string continuedExecutionRunId
   55: optional ContinueAsNewInitiator initiator
   56: optional string continuedFailureReason
@@ -778,7 +772,7 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   50:  optional binary input
   60:  optional i32 executionStartToCloseTimeoutSeconds
   70:  optional i32 taskStartToCloseTimeoutSeconds
-  80:  optional ChildPolicy childPolicy
+//  80:  optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
   90:  optional binary control
   100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   110: optional WorkflowIdReusePolicy workflowIdReusePolicy
@@ -1039,7 +1033,7 @@ struct StartWorkflowExecutionRequest {
   80: optional string identity
   90: optional string requestId
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
-  110: optional ChildPolicy childPolicy
+//  110: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
   120: optional RetryPolicy retryPolicy
   130: optional string cronSchedule
   140: optional Memo memo

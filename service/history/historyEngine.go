@@ -741,7 +741,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			TaskList:                            &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionInfo.WorkflowTimeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(executionInfo.DecisionTimeoutValue),
-			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 		},
 		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
 			Execution: &workflow.WorkflowExecution{

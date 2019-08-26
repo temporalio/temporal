@@ -133,11 +133,6 @@ func SignalExternalWorkflowExecutionFailedCausePtr(t s.SignalExternalWorkflowExe
 	return &t
 }
 
-// ChildPolicyPtr makes a copy and returns the pointer to a ChildPolicy.
-func ChildPolicyPtr(t s.ChildPolicy) *s.ChildPolicy {
-	return &t
-}
-
 // ChildWorkflowExecutionFailedCausePtr makes a copy and returns the pointer to a ChildWorkflowExecutionFailedCause.
 func ChildWorkflowExecutionFailedCausePtr(t s.ChildWorkflowExecutionFailedCause) *s.ChildWorkflowExecutionFailedCause {
 	return &t

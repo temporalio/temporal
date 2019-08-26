@@ -1790,7 +1790,6 @@ func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             common.StringPtr(ci.CreateRequestID),
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-			ChildPolicy:           attributes.ChildPolicy,
 		},
 		ParentExecutionInfo: &history.ParentExecutionInfo{
 			DomainUUID:  common.StringPtr(task.DomainID),

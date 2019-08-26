@@ -417,7 +417,6 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						WorkflowId:   common.StringPtr(childID),
 						WorkflowType: childWorkflowType,
 						Input:        buf.Bytes(),
-						ChildPolicy:  common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 					},
 				}}, nil
 			} else if previousStartedEventID > 0 {
