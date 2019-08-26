@@ -158,7 +158,6 @@ func (t *transferQueueProcessorBase) pushDecision(
 		ScheduleId:                    common.Int64Ptr(task.ScheduleID),
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(decisionScheduleToStartTimeout),
 	})
-
 	return err
 }
 

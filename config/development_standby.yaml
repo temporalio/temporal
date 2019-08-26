@@ -1,7 +1,7 @@
 persistence:
   defaultStore: cass-default
   visibilityStore: cass-visibility
-  numHistoryShards: 1
+  numHistoryShards: 4
   datastores:
     cass-default:
       cassandra:
@@ -67,6 +67,17 @@ services:
 
 clusterMetadata:
   enableGlobalDomain: true
+  replicationConsumer:
+    type: rpc
+    fetcher:
+      rpcParallelism: 1
+      aggregationIntervalSecs: 2
+      errorRetryWaitSecs: 1
+      timerJitterCoefficient: 0.15
+    processor:
+      noTaskInitialWaitIntervalSecs: 2
+      noTaskWaitBackoffCoefficient: 1
+      noTaskMaxWaitIntervalSecs: 2
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "standby"

@@ -32,6 +32,13 @@ import (
 	"github.com/uber/ringpop-go/discovery"
 )
 
+const (
+	// ReplicationConsumerTypeKafka means consuming replication tasks from kafka.
+	ReplicationConsumerTypeKafka = "kafka"
+	// ReplicationConsumerTypeRPC means pulling source DC for replication tasks.
+	ReplicationConsumerTypeRPC = "rpc"
+)
+
 type (
 	// Config contains the configuration for a set of cadence services
 	Config struct {
@@ -42,7 +49,7 @@ type (
 		// Log is the logging config
 		Log Logger `yaml:"log"`
 		// ClusterMetadata is the config containing all valid clusters and active cluster
-		ClusterMetadata ClusterMetadata `yaml:"clusterMetadata"`
+		ClusterMetadata *ClusterMetadata `yaml:"clusterMetadata"`
 		// DCRedirectionPolicy contains the frontend datacenter redirection policy
 		DCRedirectionPolicy DCRedirectionPolicy `yaml:"dcRedirectionPolicy"`
 		// Services is a map of service name to service config items
@@ -225,6 +232,8 @@ type (
 	// ClusterMetadata contains the all cluster which participated in cross DC
 	ClusterMetadata struct {
 		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
+		// ReplicationConsumerConfig determines how we consume replication tasks.
+		ReplicationConsumer *ReplicationConsumerConfig `yaml:"replicationConsumer"`
 		// FailoverVersionIncrement is the increment of each cluster version when failover happens
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
 		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
@@ -244,6 +253,31 @@ type (
 		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
+	}
+
+	// ReplicationConsumerConfig contains config for replication consumer
+	ReplicationConsumerConfig struct {
+		// Type determines how we consume replication tasks. It can be either kafka(default) or rpc.
+		Type string `yaml:"type"`
+		// FetcherConfig is the config for replication task fetcher.
+		FetcherConfig *FetcherConfig `yaml:"fetcher"`
+		// ProcessorConfig is the config for replication task processor.
+		ProcessorConfig *ReplicationTaskProcessorConfig `yaml:"processor"`
+	}
+
+	// FetcherConfig is the config for replication task fetcher.
+	FetcherConfig struct {
+		RPCParallelism          int     `yaml:"rpcParallelism"`
+		AggregationIntervalSecs int     `yaml:"aggregationIntervalSecs"`
+		ErrorRetryWaitSecs      int     `yaml:"errorRetryWaitSecs"`
+		TimerJitterCoefficient  float64 `yaml:"timerJitterCoefficient"`
+	}
+
+	// ReplicationTaskProcessorConfig is the config for replication task processor.
+	ReplicationTaskProcessorConfig struct {
+		NoTaskInitialWaitIntervalSecs int     `yaml:"noTaskInitialWaitIntervalSecs"`
+		NoTaskWaitBackoffCoefficient  float64 `yaml:"noTaskWaitBackoffCoefficient"`
+		NoTaskMaxWaitIntervalSecs     int     `yaml:"noTaskMaxWaitIntervalSecs"`
 	}
 
 	// DCRedirectionPolicy contains the frontend datacenter redirection policy
@@ -371,7 +405,10 @@ type (
 
 // Validate validates this config
 func (c *Config) Validate() error {
-	return c.Persistence.Validate()
+	if err := c.Persistence.Validate(); err != nil {
+		return err
+	}
+	return c.Archival.Validate(&c.DomainDefaults.Archival)
 }
 
 // String converts the config object into a string

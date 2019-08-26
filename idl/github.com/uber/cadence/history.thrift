@@ -19,6 +19,7 @@
 // THE SOFTWARE.
 
 include "shared.thrift"
+include "replicator.thrift"
 
 namespace java com.uber.cadence.history
 
@@ -85,10 +86,12 @@ struct GetMutableStateResponse {
   120: optional i32 eventStoreVersion
   130: optional binary currentBranchToken
   140: optional map<string, shared.ReplicationInfo> replicationInfo
-  150: optional shared.VersionHistories versionHistories
-  //TODO: change these fields to enum when possible
-  160: optional i32 workflowState
-  170: optional i32 workflowCloseState
+  // TODO: when migrating to gRPC, make this a enum
+  // TODO: when migrating to gRPC, unify internal & external representation
+  // NOTE: workflowState & workflowCloseState are the same as persistence representation
+  150: optional i32 workflowState
+  160: optional i32 workflowCloseState
+  170: optional shared.VersionHistories versionHistories
 }
 
 struct PollMutableStateRequest {
@@ -113,7 +116,9 @@ struct PollMutableStateResponse {
   110: optional binary currentBranchToken
   120: optional map<string, shared.ReplicationInfo> replicationInfo
   130: optional shared.VersionHistories versionHistories
-  //TODO: change these fields to enum when possible
+  // TODO: when migrating to gRPC, make this a enum
+  // TODO: when migrating to gRPC, unify internal & external representation
+  // NOTE: workflowState & workflowCloseState are the same as persistence representation
   140: optional i32 workflowState
   150: optional i32 workflowCloseState
 }
@@ -740,5 +745,14 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.AccessDeniedError accessDeniedError,
+    )
+
+  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.LimitExceededError limitExceededError,
+      4: shared.ServiceBusyError serviceBusyError,
+      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
     )
 }

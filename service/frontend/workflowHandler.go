@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source ../../.gen/go/cadence/workflowserviceserver/server.go -destination workflowHandler_mock.go -mock_names Interface=MockWorkflowHandler
+
 package frontend
 
 import (
@@ -33,6 +35,7 @@ import (
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
@@ -1673,10 +1676,9 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
-	configuredForArchival := wh.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
 	enableArchivalRead := wh.GetArchivalMetadata().GetHistoryConfig().ReadEnabled()
 	historyArchived := wh.historyArchived(ctx, getRequest, domainID)
-	if configuredForArchival && enableArchivalRead && historyArchived {
+	if enableArchivalRead && historyArchived {
 		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
 	}
 
@@ -2729,6 +2731,25 @@ func (wh *WorkflowHandler) QueryWorkflow(
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
+
+	// if workflow is closed and a rejection condition is given then check if query should be rejected before proceeding
+	workflowCloseStatus := response.GetWorkflowCloseState()
+	if workflowCloseStatus != persistence.WorkflowCloseStatusNone && queryRequest.QueryRejectCondition != nil {
+		notOpenReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotOpen
+		notCompletedCleanlyReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotCompletedCleanly &&
+			workflowCloseStatus != persistence.WorkflowCloseStatusCompleted
+		if notOpenReject || notCompletedCleanlyReject {
+			return &gen.QueryWorkflowResponse{
+				QueryResult: nil,
+				QueryRejected: &gen.QueryRejected{
+					CloseStatus: persistence.ToThriftWorkflowExecutionCloseStatus(
+						int(response.GetWorkflowCloseState()),
+					).Ptr(),
+				},
+			}, nil
+		}
+	}
+
 	clientFeature := client.NewFeatureImpl(
 		response.GetClientLibraryVersion(),
 		response.GetClientFeatureVersion(),
@@ -3297,4 +3318,29 @@ func (wh *WorkflowHandler) allow(d domainGetter) bool {
 		domain = d.GetDomain()
 	}
 	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
+}
+
+// GetReplicationMessages returns new replication tasks since the read level provided in the token.
+func (wh *WorkflowHandler) GetReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+) (resp *replicator.GetReplicationMessagesResponse, err error) {
+	defer log.CapturePanic(wh.GetLogger(), &err)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendGetReplicationTasksScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	resp, err = wh.history.GetReplicationMessages(ctx, request)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return resp, nil
 }

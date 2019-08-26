@@ -44,7 +44,6 @@ type (
 	timeNow                 func() time.Time
 	updateTimerAckLevel     func(TimerSequenceID) error
 	timerQueueShutdown      func() error
-	timerTaskFilter         func(timer *persistence.TimerTaskInfo) (bool, error)
 	timerQueueProcessorImpl struct {
 		isGlobalDomainEnabled  bool
 		currentClusterName     string
@@ -74,6 +73,7 @@ func newTimerQueueProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
+
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
@@ -93,7 +93,12 @@ func newTimerQueueProcessor(
 				logger,
 			)
 			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
-				shard, historyService, clusterName, taskAllocator, historyRereplicator, logger,
+				shard,
+				historyService,
+				clusterName,
+				taskAllocator,
+				historyRereplicator,
+				logger,
 			)
 		}
 	}
@@ -186,8 +191,17 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 		tag.MinLevel(int64(minLevel.Nanosecond())),
 		tag.MaxLevel(int64(maxLevel.Nanosecond())))
 	// we should consider make the failover idempotent
-	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainIDs,
-		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.taskAllocator, t.logger)
+	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
+		t.shard,
+		t.historyService,
+		domainIDs,
+		standbyClusterName,
+		minLevel,
+		maxLevel,
+		t.matchingClient,
+		t.taskAllocator,
+		t.logger,
+	)
 
 	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 		standbyTimerProcessor.retryTasks()

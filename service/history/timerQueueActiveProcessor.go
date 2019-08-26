@@ -41,7 +41,7 @@ type (
 		shard                   ShardContext
 		historyService          *historyEngineImpl
 		cache                   *historyCache
-		timerTaskFilter         timerTaskFilter
+		timerTaskFilter         queueTaskFilter
 		now                     timeNow
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -68,7 +68,11 @@ func newTimerQueueActiveProcessor(
 		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
-	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
+	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		timer, ok := qTask.(*persistence.TimerTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyActiveTask(timer.DomainID, timer)
 	}
 
@@ -150,7 +154,11 @@ func newTimerQueueFailoverProcessor(
 		tag.WorkflowDomainIDs(domainIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
-	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
+	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+		timer, ok := qTask.(*persistence.TimerTaskInfo)
+		if !ok {
+			return false, errUnexpectedQueueTask
+		}
 		return taskAllocator.verifyFailoverActiveTask(domainIDs, timer.DomainID, timer)
 	}
 
@@ -202,7 +210,7 @@ func (t *timerQueueActiveProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
 }
 
-func (t *timerQueueActiveProcessorImpl) getTaskFilter() timerTaskFilter {
+func (t *timerQueueActiveProcessorImpl) getTaskFilter() queueTaskFilter {
 	return t.timerTaskFilter
 }
 
@@ -222,10 +230,24 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }
 
+func (t *timerQueueActiveProcessorImpl) complete(
+	qTask queueTaskInfo,
+) {
+	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+	if !ok {
+		return
+	}
+	t.timerQueueProcessorBase.complete(timerTask)
+}
+
 func (t *timerQueueActiveProcessorImpl) process(
-	timerTask *persistence.TimerTaskInfo,
+	qTask queueTaskInfo,
 	shouldProcessTask bool,
 ) (int, error) {
+	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+	if !ok {
+		return metrics.TimerActiveQueueProcessorScope, errUnexpectedQueueTask
+	}
 
 	var err error
 	switch timerTask.TaskType {
@@ -296,8 +318,8 @@ func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(
 	}
 	tBuilder := t.historyService.getTimerBuilder(context.getExecution())
 
-	var timerTasks []persistence.Task
-	scheduleNewDecision := false
+	updateHistory := false
+	updateState := false
 
 ExpireUserTimers:
 	for _, td := range tBuilder.GetUserTimers(msBuilder) {
@@ -312,27 +334,21 @@ ExpireUserTimers:
 			if _, err := msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID); err != nil {
 				return err
 			}
-
-			scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
+			updateHistory = true
 		} else {
 			// See if we have next timer in list to be created.
 			if !td.TaskCreated {
-				nextTask := tBuilder.createNewTask(td)
-				timerTasks = []persistence.Task{nextTask}
-
-				// Update the task ID tracking the corresponding timer task.
-				ti.TaskID = TimerTaskStatusCreated
-				msBuilder.UpdateUserTimer(ti.TimerID, ti)
+				updateState = true
 			}
-
-			// Done!
 			break ExpireUserTimers
 		}
 	}
 
-	// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
-	// the history and try the operation again.
-	return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks)
+	if updateHistory || updateState {
+		scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecision()
+		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision)
+	}
+	return nil
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
@@ -357,7 +373,6 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	}
 	tBuilder := t.historyService.getTimerBuilder(context.getExecution())
 
-	var timerTasks []persistence.Task
 	updateHistory := false
 	updateState := false
 	ai, ok := msBuilder.GetActivityInfo(task.EventID)
@@ -389,6 +404,10 @@ ExpireActivityTimers:
 		}
 
 		if isExpired := tBuilder.IsTimerExpired(td, referenceTime); !isExpired {
+			// See if we have next timer in list to be created.
+			if !td.TaskCreated {
+				updateState = true
+			}
 			break ExpireActivityTimers
 		}
 
@@ -413,36 +432,27 @@ ExpireActivityTimers:
 		if timeoutType != workflow.TimeoutTypeScheduleToStart {
 			// ScheduleToStart (queue timeout) is not retriable. Instead of retry, customer should set larger
 			// ScheduleToStart timeout.
-			retryTask := msBuilder.CreateActivityRetryTimer(ai, getTimeoutErrorReason(timeoutType))
-			if retryTask != nil {
-				timerTasks = append(timerTasks, retryTask)
+			ok, err := msBuilder.RetryActivity(ai, getTimeoutErrorReason(timeoutType))
+			if err != nil {
+				return err
+			}
+			if ok {
 				updateState = true
-
-				t.logger.Info("Ignore activity timeout due to retry",
-					tag.WorkflowID(msBuilder.GetExecutionInfo().WorkflowID),
-					tag.WorkflowRunID(msBuilder.GetExecutionInfo().RunID),
-					tag.WorkflowDomainID(msBuilder.GetExecutionInfo().DomainID),
-					tag.WorkflowScheduleID(ai.ScheduleID),
-					tag.Attempt(ai.Attempt),
-					tag.FailoverVersion(ai.Version),
-					tag.TimerTaskStatus(ai.TimerTaskStatus),
-					tag.WorkflowTimeoutType(int64(timeoutType)))
-
 				continue
 			}
 		}
 
-		domainEntry, err := t.shard.GetDomainCache().GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+		metricScopeWithDomainTag, err := t.getMetricScopeWithDomainTag(
+			metrics.TimerActiveTaskActivityTimeoutScope,
+			msBuilder.GetExecutionInfo().DomainID)
 		if err != nil {
-			return &workflow.InternalServiceError{Message: "unable to get domain from cache by domainID."}
+			return err
 		}
 
 		switch timeoutType {
 		case workflow.TimeoutTypeScheduleToClose:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.ScheduleToCloseTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.ScheduleToCloseTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 					return err
 				}
@@ -451,9 +461,7 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeStartToClose:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.StartToCloseTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.StartToCloseTimeoutCounter)
 				if ai.StartedID != common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return err
@@ -464,9 +472,7 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeHeartbeat:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.HeartbeatTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.HeartbeatTimeoutCounter)
 				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 					return err
 				}
@@ -475,9 +481,7 @@ ExpireActivityTimers:
 
 		case workflow.TimeoutTypeScheduleToStart:
 			{
-				t.metricsClient.Scope(metrics.TimerActiveTaskActivityTimeoutScope).
-					Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-					IncCounter(metrics.ScheduleToStartTimeoutCounter)
+				metricScopeWithDomainTag.IncCounter(metrics.ScheduleToStartTimeoutCounter)
 				if ai.StartedID == common.EmptyEventID {
 					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
 						return err
@@ -488,17 +492,11 @@ ExpireActivityTimers:
 		}
 	}
 
-	// use a new timer builder, since during the above for loop, the some timer definitions can be invalid
-	if tt := t.historyService.getTimerBuilder(context.getExecution()).GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
-		updateState = true
-		timerTasks = append(timerTasks, tt)
-	}
-
 	if updateHistory || updateState {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecisionTask()
-		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks)
+		scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecision()
+		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision)
 	}
 	return nil
 }
@@ -523,40 +521,38 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 	}
 
 	scheduleID := task.EventID
-	di, found := msBuilder.GetPendingDecision(scheduleID)
+	decision, found := msBuilder.GetDecisionInfo(scheduleID)
 	if !found {
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, di.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
 		return nil
 	}
 
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+	metricScopeWithDomainTag, err := t.getMetricScopeWithDomainTag(
+		metrics.TimerActiveTaskDecisionTimeoutScope,
+		msBuilder.GetExecutionInfo().DomainID)
 	if err != nil {
-		return &workflow.InternalServiceError{Message: "unable to get domain from cache by domainID."}
+		return err
 	}
 
 	scheduleNewDecision := false
 	switch task.TimeoutType {
 	case int(workflow.TimeoutTypeStartToClose):
-		t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
-			Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-			IncCounter(metrics.StartToCloseTimeoutCounter)
-		if di.Attempt == task.ScheduleAttempt {
+		metricScopeWithDomainTag.IncCounter(metrics.StartToCloseTimeoutCounter)
+		if decision.Attempt == task.ScheduleAttempt {
 			// Add a decision task timeout event.
-			msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
+			msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, decision.StartedID)
 			scheduleNewDecision = true
 		}
 	case int(workflow.TimeoutTypeScheduleToStart):
-		t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
-			Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)).
-			IncCounter(metrics.ScheduleToStartTimeoutCounter)
+		metricScopeWithDomainTag.IncCounter(metrics.ScheduleToStartTimeoutCounter)
 		// check if scheduled decision still pending and not started yet
-		if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID {
+		if decision.Attempt == task.ScheduleAttempt && decision.StartedID == common.EmptyEventID {
 			_, err := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 			if err != nil {
 				// unable to add DecisionTaskTimeout event to history
@@ -571,7 +567,7 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 	if scheduleNewDecision {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, nil)
+		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision)
 	}
 	return nil
 }
@@ -601,13 +597,13 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(
 		return nil
 	}
 
-	if msBuilder.HasProcessedOrPendingDecisionTask() {
+	if msBuilder.HasProcessedOrPendingDecision() {
 		// already has decision task
 		return nil
 	}
 
 	// schedule first decision task
-	return t.updateWorkflowExecution(context, msBuilder, true, false, nil)
+	return t.updateWorkflowExecution(context, msBuilder, true)
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
@@ -733,7 +729,7 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		return t.updateWorkflowExecution(context, msBuilder, false, true, nil)
+		return t.updateWorkflowExecution(context, msBuilder, false)
 	}
 
 	// workflow timeout, but a retry or cron is needed, so we do continue as new to retry or cron
@@ -756,7 +752,7 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 		FailureReason:                       common.StringPtr(timeoutReason),
 		CronSchedule:                        common.StringPtr(msBuilder.GetExecutionInfo().CronSchedule),
 	}
-	domainEntry, err := getActiveDomainEntryFromShard(t.shard, &domainID)
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		return err
 	}
@@ -764,24 +760,17 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	if t.config.EnableEventsV2(domainEntry.GetInfo().Name) {
 		eventStoreVersion = persistence.EventStoreVersionV2
 	}
-	_, newMutableState, err := msBuilder.AddContinueAsNewEvent(msBuilder.GetNextEventID(), common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion)
+	_, newMutableState, err := msBuilder.AddContinueAsNewEvent(
+		msBuilder.GetNextEventID(),
+		common.EmptyEventID,
+		domainEntry,
+		startAttributes.GetParentWorkflowDomain(),
+		continueAsnewAttributes,
+		eventStoreVersion,
+	)
 	if err != nil {
 		return err
 	}
-
-	executionInfo := context.getExecution()
-	tBuilder := t.historyService.getTimerBuilder(executionInfo)
-	transferTask, timerTask, err := getWorkflowCleanupTasks(
-		t.shard.GetDomainCache(),
-		domainID,
-		executionInfo.GetWorkflowId(),
-		tBuilder)
-	if err != nil {
-		return err
-	}
-
-	msBuilder.AddTransferTasks(transferTask)
-	msBuilder.AddTimerTasks(timerTask)
 
 	newExecutionInfo := newMutableState.GetExecutionInfo()
 	return context.updateWorkflowExecutionWithNewAsActive(
@@ -804,33 +793,16 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	scheduleNewDecision bool,
-	createDeletionTask bool,
-	timerTasks []persistence.Task,
 ) error {
-	executionInfo := msBuilder.GetExecutionInfo()
+
 	var err error
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		err = scheduleDecision(msBuilder, t.shard.GetTimeSource(), t.logger)
+		err = scheduleDecision(msBuilder)
 		if err != nil {
 			return err
 		}
 	}
-
-	if createDeletionTask {
-		tBuilder := t.historyService.getTimerBuilder(context.getExecution())
-		transferTask, timerTask, err := getWorkflowCleanupTasks(
-			t.shard.GetDomainCache(),
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			tBuilder)
-		if err != nil {
-			return err
-		}
-		msBuilder.AddTransferTasks(transferTask)
-		msBuilder.AddTimerTasks(timerTask)
-	}
-	msBuilder.AddTimerTasks(timerTasks...)
 
 	now := t.shard.GetTimeSource().Now()
 	err = context.updateWorkflowExecutionAsActive(now)
@@ -844,4 +816,13 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	}
 
 	return nil
+}
+
+func (t *timerQueueActiveProcessorImpl) getMetricScopeWithDomainTag(scope int, domainID string) (metrics.Scope, error) {
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return nil, err
+	}
+	return t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
+		Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)), nil
 }

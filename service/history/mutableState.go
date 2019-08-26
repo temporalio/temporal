@@ -71,8 +71,9 @@ type (
 		AddDecisionTaskCompletedEvent(int64, int64, *workflow.RespondDecisionTaskCompletedRequest, int) (*workflow.HistoryEvent, error)
 		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause workflow.DecisionTaskFailedCause, details []byte, identity, reason, baseRunID, newRunID string, forkEventVersion int64) (*workflow.HistoryEvent, error)
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) (*workflow.HistoryEvent, error)
-		AddDecisionTaskScheduledEvent() (*decisionInfo, error)
-		AddDecisionTaskScheduledEventAsHeartbeat(originalScheduledTimestamp int64) (*decisionInfo, error)
+		AddFirstDecisionTaskScheduled(*workflow.HistoryEvent) error
+		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
+		AddDecisionTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp int64) (*decisionInfo, error)
 		AddDecisionTaskStartedEvent(int64, string, *workflow.PollForDecisionTaskRequest) (*workflow.HistoryEvent, *decisionInfo, error)
 		AddDecisionTaskTimedOutEvent(int64, int64) (*workflow.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*workflow.HistoryEvent, error)
@@ -100,7 +101,7 @@ type (
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		CreateActivityRetryTimer(*persistence.ActivityInfo, string) persistence.Task
+		RetryActivity(*persistence.ActivityInfo, string) (bool, error)
 		CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
@@ -119,6 +120,7 @@ type (
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, error)
 		GetCompletionEvent() (*workflow.HistoryEvent, error)
+		GetDecisionInfo(int64) (*decisionInfo, bool)
 		GetStartEvent() (*workflow.HistoryEvent, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetVersionHistories() *persistence.VersionHistories
@@ -126,32 +128,32 @@ type (
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetEventStoreVersion() int32
 		GetHistoryBuilder() *historyBuilder
-		GetInFlightDecisionTask() (*decisionInfo, bool)
+		GetInFlightDecision() (*decisionInfo, bool)
+		GetPendingDecision() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
-		GetPendingDecision(int64) (*decisionInfo, bool)
 		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistence.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
+		GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo
+		GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
 		GetCronBackoffDuration() (time.Duration, error)
 		GetScheduleIDByActivityID(string) (int64, error)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
-		GetAllSignalsToSend() map[int64]*persistence.SignalInfo
-		GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo
 		GetStartVersion() (int64, error)
 		GetUserTimer(string) (*persistence.TimerInfo, bool)
 		GetWorkflowType() *workflow.WorkflowType
 		GetWorkflowStateCloseStatus() (int, int)
 		HasBufferedEvents() bool
-		HasInFlightDecisionTask() bool
+		HasInFlightDecision() bool
 		HasParentExecution() bool
-		HasPendingDecisionTask() bool
-		HasProcessedOrPendingDecisionTask() bool
+		HasPendingDecision() bool
+		HasProcessedOrPendingDecision() bool
 		IsCancelRequested() (bool, string)
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
@@ -193,7 +195,7 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *workflow.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState, int32) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*workflow.HistoryEvent) error
 		ReplicateWorkflowExecutionStartedEvent(*cache.DomainCacheEntry, *string, workflow.WorkflowExecution, string, *workflow.HistoryEvent) error

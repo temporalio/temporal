@@ -33,7 +33,7 @@ const (
 
 type (
 	// Daemon is the base interfaces implemented by
-	// background tasks within cherami
+	// background tasks within Cadence
 	Daemon interface {
 		Start()
 		Stop()

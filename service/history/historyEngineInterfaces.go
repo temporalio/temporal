@@ -25,6 +25,7 @@ import (
 	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
@@ -33,14 +34,14 @@ import (
 
 type (
 	historyEventNotification struct {
-		id                          definition.WorkflowIdentifier
-		lastFirstEventID            int64
-		nextEventID                 int64
-		previousStartedEventID      int64
-		timestamp                   time.Time
-		currentBranchToken          []byte
-		workflowExecutionState      int
-		workflowExecutionCloseState int
+		id                     definition.WorkflowIdentifier
+		lastFirstEventID       int64
+		nextEventID            int64
+		previousStartedEventID int64
+		timestamp              time.Time
+		currentBranchToken     []byte
+		workflowState          int
+		workflowCloseState     int
 	}
 
 	// Engine represents an interface for managing workflow execution history.
@@ -73,6 +74,7 @@ type (
 		ReplicateRawEvents(ctx context.Context, request *h.ReplicateRawEventsRequest) error
 		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *h.SyncActivityRequest) error
+		GetReplicationMessages(ctx context.Context, taskID int64) (*replicator.ReplicationMessages, error)
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -90,6 +92,12 @@ type (
 		notifyNewTask()
 	}
 
+	// ReplicatorQueueProcessor is the interface for replicator queue processor
+	ReplicatorQueueProcessor interface {
+		queueProcessor
+		getTasks(readLevel int64) (*replicator.ReplicationMessages, error)
+	}
+
 	queueAckMgr interface {
 		getFinishedChan() <-chan struct{}
 		readQueueTasks() ([]queueTaskInfo, bool, error)
@@ -104,11 +112,19 @@ type (
 		GetTaskID() int64
 		GetTaskType() int
 		GetVisibilityTimestamp() time.Time
+		GetWorkflowID() string
+		GetRunID() string
+		GetDomainID() string
+	}
+
+	taskExecutor interface {
+		process(task queueTaskInfo, shouldProcessTask bool) (int, error)
+		complete(task queueTaskInfo)
+		getTaskFilter() queueTaskFilter
 	}
 
 	processor interface {
-		process(task queueTaskInfo, shouldProcessTask bool) (int, error)
-		getTaskFilter() queueTaskFilter
+		taskExecutor
 		readTasks(readLevel int64) ([]queueTaskInfo, bool, error)
 		updateAckLevel(taskID int64) error
 		queueShutdown() error
@@ -134,9 +150,8 @@ type (
 	}
 
 	timerProcessor interface {
+		taskExecutor
 		notifyNewTimers(timerTask []persistence.Task)
-		process(task *persistence.TimerTaskInfo, shouldProcessTask bool) (int, error)
-		getTaskFilter() timerTaskFilter
 	}
 
 	timerQueueAckMgr interface {

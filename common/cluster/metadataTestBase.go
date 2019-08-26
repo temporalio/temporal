@@ -91,6 +91,15 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 			masterClusterName,
 			TestCurrentClusterName,
 			TestAllClusterInfo,
+			&config.ReplicationConsumerConfig{
+				Type: config.ReplicationConsumerTypeRPC,
+				FetcherConfig: &config.FetcherConfig{
+					RPCParallelism:          1,
+					AggregationIntervalSecs: 2,
+					ErrorRetryWaitSecs:      1,
+					TimerJitterCoefficient:  0.15,
+				},
+			},
 		)
 	}
 
@@ -101,5 +110,6 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 		TestCurrentClusterName,
 		TestCurrentClusterName,
 		TestSingleDCClusterInfo,
+		nil,
 	)
 }

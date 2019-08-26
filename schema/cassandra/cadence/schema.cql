@@ -15,6 +15,8 @@ CREATE TYPE shard (
   -- Mapping of cluster to corresponding timer ack level
   cluster_timer_ack_level     map<text, timestamp>,
   domain_notification_version bigint, -- the global domain change version this shard is aware of
+  -- Mapping of (remote) cluster to corresponding replication level (last replicated task_id)
+  cluster_replication_level   map<text, bigint>,
 );
 
 --- Workflow execution and mutable state ---
@@ -206,19 +208,21 @@ CREATE TYPE child_execution_info (
 
 -- External workflow cancellation in progress mutable state
 CREATE TYPE request_cancel_info (
-  version           bigint,
-  initiated_id      bigint,
-  cancel_request_id text,
+  version                   bigint,
+  initiated_event_batch_id  bigint,
+  initiated_id              bigint,
+  cancel_request_id         text,
 );
 
 -- External workflow signal in progress mutable state
 CREATE TYPE signal_info (
-  version           bigint,
-  initiated_id      bigint,
-  signal_request_id uuid,
-  signal_name       text,
-  input             blob,
-  control           blob,
+  version                   bigint,
+  initiated_event_batch_id  bigint,
+  initiated_id              bigint,
+  signal_request_id         uuid,
+  signal_name               text,
+  input                     blob,
+  control                   blob,
 );
 
 -- Activity or workflow task in a task list

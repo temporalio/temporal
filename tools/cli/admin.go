@@ -484,6 +484,10 @@ func newAdminElasticSearchCommands() []cli.Command {
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
 				},
+				cli.StringFlag{
+					Name:  FlagMuttleyDestinationWithAlias,
+					Usage: "Optional muttely destination to ElasticSearch cluster",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminCatIndices(c)
@@ -518,6 +522,43 @@ func newAdminElasticSearchCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				AdminIndex(c)
+			},
+		},
+		{
+			Name:    "delete",
+			Aliases: []string{"del"},
+			Usage:   "Delete docs on ElasticSearch",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagURL,
+					Usage: "URL of ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagMuttleyDestinationWithAlias,
+					Usage: "Optional muttely destination to ElasticSearch cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagIndex,
+					Usage: "ElasticSearch target index",
+				},
+				cli.StringFlag{
+					Name: FlagInputFileWithAlias,
+					Usage: "Input file name. Redirect cadence wf list result (with tale format) to a file and use as delete input. " +
+						"First line should be table header like WORKFLOW TYPE | WORKFLOW ID | RUN ID | ...",
+				},
+				cli.IntFlag{
+					Name:  FlagBatchSizeWithAlias,
+					Usage: "Optional batch size of actions for bulk operations",
+					Value: 1000,
+				},
+				cli.IntFlag{
+					Name:  FlagRPS,
+					Usage: "Optional batch request rate per second",
+					Value: 30,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDelete(c)
 			},
 		},
 		{

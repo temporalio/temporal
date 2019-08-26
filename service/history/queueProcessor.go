@@ -27,15 +27,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -64,10 +61,7 @@ type (
 		metricsClient metrics.Client
 		rateLimiter   quotas.Limiter // Read rate limiter
 		ackMgr        queueAckMgr
-		retryPolicy   backoff.RetryPolicy
-
-		// worker coroutines notification
-		workerNotificationChans []chan struct{}
+		taskProcessor *taskProcessor
 
 		lastPollTime time.Time
 
@@ -91,14 +85,15 @@ func newQueueProcessorBase(
 	options *QueueProcessorOptions,
 	processor processor,
 	queueAckMgr queueAckMgr,
+	historyCache *historyCache,
 	logger log.Logger,
 ) *queueProcessorBase {
 
-	workerNotificationChans := []chan struct{}{}
-	for index := 0; index < options.WorkerCount(); index++ {
-		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
+	taskProcessorOptions := taskProcessorOptions{
+		queueSize:   options.BatchSize(),
+		workerCount: options.WorkerCount(),
 	}
-
+	taskProcessor := newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
 	p := &queueProcessorBase{
 		clusterName: clusterName,
 		shard:       shard,
@@ -110,15 +105,14 @@ func newQueueProcessorBase(
 				return float64(options.MaxPollRPS())
 			},
 		),
-		workerNotificationChans: workerNotificationChans,
-		status:                  common.DaemonStatusInitialized,
-		notifyCh:                make(chan struct{}, 1),
-		shutdownCh:              make(chan struct{}),
-		metricsClient:           shard.GetMetricsClient(),
-		logger:                  logger,
-		ackMgr:                  queueAckMgr,
-		retryPolicy:             common.CreatePersistanceRetryPolicy(),
-		lastPollTime:            time.Time{},
+		status:        common.DaemonStatusInitialized,
+		notifyCh:      make(chan struct{}, 1),
+		shutdownCh:    make(chan struct{}),
+		metricsClient: shard.GetMetricsClient(),
+		logger:        logger,
+		ackMgr:        queueAckMgr,
+		lastPollTime:  time.Time{},
+		taskProcessor: taskProcessor,
 	}
 
 	return p
@@ -132,6 +126,7 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
+	p.taskProcessor.start()
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -151,6 +146,7 @@ func (p *queueProcessorBase) Stop() {
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 		p.logger.Warn("", tag.LifeCycleStopTimedout, tag.ComponentTransferQueue)
 	}
+	p.taskProcessor.stop()
 }
 
 func (p *queueProcessorBase) notifyNewTask() {
@@ -163,14 +159,6 @@ func (p *queueProcessorBase) notifyNewTask() {
 
 func (p *queueProcessorBase) processorPump() {
 	defer p.shutdownWG.Done()
-	tasksCh := make(chan queueTaskInfo, p.options.BatchSize())
-
-	var workerWG sync.WaitGroup
-	for i := 0; i < p.options.WorkerCount(); i++ {
-		workerWG.Add(1)
-		notificationChan := p.workerNotificationChans[i]
-		go p.taskWorker(tasksCh, notificationChan, &workerWG)
-	}
 
 	jitter := backoff.NewJitter()
 	pollTimer := time.NewTimer(jitter.JitDuration(
@@ -194,14 +182,14 @@ processorPumpLoop:
 			// use a separate gorouting since the caller hold the shutdownWG
 			go p.Stop()
 		case <-p.notifyCh:
-			p.processBatch(tasksCh)
+			p.processBatch()
 		case <-pollTimer.C:
 			pollTimer.Reset(jitter.JitDuration(
 				p.options.MaxPollInterval(),
 				p.options.MaxPollIntervalJitterCoefficient(),
 			))
 			if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(p.timeSource.Now()) {
-				p.processBatch(tasksCh)
+				p.processBatch()
 			}
 		case <-updateAckTimer.C:
 			updateAckTimer.Reset(jitter.JitDuration(
@@ -212,18 +200,10 @@ processorPumpLoop:
 		}
 	}
 
-	p.logger.Info("Queue processor pump shutting down.")
-	// This is the only pump which writes to tasksCh, so it is safe to close channel here
-	close(tasksCh)
-	if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
-		p.logger.Warn("Queue processor timedout on worker shutdown.")
-	}
-
+	p.logger.Info("Queue processor pump shut down.")
 }
 
-func (p *queueProcessorBase) processBatch(
-	tasksCh chan<- queueTaskInfo,
-) {
+func (p *queueProcessorBase) processBatch() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
 	if err := p.rateLimiter.Wait(ctx); err != nil {
@@ -247,10 +227,18 @@ func (p *queueProcessorBase) processBatch(
 	}
 
 	for _, task := range tasks {
+		if shutdown := p.taskProcessor.addTask(
+			&taskInfo{
+				processor: p.processor,
+				task:      task,
+			},
+		); shutdown {
+			return
+		}
 		select {
-		case tasksCh <- task:
 		case <-p.shutdownCh:
 			return
+		default:
 		}
 	}
 
@@ -263,221 +251,10 @@ func (p *queueProcessorBase) processBatch(
 	return
 }
 
-func (p *queueProcessorBase) taskWorker(
-	tasksCh <-chan queueTaskInfo,
-	notificationChan <-chan struct{},
-	workerWG *sync.WaitGroup,
-) {
-
-	defer workerWG.Done()
-
-	for {
-		select {
-		case <-p.shutdownCh:
-			return
-		case task, ok := <-tasksCh:
-			if !ok {
-				return
-			}
-			p.processTaskAndAck(notificationChan, task)
-		}
-	}
-}
-
 func (p *queueProcessorBase) retryTasks() {
-	for _, workerNotificationChan := range p.workerNotificationChans {
-		select {
-		case workerNotificationChan <- struct{}{}:
-		default:
-		}
-	}
+	p.taskProcessor.retryTasks()
 }
 
-func (p *queueProcessorBase) processTaskAndAck(
-	notificationChan <-chan struct{},
-	task queueTaskInfo,
-) {
-
-	var scope int
-	var shouldProcessTask bool
-	var err error
-	startTime := p.timeSource.Now()
-	logger := p.initializeLoggerForTask(task)
-	attempt := 0
-	incAttempt := func() {
-		attempt++
-		if attempt >= p.options.MaxRetryCount() {
-			p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-			switch task.(type) {
-			case *persistence.TransferTaskInfo:
-				logger.Error("Critical error processing transfer task, retrying.", tag.Error(err), tag.OperationCritical)
-			case *persistence.ReplicationTaskInfo:
-				logger.Error("Critical error processing replication task, retrying.", tag.Error(err), tag.OperationCritical)
-			}
-		}
-	}
-
-FilterLoop:
-	for {
-		select {
-		case <-p.shutdownCh:
-			// this must return without ack
-			return
-		default:
-			shouldProcessTask, err = p.processor.getTaskFilter()(task)
-			if err == nil {
-				break FilterLoop
-			}
-			incAttempt()
-			time.Sleep(loadDomainEntryForQueueTaskRetryDelay)
-		}
-	}
-
-	op := func() error {
-		scope, err = p.processTaskOnce(notificationChan, task, shouldProcessTask, logger)
-		return p.handleTaskError(scope, startTime, notificationChan, err, logger)
-	}
-	retryCondition := func(err error) bool {
-		select {
-		case <-p.shutdownCh:
-			return false
-		default:
-			return true
-		}
-	}
-
-	for {
-		select {
-		case <-p.shutdownCh:
-			// this must return without ack
-			return
-		default:
-			err = backoff.Retry(op, p.retryPolicy, retryCondition)
-			if err == nil {
-				p.ackTaskOnce(task, scope, shouldProcessTask, startTime, attempt)
-				return
-			}
-			incAttempt()
-		}
-	}
-}
-
-func (p *queueProcessorBase) processTaskOnce(
-	notificationChan <-chan struct{},
-	task queueTaskInfo,
-	shouldProcessTask bool,
-	logger log.Logger,
-) (int, error) {
-
-	select {
-	case <-notificationChan:
-	default:
-	}
-
-	startTime := p.timeSource.Now()
-	scope, err := p.processor.process(task, shouldProcessTask)
-	if shouldProcessTask {
-		p.metricsClient.IncCounter(scope, metrics.TaskRequests)
-		p.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
-	}
-	return scope, err
-}
-
-func (p *queueProcessorBase) handleTaskError(
-	scope int,
-	startTime time.Time,
-	notificationChan <-chan struct{},
-	err error,
-	logger log.Logger,
-) error {
-
-	if err == nil {
-		return nil
-	}
-
-	if _, ok := err.(*workflow.EntityNotExistsError); ok {
-		return nil
-	}
-
-	// this is a transient error
-	if err == ErrTaskRetry {
-		p.metricsClient.IncCounter(scope, metrics.TaskStandbyRetryCounter)
-		<-notificationChan
-		return err
-	}
-
-	if err == ErrTaskDiscarded {
-		p.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
-		err = nil
-	}
-
-	// this is a transient error
-	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if p.timeSource.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
-			p.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
-			return nil
-		}
-
-		return err
-	}
-
-	p.metricsClient.IncCounter(scope, metrics.TaskFailures)
-
-	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-		logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
-		return nil
-	}
-
-	logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
-	return err
-}
-
-func (p *queueProcessorBase) ackTaskOnce(
-	task queueTaskInfo,
-	scope int,
-	reportMetrics bool,
-	startTime time.Time,
-	attempt int,
-) {
-
+func (p *queueProcessorBase) complete(task queueTaskInfo) {
 	p.ackMgr.completeQueueTask(task.GetTaskID())
-	if reportMetrics {
-		p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-		p.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime))
-		p.metricsClient.RecordTimer(
-			scope,
-			metrics.TaskQueueLatency,
-			time.Since(task.GetVisibilityTimestamp()),
-		)
-	}
-}
-
-func (p *queueProcessorBase) initializeLoggerForTask(
-	task queueTaskInfo,
-) log.Logger {
-
-	logger := p.logger.WithTags(
-		tag.ShardID(p.shard.GetShardID()),
-		tag.TaskID(task.GetTaskID()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()))
-
-	switch task := task.(type) {
-	case *persistence.TransferTaskInfo:
-		logger = logger.WithTags(
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.WorkflowDomainID(task.DomainID))
-
-		logger.Debug("Processing transfer task")
-	case *persistence.ReplicationTaskInfo:
-		logger = logger.WithTags(
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.WorkflowDomainID(task.DomainID))
-
-		logger.Debug("Processing replication task")
-	}
-
-	return logger
 }

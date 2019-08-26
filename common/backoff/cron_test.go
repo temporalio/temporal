@@ -46,6 +46,7 @@ var crontests = []struct {
 	{"invalid-cron-spec", "2018-12-17T00:04:00+00:00", "2018-12-17T01:02:00+00:00", NoBackoff},
 	{"@every 5h", "2018-12-17T08:00:00+00:00", "2018-12-17T09:00:00+00:00", time.Hour * 4},
 	{"@every 5h", "2018-12-17T08:00:00+00:00", "2018-12-18T00:00:00+00:00", time.Hour * 4},
+	{"0 3 * * 0-6", "2018-12-17T08:00:00-08:00", "", time.Hour * 11},
 }
 
 func TestCron(t *testing.T) {
@@ -55,6 +56,10 @@ func TestCron(t *testing.T) {
 			end := start
 			if tt.endTime != "" {
 				end, _ = time.Parse(time.RFC3339, tt.endTime)
+			}
+			err := ValidateSchedule(tt.cron)
+			if tt.result != NoBackoff {
+				assert.NoError(t, err)
 			}
 			backoff := GetBackoffForNextSchedule(tt.cron, start, end)
 			assert.Equal(t, tt.result, backoff, "The cron spec is %s and the expected result is %s", tt.cron, tt.result)

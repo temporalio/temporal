@@ -109,3 +109,12 @@ const (
 	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
 	DefaultTransactionSizeLimit = 14 * 1024 * 1024
 )
+
+const (
+	// ArchivalEnabled is the status for enabling archival
+	ArchivalEnabled = "enabled"
+	// ArchivalDisabled is the status for disabling archival
+	ArchivalDisabled = "disabled"
+	// ArchivalPaused is the status for pausing archival
+	ArchivalPaused = "paused"
+)

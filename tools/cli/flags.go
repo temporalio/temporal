@@ -134,6 +134,8 @@ const (
 	FlagOutputFormat                      = "output"
 	FlagQueryType                         = "query_type"
 	FlagQueryTypeWithAlias                = FlagQueryType + ", qt"
+	FlagQueryRejectCondition              = "query_reject_condition"
+	FlagQueryRejectConditionWithAlias     = FlagQueryRejectCondition + ", qrc"
 	FlagShowDetail                        = "show_detail"
 	FlagShowDetailWithAlias               = FlagShowDetail + ", sd"
 	FlagActiveClusterName                 = "active_cluster"
@@ -404,6 +406,44 @@ func getFlagsForListAll() []cli.Flag {
 	}
 }
 
+func getFlagsForScan() []cli.Flag {
+	return []cli.Flag{
+		cli.IntFlag{
+			Name:  FlagPageSizeWithAlias,
+			Value: 2000,
+			Usage: "Page size for each Scan API call",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintRawTimeWithAlias,
+			Usage: "Print raw time stamp",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintDateTimeWithAlias,
+			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintMemoWithAlias,
+			Usage: "Print memo",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintSearchAttrWithAlias,
+			Usage: "Print search attributes",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintFullyDetailWithAlias,
+			Usage: "Print full message without table format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintJSONWithAlias,
+			Usage: "Print in raw json format",
+		},
+		cli.StringFlag{
+			Name:  FlagListQueryWithAlias,
+			Usage: "Optional SQL like query",
+		},
+	}
+}
+
 func getFlagsForCount() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
@@ -435,6 +475,10 @@ func getFlagsForQuery() []cli.Flag {
 			Name: FlagInputFileWithAlias,
 			Usage: "Optional input for the query from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"Input from file will be overwrite by input from command line",
+		},
+		cli.StringFlag{
+			Name:  FlagQueryRejectConditionWithAlias,
+			Usage: "Optional flag to reject queries based on workflow state. Valid values are \"not_open\" and \"not_completed_cleanly\"",
 		},
 	}
 }

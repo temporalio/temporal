@@ -501,8 +501,9 @@ func updateRequestCancelInfos(
 		rows := make([]sqldb.RequestCancelInfoMapsRow, len(requestCancelInfos))
 		for i, v := range requestCancelInfos {
 			blob, err := requestCancelInfoToBlob(&sqlblobs.RequestCancelInfo{
-				Version:         &v.Version,
-				CancelRequestID: &v.CancelRequestID,
+				Version:               &v.Version,
+				InitiatedEventBatchID: &v.InitiatedEventBatchID,
+				CancelRequestID:       &v.CancelRequestID,
 			})
 			if err != nil {
 				return err
@@ -580,9 +581,10 @@ func getRequestCancelInfoMap(
 			return nil, err
 		}
 		ret[v.InitiatedID] = &persistence.RequestCancelInfo{
-			Version:         rowInfo.GetVersion(),
-			CancelRequestID: rowInfo.GetCancelRequestID(),
-			InitiatedID:     v.InitiatedID,
+			Version:               rowInfo.GetVersion(),
+			InitiatedID:           v.InitiatedID,
+			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
+			CancelRequestID:       rowInfo.GetCancelRequestID(),
 		}
 	}
 
@@ -624,11 +626,12 @@ func updateSignalInfos(
 		rows := make([]sqldb.SignalInfoMapsRow, len(signalInfos))
 		for i, v := range signalInfos {
 			blob, err := signalInfoToBlob(&sqlblobs.SignalInfo{
-				Version:   &v.Version,
-				RequestID: &v.SignalRequestID,
-				Name:      &v.SignalName,
-				Input:     v.Input,
-				Control:   v.Control,
+				Version:               &v.Version,
+				InitiatedEventBatchID: &v.InitiatedEventBatchID,
+				RequestID:             &v.SignalRequestID,
+				Name:                  &v.SignalName,
+				Input:                 v.Input,
+				Control:               v.Control,
 			})
 			if err != nil {
 				return err
@@ -706,12 +709,13 @@ func getSignalInfoMap(
 			return nil, err
 		}
 		ret[v.InitiatedID] = &persistence.SignalInfo{
-			Version:         rowInfo.GetVersion(),
-			InitiatedID:     v.InitiatedID,
-			SignalRequestID: rowInfo.GetRequestID(),
-			SignalName:      rowInfo.GetName(),
-			Input:           rowInfo.GetInput(),
-			Control:         rowInfo.GetControl(),
+			Version:               rowInfo.GetVersion(),
+			InitiatedID:           v.InitiatedID,
+			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
+			SignalRequestID:       rowInfo.GetRequestID(),
+			SignalName:            rowInfo.GetName(),
+			Input:                 rowInfo.GetInput(),
+			Control:               rowInfo.GetControl(),
 		}
 	}
 

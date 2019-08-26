@@ -137,6 +137,7 @@ func (s *server) startService() common.Daemon {
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
+		clusterMetadata.ReplicationConsumer,
 	)
 
 	if s.cfg.PublicClient.HostPort != "" {
@@ -184,18 +185,7 @@ func (s *server) startService() common.Daemon {
 		&s.cfg.DomainDefaults.Archival,
 	)
 
-	configuredForHistoryArchival := params.ArchivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival()
-	historyArchiverProviderCfg := s.cfg.Archival.History.Provider
-	if (configuredForHistoryArchival && historyArchiverProviderCfg == nil) || (!configuredForHistoryArchival && historyArchiverProviderCfg != nil) {
-		log.Fatalf("invalid history archival config")
-	}
-
-	configuredForVisibilityArchival := params.ArchivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival()
-	visibilityArchiverProviderCfg := s.cfg.Archival.Visibility.Provider
-	if (configuredForVisibilityArchival && visibilityArchiverProviderCfg == nil) || (!configuredForVisibilityArchival && visibilityArchiverProviderCfg != nil) {
-		log.Fatalf("invalid visibility archival config")
-	}
-	params.ArchiverProvider = provider.NewArchiverProvider(historyArchiverProviderCfg, visibilityArchiverProviderCfg)
+	params.ArchiverProvider = provider.NewArchiverProvider(s.cfg.Archival.History.Provider, s.cfg.Archival.Visibility.Provider)
 
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 

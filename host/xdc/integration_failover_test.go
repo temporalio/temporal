@@ -387,6 +387,9 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResultString := string(queryResult.Resp.QueryResult)
 	s.Equal("query-result", queryResultString)
 
+	// Wait a while so the events are replicated.
+	time.Sleep(5 * time.Second)
+
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
 	go queryWorkflowFn(client2, queryType)
 	// process that query task, which should respond via RespondQueryTaskCompleted
@@ -771,7 +774,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		T:               s.T(),
 	}
 
-	// make some progress in cluster 1
+	// Complete the workflow in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
@@ -793,14 +796,14 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// wait till failover completed
 	time.Sleep(cacheRefreshInterval)
 
-	// start the workflow in cluster 2 with ID reuse policy being allow if last run fails
+	// start the same workflow in cluster 2 is not allowed if policy is AllowDuplicateFailedOnly
 	startReq.RequestId = common.StringPtr(uuid.New())
 	startReq.WorkflowIdReusePolicy = workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly.Ptr()
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
 	s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err)
 	s.Nil(we)
 
-	// start the workflow in cluster 2 with ID reuse policy being reject ID reuse
+	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = common.StringPtr(uuid.New())
 	startReq.WorkflowIdReusePolicy = workflow.WorkflowIdReusePolicyRejectDuplicate.Ptr()
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)

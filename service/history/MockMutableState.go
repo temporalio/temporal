@@ -501,11 +501,49 @@ func (_m *mockMutableState) AddDecisionTaskScheduleToStartTimeoutEvent(_a0 int64
 	return r0, r1
 }
 
-func (_m *mockMutableState) AddDecisionTaskScheduledEventAsHeartbeat(_a0 int64) (*decisionInfo, error) {
+// AddDecisionTaskScheduledEventAsHeartbeat provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) AddDecisionTaskScheduledEventAsHeartbeat(_a0 bool, _a1 int64) (*decisionInfo, error) {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 *decisionInfo
+	if rf, ok := ret.Get(0).(func(bool, int64) *decisionInfo); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*decisionInfo)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(bool, int64) error); ok {
+		r1 = rf(_a0, _a1)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// AddFirstDecisionTaskScheduled provides a mock function with given fields:
+func (_m *mockMutableState) AddFirstDecisionTaskScheduled(_a0 *shared.HistoryEvent) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*shared.HistoryEvent) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// AddDecisionTaskScheduledEvent provides a mock function with given fields: _a0
+func (_m *mockMutableState) AddDecisionTaskScheduledEvent(_a0 bool) (*decisionInfo, error) {
 	ret := _m.Called(_a0)
 
 	var r0 *decisionInfo
-	if rf, ok := ret.Get(0).(func(int64) *decisionInfo); ok {
+	if rf, ok := ret.Get(0).(func(bool) *decisionInfo); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
@@ -514,31 +552,8 @@ func (_m *mockMutableState) AddDecisionTaskScheduledEventAsHeartbeat(_a0 int64) 
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(int64) error); ok {
+	if rf, ok := ret.Get(1).(func(bool) error); ok {
 		r1 = rf(_a0)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// AddDecisionTaskScheduledEvent provides a mock function with given fields:
-func (_m *mockMutableState) AddDecisionTaskScheduledEvent() (*decisionInfo, error) {
-	ret := _m.Called()
-
-	var r0 *decisionInfo
-	if rf, ok := ret.Get(0).(func() *decisionInfo); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*decisionInfo)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1161,19 +1176,24 @@ func (_m *mockMutableState) CopyToPersistence() *persistence.WorkflowMutableStat
 }
 
 // CreateActivityRetryTimer provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) CreateActivityRetryTimer(_a0 *persistence.ActivityInfo, _a1 string) persistence.Task {
+func (_m *mockMutableState) RetryActivity(_a0 *persistence.ActivityInfo, _a1 string) (bool, error) {
 	ret := _m.Called(_a0, _a1)
 
-	var r0 persistence.Task
-	if rf, ok := ret.Get(0).(func(*persistence.ActivityInfo, string) persistence.Task); ok {
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(*persistence.ActivityInfo, string) bool); ok {
 		r0 = rf(_a0, _a1)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(persistence.Task)
-		}
+		r0 = ret.Get(0).(bool)
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.ActivityInfo, string) error); ok {
+		r1 = rf(_a0, _a1)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // CreateNewHistoryEvent provides a mock function with given fields: eventType
@@ -1208,13 +1228,13 @@ func (_m *mockMutableState) CreateNewHistoryEventWithTimestamp(eventType shared.
 	return r0
 }
 
-// CreateTransientDecisionEvents provides a mock function with given fields: di, identity
-func (_m *mockMutableState) CreateTransientDecisionEvents(di *decisionInfo, identity string) (*shared.HistoryEvent, *shared.HistoryEvent) {
-	ret := _m.Called(di, identity)
+// CreateTransientDecisionEvents provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) CreateTransientDecisionEvents(_a0 *decisionInfo, _a1 string) (*shared.HistoryEvent, *shared.HistoryEvent) {
+	ret := _m.Called(_a0, _a1)
 
 	var r0 *shared.HistoryEvent
 	if rf, ok := ret.Get(0).(func(*decisionInfo, string) *shared.HistoryEvent); ok {
-		r0 = rf(di, identity)
+		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -1223,7 +1243,7 @@ func (_m *mockMutableState) CreateTransientDecisionEvents(di *decisionInfo, iden
 
 	var r1 *shared.HistoryEvent
 	if rf, ok := ret.Get(1).(func(*decisionInfo, string) *shared.HistoryEvent); ok {
-		r1 = rf(di, identity)
+		r1 = rf(_a0, _a1)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(*shared.HistoryEvent)
@@ -1363,38 +1383,6 @@ func (_m *mockMutableState) GetActivityScheduledEvent(_a0 int64) (*shared.Histor
 	}
 
 	return r0, r1
-}
-
-// GetAllRequestCancels provides a mock function with given fields:
-func (_m *mockMutableState) GetAllRequestCancels() map[int64]*persistence.RequestCancelInfo {
-	ret := _m.Called()
-
-	var r0 map[int64]*persistence.RequestCancelInfo
-	if rf, ok := ret.Get(0).(func() map[int64]*persistence.RequestCancelInfo); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[int64]*persistence.RequestCancelInfo)
-		}
-	}
-
-	return r0
-}
-
-// GetAllSignalsToSend provides a mock function with given fields:
-func (_m *mockMutableState) GetAllSignalsToSend() map[int64]*persistence.SignalInfo {
-	ret := _m.Called()
-
-	var r0 map[int64]*persistence.SignalInfo
-	if rf, ok := ret.Get(0).(func() map[int64]*persistence.SignalInfo); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[int64]*persistence.SignalInfo)
-		}
-	}
-
-	return r0
 }
 
 // GetVersionHistories provide mocks
@@ -1584,8 +1572,31 @@ func (_m *mockMutableState) GetHistoryBuilder() *historyBuilder {
 	return r0
 }
 
-// GetInFlightDecisionTask provides a mock function with given fields:
-func (_m *mockMutableState) GetInFlightDecisionTask() (*decisionInfo, bool) {
+// GetInFlightDecision provides a mock function with given fields:
+func (_m *mockMutableState) GetInFlightDecision() (*decisionInfo, bool) {
+	ret := _m.Called()
+
+	var r0 *decisionInfo
+	if rf, ok := ret.Get(0).(func() *decisionInfo); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*decisionInfo)
+		}
+	}
+
+	var r1 bool
+	if rf, ok := ret.Get(1).(func() bool); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	return r0, r1
+}
+
+// GetPendingDecision provides a mock function with given fields:
+func (_m *mockMutableState) GetPendingDecision() (*decisionInfo, bool) {
 	ret := _m.Called()
 
 	var r0 *decisionInfo
@@ -1688,8 +1699,8 @@ func (_m *mockMutableState) GetPendingChildExecutionInfos() map[int64]*persisten
 	return r0
 }
 
-// GetPendingDecision provides a mock function with given fields: _a0
-func (_m *mockMutableState) GetPendingDecision(_a0 int64) (*decisionInfo, bool) {
+// GetDecisionInfo provides a mock function with given fields: _a0
+func (_m *mockMutableState) GetDecisionInfo(_a0 int64) (*decisionInfo, bool) {
 	ret := _m.Called(_a0)
 
 	var r0 *decisionInfo
@@ -1721,6 +1732,38 @@ func (_m *mockMutableState) GetPendingTimerInfos() map[string]*persistence.Timer
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(map[string]*persistence.TimerInfo)
+		}
+	}
+
+	return r0
+}
+
+// GetPendingRequestCancelInfos provides a mock function with given fields:
+func (_m *mockMutableState) GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo {
+	ret := _m.Called()
+
+	var r0 map[int64]*persistence.RequestCancelInfo
+	if rf, ok := ret.Get(0).(func() map[int64]*persistence.RequestCancelInfo); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[int64]*persistence.RequestCancelInfo)
+		}
+	}
+
+	return r0
+}
+
+// GetPendingSignalInfos provides a mock function with given fields:
+func (_m *mockMutableState) GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo {
+	ret := _m.Called()
+
+	var r0 map[int64]*persistence.SignalInfo
+	if rf, ok := ret.Get(0).(func() map[int64]*persistence.SignalInfo); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[int64]*persistence.SignalInfo)
 		}
 	}
 
@@ -1956,8 +1999,8 @@ func (_m *mockMutableState) HasBufferedEvents() bool {
 	return r0
 }
 
-// HasInFlightDecisionTask provides a mock function with given fields:
-func (_m *mockMutableState) HasInFlightDecisionTask() bool {
+// HasInFlightDecision provides a mock function with given fields:
+func (_m *mockMutableState) HasInFlightDecision() bool {
 	ret := _m.Called()
 
 	var r0 bool
@@ -1984,8 +2027,8 @@ func (_m *mockMutableState) HasParentExecution() bool {
 	return r0
 }
 
-// HasPendingDecisionTask provides a mock function with given fields:
-func (_m *mockMutableState) HasPendingDecisionTask() bool {
+// HasPendingDecision provides a mock function with given fields:
+func (_m *mockMutableState) HasPendingDecision() bool {
 	ret := _m.Called()
 
 	var r0 bool
@@ -1998,8 +2041,8 @@ func (_m *mockMutableState) HasPendingDecisionTask() bool {
 	return r0
 }
 
-// HasProcessedOrPendingDecisionTask provides a mock function with given fields:
-func (_m *mockMutableState) HasProcessedOrPendingDecisionTask() bool {
+// HasProcessedOrPendingDecision provides a mock function with given fields:
+func (_m *mockMutableState) HasProcessedOrPendingDecision() bool {
 	ret := _m.Called()
 
 	var r0 bool
@@ -2647,13 +2690,13 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionCompletedEvent(_a0 int64, 
 	return r0
 }
 
-// ReplicateWorkflowExecutionContinuedAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4, _a5, _a6
-func (_m *mockMutableState) ReplicateWorkflowExecutionContinuedAsNewEvent(_a0 int64, _a1 string, _a2 *shared.HistoryEvent, _a3 *shared.HistoryEvent, _a4 *decisionInfo, _a5 mutableState, _a6 int32) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
+// ReplicateWorkflowExecutionContinuedAsNewEvent provides a mock function with given fields: _a0, _a1, _a2
+func (_m *mockMutableState) ReplicateWorkflowExecutionContinuedAsNewEvent(_a0 int64, _a1 string, _a2 *shared.HistoryEvent) error {
+	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int64, string, *shared.HistoryEvent, *shared.HistoryEvent, *decisionInfo, mutableState, int32) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6)
+	if rf, ok := ret.Get(0).(func(int64, string, *shared.HistoryEvent) error); ok {
+		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Error(0)
 	}

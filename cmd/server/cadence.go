@@ -52,7 +52,9 @@ func startHandler(c *cli.Context) {
 	if err != nil {
 		log.Fatal("Config file corrupted.", err)
 	}
-	log.Printf("config=\n%v\n", cfg.String())
+	if cfg.Log.Level == "debug" {
+		log.Printf("config=\n%v\n", cfg.String())
+	}
 
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("config validation failed: %v", err)

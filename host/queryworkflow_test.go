@@ -413,7 +413,6 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	// activity handler
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-
 		return []byte("Activity Result."), false, nil
 	}
 
@@ -449,7 +448,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		Err  error
 	}
 	queryResultCh := make(chan QueryResult)
-	queryWorkflowFn := func(queryType string) {
+	queryWorkflowFn := func(queryType string, rejectCondition *workflow.QueryRejectCondition) {
 		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflow.QueryWorkflowRequest{
 			Domain: common.StringPtr(s.domainName),
 			Execution: &workflow.WorkflowExecution{
@@ -459,12 +458,13 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 			Query: &workflow.WorkflowQuery{
 				QueryType: common.StringPtr(queryType),
 			},
+			QueryRejectCondition: rejectCondition,
 		})
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
-	go queryWorkflowFn(queryType)
+	go queryWorkflowFn(queryType, nil)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -479,10 +479,11 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
+	s.Nil(queryResult.Resp.QueryRejected)
 	queryResultString := string(queryResult.Resp.QueryResult)
 	s.Equal("query-result", queryResultString)
 
-	go queryWorkflowFn("invalid-query-type")
+	go queryWorkflowFn("invalid-query-type", nil)
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
@@ -497,6 +498,57 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	queryFailError, ok := queryResult.Err.(*workflow.QueryFailedError)
 	s.True(ok)
 	s.Equal("unknown-query-type", queryFailError.Message)
+
+	// advance the state of the decider
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.NoError(err)
+
+	go queryWorkflowFn(queryType, nil)
+	// process that query task, which should respond via RespondQueryTaskCompleted
+	for {
+		// loop until process the query task
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+		s.Nil(errInner)
+		if isQueryTask {
+			break
+		}
+	} // wait until query result is ready
+	queryResult = <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	s.Nil(queryResult.Resp.QueryRejected)
+	queryResultString = string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
+
+	rejectCondition := workflow.QueryRejectConditionNotOpen
+	go queryWorkflowFn(queryType, &rejectCondition)
+	queryResult = <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.Nil(queryResult.Resp.QueryResult)
+	s.NotNil(queryResult.Resp.QueryRejected.CloseStatus)
+	s.Equal(workflow.WorkflowExecutionCloseStatusCompleted, *queryResult.Resp.QueryRejected.CloseStatus)
+
+	rejectCondition = workflow.QueryRejectConditionNotCompletedCleanly
+	go queryWorkflowFn(queryType, &rejectCondition)
+	for {
+		// loop until process the query task
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+		s.Nil(errInner)
+		if isQueryTask {
+			break
+		}
+	} // wait until query result is ready
+	queryResult = <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	s.Nil(queryResult.Resp.QueryRejected)
+	queryResultString = string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
 }
 
 func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {

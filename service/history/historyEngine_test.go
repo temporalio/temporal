@@ -28,12 +28,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/history/historyservicetest"
+	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -57,10 +60,11 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		controller               *gomock.Controller
 		mockHistoryEngine        *historyEngineImpl
-		mockMatchingClient       *mocks.MatchingClient
 		mockArchivalClient       *archiver.ClientMock
-		mockHistoryClient        *mocks.HistoryClient
+		mockMatchingClient       *matchingservicetest.MockClient
+		mockHistoryClient        *historyservicetest.MockClient
 		mockMetadataMgr          *mocks.MetadataManager
 		mockVisibilityMgr        *mocks.VisibilityManager
 		mockExecutionMgr         *mocks.ExecutionManager
@@ -75,7 +79,7 @@ type (
 		mockService              service.Service
 		mockMetricClient         metrics.Client
 		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *mockQueueProcessor
+		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MockTimerQueueProcessor
 
 		shardClosedCh chan int
@@ -108,9 +112,10 @@ func (s *engineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	shardID := 10
-	s.mockMatchingClient = &mocks.MatchingClient{}
+	s.controller = gomock.NewController(s.T())
 	s.mockArchivalClient = &archiver.ClientMock{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
@@ -160,8 +165,8 @@ func (s *engineSuite) SetupTest() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
 	s.mockTxProcessor = &MockTransferQueueProcessor{}
 	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = &mockQueueProcessor{}
-	s.mockReplicationProcessor.On("notifyNewTask").Maybe()
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor = &MockTimerQueueProcessor{}
 	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
@@ -198,8 +203,8 @@ func (s *engineSuite) SetupTest() {
 }
 
 func (s *engineSuite) TearDownTest() {
+	s.controller.Finish()
 	s.mockHistoryEngine.historyEventNotifier.Stop()
-	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
@@ -209,7 +214,6 @@ func (s *engineSuite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockReplicationProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 }
 
@@ -881,7 +885,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	s.Equal(int32(50), *activity3Attributes.StartToCloseTimeoutSeconds)
 	s.Equal(int32(5), *activity3Attributes.HeartbeatTimeoutSeconds)
 
-	di, ok := executionBuilder.GetPendingDecision(15)
+	di, ok := executionBuilder.GetDecisionInfo(15)
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 }
@@ -1065,8 +1069,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	s.Equal(*decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Empty(executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID - 1)
+	s.True(executionBuilder.HasPendingDecision())
+	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
 	s.Equal(int64(0), di3.Attempt)
@@ -1164,8 +1168,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	s.Equal(*decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Empty(executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID - 1)
+	s.True(executionBuilder.HasPendingDecision())
+	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
 	s.Equal(int64(0), di3.Attempt)
@@ -1379,7 +1383,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 			s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-			s.False(executionBuilder.HasPendingDecisionTask())
+			s.False(executionBuilder.HasPendingDecision())
 
 			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).ActivityTaskScheduledEventAttributes
 			s.Equal(iVar.expectedScheduleToClose, activity1Attributes.GetScheduleToCloseTimeoutSeconds())
@@ -1389,7 +1393,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
 			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 			s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-			s.True(executionBuilder.HasPendingDecisionTask())
+			s.True(executionBuilder.HasPendingDecision())
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1464,7 +1468,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Empty(executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
+	s.True(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDecision() {
@@ -1539,7 +1543,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 
 	activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).ActivityTaskScheduledEventAttributes
 	s.Equal("activity1", *activity1Attributes.ActivityId)
@@ -1616,6 +1620,132 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 	s.Error(err, "decision heartbeat timeout")
 }
 
+func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeout() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
+
+	decisions := []*workflow.Decision{}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info: &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(true)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+			TaskToken:                  taskToken,
+			Decisions:                  decisions,
+			ExecutionContext:           executionContext,
+			Identity:                   &identity,
+		},
+	})
+	s.Nil(err)
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = 0
+
+	decisions := []*workflow.Decision{}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info: &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{
+				Retention:                1,
+				HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	s.mockClusterMetadata.On("IsArchivalEnabled").Return(true)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+			TaskToken:                  taskToken,
+			Decisions:                  decisions,
+			ExecutionContext:           executionContext,
+			Identity:                   &identity,
+		},
+	})
+	s.Nil(err)
+}
+
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() {
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{
@@ -1686,7 +1816,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateCompleted, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
@@ -1760,7 +1890,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateCompleted, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSuccess() {
@@ -2459,8 +2589,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(10))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(10))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(10), di.ScheduleID)
@@ -2594,8 +2724,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(8))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(8))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(8), di.ScheduleID)
@@ -2669,8 +2799,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(8))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(8))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(8), di.ScheduleID)
@@ -3180,8 +3310,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(10))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(10))
 	s.True(ok)
 	s.Equal(int32(25), di.DecisionTimeout)
 	s.Equal(int64(10), di.ScheduleID)
@@ -3315,8 +3445,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(8))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(8))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(8), di.ScheduleID)
@@ -3392,8 +3522,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(8))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(8))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(8), di.ScheduleID)
@@ -3525,7 +3655,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
@@ -3713,8 +3843,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(9))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(9))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(9), di.ScheduleID)
@@ -3788,8 +3918,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di, ok := executionBuilder.GetPendingDecision(int64(9))
+	s.True(executionBuilder.HasPendingDecision())
+	di, ok := executionBuilder.GetDecisionInfo(int64(9))
 	s.True(ok)
 	s.Equal(int32(100), di.DecisionTimeout)
 	s.Equal(int64(9), di.ScheduleID)
@@ -3977,7 +4107,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled() {
@@ -4052,8 +4182,8 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di2, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID - 1)
+	s.True(executionBuilder.HasPendingDecision())
+	di2, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di2.ScheduleID)
 	s.Equal(int64(0), di2.Attempt)
@@ -4132,7 +4262,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed() {
@@ -4215,7 +4345,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateCompleted, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat() {
@@ -4291,7 +4421,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
@@ -4346,7 +4476,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
+	s.True(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
@@ -4422,7 +4552,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
@@ -4477,7 +4607,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
+	s.True(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
@@ -4582,8 +4712,8 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.True(decisionFailedEvent)
 	executionBuilder = s.getBuilder(domainID, we)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.True(executionBuilder.HasPendingDecisionTask())
-	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID)
+	s.True(executionBuilder.HasPendingDecision())
+	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID)
 	s.True(ok, "DI.ScheduleID: %v, ScheduleID: %v, StartedID: %v", di2.ScheduleID,
 		executionBuilder.GetExecutionInfo().DecisionScheduleID, executionBuilder.GetExecutionInfo().DecisionStartedID)
 	s.Equal(executionBuilder.GetExecutionInfo().NextEventID, di3.ScheduleID)
@@ -4660,7 +4790,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer() {
@@ -4728,7 +4858,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() {
@@ -4745,6 +4875,21 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	})
 	identity := "testIdentity"
 	timerID := "t1"
+
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -4780,20 +4925,6 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 		return true
 	})).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
-				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{ClusterName: cluster.TestCurrentClusterName},
-				},
-			},
-			TableVersion: persistence.DomainTableVersionV1,
-		},
-		nil,
-	)
 	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
@@ -4809,7 +4940,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.False(executionBuilder.HasPendingDecision())
 	s.False(executionBuilder.HasBufferedEvents())
 }
 
@@ -5084,7 +5215,7 @@ func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution wo
 }
 
 func addDecisionTaskScheduledEvent(builder mutableState) *decisionInfo {
-	di, _ := builder.AddDecisionTaskScheduledEvent()
+	di, _ := builder.AddDecisionTaskScheduledEvent(false)
 	return di
 }
 
@@ -5336,59 +5467,60 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 
 func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *persistence.WorkflowExecutionInfo {
 	return &persistence.WorkflowExecutionInfo{
-		DomainID:                     sourceInfo.DomainID,
-		WorkflowID:                   sourceInfo.WorkflowID,
-		RunID:                        sourceInfo.RunID,
-		ParentDomainID:               sourceInfo.ParentDomainID,
-		ParentWorkflowID:             sourceInfo.ParentWorkflowID,
-		ParentRunID:                  sourceInfo.ParentRunID,
-		InitiatedID:                  sourceInfo.InitiatedID,
-		CompletionEventBatchID:       sourceInfo.CompletionEventBatchID,
-		CompletionEvent:              sourceInfo.CompletionEvent,
-		TaskList:                     sourceInfo.TaskList,
-		StickyTaskList:               sourceInfo.StickyTaskList,
-		StickyScheduleToStartTimeout: sourceInfo.StickyScheduleToStartTimeout,
-		WorkflowTypeName:             sourceInfo.WorkflowTypeName,
-		WorkflowTimeout:              sourceInfo.WorkflowTimeout,
-		DecisionTimeoutValue:         sourceInfo.DecisionTimeoutValue,
-		ExecutionContext:             sourceInfo.ExecutionContext,
-		State:                        sourceInfo.State,
-		CloseStatus:                  sourceInfo.CloseStatus,
-		LastFirstEventID:             sourceInfo.LastFirstEventID,
-		LastEventTaskID:              sourceInfo.LastEventTaskID,
-		NextEventID:                  sourceInfo.NextEventID,
-		LastProcessedEvent:           sourceInfo.LastProcessedEvent,
-		StartTimestamp:               sourceInfo.StartTimestamp,
-		LastUpdatedTimestamp:         sourceInfo.LastUpdatedTimestamp,
-		CreateRequestID:              sourceInfo.CreateRequestID,
-		SignalCount:                  sourceInfo.SignalCount,
-		DecisionVersion:              sourceInfo.DecisionVersion,
-		DecisionScheduleID:           sourceInfo.DecisionScheduleID,
-		DecisionStartedID:            sourceInfo.DecisionStartedID,
-		DecisionRequestID:            sourceInfo.DecisionRequestID,
-		DecisionTimeout:              sourceInfo.DecisionTimeout,
-		DecisionAttempt:              sourceInfo.DecisionAttempt,
-		DecisionStartedTimestamp:     sourceInfo.DecisionStartedTimestamp,
-		CancelRequested:              sourceInfo.CancelRequested,
-		CancelRequestID:              sourceInfo.CancelRequestID,
-		CronSchedule:                 sourceInfo.CronSchedule,
-		ClientLibraryVersion:         sourceInfo.ClientLibraryVersion,
-		ClientFeatureVersion:         sourceInfo.ClientFeatureVersion,
-		ClientImpl:                   sourceInfo.ClientImpl,
-		AutoResetPoints:              sourceInfo.AutoResetPoints,
-		Memo:                         sourceInfo.Memo,
-		SearchAttributes:             sourceInfo.SearchAttributes,
-		Attempt:                      sourceInfo.Attempt,
-		HasRetryPolicy:               sourceInfo.HasRetryPolicy,
-		InitialInterval:              sourceInfo.InitialInterval,
-		BackoffCoefficient:           sourceInfo.BackoffCoefficient,
-		MaximumInterval:              sourceInfo.MaximumInterval,
-		ExpirationTime:               sourceInfo.ExpirationTime,
-		MaximumAttempts:              sourceInfo.MaximumAttempts,
-		NonRetriableErrors:           sourceInfo.NonRetriableErrors,
-		EventStoreVersion:            sourceInfo.EventStoreVersion,
-		BranchToken:                  sourceInfo.BranchToken,
-		ExpirationSeconds:            sourceInfo.ExpirationSeconds,
+		DomainID:                           sourceInfo.DomainID,
+		WorkflowID:                         sourceInfo.WorkflowID,
+		RunID:                              sourceInfo.RunID,
+		ParentDomainID:                     sourceInfo.ParentDomainID,
+		ParentWorkflowID:                   sourceInfo.ParentWorkflowID,
+		ParentRunID:                        sourceInfo.ParentRunID,
+		InitiatedID:                        sourceInfo.InitiatedID,
+		CompletionEventBatchID:             sourceInfo.CompletionEventBatchID,
+		CompletionEvent:                    sourceInfo.CompletionEvent,
+		TaskList:                           sourceInfo.TaskList,
+		StickyTaskList:                     sourceInfo.StickyTaskList,
+		StickyScheduleToStartTimeout:       sourceInfo.StickyScheduleToStartTimeout,
+		WorkflowTypeName:                   sourceInfo.WorkflowTypeName,
+		WorkflowTimeout:                    sourceInfo.WorkflowTimeout,
+		DecisionTimeoutValue:               sourceInfo.DecisionTimeoutValue,
+		ExecutionContext:                   sourceInfo.ExecutionContext,
+		State:                              sourceInfo.State,
+		CloseStatus:                        sourceInfo.CloseStatus,
+		LastFirstEventID:                   sourceInfo.LastFirstEventID,
+		LastEventTaskID:                    sourceInfo.LastEventTaskID,
+		NextEventID:                        sourceInfo.NextEventID,
+		LastProcessedEvent:                 sourceInfo.LastProcessedEvent,
+		StartTimestamp:                     sourceInfo.StartTimestamp,
+		LastUpdatedTimestamp:               sourceInfo.LastUpdatedTimestamp,
+		CreateRequestID:                    sourceInfo.CreateRequestID,
+		SignalCount:                        sourceInfo.SignalCount,
+		DecisionVersion:                    sourceInfo.DecisionVersion,
+		DecisionScheduleID:                 sourceInfo.DecisionScheduleID,
+		DecisionStartedID:                  sourceInfo.DecisionStartedID,
+		DecisionRequestID:                  sourceInfo.DecisionRequestID,
+		DecisionTimeout:                    sourceInfo.DecisionTimeout,
+		DecisionAttempt:                    sourceInfo.DecisionAttempt,
+		DecisionStartedTimestamp:           sourceInfo.DecisionStartedTimestamp,
+		DecisionOriginalScheduledTimestamp: sourceInfo.DecisionOriginalScheduledTimestamp,
+		CancelRequested:                    sourceInfo.CancelRequested,
+		CancelRequestID:                    sourceInfo.CancelRequestID,
+		CronSchedule:                       sourceInfo.CronSchedule,
+		ClientLibraryVersion:               sourceInfo.ClientLibraryVersion,
+		ClientFeatureVersion:               sourceInfo.ClientFeatureVersion,
+		ClientImpl:                         sourceInfo.ClientImpl,
+		AutoResetPoints:                    sourceInfo.AutoResetPoints,
+		Memo:                               sourceInfo.Memo,
+		SearchAttributes:                   sourceInfo.SearchAttributes,
+		Attempt:                            sourceInfo.Attempt,
+		HasRetryPolicy:                     sourceInfo.HasRetryPolicy,
+		InitialInterval:                    sourceInfo.InitialInterval,
+		BackoffCoefficient:                 sourceInfo.BackoffCoefficient,
+		MaximumInterval:                    sourceInfo.MaximumInterval,
+		ExpirationTime:                     sourceInfo.ExpirationTime,
+		MaximumAttempts:                    sourceInfo.MaximumAttempts,
+		NonRetriableErrors:                 sourceInfo.NonRetriableErrors,
+		EventStoreVersion:                  sourceInfo.EventStoreVersion,
+		BranchToken:                        sourceInfo.BranchToken,
+		ExpirationSeconds:                  sourceInfo.ExpirationSeconds,
 	}
 }
 

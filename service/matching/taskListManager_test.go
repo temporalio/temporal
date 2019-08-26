@@ -34,7 +34,6 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -92,7 +91,7 @@ func createTestTaskListManagerWithConfig(cfg *Config) *taskListManagerImpl {
 	mockDomainCache := &cache.DomainCacheMock{}
 	mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.CreateDomainCacheEntry("domainName"), nil)
 	me := newMatchingEngine(
-		cfg, tm, &mocks.HistoryClient{}, logger, mockDomainCache,
+		cfg, tm, nil, logger, mockDomainCache,
 	)
 	tl := "tl"
 	dID := "domain"

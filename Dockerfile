@@ -14,7 +14,7 @@ WORKDIR /cadence
 ENV GOFLAGS="-mod=readonly"
 
 # Copy go mod dependencies and build cache
-COPY go.* .
+COPY go.* ./
 RUN go mod download
 
 COPY . .

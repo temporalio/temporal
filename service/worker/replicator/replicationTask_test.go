@@ -25,9 +25,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
+	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/common/clock"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
@@ -40,7 +42,6 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	messageMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/xdc"
 	"go.uber.org/zap"
@@ -55,8 +56,10 @@ type (
 
 		mockTimeSource    *clock.EventTimeSource
 		mockMsg           *messageMocks.Message
-		mockHistoryClient *mocks.HistoryClient
+		mockHistoryClient *historyservicetest.MockClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
+
+		controller *gomock.Controller
 	}
 
 	historyReplicationTaskSuite struct {
@@ -68,8 +71,10 @@ type (
 
 		mockTimeSource    *clock.EventTimeSource
 		mockMsg           *messageMocks.Message
-		mockHistoryClient *mocks.HistoryClient
+		mockHistoryClient *historyservicetest.MockClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
+
+		controller *gomock.Controller
 	}
 
 	historyMetadataReplicationTaskSuite struct {
@@ -81,8 +86,10 @@ type (
 
 		mockTimeSource    *clock.EventTimeSource
 		mockMsg           *messageMocks.Message
-		mockHistoryClient *mocks.HistoryClient
+		mockHistoryClient *historyservicetest.MockClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
+
+		controller *gomock.Controller
 	}
 )
 
@@ -121,14 +128,15 @@ func (s *activityReplicationTaskSuite) SetupTest() {
 
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockMsg = &messageMocks.Message{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.controller = gomock.NewController(s.T())
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 }
 
 func (s *activityReplicationTaskSuite) TearDownTest() {
 	s.mockMsg.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
 	s.mockRereplicator.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *historyReplicationTaskSuite) SetupSuite() {
@@ -152,14 +160,15 @@ func (s *historyReplicationTaskSuite) SetupTest() {
 
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockMsg = &messageMocks.Message{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.controller = gomock.NewController(s.T())
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 }
 
 func (s *historyReplicationTaskSuite) TearDownTest() {
 	s.mockMsg.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
 	s.mockRereplicator.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *historyMetadataReplicationTaskSuite) SetupSuite() {
@@ -182,14 +191,15 @@ func (s *historyMetadataReplicationTaskSuite) SetupTest() {
 
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockMsg = &messageMocks.Message{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.controller = gomock.NewController(s.T())
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 }
 
 func (s *historyMetadataReplicationTaskSuite) TearDownTest() {
 	s.mockMsg.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
 	s.mockRereplicator.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
@@ -246,7 +256,7 @@ func (s *activityReplicationTaskSuite) TestExecute() {
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 
 	randomErr := errors.New("some random error")
-	s.mockHistoryClient.On("SyncActivity", mock.Anything, task.req).Return(randomErr).Once()
+	s.mockHistoryClient.EXPECT().SyncActivity(gomock.Any(), task.req).Return(randomErr).Times(1)
 	err := task.Execute()
 	s.Equal(randomErr, err)
 }
@@ -294,7 +304,7 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 		retryErr.GetRunId(), retryErr.GetNextEventId(),
 		task.queueID.RunID, task.taskID+1,
 	).Return(nil).Once()
-	s.mockHistoryClient.On("SyncActivity", mock.Anything, task.req).Return(nil).Once()
+	s.mockHistoryClient.EXPECT().SyncActivity(gomock.Any(), task.req).Return(nil).Times(1)
 	err = task.HandleErr(retryErr)
 	s.Nil(err)
 }
@@ -402,7 +412,7 @@ func (s *historyReplicationTaskSuite) TestExecute() {
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 
 	randomErr := errors.New("some random error")
-	s.mockHistoryClient.On("ReplicateEvents", mock.Anything, task.req).Return(randomErr).Once()
+	s.mockHistoryClient.EXPECT().ReplicateEvents(gomock.Any(), task.req).Return(randomErr).Times(1)
 	err := task.Execute()
 	s.Equal(randomErr, err)
 }
@@ -450,7 +460,7 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 		retryErr.GetRunId(), retryErr.GetNextEventId(),
 		task.queueID.RunID, task.taskID,
 	).Return(nil).Once()
-	s.mockHistoryClient.On("ReplicateEvents", mock.Anything, task.req).Return(nil).Once()
+	s.mockHistoryClient.EXPECT().ReplicateEvents(gomock.Any(), task.req).Return(nil).Times(1)
 	err = task.HandleErr(retryErr)
 	s.Nil(err)
 }

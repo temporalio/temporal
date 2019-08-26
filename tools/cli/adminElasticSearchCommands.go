@@ -25,6 +25,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/tokenbucket"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -196,6 +199,60 @@ func AdminIndex(c *cli.Context) {
 		if i%batchSize == batchSize-1 {
 			bulkConductFn()
 		}
+	}
+	if bulkRequest.NumberOfActions() != 0 {
+		bulkConductFn()
+	}
+}
+
+// AdminDelete used to delete documents from ElasticSearch with input of list result
+func AdminDelete(c *cli.Context) {
+	esClient := getESClient(c)
+	indexName := getRequiredOption(c, FlagIndex)
+	inputFileName := getRequiredOption(c, FlagInputFile)
+	batchSize := c.Int(FlagBatchSize)
+	rps := c.Int(FlagRPS)
+	ratelimiter := tokenbucket.New(rps, clock.NewRealTimeSource())
+
+	file, err := os.Open(inputFileName)
+	if err != nil {
+		ErrorAndExit("Cannot open input file", nil)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+
+	scanner.Scan() // skip first line
+	i := 0
+
+	bulkRequest := esClient.Bulk()
+	bulkConductFn := func() {
+		ok, waitTime := ratelimiter.TryConsume(1)
+		if !ok {
+			time.Sleep(waitTime)
+		}
+		_, err := bulkRequest.Do(context.Background())
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Bulk failed, current processed row %d", i), err)
+		}
+		if bulkRequest.NumberOfActions() != 0 {
+			ErrorAndExit(fmt.Sprintf("Bulk request not done, current processed row %d", i), err)
+		}
+	}
+
+	for scanner.Scan() {
+		line := strings.Split(scanner.Text(), "|")
+		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
+		req := elastic.NewBulkDeleteRequest().
+			Index(indexName).
+			Type(esDocType).
+			Id(docID).
+			VersionType(versionTypeExternal).
+			Version(math.MaxInt64)
+		bulkRequest.Add(req)
+		if i%batchSize == batchSize-1 {
+			bulkConductFn()
+		}
+		i++
 	}
 	if bulkRequest.NumberOfActions() != 0 {
 		bulkConductFn()

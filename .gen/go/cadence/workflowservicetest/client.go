@@ -29,6 +29,7 @@ import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
 	workflowserviceclient "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	yarpc "go.uber.org/yarpc"
 )
@@ -225,6 +226,39 @@ func (mr *_MockClientRecorder) DescribeWorkflowExecution(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _DescribeRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeWorkflowExecution", args...)
+}
+
+// GetReplicationMessages responds to a GetReplicationMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().GetReplicationMessages(gomock.Any(), ...).Return(...)
+// 	... := client.GetReplicationMessages(...)
+func (m *MockClient) GetReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetReplicationMessagesResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "GetReplicationMessages", args...)
+	success, _ = ret[i].(*replicator.GetReplicationMessagesResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) GetReplicationMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "GetReplicationMessages", args...)
 }
 
 // GetSearchAttributes responds to a GetSearchAttributes call based on the mock expectations. This

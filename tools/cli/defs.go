@@ -46,6 +46,7 @@ const (
 
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500
+	defaultPageSizeForScan          = 2000
 	defaultWorkflowIDReusePolicy    = s.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 
 	workflowStatusNotSet = -1

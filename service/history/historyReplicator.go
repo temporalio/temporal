@@ -1053,8 +1053,8 @@ func (r *historyReplicator) terminateWorkflow(
 	}
 	var currentLastWriteVersion int64
 	var err error
-	err = r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, true, false,
-		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+	err = r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, false,
+		func(msBuilder mutableState, tBuilder *timerBuilder) error {
 
 			// compare the current last write version first
 			// since this function has assumption that
@@ -1062,10 +1062,10 @@ func (r *historyReplicator) terminateWorkflow(
 			// if assumption is broken (race condition), then retry
 			currentLastWriteVersion, err = msBuilder.GetLastWriteVersion()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if incomingVersion <= currentLastWriteVersion {
-				return nil, newRetryTaskErrorWithHint(
+				return newRetryTaskErrorWithHint(
 					ErrRetryExistingWorkflowMsg,
 					domainID,
 					workflowID,
@@ -1075,7 +1075,7 @@ func (r *historyReplicator) terminateWorkflow(
 			}
 
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
+				return ErrWorkflowCompleted
 			}
 
 			// incomingVersion > currentLastWriteVersion
@@ -1084,7 +1084,7 @@ func (r *historyReplicator) terminateWorkflow(
 			// if last write version indicates not from current cluster, need to fetch from remote
 			sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(currentLastWriteVersion)
 			if sourceCluster != r.clusterMetadata.GetCurrentClusterName() {
-				return nil, newRetryTaskErrorWithHint(
+				return newRetryTaskErrorWithHint(
 					ErrRetryExistingWorkflowMsg,
 					domainID,
 					workflowID,
@@ -1100,10 +1100,10 @@ func (r *historyReplicator) terminateWorkflow(
 				[]byte(fmt.Sprintf("terminated by version: %v", incomingVersion)),
 				workflowTerminationIdentity,
 			); err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
 			}
 
-			return nil, nil
+			return nil
 		})
 
 	if err != nil {
@@ -1224,13 +1224,13 @@ func (r *historyReplicator) flushEventsBuffer(
 		return err
 	}
 
-	di, ok := msBuilder.GetInFlightDecisionTask()
+	decision, ok := msBuilder.GetInFlightDecision()
 	if !ok {
 		return ErrCorruptedMutableStateDecision
 	}
 	if _, err = msBuilder.AddDecisionTaskFailedEvent(
-		di.ScheduleID,
-		di.StartedID,
+		decision.ScheduleID,
+		decision.StartedID,
 		workflow.DecisionTaskFailedCauseFailoverCloseDecision,
 		nil, identityHistoryService,
 		"",
@@ -1325,7 +1325,17 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	resetRequestID := uuid.New()
 	// workflow event buffer guarantee that the event immediately
 	// after the decision task started is decision task finished event
-	resetDecisionID := msBuilder.GetPreviousStartedEventID() + 1
+	lastDecisionTaskStartEventID := msBuilder.GetPreviousStartedEventID()
+	if lastDecisionTaskStartEventID == common.EmptyEventID {
+		// TODO when https://github.com/uber/cadence/issues/2420 is finished
+		//  reset to workflow finish event
+		errStr := "cannot reapply signal due to workflow missing decision"
+		logger.Error(errStr)
+		return &shared.BadRequestError{Message: errStr}
+
+	}
+
+	resetDecisionFinishID := lastDecisionTaskStartEventID + 1
 
 	baseContext := context
 	baseMutableState := msBuilder
@@ -1337,7 +1347,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 			Domain:                common.StringPtr(domainEntry.GetInfo().Name),
 			WorkflowExecution:     context.getExecution(),
 			Reason:                common.StringPtr(workflowResetReason),
-			DecisionFinishEventId: common.Int64Ptr(resetDecisionID),
+			DecisionFinishEventId: common.Int64Ptr(resetDecisionFinishID),
 			RequestId:             common.StringPtr(resetRequestID),
 		},
 		baseContext,
@@ -1417,26 +1427,10 @@ func (r *historyReplicator) persistWorkflowMutation(
 	timerTasks []persistence.Task,
 ) error {
 
-	if !msBuilder.HasPendingDecisionTask() {
-		executionInfo := msBuilder.GetExecutionInfo()
-		di, err := msBuilder.AddDecisionTaskScheduledEvent()
+	if !msBuilder.HasPendingDecision() {
+		_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
 		if err != nil {
 			return ErrWorkflowMutationDecision
-		}
-		msBuilder.AddTransferTasks(&persistence.DecisionTask{
-			DomainID:   executionInfo.DomainID,
-			TaskList:   di.TaskList,
-			ScheduleID: di.ScheduleID,
-		})
-
-		if msBuilder.IsStickyTaskListEnabled() {
-			tBuilder := newTimerBuilder(r.timeSource)
-			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(
-				di.ScheduleID,
-				di.Attempt,
-				executionInfo.StickyScheduleToStartTimeout,
-			)
-			msBuilder.AddTimerTasks(stickyTaskTimeoutTimer)
 		}
 	}
 

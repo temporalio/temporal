@@ -3,7 +3,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_ci"
+    command: "make cover_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
     plugins:
       - docker-compose#v3.0.0:
           run: unit-test
@@ -13,7 +15,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_integration_ci"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -26,7 +30,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_integration_ci EVENTSV2=true"
+    command: "make cover_integration_profile EVENTSV2=true"
+    artifact_paths:
+      - "build/coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -39,7 +45,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_xdc_ci"
+    command: "make cover_xdc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -52,7 +60,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_integration_ci"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -65,7 +75,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_integration_ci EVENTSV2=true"
+    command: "make cover_integration_profile EVENTSV2=true"
+    artifact_paths:
+      - "build/coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -78,7 +90,9 @@ steps:
     agents:
       queue: "workers"
       docker: "*"
-    command: "make cover_xdc_ci"
+    command: "make cover_xdc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
     retry:
       automatic:
         limit: 1
@@ -88,6 +102,19 @@ steps:
           config: docker/buildkite/docker-compose.yml
 
   - wait
+
+  - label: ":golang: code-coverage"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "scripts/buildkite/gocov.sh"
+    retry:
+      automatic:
+        limit: 2
+    plugins:
+      - docker-compose#v3.0.0:
+          run: coverage-report
+          config: docker/buildkite/docker-compose.yml
 
   - label: ":docker: build and push master"
     agents:

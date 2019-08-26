@@ -96,8 +96,14 @@ func newTransferQueueProcessor(
 				logger,
 			)
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
-				clusterName, shard, historyService, visibilityMgr,
-				matchingClient, taskAllocator, historyRereplicator, logger,
+				clusterName,
+				shard,
+				historyService,
+				visibilityMgr,
+				matchingClient,
+				taskAllocator,
+				historyRereplicator,
+				logger,
 			)
 		}
 	}
@@ -116,7 +122,15 @@ func newTransferQueueProcessor(
 		ackLevel:              shard.GetTransferAckLevel(),
 		logger:                logger,
 		shutdownChan:          make(chan struct{}),
-		activeTaskProcessor:   newTransferQueueActiveProcessor(shard, historyService, visibilityMgr, matchingClient, historyClient, taskAllocator, logger),
+		activeTaskProcessor: newTransferQueueActiveProcessor(
+			shard,
+			historyService,
+			visibilityMgr,
+			matchingClient,
+			historyClient,
+			taskAllocator,
+			logger,
+		),
 		standbyTaskProcessors: standbyTaskProcessors,
 	}
 }
@@ -197,8 +211,17 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 		tag.MinLevel(minLevel),
 		tag.MaxLevel(maxLevel))
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
-		t.shard, t.historyService, t.visibilityMgr, t.matchingClient, t.historyClient,
-		domainIDs, standbyClusterName, minLevel, maxLevel, t.taskAllocator, t.logger,
+		t.shard,
+		t.historyService,
+		t.visibilityMgr,
+		t.matchingClient,
+		t.historyClient,
+		domainIDs,
+		standbyClusterName,
+		minLevel,
+		maxLevel,
+		t.taskAllocator,
+		t.logger,
 	)
 
 	for _, standbyTaskProcessor := range t.standbyTaskProcessors {

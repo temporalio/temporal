@@ -102,14 +102,20 @@ func newTransferQueueStandbyProcessor(
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
-			shard, options, visibilityMgr, matchingClient,
-			maxReadAckLevel, updateClusterAckLevel, transferQueueShutdown, logger,
+			shard,
+			options,
+			visibilityMgr,
+			matchingClient,
+			maxReadAckLevel,
+			updateClusterAckLevel,
+			transferQueueShutdown,
+			logger,
 		),
 		historyRereplicator: historyRereplicator,
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -122,6 +128,10 @@ func (t *transferQueueStandbyProcessorImpl) getTaskFilter() queueTaskFilter {
 
 func (t *transferQueueStandbyProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
+}
+
+func (t *transferQueueStandbyProcessorImpl) complete(qTask queueTaskInfo) {
+	t.queueProcessorBase.complete(qTask)
 }
 
 func (t *transferQueueStandbyProcessorImpl) process(
@@ -244,7 +254,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(
 	processTaskIfClosed := false
 
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
-		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
+		decisionInfo, isPending := msBuilder.GetDecisionInfo(transferTask.ScheduleID)
 		if !isPending {
 			return nil
 		}
@@ -311,7 +321,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		workflowTypeName := executionInfo.WorkflowTypeName
 		workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 		workflowCloseTimestamp := wfCloseTime
-		workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := msBuilder.GetNextEventID() - 1
 		startEvent, err := msBuilder.GetStartEvent()
 		if err != nil {
