@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build test
-
 package history
 
 import (
@@ -34,13 +32,11 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -51,25 +47,17 @@ type (
 	nDCWorkflowSuite struct {
 		suite.Suite
 
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMetadataMgr     *mocks.MetadataManager
-		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockShard           *shardContextImpl
+		mockClusterMetadata *mocks.ClusterMetadata
 		mockDomainCache     *cache.DomainCacheMock
-		mockClientBean      *client.MockClientBean
-		mockEventsCache     *MockEventsCache
+		mockContext         *mockWorkflowExecutionContext
+		mockMutableState    *mockMutableState
+		logger              log.Logger
 
-		mockContext      *mockWorkflowExecutionContext
-		mockMutableState *mockMutableState
-		domainID         string
-		workflowID       string
-		runID            string
+		domainID   string
+		workflowID string
+		runID      string
 	}
 )
 
@@ -80,33 +68,21 @@ func TestNDCWorkflowSuite(t *testing.T) {
 
 func (s *nDCWorkflowSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockShardManager = &mocks.ShardManager{}
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockEventsCache = &MockEventsCache{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		historyV2Mgr:              s.mockHistoryV2Mgr,
-		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		eventsCache:               s.mockEventsCache,
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
@@ -119,15 +95,7 @@ func (s *nDCWorkflowSuite) SetupTest() {
 }
 
 func (s *nDCWorkflowSuite) TearDownTest() {
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockShardManager.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
-	s.mockEventsCache.AssertExpectations(s.T())
-
 	s.mockContext.AssertExpectations(s.T())
 	s.mockMutableState.AssertExpectations(s.T())
 }
@@ -355,36 +323,28 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastEventVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID},
-		&persistence.DomainConfig{},
-		&persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
-			},
-		},
-		1234,
-		s.mockClusterMetadata,
-	), nil)
 
 	s.mockMutableState.On("UpdateCurrentVersion", lastEventVersion, true)
+	inFlightDecision := &decisionInfo{
+		Version:    1234,
+		ScheduleID: 5678,
+		StartedID:  9012,
+	}
+	s.mockMutableState.On("GetInFlightDecision").Return(inFlightDecision, true).Times(1)
+	s.mockMutableState.On("AddDecisionTaskFailedEvent",
+		inFlightDecision.ScheduleID,
+		inFlightDecision.StartedID,
+		shared.DecisionTaskFailedCauseFailoverCloseDecision,
+		[]byte(nil),
+		identityHistoryService,
+		"",
+		"",
+		"",
+		int64(0),
+	).Return(&shared.HistoryEvent{}, nil).Times(1)
+	s.mockMutableState.On("FlushBufferedEvents").Return(nil).Times(1)
+
 	s.mockMutableState.On("AddWorkflowExecutionTerminatedEvent", mock.Anything, mock.Anything, mock.Anything).Return(&shared.HistoryEvent{}, nil)
-	s.mockMutableState.On("AddTransferTasks", mock.MatchedBy(func(tasks []persistence.Task) bool {
-		if len(tasks) != 1 {
-			return false
-		}
-		_, ok := tasks[0].(*persistence.CloseExecutionTask)
-		return ok
-	})).Once()
-	s.mockMutableState.On("AddTimerTasks", mock.MatchedBy(func(tasks []persistence.Task) bool {
-		if len(tasks) != 1 {
-			return false
-		}
-		_, ok := tasks[0].(*persistence.DeleteHistoryEventTask)
-		return ok
-	})).Once()
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()

@@ -27,8 +27,8 @@ import (
 	"fmt"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -176,28 +176,33 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 
 	// do not persist the change right now, NDC requires transaction
 	r.mutableState.UpdateCurrentVersion(lastWriteVersion, true)
+
+	if decision, ok := r.mutableState.GetInFlightDecision(); ok {
+		if _, err := r.mutableState.AddDecisionTaskFailedEvent(
+			decision.ScheduleID,
+			decision.StartedID,
+			workflow.DecisionTaskFailedCauseFailoverCloseDecision,
+			nil,
+			identityHistoryService,
+			"",
+			"",
+			"",
+			0,
+		); err != nil {
+			return err
+		}
+
+		if err := r.mutableState.FlushBufferedEvents(); err != nil {
+			return err
+		}
+	}
+
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		workflowTerminationReason,
 		[]byte(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		workflowTerminationIdentity,
 	)
-	if err != nil {
-		return err
-	}
 
-	// add close workflow tasks
-	executionInfo := r.mutableState.GetExecutionInfo()
-	transferTask, timerTask, err := getWorkflowCleanupTasks(
-		r.domainCache,
-		executionInfo.DomainID,
-		executionInfo.WorkflowID,
-		newTimerBuilder(clock.NewRealTimeSource()), // terminate workflow as active
-	)
-	if err != nil {
-		return err
-	}
-	r.mutableState.AddTransferTasks(transferTask)
-	r.mutableState.AddTimerTasks(timerTask)
 	return err
 }
 

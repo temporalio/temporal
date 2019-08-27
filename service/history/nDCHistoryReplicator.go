@@ -208,12 +208,12 @@ func (r *nDCHistoryReplicator) applyEvents(
 
 		case *shared.EntityNotExistsError:
 			// mutable state not created, check if is workflow reset
-			mutableState, completeFn, err := r.applyNonStartEventsMissingMutableState(ctx, context, task)
+			mutableState, err := r.applyNonStartEventsMissingMutableState(ctx, context, task)
 			if err != nil {
 				return err
 			}
 
-			return r.applyNonStartEventsResetWorkflow(ctx, context, mutableState, completeFn, task)
+			return r.applyNonStartEventsResetWorkflow(ctx, context, mutableState, task)
 
 		default:
 			// unable to get mutable state, return err so we can retry the task later
@@ -470,12 +470,12 @@ func (r *nDCHistoryReplicator) applyNonStartEventsMissingMutableState(
 	ctx ctx.Context,
 	newContext workflowExecutionContext,
 	task nDCReplicationTask,
-) (mutableState, nDCWorkflowResetterCompleteFn, error) {
+) (mutableState, error) {
 
 	// for non reset workflow execution replication task, just do re-application
 	if !task.getRequest().GetResetWorkflow() {
 		// TODO we should use a new retry error for 3+DC
-		return nil, nil, newRetryTaskErrorWithHint(
+		return nil, newRetryTaskErrorWithHint(
 			ErrWorkflowNotFoundMsg,
 			task.getDomainID(),
 			task.getWorkflowID(),
@@ -500,18 +500,15 @@ func (r *nDCHistoryReplicator) applyNonStartEventsMissingMutableState(
 		task.getLogger(),
 	)
 
-	return workflowResetter.resetWorkflow(ctx, baseEventID, baseEventVersion)
+	return workflowResetter.resetWorkflow(ctx, task.getEventTime(), baseEventID, baseEventVersion)
 }
 
 func (r *nDCHistoryReplicator) applyNonStartEventsResetWorkflow(
 	ctx ctx.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
-	completeFn nDCWorkflowResetterCompleteFn,
 	task nDCReplicationTask,
 ) error {
-
-	defer completeFn()
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())

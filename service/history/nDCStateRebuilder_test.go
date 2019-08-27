@@ -18,20 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build test
-
 package history
 
 import (
 	ctx "context"
 	"testing"
+	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -40,31 +39,26 @@ import (
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
 	nDCStateRebuilderSuite struct {
 		suite.Suite
 
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMetadataMgr     *mocks.MetadataManager
-		mockMessagingClient messaging.Client
+		controller        *gomock.Controller
+		mockTaskRefresher *MockmutableStateTaskRefresher
+
 		mockService         service.Service
 		mockShard           *shardContextImpl
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
+		mockClusterMetadata *mocks.ClusterMetadata
 		mockDomainCache     *cache.DomainCacheMock
-		mockClientBean      *client.MockClientBean
 		mockEventsCache     *MockEventsCache
+		logger              log.Logger
 
 		domainID   string
 		domainName string
@@ -83,15 +77,9 @@ func TestNDCStateRebuilderSuite(t *testing.T) {
 func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockShardManager = &mocks.ShardManager{}
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockEventsCache = &MockEventsCache{}
 
@@ -99,9 +87,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
-		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
@@ -112,7 +98,9 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockShard.config.EnableVisibilityToKafka = dynamicconfig.GetBoolPropertyFn(true)
+
+	s.controller = gomock.NewController(s.T())
+	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
@@ -121,17 +109,14 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.nDCStateRebuilder = newNDCStateRebuilder(
 		s.mockShard, s.logger,
 	)
+	s.nDCStateRebuilder.taskRefresher = s.mockTaskRefresher
 }
 
 func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockShardManager.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
@@ -253,6 +238,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
+	now := time.Now()
 
 	targetDomainID := uuid.New()
 	targetDomainName := "other random domain name"
@@ -328,10 +314,12 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		1234,
 		s.mockClusterMetadata,
 	), nil)
+	s.mockTaskRefresher.EXPECT().refreshTasks(now, gomock.Any()).Return(nil).Times(1)
 
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		ctx.Background(),
+		now,
 		definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID),
 		branchToken,
 		nextEventID,

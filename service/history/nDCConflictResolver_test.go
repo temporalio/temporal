@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build test
-
 package history
 
 import (
@@ -31,48 +29,33 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
 	nDCConflictResolverSuite struct {
 		suite.Suite
 
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMetadataMgr     *mocks.MetadataManager
-		mockMessagingClient messaging.Client
-		mockService         service.Service
-		mockShard           *shardContextImpl
-		mockDomainCache     *cache.DomainCacheMock
-		mockClientBean      *client.MockClientBean
-		mockEventsCache     *MockEventsCache
+		controller       *gomock.Controller
+		mockStateBuilder *MocknDCStateRebuilder
 
+		mockService      service.Service
+		mockShard        *shardContextImpl
 		mockContext      *mockWorkflowExecutionContext
 		mockMutableState *mockMutableState
-		domainID         string
-		domainName       string
-		workflowID       string
-		runID            string
+		logger           log.Logger
 
-		controller          *gomock.Controller
-		mockStateBuilder    *MocknDCStateRebuilder
+		domainID   string
+		domainName string
+		workflowID string
+		runID      string
+
 		nDCConflictResolver *nDCConflictResolverImpl
 	}
 )
@@ -84,37 +67,20 @@ func TestNDCConflictResolverSuite(t *testing.T) {
 
 func (s *nDCConflictResolverSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockShardManager = &mocks.ShardManager{}
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockEventsCache = &MockEventsCache{}
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		historyV2Mgr:              s.mockHistoryV2Mgr,
-		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		eventsCache:               s.mockEventsCache,
 		timeSource:                clock.NewRealTimeSource(),
 	}
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockShard.config.EnableVisibilityToKafka = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
@@ -132,17 +98,8 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 }
 
 func (s *nDCConflictResolverSuite) TearDownTest() {
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockShardManager.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
-	s.mockDomainCache.AssertExpectations(s.T())
-	s.mockEventsCache.AssertExpectations(s.T())
-
+	s.mockContext.AssertExpectations(s.T())
 	s.mockMutableState.AssertExpectations(s.T())
-
 	s.controller.Finish()
 }
 
@@ -197,6 +154,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
+		gomock.Any(),
 		workflowIdentifier,
 		branchToken1,
 		lastEventID1+1,
@@ -285,14 +243,10 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	).Once()
 	mockRebuildMutableState.On("SetVersionHistories", versionHistories).Return(nil).Once()
 	mockRebuildMutableState.On("SetUpdateCondition", updateCondition).Once()
-	if s.mockShard.config.EnableVisibilityToKafka() {
-		mockRebuildMutableState.On("AddTransferTasks", []persistence.Task{
-			&persistence.UpsertWorkflowSearchAttributesTask{},
-		}).Once()
-	}
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
+		gomock.Any(),
 		workflowIdentifier,
 		branchToken1,
 		lastEventID1+1,

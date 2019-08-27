@@ -25,6 +25,7 @@ package history
 import (
 	ctx "context"
 	"fmt"
+	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -41,6 +42,7 @@ type (
 	nDCStateRebuilder interface {
 		rebuild(
 			ctx ctx.Context,
+			now time.Time,
 			baseWorkflowIdentifier definition.WorkflowIdentifier,
 			baseBranchToken []byte,
 			baseNextEventID int64,
@@ -52,8 +54,10 @@ type (
 	nDCStateRebuilderImpl struct {
 		shard           ShardContext
 		domainCache     cache.DomainCache
+		eventsCache     eventsCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
+		taskRefresher   mutableStateTaskRefresher
 
 		rebuiltHistorySize int64
 		logger             log.Logger
@@ -70,9 +74,15 @@ func newNDCStateRebuilder(
 	return &nDCStateRebuilderImpl{
 		shard:           shard,
 		domainCache:     shard.GetDomainCache(),
+		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
-
+		taskRefresher: newMutableStateTaskRefresher(
+			shard.GetConfig(),
+			shard.GetDomainCache(),
+			shard.GetEventsCache(),
+			logger,
+		),
 		rebuiltHistorySize: 0,
 		logger:             logger,
 	}
@@ -80,6 +90,7 @@ func newNDCStateRebuilder(
 
 func (r *nDCStateRebuilderImpl) rebuild(
 	ctx ctx.Context,
+	now time.Time,
 	baseWorkflowIdentifier definition.WorkflowIdentifier,
 	baseBranchToken []byte,
 	baseNextEventID int64,
@@ -133,8 +144,16 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, 0, err
 	}
 
-	// TODO refresh tasks before return
-	//  this includes UpsertWorkflowSearchAttributesTask
+	// close rebuilt mutable state transaction clearing all generated tasks, etc.
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, transactionPolicyPassive)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// refresh tasks to be generated
+	if err := r.taskRefresher.refreshTasks(now, rebuiltMutableState); err != nil {
+		return nil, 0, err
+	}
 
 	return rebuiltMutableState, r.rebuiltHistorySize, nil
 }

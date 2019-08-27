@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build test
-
 package history
 
 import (
@@ -32,7 +30,6 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -46,18 +43,14 @@ type (
 	nDCTransactionMgrSuite struct {
 		suite.Suite
 
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockMetadataMgr     *mocks.MetadataManager
-		mockService         service.Service
-		mockShard           *shardContextImpl
-		mockDomainCache     *cache.DomainCacheMock
-
 		controller    *gomock.Controller
 		mockCreateMgr *MocknDCTransactionMgrForNewWorkflow
 		mockUpdateMgr *MocknDCTransactionMgrForExistingWorkflow
+
+		mockService      service.Service
+		mockShard        *shardContextImpl
+		mockExecutionMgr *mocks.ExecutionManager
+		logger           log.Logger
 
 		transactionMgr *nDCTransactionMgrImpl
 	}
@@ -70,25 +63,19 @@ func TestNDCTransactionMgrSuite(t *testing.T) {
 
 func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
-		historyV2Mgr:              s.mockHistoryV2Mgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               s.mockDomainCache,
 		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
 	}
@@ -103,10 +90,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 }
 
 func (s *nDCTransactionMgrSuite) TearDownTest() {
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 

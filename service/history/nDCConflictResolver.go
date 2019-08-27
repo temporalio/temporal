@@ -139,6 +139,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
 		ctx,
+		executionInfo.StartTimestamp,
 		workflowIdentifier,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventID()+1,

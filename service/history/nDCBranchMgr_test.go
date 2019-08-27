@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build test
-
 package history
 
 import (
@@ -31,14 +29,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -49,26 +44,18 @@ type (
 	nDCBranchMgrSuite struct {
 		suite.Suite
 
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockShardManager    *mocks.ShardManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMetadataMgr     *mocks.MetadataManager
-		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockShard           *shardContextImpl
-		mockDomainCache     *cache.DomainCacheMock
-		mockClientBean      *client.MockClientBean
-		mockEventsCache     *MockEventsCache
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
+		mockClusterMetadata *mocks.ClusterMetadata
+		mockContext         *mockWorkflowExecutionContext
+		mockMutableState    *mockMutableState
+		logger              log.Logger
 
-		mockContext      *mockWorkflowExecutionContext
-		mockMutableState *mockMutableState
-		branchIndex      int
-		domainID         string
-		workflowID       string
-		runID            string
+		branchIndex int
+		domainID    string
+		workflowID  string
+		runID       string
 
 		nDCBranchMgr *nDCBranchMgrImpl
 	}
@@ -82,32 +69,20 @@ func TestNDCBranchMgrSuite(t *testing.T) {
 func (s *nDCBranchMgrSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockShardManager = &mocks.ShardManager{}
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockEventsCache = &MockEventsCache{}
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
-		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		eventsCache:               s.mockEventsCache,
 		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
@@ -125,14 +100,6 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 
 func (s *nDCBranchMgrSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockShardManager.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
-	s.mockDomainCache.AssertExpectations(s.T())
-	s.mockEventsCache.AssertExpectations(s.T())
-
 	s.mockContext.AssertExpectations(s.T())
 	s.mockMutableState.AssertExpectations(s.T())
 }

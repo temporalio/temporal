@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutableStateTaskRefresher_mock.go
+
 package history
 
 import (
@@ -35,91 +37,140 @@ var emptyTasks = []persistence.Task{}
 
 type (
 	mutableStateTaskRefresher interface {
-		refreshTasks(now time.Time) error
+		refreshTasks(now time.Time, mutableState mutableState) error
 	}
 
 	mutableStateTaskRefresherImpl struct {
+		config      *Config
 		domainCache cache.DomainCache
 		eventsCache eventsCache
 		logger      log.Logger
-
-		mutableState  mutableState
-		taskGenerator mutableStateTaskGenerator
 	}
 )
 
 func newMutableStateTaskRefresher(
+	config *Config,
 	domainCache cache.DomainCache,
 	eventsCache eventsCache,
 	logger log.Logger,
-	mutableState mutableState,
 ) *mutableStateTaskRefresherImpl {
 
 	return &mutableStateTaskRefresherImpl{
+		config:      config,
 		domainCache: domainCache,
 		eventsCache: eventsCache,
 		logger:      logger,
-
-		mutableState: mutableState,
-		taskGenerator: newMutableStateTaskGenerator(
-			domainCache,
-			logger,
-			mutableState,
-		),
 	}
 }
 
-func (r *mutableStateTaskRefresherImpl) refreshTasks(now time.Time) error {
+func (r *mutableStateTaskRefresherImpl) refreshTasks(
+	now time.Time,
+	mutableState mutableState,
+) error {
 
-	if err := r.refreshTasksForWorkflowStart(now); err != nil {
+	taskGenerator := newMutableStateTaskGenerator(
+		r.domainCache,
+		r.logger,
+		mutableState,
+	)
+
+	if err := r.refreshTasksForWorkflowStart(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForWorkflowClose(now); err != nil {
+	if err := r.refreshTasksForWorkflowClose(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForRecordWorkflowStarted(now); err != nil {
+	if err := r.refreshTasksForRecordWorkflowStarted(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForDecision(now); err != nil {
+	if err := r.refreshTasksForDecision(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForActivity(now); err != nil {
+	if err := r.refreshTasksForActivity(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForTimer(now); err != nil {
+	if err := r.refreshTasksForTimer(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForChildWorkflow(now); err != nil {
+	if err := r.refreshTasksForChildWorkflow(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForRequestCancelExternalWorkflow(now); err != nil {
+	if err := r.refreshTasksForRequestCancelExternalWorkflow(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	if err := r.refreshTasksForSignalExternalWorkflow(now); err != nil {
+	if err := r.refreshTasksForSignalExternalWorkflow(
+		now,
+		mutableState,
+		taskGenerator,
+	); err != nil {
 		return err
 	}
 
-	return r.refreshTasksForWorkflowSearchAttr(now)
+	if r.config.EnableVisibilityToKafka() {
+		if err := r.refreshTasksForWorkflowSearchAttr(
+			now,
+			mutableState,
+			taskGenerator,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	startEvent, err := r.mutableState.GetStartEvent()
+	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
 
-	if err := r.taskGenerator.generateWorkflowStartTasks(
+	if err := taskGenerator.generateWorkflowStartTasks(
 		now,
 		startEvent,
 	); err != nil {
@@ -127,8 +178,8 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.WorkflowExecutionStartedEventAttributes
-	if !r.mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstDecisionTaskBackoffSeconds() > 0 {
-		if err := r.taskGenerator.generateDelayedDecisionTasks(
+	if !mutableState.HasProcessedOrPendingDecision() && startAttr.GetFirstDecisionTaskBackoffSeconds() > 0 {
+		if err := taskGenerator.generateDelayedDecisionTasks(
 			now,
 			startEvent,
 		); err != nil {
@@ -141,12 +192,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowStart(
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
+	executionInfo := mutableState.GetExecutionInfo()
 
 	if executionInfo.CloseStatus != persistence.WorkflowCloseStatusNone {
-		return r.taskGenerator.generateWorkflowCloseTasks(
+		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
 	}
@@ -156,12 +209,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
+	executionInfo := mutableState.GetExecutionInfo()
 
 	if executionInfo.CloseStatus == persistence.WorkflowCloseStatusNone {
-		return r.taskGenerator.generateRecordWorkflowStartedTasks(
+		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 		)
 	}
@@ -171,28 +226,30 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	if !r.mutableState.HasPendingDecision() {
+	if !mutableState.HasPendingDecision() {
 		// no decision task at all
 		return nil
 	}
 
-	decision, ok := r.mutableState.GetPendingDecision()
+	decision, ok := mutableState.GetPendingDecision()
 	if !ok {
 		return &shared.InternalServiceError{Message: "it could be a bug, cannot get pending decision"}
 	}
 
 	// decision already started
 	if decision.StartedID != common.EmptyEventID {
-		return r.taskGenerator.generateDecisionStartTasks(
+		return taskGenerator.generateDecisionStartTasks(
 			now,
 			decision.ScheduleID,
 		)
 	}
 
 	// decision only scheduled
-	return r.taskGenerator.generateDecisionScheduleTasks(
+	return taskGenerator.generateDecisionScheduleTasks(
 		now,
 		decision.ScheduleID,
 	)
@@ -200,12 +257,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForActivity(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
-	pendingActivityInfos := r.mutableState.GetPendingActivityInfos()
+	executionInfo := mutableState.GetExecutionInfo()
+	pendingActivityInfos := mutableState.GetPendingActivityInfos()
 
-	currentBranchToken, err := r.mutableState.GetCurrentBranchToken()
+	currentBranchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
 	}
@@ -225,14 +284,14 @@ Loop:
 			executionInfo.RunID,
 			activityInfo.ScheduledEventBatchID,
 			activityInfo.ScheduleID,
-			r.mutableState.GetEventStoreVersion(),
+			mutableState.GetEventStoreVersion(),
 			currentBranchToken,
 		)
 		if err != nil {
 			return err
 		}
 
-		if err := r.taskGenerator.generateActivityTransferTasks(
+		if err := taskGenerator.generateActivityTransferTasks(
 			now,
 			scheduleEvent,
 		); err != nil {
@@ -242,11 +301,11 @@ Loop:
 
 	tBuilder := newTimerBuilder(r.getTimeSource(now))
 	if timerTask := tBuilder.GetActivityTimerTaskIfNeeded(
-		r.mutableState,
+		mutableState,
 	); timerTask != nil {
 		// no need to set the version, since activity timer task
 		// is just a trigger to check all activities
-		r.mutableState.AddTimerTasks(timerTask)
+		mutableState.AddTimerTasks(timerTask)
 	}
 
 	return nil
@@ -254,9 +313,11 @@ Loop:
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForTimer(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	pendingTimerInfos := r.mutableState.GetPendingTimerInfos()
+	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 
 	for _, timerInfo := range pendingTimerInfos {
 		// clear all timer task mask for later timer task re-generation
@@ -265,11 +326,11 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForTimer(
 
 	tBuilder := newTimerBuilder(r.getTimeSource(now))
 	if timerTask := tBuilder.GetUserTimerTaskIfNeeded(
-		r.mutableState,
+		mutableState,
 	); timerTask != nil {
 		// no need to set the version, since activity timer task
 		// is just a trigger to check all activities
-		r.mutableState.AddTimerTasks(timerTask)
+		mutableState.AddTimerTasks(timerTask)
 	}
 
 	return nil
@@ -277,12 +338,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForTimer(
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForChildWorkflow(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
-	pendingChildWorkflowInfos := r.mutableState.GetPendingChildExecutionInfos()
+	executionInfo := mutableState.GetExecutionInfo()
+	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
 
-	currentBranchToken, err := r.mutableState.GetCurrentBranchToken()
+	currentBranchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
 	}
@@ -299,14 +362,14 @@ Loop:
 			executionInfo.RunID,
 			childWorkflowInfo.InitiatedEventBatchID,
 			childWorkflowInfo.InitiatedID,
-			r.mutableState.GetEventStoreVersion(),
+			mutableState.GetEventStoreVersion(),
 			currentBranchToken,
 		)
 		if err != nil {
 			return err
 		}
 
-		if err := r.taskGenerator.generateChildWorkflowTasks(
+		if err := taskGenerator.generateChildWorkflowTasks(
 			now,
 			scheduleEvent,
 		); err != nil {
@@ -319,12 +382,14 @@ Loop:
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
-	pendingRequestCancelInfos := r.mutableState.GetPendingRequestCancelExternalInfos()
+	executionInfo := mutableState.GetExecutionInfo()
+	pendingRequestCancelInfos := mutableState.GetPendingRequestCancelExternalInfos()
 
-	currentBranchToken, err := r.mutableState.GetCurrentBranchToken()
+	currentBranchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
 	}
@@ -336,14 +401,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 			executionInfo.RunID,
 			requestCancelInfo.InitiatedEventBatchID,
 			requestCancelInfo.InitiatedID,
-			r.mutableState.GetEventStoreVersion(),
+			mutableState.GetEventStoreVersion(),
 			currentBranchToken,
 		)
 		if err != nil {
 			return err
 		}
 
-		if err := r.taskGenerator.generateRequestCancelExternalTasks(
+		if err := taskGenerator.generateRequestCancelExternalTasks(
 			now,
 			initiateEvent,
 		); err != nil {
@@ -356,12 +421,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
-	pendingSignalInfos := r.mutableState.GetPendingSignalExternalInfos()
+	executionInfo := mutableState.GetExecutionInfo()
+	pendingSignalInfos := mutableState.GetPendingSignalExternalInfos()
 
-	currentBranchToken, err := r.mutableState.GetCurrentBranchToken()
+	currentBranchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
 	}
@@ -373,14 +440,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 			executionInfo.RunID,
 			signalInfo.InitiatedEventBatchID,
 			signalInfo.InitiatedID,
-			r.mutableState.GetEventStoreVersion(),
+			mutableState.GetEventStoreVersion(),
 			currentBranchToken,
 		)
 		if err != nil {
 			return err
 		}
 
-		if err := r.taskGenerator.generateSignalExternalTasks(
+		if err := taskGenerator.generateSignalExternalTasks(
 			now,
 			initiateEvent,
 		); err != nil {
@@ -393,9 +460,11 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	now time.Time,
+	mutableState mutableState,
+	taskGenerator mutableStateTaskGenerator,
 ) error {
 
-	return r.taskGenerator.generateWorkflowSearchAttrTasks(
+	return taskGenerator.generateWorkflowSearchAttrTasks(
 		now,
 	)
 }
