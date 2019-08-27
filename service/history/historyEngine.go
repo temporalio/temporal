@@ -464,7 +464,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
 			if t.StartRequestID == *request.RequestId {
-				e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
 				return &workflow.StartWorkflowExecutionResponse{
 					RunId: common.StringPtr(t.RunID),
 				}, nil
@@ -472,7 +471,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			}
 
 			if msBuilder.GetCurrentVersion() < t.LastWriteVersion {
-				e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
 				return nil, ce.NewDomainNotActiveError(
 					*request.Domain,
 					clusterMetadata.GetCurrentClusterName(),
@@ -484,9 +482,15 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			createMode = persistence.CreateWorkflowModeWorkflowIDReuse
 			prevRunID = t.RunID
 			prevLastWriteVersion = t.LastWriteVersion
-			err = e.applyWorkflowIDReusePolicyHelper(t.StartRequestID, prevRunID, t.State, t.CloseStatus, domainID, execution, startRequest.StartRequest.GetWorkflowIdReusePolicy())
-			if err != nil {
-				e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
+			if err = e.applyWorkflowIDReusePolicyHelper(
+				t.StartRequestID,
+				prevRunID,
+				t.State,
+				t.CloseStatus,
+				domainID,
+				execution,
+				startRequest.StartRequest.GetWorkflowIdReusePolicy(),
+			); err != nil {
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
@@ -1580,7 +1584,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	)
 
 	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-		e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
 		if t.StartRequestID == *request.RequestId {
 			return &workflow.StartWorkflowExecutionResponse{
 				RunId: common.StringPtr(t.RunID),
@@ -2016,42 +2019,6 @@ func createDeleteHistoryEventTimerTask(
 	expiryTime := clock.NewRealTimeSource().Now().Add(retention)
 	return &persistence.DeleteHistoryEventTask{
 		VisibilityTimestamp: expiryTime,
-	}
-}
-
-func (e *historyEngineImpl) deleteEvents(
-	domainID string,
-	execution workflow.WorkflowExecution,
-	eventStoreVersion int32,
-	branchToken []byte,
-) {
-
-	var err error
-	defer func() {
-		// This is the only code path that deleting history could cause history corruption(missing first batch).
-		// We will use this warn log to verify this issue: https://github.com/uber/cadence/issues/2441
-		e.logger.Warn("encounter WorkflowExecutionAlreadyStartedError, deleting duplicated history",
-			tag.ShardID(e.shard.GetShardID()),
-			tag.WorkflowDomainID(domainID),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Number(int64(eventStoreVersion)),
-			tag.Error(err))
-	}()
-	// We created the history events but failed to create workflow execution, so cleanup the history which could cause
-	// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
-	// are always created for a unique run_id which is not visible beyond this call yet.
-	// TODO: Handle error on deletion of execution history
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		err = e.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-			BranchToken: branchToken,
-			ShardID:     common.IntPtr(e.shard.GetShardID()),
-		})
-	} else {
-		err = e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-			DomainID:  domainID,
-			Execution: execution,
-		})
 	}
 }
 
