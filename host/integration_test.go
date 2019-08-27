@@ -3707,6 +3707,15 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	startdEventAttributes := firstEvent.WorkflowExecutionStartedEventAttributes
 	s.Equal(memo, startdEventAttributes.Memo)
 
+	// verify DescribeWorkflowExecution result
+	descRequest := &workflow.DescribeWorkflowExecutionRequest{
+		Domain:    common.StringPtr(s.domainName),
+		Execution: execution,
+	}
+	descResp, err := s.engine.DescribeWorkflowExecution(createContext(), descRequest)
+	s.Nil(err)
+	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
+
 	// verify closed visibility
 	var closdExecutionInfo *workflow.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {

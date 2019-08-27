@@ -220,6 +220,18 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	}
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
+
+	// verify DescribeWorkflowExecution
+	descRequest := &workflow.DescribeWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+	}
+	descResp, err := s.engine.DescribeWorkflowExecution(createContext(), descRequest)
+	s.Nil(err)
+	expectedSearchAttributes := getUpsertSearchAttributes()
+	s.Equal(expectedSearchAttributes, descResp.WorkflowExecutionInfo.GetSearchAttributes())
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
