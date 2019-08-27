@@ -752,6 +752,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			StartTime:        common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
 			HistoryLength:    common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
 			AutoResetPoints:  executionInfo.AutoResetPoints,
+			Memo:             &workflow.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &workflow.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
 		},
 	}
