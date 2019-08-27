@@ -1126,6 +1126,17 @@ func (p *historyV2PersistenceClient) CompleteForkBranch(request *CompleteForkBra
 	return err
 }
 
+func (p *historyV2PersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetAllHistoryTreeBranches(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetAllHistoryTreeBranchesScope, err)
+	}
+	return response, err
+}
+
 // GetHistoryTree returns all branch information of a tree
 func (p *historyV2PersistenceClient) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetHistoryTreeScope, metrics.PersistenceRequests)

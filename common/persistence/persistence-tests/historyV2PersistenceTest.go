@@ -114,6 +114,62 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 }
 
 //TestReadBranchByPagination test
+func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
+	//TODO https://github.com/uber/cadence/issues/2458
+	if s.HistoryV2Mgr.GetName() != "cassandra" {
+		return
+	}
+
+	resp, err := s.HistoryV2Mgr.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+		PageSize: 1,
+	})
+	s.Nil(err)
+	s.Equal(0, len(resp.Branches), "some trees were leaked in other tests")
+
+	trees := map[string]bool{}
+	totalTrees := 1002
+	pgSize := 100
+
+	for i := 0; i < totalTrees; i++ {
+		treeID := uuid.New()
+		bi, err := s.newHistoryBranch(treeID)
+		s.Nil(err)
+
+		events := s.genRandomEvents([]int64{1, 2, 3}, 1)
+		err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
+		s.Nil(err)
+		trees[treeID] = true
+	}
+
+	var pgToken []byte
+	for {
+		resp, err := s.HistoryV2Mgr.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+			PageSize:      pgSize,
+			NextPageToken: pgToken,
+		})
+		s.Nil(err)
+		for _, br := range resp.Branches {
+			if trees[br.TreeID] == true {
+				delete(trees, br.TreeID)
+
+				s.True(br.ForkTime.UnixNano() > 0)
+				s.True(len(br.BranchID) > 0)
+				s.Equal("branchInfo", br.Info)
+			} else {
+				s.Fail("treeID not found", br.TreeID)
+			}
+		}
+
+		if resp.NextPageToken == nil {
+			break
+		}
+		pgToken = resp.NextPageToken
+	}
+
+	s.Equal(0, len(trees))
+}
+
+//TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	treeID := uuid.New()
 	bi, err := s.newHistoryBranch(treeID)
@@ -192,6 +248,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// fork from here
 	bi2, err := s.fork(bi, 13)
 	s.Nil(err)
+	s.completeFork(bi2, true)
 
 	events = s.genRandomEvents([]int64{13}, 1)
 	err = s.appendNewNode(bi2, events, 1)
@@ -284,6 +341,13 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	req.NextPageToken = nil
 	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
 	s.IsType(&gen.EntityNotExistsError{}, err)
+
+	err = s.deleteHistoryBranch(bi2)
+	s.Nil(err)
+	err = s.deleteHistoryBranch(bi)
+	s.Nil(err)
+	branches := s.descTree(treeID)
+	s.Equal(0, len(branches))
 }
 
 //TestConcurrentlyCreateAndAppendBranches test

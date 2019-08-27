@@ -477,11 +477,17 @@ func (m *sqlHistoryV2Manager) CompleteForkBranch(request *p.InternalCompleteFork
 	})
 }
 
+func (h *sqlHistoryV2Manager) GetAllHistoryTreeBranches(request *p.GetAllHistoryTreeBranchesRequest) (*p.GetAllHistoryTreeBranchesResponse, error) {
+	// TODO https://github.com/uber/cadence/issues/2458
+	// Implement it when we need
+	panic("not implemented yet")
+}
+
 // GetHistoryTree returns all branch information of a tree
 func (m *sqlHistoryV2Manager) GetHistoryTree(request *p.GetHistoryTreeRequest) (*p.GetHistoryTreeResponse, error) {
 	treeID := sqldb.MustParseUUID(request.TreeID)
 	branches := make([]*shared.HistoryBranch, 0)
-	forkingBranches := make([]p.ForkingInProgressBranch, 0)
+	forkingBranches := make([]p.HistoryBranchDetail, 0)
 
 	treeFilter := &sqldb.HistoryTreeFilter{
 		TreeID:  treeID,
@@ -497,7 +503,8 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(request *p.GetHistoryTreeRequest) (
 			return nil, err
 		}
 		if row.InProgress {
-			br := p.ForkingInProgressBranch{
+			br := p.HistoryBranchDetail{
+				TreeID:   request.TreeID,
 				BranchID: row.BranchID.String(),
 				ForkTime: time.Unix(0, treeInfo.GetCreatedTimeNanos()),
 				Info:     treeInfo.GetInfo(),

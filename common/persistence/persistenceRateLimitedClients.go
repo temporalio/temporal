@@ -732,3 +732,11 @@ func (p *historyV2RateLimitedPersistenceClient) GetHistoryTree(request *GetHisto
 	response, err := p.persistence.GetHistoryTree(request)
 	return response, err
 }
+
+func (p *historyV2RateLimitedPersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.GetAllHistoryTreeBranches(request)
+	return response, err
+}

@@ -167,6 +167,25 @@ func (_m *HistoryV2Manager) GetHistoryTree(request *persistence.GetHistoryTreeRe
 	return r0, r1
 }
 
+func (_m *HistoryV2Manager) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.GetAllHistoryTreeBranchesResponse, error) {
+	ret := _m.Called(request)
+	var r0 *persistence.GetAllHistoryTreeBranchesResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetAllHistoryTreeBranchesRequest) *persistence.GetAllHistoryTreeBranchesResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetAllHistoryTreeBranchesResponse)
+		}
+	}
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetAllHistoryTreeBranchesRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
 // Close provides a mock function with given fields:
 func (_m *HistoryV2Manager) Close() {
 	_m.Called()

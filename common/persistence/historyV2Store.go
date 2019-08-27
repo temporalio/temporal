@@ -257,6 +257,10 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 	return resp, nil
 }
 
+func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+	return m.persistence.GetAllHistoryTreeBranches(request)
+}
+
 func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHistoryBranchRequest) ([]*workflow.HistoryEvent, []*workflow.History, []byte, int, int64, error) {
 	var branch workflow.HistoryBranch
 	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
