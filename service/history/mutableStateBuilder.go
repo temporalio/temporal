@@ -277,6 +277,7 @@ func (e *mutableStateBuilder) Load(
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
 	e.stateInDB = state.ExecutionInfo.State
 	e.nextEventIDInDB = state.ExecutionInfo.NextEventID
+	e.versionHistories = state.VersionHistories
 }
 
 func (e *mutableStateBuilder) GetEventStoreVersion() int32 {

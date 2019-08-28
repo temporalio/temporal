@@ -31,6 +31,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
@@ -70,6 +71,7 @@ type Cadence interface {
 	GetFrontendClient() workflowserviceclient.Interface
 	FrontendAddress() string
 	GetFrontendService() service.Service
+	GetHistoryClient() historyserviceclient.Interface
 }
 
 type (
@@ -94,6 +96,7 @@ type (
 		shutdownCh          chan struct{}
 		shutdownWG          sync.WaitGroup
 		frontEndService     service.Service
+		historyService      service.Service
 		clusterNo           int // cluster number
 		replicator          *replicator.Replicator
 		clientWorker        archiver.ClientWorker
@@ -386,6 +389,10 @@ func (c *cadenceImpl) GetFrontendService() service.Service {
 	return c.frontEndService
 }
 
+func (c *cadenceImpl) GetHistoryClient() historyserviceclient.Interface {
+	return NewHistoryClient(c.historyService.GetDispatcher())
+}
+
 func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := new(service.BootstrapParams)
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
@@ -490,6 +497,7 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		params.ArchiverProvider = c.archiverProvider
 
 		service := service.New(params)
+		c.historyService = service
 		hConfig := c.historyConfig
 		historyConfig := history.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger), hConfig.NumHistoryShards, c.workerConfig.EnableIndexer, config.StoreTypeCassandra)
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(hConfig.NumHistoryShards)

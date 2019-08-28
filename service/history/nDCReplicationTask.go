@@ -114,7 +114,6 @@ func newNDCReplicationTask(
 	historyEvents := history.Events
 	firstEvent := history.Events[0]
 	lastEvent := history.Events[len(history.Events)-1]
-
 	eventTime := int64(0)
 	for _, event := range historyEvents {
 		if event.GetTimestamp() > eventTime {

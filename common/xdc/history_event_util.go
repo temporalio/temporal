@@ -29,18 +29,19 @@ import (
 )
 
 const (
-	workflowType = "history event generation mock"
-	domainID     = "00000000-0000-0000-0000-000000000000"
-	tasklist     = "generation tasklist"
-	timeout      = int32(1)
-	identity     = "identity"
-	runID        = "00000000-0000-0000-0000-000000000000"
+	timeout                = int32(1)
+	cause                  = "NDC test"
+	signal                 = "NDC signal"
+	checksum               = "NDC checksum"
+	childWorkflowPrefix    = "child-"
+	externalWorkflowPrefix = "external-"
+	reason                 = "NDC reason"
 )
 
 type (
 	// HistoryAttributesGenerator is to generator history attribute in history events
 	HistoryAttributesGenerator interface {
-		GenerateHistoryEvents([]batch) []*shared.History
+		GenerateHistoryEvents([]NDCTestBatch, int64, int64) []*shared.History
 	}
 
 	// HistoryAttributesGeneratorImpl is to generator history attribute in history events
@@ -50,6 +51,7 @@ type (
 		timerStartEventIDs                      map[int64]bool
 		childWorkflowInitialEventIDs            map[int64]int64
 		childWorkflowStartEventIDs              map[int64]int64
+		childWorkflowRunIDs                     map[int64]string
 		signalExternalWorkflowEventIDs          map[int64]int64
 		requestExternalWorkflowCanceledEventIDs map[int64]int64
 		activityScheduleEventIDs                map[int64]bool
@@ -58,17 +60,34 @@ type (
 		decisionTaskScheduleEventID             int64
 		decisionTaskStartEventID                int64
 		decisionTaskCompleteEventID             int64
+
+		identity     string
+		workflowID   string
+		runID        string
+		taskList     string
+		workflowType string
+		domainID     string
+		domain       string
 	}
 )
 
 // NewHistoryAttributesGenerator is initial a generator
-func NewHistoryAttributesGenerator() HistoryAttributesGenerator {
+func NewHistoryAttributesGenerator(
+	workflowID,
+	runID,
+	taskList,
+	workflowType,
+	domainID,
+	domain,
+	identity string,
+) HistoryAttributesGenerator {
 	return &HistoryAttributesGeneratorImpl{
 		decisionTaskAttempts:                    int64(0),
 		timerIDs:                                make(map[string]bool),
 		timerStartEventIDs:                      make(map[int64]bool),
 		childWorkflowInitialEventIDs:            make(map[int64]int64),
 		childWorkflowStartEventIDs:              make(map[int64]int64),
+		childWorkflowRunIDs:                     make(map[int64]string),
 		signalExternalWorkflowEventIDs:          make(map[int64]int64),
 		requestExternalWorkflowCanceledEventIDs: make(map[int64]int64),
 		activityScheduleEventIDs:                make(map[int64]bool),
@@ -77,19 +96,26 @@ func NewHistoryAttributesGenerator() HistoryAttributesGenerator {
 		decisionTaskScheduleEventID:             -1,
 		decisionTaskStartEventID:                -1,
 		decisionTaskCompleteEventID:             -1,
+		identity:                                identity,
+		workflowID:                              workflowID,
+		runID:                                   runID,
+		taskList:                                taskList,
+		workflowType:                            workflowType,
+		domainID:                                domainID,
+		domain:                                  domain,
 	}
 }
 
 // GenerateHistoryEvents is to generator batches of history events
-func (h *HistoryAttributesGeneratorImpl) GenerateHistoryEvents(batches []batch) []*shared.History {
+func (h *HistoryAttributesGeneratorImpl) GenerateHistoryEvents(batches []NDCTestBatch, startEventID, version int64) []*shared.History {
 	history := make([]*shared.History, 0, len(batches))
-	historyEvents := make([]*shared.HistoryEvent, 0)
-	eventID := int64(1)
+	eventID := startEventID
 
 	//TODO: Marker and EventTypeUpsertWorkflowSearchAttributes need to be added to the model and also to generate event attributes
 	for _, batch := range batches {
-		for _, event := range batch.events {
-			historyEvent := h.generateEventAttribute(event, eventID)
+		historyEvents := make([]*shared.HistoryEvent, 0)
+		for _, event := range batch.Events {
+			historyEvent := h.generateEventAttribute(event, eventID, version)
 			eventID++
 			historyEvents = append(historyEvents, historyEvent)
 		}
@@ -101,25 +127,23 @@ func (h *HistoryAttributesGeneratorImpl) GenerateHistoryEvents(batches []batch) 
 	return history
 }
 
-func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, eventID int64) *shared.HistoryEvent {
-	historyEvent := getDefaultHistoryEvent(eventID)
+func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, eventID, version int64) *shared.HistoryEvent {
+	historyEvent := getDefaultHistoryEvent(eventID, version)
 	switch vertex.GetName() {
 	case shared.EventTypeWorkflowExecutionStarted.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionStarted.Ptr()
 		historyEvent.WorkflowExecutionStartedEventAttributes = &shared.WorkflowExecutionStartedEventAttributes{
 			WorkflowType: &shared.WorkflowType{
-				Name: common.StringPtr(workflowType),
+				Name: common.StringPtr(h.workflowType),
 			},
-			ParentWorkflowDomain:   common.StringPtr(domainID),
-			ParentInitiatedEventId: common.Int64Ptr(common.EmptyEventID),
 			TaskList: &shared.TaskList{
-				Name: common.StringPtr(tasklist),
+				Name: common.StringPtr(h.taskList),
 				Kind: shared.TaskListKindNormal.Ptr(),
 			},
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(timeout),
-			Identity:                            common.StringPtr(identity),
-			FirstExecutionRunId:                 common.StringPtr(runID),
+			Identity:                            common.StringPtr(h.identity),
+			FirstExecutionRunId:                 common.StringPtr(h.runID),
 		}
 	case shared.EventTypeWorkflowExecutionCompleted.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionCompleted.Ptr()
@@ -134,7 +158,7 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 	case shared.EventTypeWorkflowExecutionTerminated.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionTerminated.Ptr()
 		historyEvent.WorkflowExecutionTerminatedEventAttributes = &shared.WorkflowExecutionTerminatedEventAttributes{
-			Identity: common.StringPtr(identity),
+			Identity: common.StringPtr(h.identity),
 		}
 	case shared.EventTypeWorkflowExecutionTimedOut.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionTimedOut.Ptr()
@@ -144,13 +168,13 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 	case shared.EventTypeWorkflowExecutionCancelRequested.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionCancelRequested.Ptr()
 		historyEvent.WorkflowExecutionCancelRequestedEventAttributes = &shared.WorkflowExecutionCancelRequestedEventAttributes{
-			Cause:                    common.StringPtr("cause"),
+			Cause:                    common.StringPtr(cause),
 			ExternalInitiatedEventId: common.Int64Ptr(10),
 			ExternalWorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("wid"),
-				RunId:      common.StringPtr("rid"),
+				WorkflowId: common.StringPtr(h.workflowID),
+				RunId:      common.StringPtr(h.runID),
 			},
-			Identity: common.StringPtr(identity),
+			Identity: common.StringPtr(h.identity),
 		}
 	case shared.EventTypeWorkflowExecutionCanceled.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionCanceled.Ptr()
@@ -160,12 +184,12 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 	case shared.EventTypeWorkflowExecutionContinuedAsNew.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr()
 		historyEvent.WorkflowExecutionContinuedAsNewEventAttributes = &shared.WorkflowExecutionContinuedAsNewEventAttributes{
-			NewExecutionRunId: common.StringPtr(runID),
+			NewExecutionRunId: common.StringPtr(h.runID),
 			WorkflowType: &shared.WorkflowType{
-				Name: common.StringPtr(workflowType),
+				Name: common.StringPtr(h.workflowType),
 			},
 			TaskList: &shared.TaskList{
-				Name: common.StringPtr(tasklist),
+				Name: common.StringPtr(h.taskList),
 				Kind: shared.TaskListKindNormal.Ptr(),
 			},
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(timeout),
@@ -176,14 +200,14 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 	case shared.EventTypeWorkflowExecutionSignaled.String():
 		historyEvent.EventType = shared.EventTypeWorkflowExecutionSignaled.Ptr()
 		historyEvent.WorkflowExecutionSignaledEventAttributes = &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr("signal"),
-			Identity:   common.StringPtr(identity),
+			SignalName: common.StringPtr(signal),
+			Identity:   common.StringPtr(h.identity),
 		}
 	case shared.EventTypeDecisionTaskScheduled.String():
 		historyEvent.EventType = shared.EventTypeDecisionTaskScheduled.Ptr()
 		historyEvent.DecisionTaskScheduledEventAttributes = &shared.DecisionTaskScheduledEventAttributes{
 			TaskList: &shared.TaskList{
-				Name: common.StringPtr(tasklist),
+				Name: common.StringPtr(h.taskList),
 				Kind: shared.TaskListKindNormal.Ptr(),
 			},
 			StartToCloseTimeoutSeconds: common.Int32Ptr(timeout),
@@ -194,7 +218,7 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.EventType = shared.EventTypeDecisionTaskStarted.Ptr()
 		historyEvent.DecisionTaskStartedEventAttributes = &shared.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: common.Int64Ptr(h.decisionTaskScheduleEventID),
-			Identity:         common.StringPtr(identity),
+			Identity:         common.StringPtr(h.identity),
 			RequestId:        common.StringPtr(uuid.New()),
 		}
 		h.decisionTaskStartEventID = eventID
@@ -212,8 +236,8 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 			ScheduledEventId: common.Int64Ptr(h.decisionTaskScheduleEventID),
 			StartedEventId:   common.Int64Ptr(h.decisionTaskStartEventID),
 			Cause:            common.DecisionTaskFailedCausePtr(shared.DecisionTaskFailedCauseUnhandledDecision),
-			Identity:         common.StringPtr(identity),
-			BaseRunId:        common.StringPtr(runID),
+			Identity:         common.StringPtr(h.identity),
+			BaseRunId:        common.StringPtr(h.runID),
 		}
 		h.decisionTaskAttempts++
 	case shared.EventTypeDecisionTaskCompleted.String():
@@ -222,8 +246,8 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.DecisionTaskCompletedEventAttributes = &shared.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: common.Int64Ptr(h.decisionTaskScheduleEventID),
 			StartedEventId:   common.Int64Ptr(h.decisionTaskStartEventID),
-			Identity:         common.StringPtr(identity),
-			BinaryChecksum:   common.StringPtr("checksum"),
+			Identity:         common.StringPtr(h.identity),
+			BinaryChecksum:   common.StringPtr(checksum),
 		}
 		h.decisionTaskCompleteEventID = eventID
 	case shared.EventTypeActivityTaskScheduled.String():
@@ -231,8 +255,8 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.ActivityTaskScheduledEventAttributes = &shared.ActivityTaskScheduledEventAttributes{
 			ActivityId:                    common.StringPtr(uuid.New()),
 			ActivityType:                  common.ActivityTypePtr(shared.ActivityType{Name: common.StringPtr("activity")}),
-			Domain:                        common.StringPtr("domain"),
-			TaskList:                      common.TaskListPtr(shared.TaskList{Name: common.StringPtr(tasklist), Kind: common.TaskListKindPtr(shared.TaskListKindNormal)}),
+			Domain:                        common.StringPtr(h.domain),
+			TaskList:                      common.TaskListPtr(shared.TaskList{Name: common.StringPtr(h.taskList), Kind: common.TaskListKindPtr(shared.TaskListKindNormal)}),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(timeout),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(timeout),
@@ -249,7 +273,7 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.EventType = shared.EventTypeActivityTaskStarted.Ptr()
 		historyEvent.ActivityTaskStartedEventAttributes = &shared.ActivityTaskStartedEventAttributes{
 			ScheduledEventId: common.Int64Ptr(activityScheduleEventID),
-			Identity:         common.StringPtr(identity),
+			Identity:         common.StringPtr(h.identity),
 			RequestId:        common.StringPtr(uuid.New()),
 			Attempt:          common.Int32Ptr(0),
 		}
@@ -266,7 +290,7 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.ActivityTaskCompletedEventAttributes = &shared.ActivityTaskCompletedEventAttributes{
 			ScheduledEventId: common.Int64Ptr(activityScheduleEventID),
 			StartedEventId:   common.Int64Ptr(activityStartEventID),
-			Identity:         common.StringPtr(identity),
+			Identity:         common.StringPtr(h.identity),
 		}
 	case shared.EventTypeActivityTaskTimedOut.String():
 		if len(h.activityStartEventIDs) == 0 {
@@ -294,8 +318,8 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.ActivityTaskFailedEventAttributes = &shared.ActivityTaskFailedEventAttributes{
 			ScheduledEventId: common.Int64Ptr(activityScheduleEventID),
 			StartedEventId:   common.Int64Ptr(activityStartEventID),
-			Identity:         common.StringPtr(identity),
-			Reason:           common.StringPtr("failed"),
+			Identity:         common.StringPtr(h.identity),
+			Reason:           common.StringPtr(reason),
 		}
 	case shared.EventTypeActivityTaskCancelRequested.String():
 		historyEvent.EventType = shared.EventTypeActivityTaskCancelRequested.Ptr()
@@ -323,7 +347,7 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 			LatestCancelRequestedEventId: common.Int64Ptr(activityCancelRequestEventID),
 			ScheduledEventId:             common.Int64Ptr(activityScheduleEventID),
 			StartedEventId:               common.Int64Ptr(activityStartEventID),
-			Identity:                     common.StringPtr(identity),
+			Identity:                     common.StringPtr(h.identity),
 		}
 	case shared.EventTypeRequestCancelActivityTaskFailed.String():
 		if len(h.activityCancelRequestEventIDs) == 0 {
@@ -383,15 +407,15 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 			TimerId:                      common.StringPtr(timerID),
 			StartedEventId:               common.Int64Ptr(timerStartEventID),
 			DecisionTaskCompletedEventId: common.Int64Ptr(h.decisionTaskCompleteEventID),
-			Identity:                     common.StringPtr(identity),
+			Identity:                     common.StringPtr(h.identity),
 		}
 	case shared.EventTypeStartChildWorkflowExecutionInitiated.String():
 		historyEvent.EventType = shared.EventTypeStartChildWorkflowExecutionInitiated.Ptr()
 		historyEvent.StartChildWorkflowExecutionInitiatedEventAttributes = &shared.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Domain:                              common.StringPtr("domain"),
-			WorkflowId:                          common.StringPtr("child_wid"),
-			WorkflowType:                        common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
-			TaskList:                            common.TaskListPtr(shared.TaskList{Name: common.StringPtr(tasklist), Kind: common.TaskListKindPtr(shared.TaskListKindNormal)}),
+			Domain:                              common.StringPtr(h.domain),
+			WorkflowId:                          common.StringPtr(childWorkflowPrefix + h.workflowID),
+			WorkflowType:                        common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
+			TaskList:                            common.TaskListPtr(shared.TaskList{Name: common.StringPtr(h.taskList), Kind: common.TaskListKindPtr(shared.TaskListKindNormal)}),
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(timeout),
 			DecisionTaskCompletedEventId:        common.Int64Ptr(h.decisionTaskCompleteEventID),
@@ -408,9 +432,9 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 
 		historyEvent.EventType = shared.EventTypeStartChildWorkflowExecutionFailed.Ptr()
 		historyEvent.StartChildWorkflowExecutionFailedEventAttributes = &shared.StartChildWorkflowExecutionFailedEventAttributes{
-			Domain:                       common.StringPtr("domain"),
-			WorkflowId:                   common.StringPtr("child_wid"),
-			WorkflowType:                 common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:                       common.StringPtr(h.domain),
+			WorkflowId:                   common.StringPtr(childWorkflowPrefix + h.workflowID),
+			WorkflowType:                 common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			Cause:                        shared.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning.Ptr(),
 			InitiatedEventId:             common.Int64Ptr(childWorkflowInitialEventID),
 			DecisionTaskCompletedEventId: common.Int64Ptr(completeEventID),
@@ -422,17 +446,19 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		childWorkflowInitialEventID := reflect.ValueOf(h.childWorkflowInitialEventIDs).MapKeys()[0].Int()
 		delete(h.childWorkflowInitialEventIDs, childWorkflowInitialEventID)
 
+		runID := uuid.New()
 		historyEvent.EventType = shared.EventTypeChildWorkflowExecutionStarted.Ptr()
 		historyEvent.ChildWorkflowExecutionStartedEventAttributes = &shared.ChildWorkflowExecutionStartedEventAttributes{
-			Domain:           common.StringPtr("domain"),
-			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:           common.StringPtr(h.domain),
+			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			InitiatedEventId: common.Int64Ptr(childWorkflowInitialEventID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("child_wid"),
-				RunId:      common.StringPtr("child_rid"),
+				WorkflowId: common.StringPtr(childWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(runID),
 			},
 		}
 		h.childWorkflowStartEventIDs[eventID] = childWorkflowInitialEventID
+		h.childWorkflowRunIDs[eventID] = runID
 	case shared.EventTypeChildWorkflowExecutionCompleted.String():
 		if len(h.childWorkflowStartEventIDs) == 0 {
 			panic("Child workflow did not start before complete")
@@ -441,14 +467,20 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		childWorkflowInitialEventID := h.childWorkflowStartEventIDs[childWorkflowStartEventID]
 		delete(h.childWorkflowStartEventIDs, childWorkflowStartEventID)
 
+		runID := h.childWorkflowRunIDs[childWorkflowStartEventID]
+		if runID == "" {
+			panic("child run id is not set with the start event")
+		}
+		delete(h.childWorkflowRunIDs, childWorkflowStartEventID)
+
 		historyEvent.EventType = shared.EventTypeChildWorkflowExecutionCompleted.Ptr()
 		historyEvent.ChildWorkflowExecutionCompletedEventAttributes = &shared.ChildWorkflowExecutionCompletedEventAttributes{
-			Domain:           common.StringPtr("domain"),
-			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:           common.StringPtr(h.domain),
+			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			InitiatedEventId: common.Int64Ptr(childWorkflowInitialEventID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("child_wid"),
-				RunId:      common.StringPtr("child_rid"),
+				WorkflowId: common.StringPtr(childWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(runID),
 			},
 			StartedEventId: common.Int64Ptr(childWorkflowStartEventID),
 		}
@@ -460,14 +492,20 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		childWorkflowInitialEventID := h.childWorkflowStartEventIDs[childWorkflowStartEventID]
 		delete(h.childWorkflowStartEventIDs, childWorkflowStartEventID)
 
+		runID := h.childWorkflowRunIDs[childWorkflowStartEventID]
+		if runID == "" {
+			panic("child run id is not set with the start event")
+		}
+		delete(h.childWorkflowRunIDs, childWorkflowStartEventID)
+
 		historyEvent.EventType = shared.EventTypeChildWorkflowExecutionTimedOut.Ptr()
 		historyEvent.ChildWorkflowExecutionTimedOutEventAttributes = &shared.ChildWorkflowExecutionTimedOutEventAttributes{
-			Domain:           common.StringPtr("domain"),
-			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:           common.StringPtr(h.domain),
+			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			InitiatedEventId: common.Int64Ptr(childWorkflowInitialEventID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("child_wid"),
-				RunId:      common.StringPtr("child_rid"),
+				WorkflowId: common.StringPtr(childWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(runID),
 			},
 			StartedEventId: common.Int64Ptr(childWorkflowStartEventID),
 			TimeoutType:    common.TimeoutTypePtr(shared.TimeoutTypeScheduleToClose),
@@ -481,14 +519,20 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		childWorkflowInitialEventID := h.childWorkflowStartEventIDs[childWorkflowStartEventID]
 		delete(h.childWorkflowStartEventIDs, childWorkflowStartEventID)
 
+		runID := h.childWorkflowRunIDs[childWorkflowStartEventID]
+		if runID == "" {
+			panic("child run id is not set with the start event")
+		}
+		delete(h.childWorkflowRunIDs, childWorkflowStartEventID)
+
 		historyEvent.EventType = shared.EventTypeChildWorkflowExecutionTerminated.Ptr()
 		historyEvent.ChildWorkflowExecutionTerminatedEventAttributes = &shared.ChildWorkflowExecutionTerminatedEventAttributes{
-			Domain:           common.StringPtr("domain"),
-			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:           common.StringPtr(h.domain),
+			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			InitiatedEventId: common.Int64Ptr(childWorkflowInitialEventID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("child_wid"),
-				RunId:      common.StringPtr("child_rid"),
+				WorkflowId: common.StringPtr(childWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(runID),
 			},
 			StartedEventId: common.Int64Ptr(childWorkflowStartEventID),
 		}
@@ -500,14 +544,20 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		childWorkflowInitialEventID := h.childWorkflowStartEventIDs[childWorkflowStartEventID]
 		delete(h.childWorkflowStartEventIDs, childWorkflowStartEventID)
 
+		runID := h.childWorkflowRunIDs[childWorkflowStartEventID]
+		if runID == "" {
+			panic("child run id is not set with the start event")
+		}
+		delete(h.childWorkflowRunIDs, childWorkflowStartEventID)
+
 		historyEvent.EventType = shared.EventTypeChildWorkflowExecutionFailed.Ptr()
 		historyEvent.ChildWorkflowExecutionFailedEventAttributes = &shared.ChildWorkflowExecutionFailedEventAttributes{
-			Domain:           common.StringPtr("domain"),
-			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:           common.StringPtr(h.domain),
+			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			InitiatedEventId: common.Int64Ptr(childWorkflowInitialEventID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("child_wid"),
-				RunId:      common.StringPtr("child_rid"),
+				WorkflowId: common.StringPtr(childWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(runID),
 			},
 			StartedEventId: common.Int64Ptr(childWorkflowStartEventID),
 		}
@@ -519,14 +569,20 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		childWorkflowInitialEventID := h.childWorkflowStartEventIDs[childWorkflowStartEventID]
 		delete(h.childWorkflowStartEventIDs, childWorkflowStartEventID)
 
+		runID := h.childWorkflowRunIDs[childWorkflowStartEventID]
+		if runID == "" {
+			panic("child run id is not set with the start event")
+		}
+		delete(h.childWorkflowRunIDs, childWorkflowStartEventID)
+
 		historyEvent.EventType = shared.EventTypeChildWorkflowExecutionCanceled.Ptr()
 		historyEvent.ChildWorkflowExecutionCanceledEventAttributes = &shared.ChildWorkflowExecutionCanceledEventAttributes{
-			Domain:           common.StringPtr("domain"),
-			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr("child_wt")}),
+			Domain:           common.StringPtr(h.domain),
+			WorkflowType:     common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(childWorkflowPrefix + h.workflowType)}),
 			InitiatedEventId: common.Int64Ptr(childWorkflowInitialEventID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("child_wid"),
-				RunId:      common.StringPtr("child_rid"),
+				WorkflowId: common.StringPtr(childWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(runID),
 			},
 			StartedEventId: common.Int64Ptr(childWorkflowStartEventID),
 		}
@@ -534,10 +590,10 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.EventType = shared.EventTypeSignalExternalWorkflowExecutionInitiated.Ptr()
 		historyEvent.SignalExternalWorkflowExecutionInitiatedEventAttributes = &shared.SignalExternalWorkflowExecutionInitiatedEventAttributes{
 			DecisionTaskCompletedEventId: common.Int64Ptr(h.decisionTaskCompleteEventID),
-			Domain:                       common.StringPtr("domain"),
+			Domain:                       common.StringPtr(h.domain),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("external_wid"),
-				RunId:      common.StringPtr("external_rid"),
+				WorkflowId: common.StringPtr(externalWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(uuid.New()),
 			},
 			SignalName:        common.StringPtr("signal"),
 			ChildWorkflowOnly: common.BoolPtr(false),
@@ -555,10 +611,10 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.SignalExternalWorkflowExecutionFailedEventAttributes = &shared.SignalExternalWorkflowExecutionFailedEventAttributes{
 			Cause:                        common.SignalExternalWorkflowExecutionFailedCausePtr(shared.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution),
 			DecisionTaskCompletedEventId: common.Int64Ptr(completeEventID),
-			Domain:                       common.StringPtr("domain"),
+			Domain:                       common.StringPtr(h.domain),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("external_wid"),
-				RunId:      common.StringPtr("external_rid"),
+				WorkflowId: common.StringPtr(externalWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(uuid.New()),
 			},
 			InitiatedEventId: common.Int64Ptr(signalExternalWorkflowEventID),
 		}
@@ -572,20 +628,20 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.EventType = shared.EventTypeExternalWorkflowExecutionSignaled.Ptr()
 		historyEvent.ExternalWorkflowExecutionSignaledEventAttributes = &shared.ExternalWorkflowExecutionSignaledEventAttributes{
 			InitiatedEventId: common.Int64Ptr(signalExternalWorkflowEventID),
-			Domain:           common.StringPtr("domain"),
+			Domain:           common.StringPtr(h.domain),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("external_wid"),
-				RunId:      common.StringPtr("external_rid"),
+				WorkflowId: common.StringPtr(externalWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(uuid.New()),
 			},
 		}
 	case shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated.String():
 		historyEvent.EventType = shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated.Ptr()
 		historyEvent.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes = &shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			DecisionTaskCompletedEventId: common.Int64Ptr(h.decisionTaskCompleteEventID),
-			Domain:                       common.StringPtr("domain"),
+			Domain:                       common.StringPtr(h.domain),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("external_wid"),
-				RunId:      common.StringPtr("external_rid"),
+				WorkflowId: common.StringPtr(externalWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(uuid.New()),
 			},
 			ChildWorkflowOnly: common.BoolPtr(false),
 		}
@@ -602,10 +658,10 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.RequestCancelExternalWorkflowExecutionFailedEventAttributes = &shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
 			Cause:                        common.CancelExternalWorkflowExecutionFailedCausePtr(shared.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution),
 			DecisionTaskCompletedEventId: common.Int64Ptr(completeEventID),
-			Domain:                       common.StringPtr("domain"),
+			Domain:                       common.StringPtr(h.domain),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("external_wid"),
-				RunId:      common.StringPtr("external_rid"),
+				WorkflowId: common.StringPtr(externalWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(uuid.New()),
 			},
 			InitiatedEventId: common.Int64Ptr(requestExternalWorkflowCanceledEventID),
 		}
@@ -619,69 +675,307 @@ func (h *HistoryAttributesGeneratorImpl) generateEventAttribute(vertex Vertex, e
 		historyEvent.EventType = shared.EventTypeExternalWorkflowExecutionCancelRequested.Ptr()
 		historyEvent.ExternalWorkflowExecutionCancelRequestedEventAttributes = &shared.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			InitiatedEventId: common.Int64Ptr(requestExternalWorkflowCanceledEventID),
-			Domain:           common.StringPtr("domain"),
+			Domain:           common.StringPtr(h.domain),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr("external_wid"),
-				RunId:      common.StringPtr("external_rid"),
+				WorkflowId: common.StringPtr(externalWorkflowPrefix + h.workflowID),
+				RunId:      common.StringPtr(uuid.New()),
 			},
 		}
 	}
 	return historyEvent
 }
 
-func getDefaultHistoryEvent(eventID int64) *shared.HistoryEvent {
+func getDefaultHistoryEvent(eventID, version int64) *shared.HistoryEvent {
 	return &shared.HistoryEvent{
 		EventId:   common.Int64Ptr(eventID),
 		Timestamp: common.Int64Ptr(time.Now().Unix()),
 		TaskId:    common.Int64Ptr(common.EmptyEventTaskID),
-		Version:   common.Int64Ptr(common.EmptyVersion),
+		Version:   common.Int64Ptr(version),
 	}
 }
 
-type (
-	// batch is the struct for history event batch
-	batch struct {
-		events []Vertex
-	}
+// InitializeHistoryEventGenerator initializes the history event generator
+func InitializeHistoryEventGenerator() Generator {
+	generator := NewEventGenerator()
 
-	// branch is a branch of new history events
-	branch struct {
-		next    []*branch
-		batches []batch
-	}
-)
-
-func (b *branch) split(resetIdx int) *branch {
-	curr := getBranchToSplit(b, resetIdx)
-	return updateCurrentBranchWithSplit(curr, resetIdx)
-}
-
-func getBranchToSplit(root *branch, resetIdx int) *branch {
-	curr := root
-	for curr.next != nil {
-		length := len(curr.batches)
-		if length > resetIdx {
-			break
+	//Functions
+	notPendingDecisionTask := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeDecisionTaskScheduled.String():
+				count++
+			case shared.EventTypeDecisionTaskCompleted.String(),
+				shared.EventTypeDecisionTaskFailed.String(),
+				shared.EventTypeDecisionTaskTimedOut.String():
+				count--
+			}
 		}
-		curr = curr.next[len(curr.next)-1]
-		resetIdx -= length
+		return count <= 0
 	}
-	return curr
-}
+	containActivityComplete := func() bool {
+		for _, e := range generator.ListGeneratedVertices() {
+			if e.GetName() == shared.EventTypeActivityTaskCompleted.String() {
+				return true
+			}
+		}
+		return false
+	}
+	hasPendingTimer := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeTimerStarted.String():
+				count++
+			case shared.EventTypeTimerFired.String(),
+				shared.EventTypeTimerCanceled.String():
+				count--
+			}
+		}
+		return count > 0
+	}
+	hasPendingActivity := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeActivityTaskScheduled.String():
+				count++
+			case shared.EventTypeActivityTaskCanceled.String(),
+				shared.EventTypeActivityTaskFailed.String(),
+				shared.EventTypeActivityTaskTimedOut.String(),
+				shared.EventTypeActivityTaskCompleted.String():
+				count--
+			}
+		}
+		return count > 0
+	}
+	hasPendingStartActivity := func() bool {
+		count := 0
+		for _, e := range generator.ListGeneratedVertices() {
+			switch e.GetName() {
+			case shared.EventTypeActivityTaskStarted.String():
+				count++
+			case shared.EventTypeActivityTaskCanceled.String(),
+				shared.EventTypeActivityTaskFailed.String(),
+				shared.EventTypeActivityTaskTimedOut.String(),
+				shared.EventTypeActivityTaskCompleted.String():
+				count--
+			}
+		}
+		return count > 0
+	}
+	canDoBatch := func(history []Vertex) bool {
+		if len(history) == 0 {
+			return true
+		}
 
-func updateCurrentBranchWithSplit(curr *branch, resetIdx int) *branch {
-	firstBatches := make([]batch, resetIdx+1)
-	copy(firstBatches, curr.batches[:resetIdx+1])
-	secondBatches := make([]batch, len(curr.batches)-resetIdx-1)
-	copy(secondBatches, curr.batches[resetIdx+1:])
-	splitBranch := &branch{
-		next:    curr.next,
-		batches: secondBatches,
+		hasPendingDecisionTask := false
+		for _, event := range generator.ListGeneratedVertices() {
+			switch event.GetName() {
+			case shared.EventTypeDecisionTaskScheduled.String():
+				hasPendingDecisionTask = true
+			case shared.EventTypeDecisionTaskCompleted.String(),
+				shared.EventTypeDecisionTaskFailed.String(),
+				shared.EventTypeDecisionTaskTimedOut.String():
+				hasPendingDecisionTask = false
+			}
+		}
+		if hasPendingDecisionTask {
+			return false
+		}
+		if history[len(history)-1].GetName() == shared.EventTypeDecisionTaskScheduled.String() {
+			return false
+		}
+		if history[0].GetName() == shared.EventTypeDecisionTaskCompleted.String() {
+			return len(history) == 1
+		}
+		return true
 	}
-	newBranch := &branch{
-		batches: make([]batch, 0),
-	}
-	curr.batches = firstBatches
-	curr.next = []*branch{splitBranch, newBranch}
-	return newBranch
+
+	//Setup decision task model
+	decisionModel := NewHistoryEventModel()
+	decisionSchedule := NewHistoryEventVertex(shared.EventTypeDecisionTaskScheduled.String())
+	decisionStart := NewHistoryEventVertex(shared.EventTypeDecisionTaskStarted.String())
+	decisionStart.SetIsStrictOnNextVertex(true)
+	decisionFail := NewHistoryEventVertex(shared.EventTypeDecisionTaskFailed.String())
+	decisionTimedOut := NewHistoryEventVertex(shared.EventTypeDecisionTaskTimedOut.String())
+	decisionComplete := NewHistoryEventVertex(shared.EventTypeDecisionTaskCompleted.String())
+	decisionComplete.SetIsStrictOnNextVertex(true)
+	decisionComplete.SetMaxNextVertex(2)
+	decisionScheduleToStart := NewHistoryEventEdge(decisionSchedule, decisionStart)
+	decisionStartToComplete := NewHistoryEventEdge(decisionStart, decisionComplete)
+	decisionStartToFail := NewHistoryEventEdge(decisionStart, decisionFail)
+	decisionStartToTimedOut := NewHistoryEventEdge(decisionStart, decisionTimedOut)
+	decisionFailToSchedule := NewHistoryEventEdge(decisionFail, decisionSchedule)
+	decisionFailToSchedule.SetCondition(notPendingDecisionTask)
+	decisionTimedOutToSchedule := NewHistoryEventEdge(decisionTimedOut, decisionSchedule)
+	decisionTimedOutToSchedule.SetCondition(notPendingDecisionTask)
+	decisionModel.AddEdge(decisionScheduleToStart, decisionStartToComplete, decisionStartToFail, decisionStartToTimedOut,
+		decisionFailToSchedule, decisionTimedOutToSchedule)
+
+	//Setup workflow model
+	workflowModel := NewHistoryEventModel()
+	workflowStart := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionStarted.String())
+	workflowSignal := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionSignaled.String())
+	workflowComplete := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCompleted.String())
+	continueAsNew := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionContinuedAsNew.String())
+	workflowFail := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionFailed.String())
+	workflowCancel := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCanceled.String())
+	workflowCancelRequest := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCancelRequested.String()) //?
+	workflowTerminate := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionTerminated.String())
+	workflowTimedOut := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionTimedOut.String())
+	workflowStartToSignal := NewHistoryEventEdge(workflowStart, workflowSignal)
+	workflowStartToDecisionSchedule := NewHistoryEventEdge(workflowStart, decisionSchedule)
+	workflowStartToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	workflowSignalToDecisionSchedule := NewHistoryEventEdge(workflowSignal, decisionSchedule)
+	workflowSignalToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	decisionCompleteToWorkflowComplete := NewHistoryEventEdge(decisionComplete, workflowComplete)
+	decisionCompleteToWorkflowComplete.SetCondition(containActivityComplete)
+	decisionCompleteToWorkflowFailed := NewHistoryEventEdge(decisionComplete, workflowFail)
+	decisionCompleteToWorkflowFailed.SetCondition(containActivityComplete)
+	decisionCompleteToCAN := NewHistoryEventEdge(decisionComplete, continueAsNew)
+	decisionCompleteToCAN.SetCondition(containActivityComplete)
+	workflowCancelRequestToCancel := NewHistoryEventEdge(workflowCancelRequest, workflowCancel)
+	workflowModel.AddEdge(workflowStartToSignal, workflowStartToDecisionSchedule, workflowSignalToDecisionSchedule,
+		decisionCompleteToCAN, decisionCompleteToWorkflowComplete, decisionCompleteToWorkflowFailed, workflowCancelRequestToCancel)
+
+	//Setup activity model
+	activityModel := NewHistoryEventModel()
+	activitySchedule := NewHistoryEventVertex(shared.EventTypeActivityTaskScheduled.String())
+	activityStart := NewHistoryEventVertex(shared.EventTypeActivityTaskStarted.String())
+	activityComplete := NewHistoryEventVertex(shared.EventTypeActivityTaskCompleted.String())
+	activityFail := NewHistoryEventVertex(shared.EventTypeActivityTaskFailed.String())
+	activityTimedOut := NewHistoryEventVertex(shared.EventTypeActivityTaskTimedOut.String())
+	activityCancelRequest := NewHistoryEventVertex(shared.EventTypeActivityTaskCancelRequested.String()) //?
+	activityCancel := NewHistoryEventVertex(shared.EventTypeActivityTaskCanceled.String())
+	activityCancelRequestFail := NewHistoryEventVertex(shared.EventTypeRequestCancelActivityTaskFailed.String())
+	decisionCompleteToATSchedule := NewHistoryEventEdge(decisionComplete, activitySchedule)
+
+	activityScheduleToStart := NewHistoryEventEdge(activitySchedule, activityStart)
+	activityScheduleToStart.SetCondition(hasPendingActivity)
+
+	activityStartToComplete := NewHistoryEventEdge(activityStart, activityComplete)
+	activityStartToComplete.SetCondition(hasPendingActivity)
+
+	activityStartToFail := NewHistoryEventEdge(activityStart, activityFail)
+	activityStartToFail.SetCondition(hasPendingActivity)
+
+	activityStartToTimedOut := NewHistoryEventEdge(activityStart, activityTimedOut)
+	activityStartToTimedOut.SetCondition(hasPendingActivity)
+
+	activityCompleteToDecisionSchedule := NewHistoryEventEdge(activityComplete, decisionSchedule)
+	activityCompleteToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	activityFailToDecisionSchedule := NewHistoryEventEdge(activityFail, decisionSchedule)
+	activityFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	activityTimedOutToDecisionSchedule := NewHistoryEventEdge(activityTimedOut, decisionSchedule)
+	activityTimedOutToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	activityCancelToDecisionSchedule := NewHistoryEventEdge(activityCancel, decisionSchedule)
+	activityCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
+
+	activityCancelReqToCancel := NewHistoryEventEdge(activityCancelRequest, activityCancel)
+	activityCancelReqToCancel.SetCondition(hasPendingActivity)
+
+	activityCancelReqToCancelFail := NewHistoryEventEdge(activityCancelRequest, activityCancelRequestFail)
+	activityCancelRequestFailToDecisionSchedule := NewHistoryEventEdge(activityCancelRequestFail, decisionSchedule)
+	activityCancelRequestFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	decisionCompleteToActivityCancelRequest := NewHistoryEventEdge(decisionComplete, activityCancelRequest)
+	decisionCompleteToActivityCancelRequest.SetCondition(hasPendingStartActivity)
+
+	activityModel.AddEdge(decisionCompleteToATSchedule, activityScheduleToStart, activityStartToComplete,
+		activityStartToFail, activityStartToTimedOut, decisionCompleteToATSchedule, activityCompleteToDecisionSchedule,
+		activityFailToDecisionSchedule, activityTimedOutToDecisionSchedule, activityCancelReqToCancel, activityCancelReqToCancelFail,
+		activityCancelToDecisionSchedule, decisionCompleteToActivityCancelRequest, activityCancelRequestFailToDecisionSchedule)
+
+	//Setup timer model
+	timerModel := NewHistoryEventModel()
+	timerStart := NewHistoryEventVertex(shared.EventTypeTimerStarted.String())
+	timerFired := NewHistoryEventVertex(shared.EventTypeTimerFired.String())
+	timerCancel := NewHistoryEventVertex(shared.EventTypeTimerCanceled.String())
+	timerStartToFire := NewHistoryEventEdge(timerStart, timerFired)
+	timerStartToFire.SetCondition(hasPendingTimer)
+	decisionCompleteToCancel := NewHistoryEventEdge(decisionComplete, timerCancel)
+	decisionCompleteToCancel.SetCondition(hasPendingTimer)
+
+	decisionCompleteToTimerStart := NewHistoryEventEdge(decisionComplete, timerStart)
+	timerFiredToDecisionSchedule := NewHistoryEventEdge(timerFired, decisionSchedule)
+	timerFiredToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	timerCancelToDecisionSchedule := NewHistoryEventEdge(timerCancel, decisionSchedule)
+	timerCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	timerModel.AddEdge(timerStartToFire, decisionCompleteToCancel, decisionCompleteToTimerStart, timerFiredToDecisionSchedule, timerCancelToDecisionSchedule)
+
+	//Setup child workflow model
+	childWorkflowModel := NewHistoryEventModel()
+	childWorkflowInitial := NewHistoryEventVertex(shared.EventTypeStartChildWorkflowExecutionInitiated.String())
+	childWorkflowInitialFail := NewHistoryEventVertex(shared.EventTypeStartChildWorkflowExecutionFailed.String())
+	childWorkflowStart := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionStarted.String())
+	childWorkflowCancel := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionCanceled.String())
+	childWorkflowComplete := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionCompleted.String())
+	childWorkflowFail := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionFailed.String())
+	childWorkflowTerminate := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionTerminated.String())
+	childWorkflowTimedOut := NewHistoryEventVertex(shared.EventTypeChildWorkflowExecutionTimedOut.String())
+	decisionCompleteToChildWorkflowInitial := NewHistoryEventEdge(decisionComplete, childWorkflowInitial)
+	childWorkflowInitialToFail := NewHistoryEventEdge(childWorkflowInitial, childWorkflowInitialFail)
+	childWorkflowInitialToStart := NewHistoryEventEdge(childWorkflowInitial, childWorkflowStart)
+	childWorkflowStartToCancel := NewHistoryEventEdge(childWorkflowStart, childWorkflowCancel)
+	childWorkflowStartToFail := NewHistoryEventEdge(childWorkflowStart, childWorkflowFail)
+	childWorkflowStartToComplete := NewHistoryEventEdge(childWorkflowStart, childWorkflowComplete)
+	childWorkflowStartToTerminate := NewHistoryEventEdge(childWorkflowStart, childWorkflowTerminate)
+	childWorkflowStartToTimedOut := NewHistoryEventEdge(childWorkflowStart, childWorkflowTimedOut)
+	childWorkflowCancelToDecisionSchedule := NewHistoryEventEdge(childWorkflowCancel, decisionSchedule)
+	childWorkflowCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	childWorkflowFailToDecisionSchedule := NewHistoryEventEdge(childWorkflowFail, decisionSchedule)
+	childWorkflowFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	childWorkflowCompleteToDecisionSchedule := NewHistoryEventEdge(childWorkflowComplete, decisionSchedule)
+	childWorkflowCompleteToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	childWorkflowTerminateToDecisionSchedule := NewHistoryEventEdge(childWorkflowTerminate, decisionSchedule)
+	childWorkflowTerminateToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	childWorkflowTimedOutToDecisionSchedule := NewHistoryEventEdge(childWorkflowTimedOut, decisionSchedule)
+	childWorkflowTimedOutToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	childWorkflowInitialFailToDecisionSchedule := NewHistoryEventEdge(childWorkflowInitialFail, decisionSchedule)
+	childWorkflowInitialFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	childWorkflowModel.AddEdge(decisionCompleteToChildWorkflowInitial, childWorkflowInitialToFail, childWorkflowInitialToStart,
+		childWorkflowStartToCancel, childWorkflowStartToFail, childWorkflowStartToComplete, childWorkflowStartToTerminate,
+		childWorkflowStartToTimedOut, childWorkflowCancelToDecisionSchedule, childWorkflowFailToDecisionSchedule,
+		childWorkflowCompleteToDecisionSchedule, childWorkflowTerminateToDecisionSchedule, childWorkflowTimedOutToDecisionSchedule,
+		childWorkflowInitialFailToDecisionSchedule)
+
+	//Setup external workflow model
+	externalWorkflowModel := NewHistoryEventModel()
+	externalWorkflowSignal := NewHistoryEventVertex(shared.EventTypeSignalExternalWorkflowExecutionInitiated.String())
+	externalWorkflowSignalFailed := NewHistoryEventVertex(shared.EventTypeSignalExternalWorkflowExecutionFailed.String())
+	externalWorkflowSignaled := NewHistoryEventVertex(shared.EventTypeExternalWorkflowExecutionSignaled.String())
+	externalWorkflowCancel := NewHistoryEventVertex(shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated.String())
+	externalWorkflowCancelFail := NewHistoryEventVertex(shared.EventTypeRequestCancelExternalWorkflowExecutionFailed.String())
+	externalWorkflowCanceled := NewHistoryEventVertex(shared.EventTypeExternalWorkflowExecutionCancelRequested.String())
+	decisionCompleteToExternalWorkflowSignal := NewHistoryEventEdge(decisionComplete, externalWorkflowSignal)
+	decisionCompleteToExternalWorkflowCancel := NewHistoryEventEdge(decisionComplete, externalWorkflowCancel)
+	externalWorkflowSignalToFail := NewHistoryEventEdge(externalWorkflowSignal, externalWorkflowSignalFailed)
+	externalWorkflowSignalToSignaled := NewHistoryEventEdge(externalWorkflowSignal, externalWorkflowSignaled)
+	externalWorkflowCancelToFail := NewHistoryEventEdge(externalWorkflowCancel, externalWorkflowCancelFail)
+	externalWorkflowCancelToCanceled := NewHistoryEventEdge(externalWorkflowCancel, externalWorkflowCanceled)
+	externalWorkflowSignaledToDecisionSchedule := NewHistoryEventEdge(externalWorkflowSignaled, decisionSchedule)
+	externalWorkflowSignaledToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	externalWorkflowSignalFailedToDecisionSchedule := NewHistoryEventEdge(externalWorkflowSignalFailed, decisionSchedule)
+	externalWorkflowSignalFailedToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	externalWorkflowCanceledToDecisionSchedule := NewHistoryEventEdge(externalWorkflowCanceled, decisionSchedule)
+	externalWorkflowCanceledToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	externalWorkflowCancelFailToDecisionSchedule := NewHistoryEventEdge(externalWorkflowCancelFail, decisionSchedule)
+	externalWorkflowCancelFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
+	externalWorkflowModel.AddEdge(decisionCompleteToExternalWorkflowSignal, decisionCompleteToExternalWorkflowCancel,
+		externalWorkflowSignalToFail, externalWorkflowSignalToSignaled, externalWorkflowCancelToFail, externalWorkflowCancelToCanceled,
+		externalWorkflowSignaledToDecisionSchedule, externalWorkflowSignalFailedToDecisionSchedule,
+		externalWorkflowCanceledToDecisionSchedule, externalWorkflowCancelFailToDecisionSchedule)
+
+	//Config event generator
+	generator.SetBatchGenerationRule(canDoBatch)
+	generator.AddInitialEntryVertex(workflowStart)
+	generator.AddExitVertex(workflowComplete, workflowFail, workflowTerminate, workflowTimedOut, continueAsNew)
+	//generator.AddRandomEntryVertex(workflowSignal, workflowTerminate, workflowTimedOut)
+	generator.AddModel(decisionModel)
+	generator.AddModel(workflowModel)
+	generator.AddModel(activityModel)
+	generator.AddModel(timerModel)
+	generator.AddModel(childWorkflowModel)
+	generator.AddModel(externalWorkflowModel)
+	return generator
 }
