@@ -37,6 +37,8 @@ var (
 	ErrInvalidEvent = errors.New("event cannot be applied to query in state")
 	// ErrResultAlreadyRecorded indicates query cannot make state transition because result has already been recorded.
 	ErrResultAlreadyRecorded = errors.New("result already recorded cannot make state transition")
+	// ErrFailedToInvokeQueryRegistryCallback indicates that notifying query registry of its state transition failed.
+	ErrFailedToInvokeQueryRegistryCallback = errors.New("notifying query registry of state transition failed")
 )
 
 const (
@@ -91,11 +93,22 @@ type (
 		persistenceConditionSatisfied bool
 		termCh                        chan struct{}
 		state                         QueryState
+
+		bufferedToStartedCallback func(string) error
+		startedToBufferedCallback func(string) error
+		terminalStateCallback     func(string)
 	}
 )
 
-// NewQuery constructs a new Query.
-func NewQuery(queryInput *shared.WorkflowQuery) Query {
+// newQuery is used to construct a new Query. Query should always be constructed
+// by calling QueryRegistry.BufferQuery, queries constructed directly by calling this method
+// will no be accessible through query registry and are therefore not useful.
+func newQuery(
+	queryInput *shared.WorkflowQuery,
+	bufferedToStartedCallback func(string) error,
+	startedToBufferedCallback func(string) error,
+	terminalStateCallback func(string),
+) Query {
 	return &query{
 		id:                            uuid.New(),
 		queryInput:                    queryInput,
@@ -103,6 +116,10 @@ func NewQuery(queryInput *shared.WorkflowQuery) Query {
 		persistenceConditionSatisfied: false,
 		termCh:                        make(chan struct{}),
 		state:                         QueryStateBuffered,
+
+		bufferedToStartedCallback: bufferedToStartedCallback,
+		startedToBufferedCallback: startedToBufferedCallback,
+		terminalStateCallback:     terminalStateCallback,
 	}
 }
 
@@ -164,11 +181,17 @@ func (q *query) RecordEvent(event QueryEvent, queryResult *shared.WorkflowQueryR
 		if q.queryResult != nil {
 			return false, ErrResultAlreadyRecorded
 		}
+		if err := q.startedToBufferedCallback(q.id); err != nil {
+			return false, ErrFailedToInvokeQueryRegistryCallback
+		}
 		q.state = QueryStateBuffered
 		return true, nil
 	case QueryEventStart:
 		if q.state != QueryStateBuffered {
 			return false, ErrInvalidEvent
+		}
+		if err := q.bufferedToStartedCallback(q.id); err != nil {
+			return false, ErrFailedToInvokeQueryRegistryCallback
 		}
 		q.state = QueryStateStarted
 		return true, nil
@@ -188,6 +211,7 @@ func (q *query) RecordEvent(event QueryEvent, queryResult *shared.WorkflowQueryR
 		q.persistenceConditionSatisfied = true
 		return q.handleComplete(), nil
 	case QueryEventExpire:
+		q.terminalStateCallback(q.id)
 		q.state = QueryStateExpired
 		close(q.termCh)
 		return true, nil
@@ -200,6 +224,7 @@ func (q *query) handleComplete() bool {
 	if q.queryResult == nil || !q.persistenceConditionSatisfied {
 		return false
 	}
+	q.terminalStateCallback(q.id)
 	q.state = QueryStateCompleted
 	close(q.termCh)
 	return true

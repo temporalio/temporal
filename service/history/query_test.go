@@ -23,6 +23,7 @@
 package history
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,20 +45,23 @@ func (s *QuerySuite) SetupTest() {
 }
 
 func (s *QuerySuite) TestExpiredTerminalState() {
-	query := NewQuery(&shared.WorkflowQuery{})
+	qrc := queryRegistryCallbacks{}
+	query := newQuery(&shared.WorkflowQuery{}, qrc.bufferedToStartedCallback, qrc.startedToBufferedCallback, qrc.terminalCallback)
 	s.False(s.chanClosed(query.TerminationCh()))
 	changed, err := query.RecordEvent(QueryEventExpire, nil)
 	s.NoError(err)
 	s.True(changed)
 	s.True(s.chanClosed(query.TerminationCh()))
 	s.Equal(QueryStateExpired, query.State())
+	s.True(qrc.statesMatch(0, 0, 1))
 	changed, err = query.RecordEvent(QueryEventStart, nil)
 	s.Equal(ErrAlreadyTerminal, err)
 	s.False(changed)
 }
 
 func (s *QuerySuite) TestCompletedTerminalState() {
-	query := NewQuery(&shared.WorkflowQuery{})
+	qrc := queryRegistryCallbacks{}
+	query := newQuery(&shared.WorkflowQuery{}, qrc.bufferedToStartedCallback, qrc.startedToBufferedCallback, qrc.terminalCallback)
 
 	changed, err := query.RecordEvent(QueryEventRebuffer, nil)
 	s.False(changed)
@@ -65,6 +69,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateBuffered, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(0, 0, 0))
 
 	changed, err = query.RecordEvent(QueryEventRecordResult, nil)
 	s.False(changed)
@@ -72,6 +77,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateBuffered, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(0, 0, 0))
 
 	changed, err = query.RecordEvent(QueryEventStart, nil)
 	s.True(changed)
@@ -79,6 +85,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(1, 0, 0))
 
 	changed, err = query.RecordEvent(QueryEventRebuffer, nil)
 	s.True(changed)
@@ -86,6 +93,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateBuffered, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(1, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventStart, nil)
 	s.True(changed)
@@ -93,6 +101,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventRebuffer, &shared.WorkflowQueryResult{})
 	s.False(changed)
@@ -100,6 +109,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventRecordResult, nil)
 	s.False(changed)
@@ -107,6 +117,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.Nil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventRecordResult, &shared.WorkflowQueryResult{})
 	s.False(changed)
@@ -114,6 +125,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.NotNil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventRebuffer, nil)
 	s.False(changed)
@@ -121,6 +133,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.NotNil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventRecordResult, &shared.WorkflowQueryResult{})
 	s.False(changed)
@@ -128,6 +141,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateStarted, query.State())
 	s.False(s.chanClosed(query.TerminationCh()))
 	s.NotNil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 0))
 
 	changed, err = query.RecordEvent(QueryEventPersistenceConditionSatisfied, nil)
 	s.True(changed)
@@ -135,6 +149,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateCompleted, query.State())
 	s.True(s.chanClosed(query.TerminationCh()))
 	s.NotNil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 1))
 
 	changed, err = query.RecordEvent(QueryEventPersistenceConditionSatisfied, nil)
 	s.False(changed)
@@ -142,6 +157,16 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 	s.Equal(QueryStateCompleted, query.State())
 	s.True(s.chanClosed(query.TerminationCh()))
 	s.NotNil(query.QueryResult())
+	s.True(qrc.statesMatch(2, 1, 1))
+}
+
+func (s *QuerySuite) TestCallbackFailed() {
+	query := newQuery(&shared.WorkflowQuery{}, func(_ string) error { return errors.New("error") }, nil, nil)
+	changed, err := query.RecordEvent(QueryEventStart, nil)
+	s.Equal(ErrFailedToInvokeQueryRegistryCallback, err)
+	s.False(changed)
+	s.Equal(QueryStateBuffered, query.State())
+	s.False(s.chanClosed(query.TerminationCh()))
 }
 
 func (s *QuerySuite) chanClosed(ch <-chan struct{}) bool {
@@ -151,4 +176,30 @@ func (s *QuerySuite) chanClosed(ch <-chan struct{}) bool {
 	default:
 		return false
 	}
+}
+
+type queryRegistryCallbacks struct {
+	bufferedToStartedCount int
+	startedToBufferedCount int
+	terminalStateCount     int
+}
+
+func (qrc *queryRegistryCallbacks) bufferedToStartedCallback(_ string) error {
+	qrc.bufferedToStartedCount++
+	return nil
+}
+
+func (qrc *queryRegistryCallbacks) startedToBufferedCallback(_ string) error {
+	qrc.startedToBufferedCount++
+	return nil
+}
+
+func (qrc *queryRegistryCallbacks) terminalCallback(_ string) {
+	qrc.terminalStateCount++
+}
+
+func (qrc *queryRegistryCallbacks) statesMatch(bufferedToStartedCount int, startedToBufferedCount int, terminalStateCount int) bool {
+	return bufferedToStartedCount == qrc.bufferedToStartedCount &&
+		startedToBufferedCount == qrc.startedToBufferedCount &&
+		terminalStateCount == qrc.terminalStateCount
 }
