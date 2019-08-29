@@ -18,12 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package testing
 
 import (
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+
 	"reflect"
 	"time"
 )
@@ -81,6 +82,7 @@ func NewHistoryAttributesGenerator(
 	domain,
 	identity string,
 ) HistoryAttributesGenerator {
+
 	return &HistoryAttributesGeneratorImpl{
 		decisionTaskAttempts:                    int64(0),
 		timerIDs:                                make(map[string]bool),
@@ -107,7 +109,12 @@ func NewHistoryAttributesGenerator(
 }
 
 // GenerateHistoryEvents is to generator batches of history events
-func (h *HistoryAttributesGeneratorImpl) GenerateHistoryEvents(batches []NDCTestBatch, startEventID, version int64) []*shared.History {
+func (h *HistoryAttributesGeneratorImpl) GenerateHistoryEvents(
+	batches []NDCTestBatch,
+	startEventID int64,
+	version int64,
+) []*shared.History {
+
 	history := make([]*shared.History, 0, len(batches))
 	eventID := startEventID
 
@@ -696,7 +703,7 @@ func getDefaultHistoryEvent(eventID, version int64) *shared.HistoryEvent {
 
 // InitializeHistoryEventGenerator initializes the history event generator
 func InitializeHistoryEventGenerator() Generator {
-	generator := NewEventGenerator()
+	generator := NewEventGenerator(time.Now().UnixNano())
 
 	//Functions
 	notPendingDecisionTask := func() bool {

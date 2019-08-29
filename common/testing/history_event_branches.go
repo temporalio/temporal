@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package testing
 
 type (
 	// NDCTestBatch is the struct for history event batch
@@ -33,7 +33,8 @@ type (
 	}
 )
 
-func (b *NDCTestBranch) split(resetIdx int) *NDCTestBranch {
+// Split creates a new branch of the workflow execution
+func (b *NDCTestBranch) Split(resetIdx int) *NDCTestBranch {
 	curr := getBranchToSplit(b, resetIdx)
 	return updateCurrentBranchWithSplit(curr, resetIdx)
 }

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package testing
 
 import (
 	"math/rand"
@@ -37,15 +37,14 @@ var (
 )
 
 type (
-	// HistoryEventVertex represents a history event
+	// HistoryEventVertex represents one type of history event
 	HistoryEventVertex struct {
 		name                 string
 		isStrictOnNextVertex bool
 		maxNextGeneration    int
 	}
 
-	// HistoryEventModel is a history event model
-	// which contains transition state of each history event
+	// HistoryEventModel is a graph represents relationships among history event types
 	HistoryEventModel struct {
 		edges []Edge
 	}
@@ -88,7 +87,9 @@ type (
 )
 
 // NewEventGenerator initials the event generator
-func NewEventGenerator() Generator {
+func NewEventGenerator(
+	seed int64,
+) Generator {
 	return &EventGenerator{
 		connections:         make(map[Vertex][]Edge),
 		previousVertices:    make([]Vertex, 0),
@@ -96,7 +97,7 @@ func NewEventGenerator() Generator {
 		entryVertices:       make([]Vertex, 0),
 		exitVertices:        make(map[Vertex]bool),
 		randomEntryVertices: make([]Vertex, 0),
-		dice:                rand.New(rand.NewSource(time.Now().Unix())),
+		dice:                rand.New(rand.NewSource(seed)),
 		canDoBatch:          defaultBatchFunc,
 		resetPoints:         make([]ResetPoint, 0),
 	}
@@ -104,24 +105,38 @@ func NewEventGenerator() Generator {
 
 // AddInitialEntryVertex adds the initial history event vertices
 // Generator will only start from one of the entry vertex
-func (g *EventGenerator) AddInitialEntryVertex(entry ...Vertex) {
-	g.entryVertices = append(g.entryVertices, entry...)
+func (g *EventGenerator) AddInitialEntryVertex(
+	entry ...Vertex,
+) {
+
+	g.entryVertices = append(
+		g.entryVertices,
+		entry...)
 }
 
 // AddExitVertex adds the terminate history event vertex
-func (g *EventGenerator) AddExitVertex(exit ...Vertex) {
+func (g *EventGenerator) AddExitVertex(
+	exit ...Vertex,
+) {
+
 	for _, v := range exit {
 		g.exitVertices[v] = true
 	}
 }
 
 // AddRandomEntryVertex adds the random history event vertex
-func (g *EventGenerator) AddRandomEntryVertex(exit ...Vertex) {
+func (g *EventGenerator) AddRandomEntryVertex(
+	exit ...Vertex,
+) {
+
 	g.randomEntryVertices = append(g.randomEntryVertices, exit...)
 }
 
 // AddModel adds a history event model
-func (g *EventGenerator) AddModel(model Model) {
+func (g *EventGenerator) AddModel(
+	model Model,
+) {
+
 	for _, e := range model.ListEdges() {
 		if _, ok := g.connections[e.GetStartVertex()]; !ok {
 			g.connections[e.GetStartVertex()] = make([]Edge, 0)
@@ -132,11 +147,13 @@ func (g *EventGenerator) AddModel(model Model) {
 
 // ListGeneratedVertices returns all the generated history events
 func (g EventGenerator) ListGeneratedVertices() []Vertex {
+
 	return g.previousVertices
 }
 
 // HasNextVertex checks if there is accessible history event vertex
 func (g *EventGenerator) HasNextVertex() bool {
+
 	for _, prev := range g.previousVertices {
 		if _, ok := g.exitVertices[prev]; ok {
 			return false
@@ -147,6 +164,7 @@ func (g *EventGenerator) HasNextVertex() bool {
 
 // GetNextVertices generates a batch of history events happened in the same transaction
 func (g *EventGenerator) GetNextVertices() []Vertex {
+
 	if !g.HasNextVertex() {
 		panic("Generator reached to a terminate state.")
 	}
@@ -163,6 +181,7 @@ func (g *EventGenerator) GetNextVertices() []Vertex {
 
 // Reset reset the generator to the initial state
 func (g *EventGenerator) Reset() {
+
 	g.leafVertices = make([]Vertex, 0)
 	g.previousVertices = make([]Vertex, 0)
 	g.dice = rand.New(rand.NewSource(time.Now().Unix()))
@@ -171,11 +190,13 @@ func (g *EventGenerator) Reset() {
 // ListResetPoint returns a list of available point to reset the event generator
 // this will reset the previous generated event history
 func (g *EventGenerator) ListResetPoint() []ResetPoint {
+
 	return g.resetPoints
 }
 
 // RandomResetToResetPoint randomly pick a reset point and reset the event generator to the point
 func (g *EventGenerator) RandomResetToResetPoint() int {
+
 	// Random reset does not reset to index 0
 	nextIdx := g.dice.Intn(len(g.resetPoints)-1) + 1
 	g.ResetToResetPoint(nextIdx)
@@ -183,7 +204,10 @@ func (g *EventGenerator) RandomResetToResetPoint() int {
 }
 
 // ResetToResetPoint resets to the corresponding reset point based on the input reset point index
-func (g *EventGenerator) ResetToResetPoint(index int) {
+func (g *EventGenerator) ResetToResetPoint(
+	index int,
+) {
+
 	if index >= len(g.resetPoints) {
 		panic("The reset point does not exist.")
 	}
@@ -195,11 +219,15 @@ func (g *EventGenerator) ResetToResetPoint(index int) {
 }
 
 // SetBatchGenerationRule sets a function to determine next generated batch of history events
-func (g *EventGenerator) SetBatchGenerationRule(canDoBatchFunc func([]Vertex) bool) {
+func (g *EventGenerator) SetBatchGenerationRule(
+	canDoBatchFunc func([]Vertex) bool,
+) {
+
 	g.canDoBatch = canDoBatchFunc
 }
 
 func (g *EventGenerator) generateNextEventBatch() []Vertex {
+
 	batch := make([]Vertex, 0)
 	switch {
 	case len(g.previousVertices) == 0:
@@ -218,6 +246,7 @@ func (g *EventGenerator) generateNextEventBatch() []Vertex {
 }
 
 func (g *EventGenerator) addNewResetPoint() {
+
 	previousVerticesSnapshot := make([]Vertex, len(g.previousVertices))
 	copy(previousVerticesSnapshot, g.previousVertices)
 	leafVerticesSnapshot := make([]Vertex, len(g.leafVertices))
@@ -229,12 +258,16 @@ func (g *EventGenerator) addNewResetPoint() {
 	g.resetPoints = append(g.resetPoints, newResetPoint)
 }
 
-func (g *EventGenerator) updateContext(batch []Vertex) {
+func (g *EventGenerator) updateContext(
+	batch []Vertex,
+) {
+
 	g.leafVertices = append(g.leafVertices, batch...)
 	g.previousVertices = append(g.previousVertices, batch...)
 }
 
 func (g *EventGenerator) getEntryVertex() Vertex {
+
 	if len(g.entryVertices) == 0 {
 		panic("No possible start vertex to go to next step")
 	}
@@ -245,6 +278,7 @@ func (g *EventGenerator) getEntryVertex() Vertex {
 }
 
 func (g *EventGenerator) getRandomVertex() Vertex {
+
 	if len(g.randomEntryVertices) == 0 {
 		panic("No possible vertex to go to next step")
 	}
@@ -255,6 +289,7 @@ func (g *EventGenerator) getRandomVertex() Vertex {
 }
 
 func (g *EventGenerator) getVertexCandidate() int {
+
 	if len(g.leafVertices) == 0 {
 		panic("No possible vertex to go to next step")
 	}
@@ -277,7 +312,10 @@ func (g *EventGenerator) getVertexCandidate() int {
 	panic("cannot find available history event to proceed. please check your model")
 }
 
-func (g *EventGenerator) findAccessibleVertex(vertexIndex int) (bool, int) {
+func (g *EventGenerator) findAccessibleVertex(
+	vertexIndex int,
+) (bool, int) {
+
 	candidate := g.leafVertices[vertexIndex]
 	if g.leafVertices[len(g.leafVertices)-1].IsStrictOnNextVertex() {
 		vertexIndex = len(g.leafVertices) - 1
@@ -292,7 +330,10 @@ func (g *EventGenerator) findAccessibleVertex(vertexIndex int) (bool, int) {
 	return false, emptyCandidateIndex
 }
 
-func (g *EventGenerator) randomNextVertex(nextVertexIdx int) []Vertex {
+func (g *EventGenerator) randomNextVertex(
+	nextVertexIdx int,
+) []Vertex {
+
 	nextVertex := g.leafVertices[nextVertexIdx]
 	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 1
 	res := make([]Vertex, 0)
@@ -307,7 +348,10 @@ func (g *EventGenerator) randomNextVertex(nextVertexIdx int) []Vertex {
 	return res
 }
 
-func (g *EventGenerator) pickRandomVertex(nextVertex Vertex) Vertex {
+func (g *EventGenerator) pickRandomVertex(
+	nextVertex Vertex,
+) Vertex {
+
 	neighbors := g.connections[nextVertex]
 	neighborsRange := len(neighbors)
 	nextIdx := g.dice.Intn(neighborsRange)
@@ -327,6 +371,7 @@ func NewHistoryEventEdge(
 	start Vertex,
 	end Vertex,
 ) Edge {
+
 	return &HistoryEventEdge{
 		startVertex: start,
 		endVertex:   end,
@@ -334,47 +379,62 @@ func NewHistoryEventEdge(
 }
 
 // SetStartVertex sets the start vertex
-func (c *HistoryEventEdge) SetStartVertex(start Vertex) {
+func (c *HistoryEventEdge) SetStartVertex(
+	start Vertex,
+) {
+
 	c.startVertex = start
 }
 
 // GetStartVertex returns the start vertex
 func (c HistoryEventEdge) GetStartVertex() Vertex {
+
 	return c.startVertex
 }
 
 // SetEndVertex sets the end vertex
 func (c *HistoryEventEdge) SetEndVertex(end Vertex) {
+
 	c.endVertex = end
 }
 
 // GetEndVertex returns the end vertex
 func (c HistoryEventEdge) GetEndVertex() Vertex {
+
 	return c.endVertex
 }
 
 // SetCondition sets the condition to access this edge
-func (c *HistoryEventEdge) SetCondition(condition func() bool) {
+func (c *HistoryEventEdge) SetCondition(
+	condition func() bool,
+) {
+
 	c.condition = condition
 }
 
 // GetCondition returns the condition
 func (c HistoryEventEdge) GetCondition() func() bool {
+
 	return c.condition
 }
 
 // SetAction sets an action to perform when the end vertex hits
 func (c HistoryEventEdge) SetAction(action func()) {
+
 	c.action = action
 }
 
 // GetAction returns the action
 func (c HistoryEventEdge) GetAction() func() {
+
 	return c.action
 }
 
 // NewHistoryEventVertex initials a history event vertex
-func NewHistoryEventVertex(name string) Vertex {
+func NewHistoryEventVertex(
+	name string,
+) Vertex {
+
 	return &HistoryEventVertex{
 		name:                 name,
 		isStrictOnNextVertex: false,
@@ -384,31 +444,45 @@ func NewHistoryEventVertex(name string) Vertex {
 
 // GetName returns the name
 func (he HistoryEventVertex) GetName() string {
+
 	return he.name
 }
 
 // SetName sets the name
-func (he *HistoryEventVertex) SetName(name string) {
+func (he *HistoryEventVertex) SetName(
+	name string,
+) {
+
 	he.name = name
 }
 
 // Equals compares two vertex
-func (he *HistoryEventVertex) Equals(v Vertex) bool {
+func (he *HistoryEventVertex) Equals(
+	v Vertex,
+) bool {
+
 	return strings.EqualFold(he.name, v.GetName())
 }
 
 // SetIsStrictOnNextVertex sets if a vertex can be added between the current vertex and its child Vertices
-func (he *HistoryEventVertex) SetIsStrictOnNextVertex(isStrict bool) {
+func (he *HistoryEventVertex) SetIsStrictOnNextVertex(
+	isStrict bool,
+) {
+
 	he.isStrictOnNextVertex = isStrict
 }
 
 // IsStrictOnNextVertex returns the isStrict flag
 func (he HistoryEventVertex) IsStrictOnNextVertex() bool {
+
 	return he.isStrictOnNextVertex
 }
 
 // SetMaxNextVertex sets the max concurrent path can be generated from this vertex
-func (he *HistoryEventVertex) SetMaxNextVertex(maxNextGeneration int) {
+func (he *HistoryEventVertex) SetMaxNextVertex(
+	maxNextGeneration int,
+) {
+
 	if maxNextGeneration < 1 {
 		panic("max next vertex number cannot less than 1")
 	}
@@ -417,22 +491,28 @@ func (he *HistoryEventVertex) SetMaxNextVertex(maxNextGeneration int) {
 
 // GetMaxNextVertex returns the max concurrent path
 func (he HistoryEventVertex) GetMaxNextVertex() int {
+
 	return he.maxNextGeneration
 }
 
 // NewHistoryEventModel initials new history event model
 func NewHistoryEventModel() Model {
+
 	return &HistoryEventModel{
 		edges: make([]Edge, 0),
 	}
 }
 
 // AddEdge adds an edge to the model
-func (m *HistoryEventModel) AddEdge(edge ...Edge) {
+func (m *HistoryEventModel) AddEdge(
+	edge ...Edge,
+) {
+
 	m.edges = append(m.edges, edge...)
 }
 
 // ListEdges returns all added edges
 func (m HistoryEventModel) ListEdges() []Edge {
+
 	return m.edges
 }
