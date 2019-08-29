@@ -176,7 +176,7 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 	}
 	actualFileNames, err := listFilesByPrefix(dir, "file_")
 	s.NoError(err)
-	s.Equal(expectedFileNames, actualFileNames)
+	s.Equal(len(expectedFileNames), len(actualFileNames))
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
@@ -207,7 +207,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 		},
 	}
 
-	encodedHistoryBatches, err := encodeHistoryBatches(historyBatches)
+	encodedHistoryBatches, err := encode(historyBatches)
 	s.NoError(err)
 
 	decodedHistoryBatches, err := decodeHistoryBatches(encodedHistoryBatches)
@@ -255,7 +255,7 @@ func (s *UtilSuite) TestValidateDirPath() {
 	}
 }
 
-func (s *UtilSuite) TestConstructFilename() {
+func (s *UtilSuite) TestconstructHistoryFilename() {
 	testCases := []struct {
 		domainID             string
 		workflowID           string
@@ -273,7 +273,7 @@ func (s *UtilSuite) TestConstructFilename() {
 	}
 
 	for _, tc := range testCases {
-		filename := constructFilename(tc.domainID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
+		filename := constructHistoryFilename(tc.domainID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
 		s.Equal(tc.expectBuiltName, filename)
 	}
 }
@@ -426,7 +426,7 @@ func (s *UtilSuite) TestSerializeDeserializeGetHistoryToken() {
 		NextBatchIdx:         20,
 	}
 
-	serializedToken, err := serializeGetHistoryToken(token)
+	serializedToken, err := serializeToken(token)
 	s.Nil(err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)

@@ -50,8 +50,8 @@ const (
 	testCloseFailoverVersion = 100
 	testPageSize             = 100
 
-	testFileModeStr = "0700"
-	testDirModeStr  = "0600"
+	testFileModeStr = "0666"
+	testDirModeStr  = "0766"
 )
 
 var (
@@ -305,7 +305,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := ioutil.TempDir("", "TestArchiveSingeRead")
+	dir, err := ioutil.TempDir("", "TestArchiveSingleRead")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
@@ -324,7 +324,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	err = historyArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedFilename := constructFilename(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
+	expectedFilename := constructHistoryFilename(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
 	s.assertFileExists(path.Join(dir, expectedFilename))
 }
 
@@ -506,7 +506,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	err = historyArchiver.Archive(context.Background(), URI, archiveRequest)
 	s.NoError(err)
 
-	expectedFilename := constructFilename(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
+	expectedFilename := constructHistoryFilename(testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
 	s.assertFileExists(path.Join(dir, expectedFilename))
 
 	getRequest := &archiver.GetHistoryRequest{
@@ -523,7 +523,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 }
 
 func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.HistoryIterator) *historyArchiver {
-	config := &config.FilestoreHistoryArchiver{
+	config := &config.FilestoreArchiver{
 		FileMode: testFileModeStr,
 		DirMode:  testDirModeStr,
 	}
@@ -576,9 +576,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 }
 
 func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*shared.History, version int64) {
-	data, err := encodeHistoryBatches(historyBatches)
+	data, err := encode(historyBatches)
 	s.Require().NoError(err)
-	filename := constructFilename(testDomainID, testWorkflowID, testRunID, version)
+	filename := constructHistoryFilename(testDomainID, testWorkflowID, testRunID, version)
 	err = writeFile(path.Join(s.testGetDirectory, filename), data, testFileMode)
 	s.Require().NoError(err)
 }

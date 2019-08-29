@@ -334,13 +334,7 @@ type (
 
 	// HistoryArchiverProvider contains the config for all history archivers
 	HistoryArchiverProvider struct {
-		Filestore *FilestoreHistoryArchiver `yaml:"filestore"`
-	}
-
-	// FilestoreHistoryArchiver contain the config for filestore history archiver
-	FilestoreHistoryArchiver struct {
-		FileMode string `yaml:"fileMode"`
-		DirMode  string `yaml:"dirMode"`
+		Filestore *FilestoreArchiver `yaml:"filestore"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -355,11 +349,14 @@ type (
 
 	// VisibilityArchiverProvider contains the config for all visibility archivers
 	VisibilityArchiverProvider struct {
-		Filestore *FilestoreVisibilityArchiver `yaml:"filestore"`
+		Filestore *FilestoreArchiver `yaml:"filestore"`
 	}
 
-	// FilestoreVisibilityArchiver contain the config for filestore visibility archiver
-	FilestoreVisibilityArchiver struct{}
+	// FilestoreArchiver contain the config for filestore archiver
+	FilestoreArchiver struct {
+		FileMode string `yaml:"fileMode"`
+		DirMode  string `yaml:"dirMode"`
+	}
 
 	// PublicClient is config for connecting to cadence frontend
 	PublicClient struct {

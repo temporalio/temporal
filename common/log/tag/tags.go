@@ -668,6 +668,11 @@ func ArchivalRequestWorkflowID(requestWorkflowID string) Tag {
 	return newStringTag("archival-request-workflow-id", requestWorkflowID)
 }
 
+// ArchvialRequestWorkflowType returns tag for RequestWorkflowType
+func ArchvialRequestWorkflowType(requestWorkflowType string) Tag {
+	return newStringTag("archival-request-workflow-type", requestWorkflowType)
+}
+
 // ArchivalRequestRunID returns tag for RequestRunID
 func ArchivalRequestRunID(requestRunID string) Tag {
 	return newStringTag("archival-request-run-id", requestRunID)
@@ -691,6 +696,16 @@ func ArchivalRequestNextEventID(requestNextEventID int64) Tag {
 // ArchivalRequestCloseFailoverVersion returns tag for RequestCloseFailoverVersion
 func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) Tag {
 	return newInt64("archival-request-close-failover-version", requestCloseFailoverVersion)
+}
+
+// ArchivalRequestCloseTimestamp returns tag for RequestCloseTimestamp
+func ArchivalRequestCloseTimestamp(requestCloseTimeStamp int64) Tag {
+	return newInt64("archival-request-close-timestamp", requestCloseTimeStamp)
+}
+
+// ArchivalRequestCloseStatus returns tag for RequestCloseStatus
+func ArchivalRequestCloseStatus(requestCloseStatus string) Tag {
+	return newStringTag("archival-request-close-status", requestCloseStatus)
 }
 
 // ArchivalURI returns tag for Archival URI

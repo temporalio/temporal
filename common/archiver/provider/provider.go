@@ -149,8 +149,12 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (ar
 		if p.visibilityArchiverConfigs.Filestore == nil {
 			return nil, ErrArchiverConfigNotFound
 		}
-		p.visibilityArchivers[archiverKey] = filestore.NewVisibilityArchiver(container, p.visibilityArchiverConfigs.Filestore)
-		return p.visibilityArchivers[archiverKey], nil
+		visibilityArchiver, err := filestore.NewVisibilityArchiver(container, p.visibilityArchiverConfigs.Filestore)
+		if err != nil {
+			return nil, err
+		}
+		p.visibilityArchivers[archiverKey] = visibilityArchiver
+		return visibilityArchiver, nil
 	}
 	return nil, ErrUnknownScheme
 }

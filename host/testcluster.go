@@ -199,7 +199,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	if err != nil {
 		logger.Fatal("Failed to create temp dir for archiver", tag.Error(err))
 	}
-	cfg := &config.FilestoreHistoryArchiver{
+	cfg := &config.FilestoreArchiver{
 		FileMode: "0700",
 		DirMode:  "0600",
 	}
