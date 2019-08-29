@@ -1018,8 +1018,13 @@ func (s *integrationSuite) TestCronWorkflow() {
 		executionInfo := closedExecutions[i]
 		// Roundup to compare on the precision of seconds
 		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The execution time calculate based on last execution close time
+		// However, the current execution time is based on the current start time
+		// This code is to remove the diff between current start time and last execution close time
+		// TODO: Remove this line once we unify the time source
+		executionTimeDiff := executionInfo.GetStartTime()/1000000000 - lastExecution.GetCloseTime()/1000000000
 		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
-		s.Equal(int64(0), int64(expectedBackoff)%(targetBackoffDuration.Nanoseconds()/1000000000))
+		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo
 	}
 }
@@ -1965,8 +1970,13 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		executionInfo := closedExecutions[i]
 		// Round up the time precision to seconds
 		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The execution time calculate based on last execution close time
+		// However, the current execution time is based on the current start time
+		// This code is to remove the diff between current start time and last execution close time
+		// TODO: Remove this line once we unify the time source.
+		executionTimeDiff := executionInfo.GetStartTime()/1000000000 - lastExecution.GetCloseTime()/1000000000
 		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
-		s.Equal(int64(0), int64(expectedBackoff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
+		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo
 	}
 }
