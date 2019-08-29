@@ -8,6 +8,7 @@ if [ "$BUILDKITE_BRANCH" != "master" ]; then
     exit 0
 fi
 
+git fetch origin master
 MASTER_SHA=$(git rev-parse origin/master)
 
 # if this commit is not the same as tip of master, lets skip this and
