@@ -183,6 +183,8 @@ const (
 	FlagBatchTypeWithAlias                = FlagBatchType + ", bt"
 	FlagSignalName                        = "signal_name"
 	FlagSignalNameWithAlias               = FlagSignalName + ", sig"
+	FlagRemoveTaskID                      = "task_id"
+	FlagRemoveTypeID                      = "type_id"
 	FlagRPS                               = "rps"
 	FlagJobID                             = "job_id"
 	FlagJobIDWithAlias                    = FlagJobID + ", jid"

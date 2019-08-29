@@ -41,6 +41,11 @@ type Interface interface {
 		Request *admin.AddSearchAttributeRequest,
 	) error
 
+	CloseShard(
+		ctx context.Context,
+		Request *shared.CloseShardRequest,
+	) error
+
 	DescribeHistoryHost(
 		ctx context.Context,
 		Request *shared.DescribeHistoryHostRequest,
@@ -55,6 +60,11 @@ type Interface interface {
 		ctx context.Context,
 		GetRequest *admin.GetWorkflowExecutionRawHistoryRequest,
 	) (*admin.GetWorkflowExecutionRawHistoryResponse, error)
+
+	RemoveTask(
+		ctx context.Context,
+		Request *shared.RemoveTaskRequest,
+	) error
 }
 
 // New prepares an implementation of the AdminService service for
@@ -76,6 +86,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.AddSearchAttribute),
 				},
 				Signature:    "AddSearchAttribute(Request *admin.AddSearchAttributeRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "CloseShard",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.CloseShard),
+				},
+				Signature:    "CloseShard(Request *shared.CloseShardRequest)",
 				ThriftModule: admin.ThriftModule,
 			},
 
@@ -111,10 +132,21 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 				Signature:    "GetWorkflowExecutionRawHistory(GetRequest *admin.GetWorkflowExecutionRawHistoryRequest) (*admin.GetWorkflowExecutionRawHistoryResponse)",
 				ThriftModule: admin.ThriftModule,
 			},
+
+			thrift.Method{
+				Name: "RemoveTask",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RemoveTask),
+				},
+				Signature:    "RemoveTask(Request *shared.RemoveTaskRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 4)
+	procedures := make([]transport.Procedure, 0, 6)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -131,6 +163,25 @@ func (h handler) AddSearchAttribute(ctx context.Context, body wire.Value) (thrif
 
 	hadError := err != nil
 	result, err := admin.AdminService_AddSearchAttribute_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) CloseShard(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_CloseShard_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.CloseShard(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_CloseShard_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {
@@ -188,6 +239,25 @@ func (h handler) GetWorkflowExecutionRawHistory(ctx context.Context, body wire.V
 
 	hadError := err != nil
 	result, err := admin.AdminService_GetWorkflowExecutionRawHistory_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RemoveTask(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_RemoveTask_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RemoveTask(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_RemoveTask_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

@@ -91,6 +91,12 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminWorkflowCommands(),
 				},
 				{
+					Name:        "shard",
+					Aliases:     []string{"shar"},
+					Usage:       "Run admin operation on specific shard",
+					Subcommands: newAdminShardManagementCommands(),
+				},
+				{
 					Name:        "history_host",
 					Aliases:     []string{"hist"},
 					Usage:       "Run admin operation on history host",

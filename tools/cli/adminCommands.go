@@ -362,6 +362,46 @@ func AdminGetShardID(c *cli.Context) {
 	fmt.Printf("ShardID for workflowID: %v is %v \n", wid, shardID)
 }
 
+// AdminRemoveTask describes history host
+func AdminRemoveTask(c *cli.Context) {
+	adminClient := cFactory.ServerAdminClient(c)
+
+	sid := getRequiredIntOption(c, FlagShardID)
+	taskID := getRequiredInt64Option(c, FlagRemoveTaskID)
+	typeID := getRequiredIntOption(c, FlagRemoveTypeID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &shared.RemoveTaskRequest{}
+
+	req.ShardID = common.Int32Ptr(int32(sid))
+	req.TaskID = common.Int64Ptr(int64(taskID))
+	req.Type = common.Int32Ptr(int32(typeID))
+
+	err := adminClient.RemoveTask(ctx, req)
+	if err != nil {
+		ErrorAndExit("Remove task has failed", err)
+	}
+}
+
+// AdminShardManagement describes history host
+func AdminShardManagement(c *cli.Context) {
+	adminClient := cFactory.ServerAdminClient(c)
+	sid := getRequiredIntOption(c, FlagShardID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &shared.CloseShardRequest{}
+	req.ShardID = common.Int32Ptr(int32(sid))
+
+	err := adminClient.CloseShard(ctx, req)
+	if err != nil {
+		ErrorAndExit("Close shard task has failed", err)
+	}
+}
+
 // AdminDescribeHistoryHost describes history host
 func AdminDescribeHistoryHost(c *cli.Context) {
 	adminClient := cFactory.ServerAdminClient(c)

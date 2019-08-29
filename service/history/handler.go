@@ -672,6 +672,33 @@ func (h *Handler) DescribeHistoryHost(ctx context.Context,
 	return resp, nil
 }
 
+// RemoveTask returns information about the internal states of a history host
+func (h *Handler) RemoveTask(
+	ctx context.Context,
+	request *gen.RemoveTaskRequest,
+) (retError error) {
+	executionMgr, err := h.executionMgrFactory.NewExecutionManager(int(request.GetShardID()))
+	if err != nil {
+		return err
+	}
+	deleteTaskRequest := &persistence.DeleteTaskRequest{
+		TaskID:  request.GetTaskID(),
+		Type:    int(request.GetType()),
+		ShardID: int(request.GetShardID()),
+	}
+	err = executionMgr.DeleteTask(deleteTaskRequest)
+	return err
+}
+
+// CloseShardTask returns information about the internal states of a history host
+func (h *Handler) CloseShard(
+	ctx context.Context,
+	request *gen.CloseShardRequest,
+) (retError error) {
+	h.controller.removeEngineForShard(int(request.GetShardID()))
+	return nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context,
 	request *hist.DescribeMutableStateRequest) (resp *hist.DescribeMutableStateResponse, retError error) {

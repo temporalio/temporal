@@ -1687,6 +1687,54 @@ GetFailureReasonLoop:
 	}
 }
 
+func (d *cassandraPersistence) DeleteTask(request *p.DeleteTaskRequest) error {
+	var domainID, workflowID, runID string
+	switch request.Type {
+	case rowTypeTransferTask:
+		domainID = rowTypeTransferDomainID
+		workflowID = rowTypeTransferWorkflowID
+		runID = rowTypeTransferRunID
+
+	case rowTypeTimerTask:
+		domainID = rowTypeTimerDomainID
+		workflowID = rowTypeTimerWorkflowID
+		runID = rowTypeTimerRunID
+
+	case rowTypeReplicationTask:
+		domainID = rowTypeReplicationDomainID
+		workflowID = rowTypeReplicationWorkflowID
+		runID = rowTypeReplicationRunID
+
+	default:
+		return fmt.Errorf("DeleteTask type id is not one of 2 (transfer task), 3 (timer task), 4 (replication task) ")
+
+	}
+
+	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
+		request.ShardID,
+		request.Type,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		request.TaskID)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("DeleteTask operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteTask operation failed. Error: %v", err),
+		}
+	}
+
+	return nil
+
+}
+
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,

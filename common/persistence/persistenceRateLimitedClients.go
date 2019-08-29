@@ -344,6 +344,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTimerTask(r
 	return err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) DeleteTask(request *DeleteTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.DeleteTask(request)
+	return err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

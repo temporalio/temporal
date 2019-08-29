@@ -534,6 +534,13 @@ func getRequiredOption(c *cli.Context, optionName string) string {
 	return value
 }
 
+func getRequiredInt64Option(c *cli.Context, optionName string) int64 {
+	if !c.IsSet(optionName) {
+		ErrorAndExit(fmt.Sprintf("Option %s is required", optionName), nil)
+	}
+	return c.Int64(optionName)
+}
+
 func getRequiredIntOption(c *cli.Context, optionName string) int {
 	if !c.IsSet(optionName) {
 		ErrorAndExit(fmt.Sprintf("Option %s is required", optionName), nil)

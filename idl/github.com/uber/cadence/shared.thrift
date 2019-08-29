@@ -1438,6 +1438,16 @@ struct DescribeHistoryHostRequest {
   30: optional WorkflowExecution    executionForHost
 }
 
+struct RemoveTaskRequest {
+  10: optional i32                      shardID
+  20: optional i32                      type
+  30: optional i64 (js.type = "Long")   taskID
+}
+
+struct CloseShardRequest {
+  10: optional i32               shardID
+}
+
 struct DescribeHistoryHostResponse{
   10: optional i32                  numberOfShards
   20: optional list<i32>            shardIDs

@@ -697,6 +697,25 @@ service HistoryService {
       3: shared.AccessDeniedError accessDeniedError,
     )
 
+ /**
+ * CloseShard close the shard
+ **/
+ void CloseShard(1: shared.CloseShardRequest request)
+    throws (
+    1: shared.BadRequestError badRequestError,
+    2: shared.InternalServiceError internalServiceError,
+    3: shared.AccessDeniedError accessDeniedError,
+    )
+
+  /**
+  * RemoveTask remove task based on type, taskid, shardid
+  **/
+  void RemoveTask(1: shared.RemoveTaskRequest request)
+     throws (
+     1: shared.BadRequestError badRequestError,
+     2: shared.InternalServiceError internalServiceError,
+     3: shared.AccessDeniedError accessDeniedError,
+     )
   replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)
     throws (
       1: shared.BadRequestError badRequestError,
