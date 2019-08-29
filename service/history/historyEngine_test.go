@@ -433,6 +433,74 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	s.Equal(int64(4), *response.NextEventId)
 }
 
+func (s *engineSuite) TestQueryWorkflow() {
+	domainID := validDomainID
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID, Name: "testDomain"},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	).Twice()
+
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(1)
+	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
+		<-time.After(delay)
+		context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
+		s.NoError(err)
+		queryRegistry := context.getQueryRegistry()
+		release(nil)
+		buffered := queryRegistry.GetBuffered()
+		for _, b := range buffered {
+			changed, err := b.RecordEvent(QueryEventStart, nil)
+			s.NoError(err)
+			s.True(changed)
+			changed, err = b.RecordEvent(QueryEventPersistenceConditionSatisfied, nil)
+			s.NoError(err)
+			s.False(changed)
+			resultType := workflow.QueryResultTypeAnswered
+			changed, err = b.RecordEvent(QueryEventRecordResult, &workflow.WorkflowQueryResult{
+				ResultType: &resultType,
+				Answer:     answer,
+			})
+			s.NoError(err)
+			s.True(changed)
+			s.Equal(QueryStateCompleted, b.State())
+		}
+		waitGroup.Done()
+	}
+	request := &history.QueryWorkflowRequest{
+		DomainUUID: common.StringPtr(domainID),
+		Execution:  &execution,
+		Query:      &workflow.WorkflowQuery{},
+	}
+
+	// time out because query is not completed in time
+	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	s.Nil(resp)
+	s.Equal(ErrQueryTimeout, err)
+
+	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
+	start := time.Now()
+	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	s.True(time.Now().After(start.Add(time.Second)))
+	s.NoError(err)
+	s.Equal([]byte{1, 2, 3}, resp.GetQueryResult())
+	waitGroup.Wait()
+}
+
 func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 	domainID := validDomainID
 	invalidToken, _ := json.Marshal("bad token")

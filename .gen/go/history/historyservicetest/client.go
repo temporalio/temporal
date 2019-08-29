@@ -262,6 +262,39 @@ func (mr *_MockClientRecorder) GetReplicationMessages(
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetReplicationMessages", args...)
 }
 
+// QueryWorkflow responds to a QueryWorkflow call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().QueryWorkflow(gomock.Any(), ...).Return(...)
+// 	... := client.QueryWorkflow(...)
+func (m *MockClient) QueryWorkflow(
+	ctx context.Context,
+	_QueryRequest *history.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (success *history.QueryWorkflowResponse, err error) {
+
+	args := []interface{}{ctx, _QueryRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "QueryWorkflow", args...)
+	success, _ = ret[i].(*history.QueryWorkflowResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) QueryWorkflow(
+	ctx interface{},
+	_QueryRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _QueryRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
+}
+
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

@@ -289,6 +289,16 @@ struct SyncActivityRequest {
   130: optional string lastWorkerIdentity
 }
 
+struct QueryWorkflowRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+  30: optional shared.WorkflowQuery query
+}
+
+struct QueryWorkflowResponse {
+  10: optional binary queryResult
+}
+
 /**
 * HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 * of workflow instances already created.
@@ -724,4 +734,18 @@ service HistoryService {
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
     )
+
+  /**
+  * QueryWorkflow returns query result for a specified workflow execution
+  **/
+  QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)
+	throws (
+	  1: shared.BadRequestError badRequestError,
+	  2: shared.InternalServiceError internalServiceError,
+	  3: shared.EntityNotExistsError entityNotExistError,
+	  4: shared.QueryFailedError queryFailedError,
+	  5: shared.LimitExceededError limitExceededError,
+	  6: shared.ServiceBusyError serviceBusyError,
+	  7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+	)
 }

@@ -151,7 +151,6 @@ func newWorkflowExecutionContext(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
-
 	lg := logger.WithTags(
 		tag.WorkflowID(execution.GetWorkflowId()),
 		tag.WorkflowRunID(execution.GetRunId()),

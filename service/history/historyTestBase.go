@@ -547,6 +547,8 @@ func (s *TestShardContext) GetCurrentTime(cluster string) time.Time {
 func NewDynamicConfigForTest() *Config {
 	dc := dynamicconfig.NewNopCollection()
 	config := NewConfig(dc, 1, false, cconfig.StoreTypeCassandra)
+	// reduce the duration of long poll to increase test speed
+	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	return config
 }
 

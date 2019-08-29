@@ -691,6 +691,31 @@ func (c *clientImpl) SyncActivity(
 	return err
 }
 
+func (c *clientImpl) QueryWorkflow(
+	ctx context.Context,
+	request *h.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (*h.QueryWorkflowResponse, error) {
+	client, err := c.getClientForWorkflowID(request.Execution.GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *h.QueryWorkflowResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.QueryWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *replicator.GetReplicationMessagesRequest,

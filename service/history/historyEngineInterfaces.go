@@ -73,6 +73,7 @@ type (
 		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *h.SyncActivityRequest) error
 		GetReplicationMessages(ctx context.Context, taskID int64) (*replicator.ReplicationMessages, error)
+		QueryWorkflow(ctx context.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)

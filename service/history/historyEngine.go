@@ -117,6 +117,8 @@ var (
 	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for signal events"}
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event."}
+	// ErrQueryTimeout is the error indicating query timed out before being answered
+	ErrQueryTimeout = errors.New("query timed out")
 
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -576,6 +578,48 @@ func (e *historyEngineImpl) GetMutableState(
 	}
 
 	return response, nil
+}
+
+func (e *historyEngineImpl) QueryWorkflow(
+	ctx ctx.Context,
+	request *h.QueryWorkflowRequest,
+) (*h.QueryWorkflowResponse, error) {
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetDomainUUID(), *request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
+	queryRegistry := context.getQueryRegistry()
+	release(nil)
+	query := queryRegistry.BufferQuery(request.GetQuery())
+	domainCache, err := e.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+	if err != nil {
+		return nil, err
+	}
+	timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(domainCache.GetInfo().Name))
+	defer timer.Stop()
+
+	select {
+	case <-query.TerminationCh():
+		switch query.State() {
+		case QueryStateCompleted:
+			result := query.QueryResult()
+			switch result.GetResultType() {
+			case workflow.QueryResultTypeAnswered:
+				return &h.QueryWorkflowResponse{
+					QueryResult: result.GetAnswer(),
+				}, nil
+			case workflow.QueryResultTypeFailed:
+				return nil, &workflow.QueryFailedError{Message: fmt.Sprintf("%v: %v", result.GetErrorReason(), result.GetErrorDetails())}
+			}
+		case QueryStateExpired:
+			return nil, ErrQueryTimeout
+		}
+	case <-timer.C:
+		return nil, ErrQueryTimeout
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return nil, &workflow.InternalServiceError{Message: "query entered unexpected state, this should be impossible"}
 }
 
 func (e *historyEngineImpl) getMutableState(

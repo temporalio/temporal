@@ -2721,11 +2721,6 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		return nil, wh.error(err, scope)
 	}
 
-	matchingRequest := &m.QueryWorkflowRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		QueryRequest: queryRequest,
-	}
-
 	// we should always use the mutable state, since it contains the sticky tasklist information
 	response, err := wh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -2758,11 +2753,40 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		response.GetClientFeatureVersion(),
 		response.GetClientImpl(),
 	)
-
 	queryRequest.Execution.RunId = response.Execution.RunId
-	if len(response.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
-		matchingRequest.TaskList = response.StickyTaskList
-		stickyDecisionTimeout := response.GetStickyTaskListScheduleToStartTimeout()
+	if clientFeature.SupportConsistentQuery() {
+		req := &h.QueryWorkflowRequest{
+			DomainUUID: common.StringPtr(domainID),
+			Execution:  queryRequest.GetExecution(),
+			Query:      queryRequest.GetQuery(),
+		}
+		resp, err := wh.history.QueryWorkflow(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return &gen.QueryWorkflowResponse{
+			QueryResult:   resp.GetQueryResult(),
+			QueryRejected: nil,
+		}, nil
+	}
+	return wh.queryDirectlyThroughMatching(ctx, response, clientFeature, domainID, queryRequest, scope)
+}
+
+func (wh *WorkflowHandler) queryDirectlyThroughMatching(
+	ctx context.Context,
+	getMutableStateResponse *h.GetMutableStateResponse,
+	clientFeature client.Feature,
+	domainID string,
+	queryRequest *gen.QueryWorkflowRequest,
+	scope metrics.Scope,
+) (*gen.QueryWorkflowResponse, error) {
+	matchingRequest := &m.QueryWorkflowRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		QueryRequest: queryRequest,
+	}
+	if len(getMutableStateResponse.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
+		matchingRequest.TaskList = getMutableStateResponse.StickyTaskList
+		stickyDecisionTimeout := getMutableStateResponse.GetStickyTaskListScheduleToStartTimeout()
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickyness
 		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(stickyDecisionTimeout)*time.Second)
@@ -2786,8 +2810,8 @@ func (wh *WorkflowHandler) QueryWorkflow(
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.WorkflowTaskListName(response.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(response.GetNextEventId()))
+			tag.WorkflowTaskListName(getMutableStateResponse.GetStickyTaskList().GetName()),
+			tag.WorkflowNextEventID(getMutableStateResponse.GetNextEventId()))
 		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = wh.history.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
 			DomainUUID: common.StringPtr(domainID),
@@ -2799,7 +2823,7 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		}
 	}
 
-	matchingRequest.TaskList = response.TaskList
+	matchingRequest.TaskList = getMutableStateResponse.TaskList
 	matchingResp, err := wh.matching.QueryWorkflow(ctx, matchingRequest)
 	if err != nil {
 		wh.Service.GetLogger().Info("QueryWorkflowFailed.",

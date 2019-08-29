@@ -283,6 +283,8 @@ const (
 	HistoryClientSyncActivityScope
 	// HistoryClientGetReplicationTasksScope tracks RPC calls to history service
 	HistoryClientGetReplicationTasksScope
+	// HistoryClientQueryWorkflowScope tracks RPC calls to history service
+	HistoryClientQueryWorkflowScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -808,6 +810,8 @@ const (
 	SessionCountStatsScope
 	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
 	HistoryResetWorkflowExecutionScope
+	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service
+	HistoryQueryWorkflowScope
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
 	HistoryProcessDeleteHistoryEventScope
 	// WorkflowCompletionStatsScope tracks workflow completion updates
@@ -972,6 +976,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientSyncShardStatusScope:                   {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationTasksScope:               {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollForActivityTaskScope:              {operation: "MatchingClientPollForActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                  {operation: "MatchingClientAddActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -1158,6 +1163,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRemoveSignalMutableStateScope:                   {operation: "RemoveSignalMutableState"},
 		HistoryTerminateWorkflowExecutionScope:                 {operation: "TerminateWorkflowExecution"},
 		HistoryResetWorkflowExecutionScope:                     {operation: "ResetWorkflowExecution"},
+		HistoryQueryWorkflowScope:                              {operation: "QueryWorkflow"},
 		HistoryProcessDeleteHistoryEventScope:                  {operation: "ProcessDeleteHistoryEvent"},
 		HistoryScheduleDecisionTaskScope:                       {operation: "ScheduleDecisionTask"},
 		HistoryRecordChildExecutionCompletedScope:              {operation: "RecordChildExecutionCompleted"},

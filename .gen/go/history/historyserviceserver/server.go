@@ -67,6 +67,11 @@ type Interface interface {
 		Request *replicator.GetReplicationMessagesRequest,
 	) (*replicator.GetReplicationMessagesResponse, error)
 
+	QueryWorkflow(
+		ctx context.Context,
+		QueryRequest *history.QueryWorkflowRequest,
+	) (*history.QueryWorkflowResponse, error)
+
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
 		HeartbeatRequest *history.RecordActivityTaskHeartbeatRequest,
@@ -257,6 +262,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.GetReplicationMessages),
 				},
 				Signature:    "GetReplicationMessages(Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "QueryWorkflow",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.QueryWorkflow),
+				},
+				Signature:    "QueryWorkflow(QueryRequest *history.QueryWorkflowRequest) (*history.QueryWorkflowResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -515,7 +531,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 29)
+	procedures := make([]transport.Procedure, 0, 30)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -627,6 +643,25 @@ func (h handler) GetReplicationMessages(ctx context.Context, body wire.Value) (t
 
 	hadError := err != nil
 	result, err := history.HistoryService_GetReplicationMessages_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_QueryWorkflow_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.QueryWorkflow(ctx, args.QueryRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_QueryWorkflow_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {
