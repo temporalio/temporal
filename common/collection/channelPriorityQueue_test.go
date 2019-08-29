@@ -30,11 +30,11 @@ import (
 func TestChannelPriorityQueue(t *testing.T) {
 	queue := NewChannelPriorityQueue(1)
 
-	err := queue.Add(1, 20)
-	assert.NoError(t, err)
+	shutdown := queue.Add(1, 20)
+	assert.True(t, shutdown)
 
-	err = queue.Add(0, 10)
-	assert.NoError(t, err)
+	shutdown = queue.Add(0, 10)
+	assert.True(t, shutdown)
 
 	item, ok := queue.Remove()
 	assert.Equal(t, 10, item)
@@ -44,10 +44,15 @@ func TestChannelPriorityQueue(t *testing.T) {
 	assert.Equal(t, 20, item)
 	assert.True(t, ok)
 
-	err = queue.Add(2, 20)
-	assert.Error(t, err)
+	queue.Close()
 
-	queue.Destroy()
+	// once we close the channel we should get shutdown at least once
+	for {
+		shutdown = queue.Add(1, 20)
+		if !shutdown {
+			break
+		}
+	}
 
 	item, ok = queue.Remove()
 	assert.Nil(t, item)
@@ -66,7 +71,7 @@ func BenchmarkChannelPriorityQueue(b *testing.B) {
 	}
 }
 
-func sendChannelQueue(queue PriorityQueue) {
+func sendChannelQueue(queue ChannelPriorityQueue) {
 	for {
 		priority := rand.Int() % numPriorities
 		queue.Add(priority, struct{}{})
