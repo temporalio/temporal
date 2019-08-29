@@ -61,6 +61,7 @@ COPY --from=builder /cadence/schema /etc/cadence/schema
 COPY docker/entrypoint.sh /docker-entrypoint.sh
 COPY config/dynamicconfig /etc/cadence/config/dynamicconfig
 COPY docker/config_template.yaml /etc/cadence/config
+COPY docker/start-cadence.sh /start-cadence.sh
 
 WORKDIR /etc/cadence
 
@@ -68,7 +69,7 @@ ENV SERVICES="history,matching,frontend,worker"
 
 EXPOSE 7933 7934 7935 7939
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD dockerize -template /etc/cadence/config/config_template.yaml:/etc/cadence/config/docker.yaml cadence-server --root $CADENCE_HOME --env docker start --services=$SERVICES
+CMD /start-cadence.sh
 
 
 # All-in-one Cadence server
