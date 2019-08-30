@@ -221,7 +221,7 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *gen.RemoveTask
 	return err
 }
 
-// CloseShardTask returns information about the internal states of a history host
+// CloseShard returns information about the internal states of a history host
 func (adh *AdminHandler) CloseShard(ctx context.Context, request *gen.CloseShardRequest) (retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 	scope := metrics.AdminCloseShardTaskScope

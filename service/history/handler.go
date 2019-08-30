@@ -690,7 +690,7 @@ func (h *Handler) RemoveTask(
 	return err
 }
 
-// CloseShardTask returns information about the internal states of a history host
+// CloseShard returns information about the internal states of a history host
 func (h *Handler) CloseShard(
 	ctx context.Context,
 	request *gen.CloseShardRequest,
