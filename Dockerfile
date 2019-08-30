@@ -3,6 +3,27 @@ ARG TARGET=server
 # Can be used in case a proxy is necessary
 ARG GOPROXY
 
+# Build tcheck binary
+FROM golang:1.12.7-alpine AS tcheck
+
+RUN apk add --update --no-cache ca-certificates git curl
+
+ENV GO111MODULE=off
+
+RUN curl https://glide.sh/get | sh
+
+ENV TCHECK_VERSION=v1.1.0
+
+RUN go get -d github.com/uber/tcheck
+RUN cd /go/src/github.com/uber/tcheck && git checkout ${TCHECK_VERSION}
+
+WORKDIR /go/src/github.com/uber/tcheck
+
+RUN glide install
+
+RUN go install
+
+
 # Build Cadence binaries
 FROM golang:1.12.7-alpine AS builder
 
@@ -51,6 +72,7 @@ FROM alpine AS cadence-server
 ENV CADENCE_HOME /etc/cadence
 RUN mkdir -p /etc/cadence
 
+COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
 COPY --from=builder /cadence/cadence-cassandra-tool /usr/local/bin
 COPY --from=builder /cadence/cadence-sql-tool /usr/local/bin
@@ -86,6 +108,7 @@ CMD /start.sh
 # Cadence CLI
 FROM alpine AS cadence-cli
 
+COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=builder /cadence/cadence /usr/local/bin
 
 ENTRYPOINT ["cadence"]
