@@ -41,7 +41,7 @@ func NewESVisibilityManager(indexName string, esClient es.Client, config *config
 
 	if config != nil {
 		// wrap with rate limiter
-		if config.MaxQPS() != 0 {
+		if config.MaxQPS != nil && config.MaxQPS() != 0 {
 			esRateLimiter := quotas.NewDynamicRateLimiter(
 				func() float64 {
 					return float64(config.MaxQPS())
@@ -49,8 +49,9 @@ func NewESVisibilityManager(indexName string, esClient es.Client, config *config
 			)
 			visibilityFromES = p.NewVisibilityPersistenceRateLimitedClient(visibilityFromES, esRateLimiter, log)
 		}
-		// wrap with advanced rate limit for list
-		visibilityFromES = p.NewVisibilitySamplingClient(visibilityFromES, config, metricsClient, log)
+		if config.EnableSampling != nil && config.EnableSampling() {
+			visibilityFromES = p.NewVisibilitySamplingClient(visibilityFromES, config, metricsClient, log)
+		}
 	}
 	if metricsClient != nil {
 		// wrap with metrics

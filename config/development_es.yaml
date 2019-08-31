@@ -1,30 +1,26 @@
 persistence:
-  defaultStore: mysql-default
-  visibilityStore: mysql-visibility
+  defaultStore: cass-default
+  visibilityStore: cass-visibility
+  advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
-    mysql-default:
-      sql:
-        driverName: "mysql"
-        databaseName: "cadence"
-        connectAddr: "127.0.0.1:3306"
-        connectProtocol: "tcp"
-        user: "uber"
-        password: "uber"
-        maxConns: 20
-        maxIdleConns: 20
-        maxConnLifetime: "1h"
-    mysql-visibility:
-      sql:
-        driverName: "mysql"
-        databaseName: "cadence_visibility"
-        connectAddr: "127.0.0.1:3306"
-        connectProtocol: "tcp"
-        user: "uber"
-        password: "uber"
-        maxConns: 2
-        maxIdleConns: 2
-        maxConnLifetime: "1h"
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "cadence"
+        consistency: "One"
+    cass-visibility:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "cadence_visibility"
+        consistency: "One"
+    es-visibility:
+      elasticsearch:
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: cadence-visibility-dev
 
 ringpop:
   name: cadence
@@ -77,15 +73,15 @@ services:
     pprof:
       port: 7940
 
-clustersInfo:
+clusterMetadata:
   enableGlobalDomain: false
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
-  clusterInitialFailoverVersion:
-    active: 0
-  clusterAddress:
+  clusterInformation:
     active:
+      enabled: true
+      initialFailoverVersion: 0
       rpcName: "cadence-frontend"
       rpcAddress: "localhost:7933"
 
@@ -114,6 +110,8 @@ domainDefaults:
       status: "disabled"
 
 kafka:
+  tls:
+    enabled: false
   clusters:
     test:
       brokers:
@@ -123,6 +121,15 @@ kafka:
       cluster: test
     cadence-visibility-dev-dlq:
       cluster: test
+  applications:
+    visibility:
+      topic: cadence-visibility-dev
+      dlq-topic: cadence-visibility-dev-dlq
 
 publicClient:
   hostPort: "localhost:7933"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development_es.yaml"
+  pollInterval: "10s"
+

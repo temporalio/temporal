@@ -1,7 +1,7 @@
 frontend.enableClientVersionCheck:
   - value: true
-system.enableVisibilityToKafka:
-  - value: true
+system.advancedVisibilityWritingMode:
+  - value: "on"
 system.enableReadVisibilityFromES:
   - value: true
 frontend.validSearchAttributes:

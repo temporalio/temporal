@@ -21,7 +21,7 @@
 package host
 
 import (
-	"errors"
+	"github.com/uber/cadence/common"
 	"time"
 
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -33,6 +33,9 @@ var (
 		dynamicconfig.FrontendRPS:                        3000,
 		dynamicconfig.MatchingNumTasklistWritePartitions: 3,
 		dynamicconfig.MatchingNumTasklistReadPartitions:  3,
+	}
+	stringKeys = map[dynamicconfig.Key]string{
+		dynamicconfig.AdvancedVisibilityWritingMode: common.AdvancedVisibilityWritingModeOff,
 	}
 )
 
@@ -66,6 +69,9 @@ func (d *dynamicClient) GetBoolValue(name dynamicconfig.Key, filters map[dynamic
 }
 
 func (d *dynamicClient) GetStringValue(name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue string) (string, error) {
+	if val, ok := stringKeys[name]; ok {
+		return val, nil
+	}
 	return d.client.GetStringValue(name, filters, defaultValue)
 }
 
@@ -82,7 +88,11 @@ func (d *dynamicClient) GetDurationValue(
 }
 
 func (d *dynamicClient) UpdateValue(name dynamicconfig.Key, value interface{}) error {
-	return errors.New("operation not supported")
+	if name == dynamicconfig.AdvancedVisibilityWritingMode { // override for es integration tests
+		stringKeys[dynamicconfig.AdvancedVisibilityWritingMode] = value.(string)
+		return nil
+	}
+	return d.client.UpdateValue(name, value)
 }
 
 // newIntegrationConfigClient - returns a dynamic config client for integration testing

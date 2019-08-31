@@ -54,7 +54,7 @@ var keys = map[Key]string{
 	EnableNewKafkaClient:                "system.enableNewKafkaClient",
 	EnableVisibilitySampling:            "system.enableVisibilitySampling",
 	EnableReadFromClosedExecutionV2:     "system.enableReadFromClosedExecutionV2",
-	EnableVisibilityToKafka:             "system.enableVisibilityToKafka",
+	AdvancedVisibilityWritingMode:       "system.advancedVisibilityWritingMode",
 	EnableReadVisibilityFromES:          "system.enableReadVisibilityFromES",
 	HistoryArchivalStatus:               "system.historyArchivalStatus",
 	EnableReadFromHistoryArchival:       "system.enableReadFromHistoryArchival",
@@ -235,8 +235,8 @@ const (
 	EnableVisibilitySampling
 	// EnableReadFromClosedExecutionV2 is key for enable read from cadence_visibility.closed_executions_v2
 	EnableReadFromClosedExecutionV2
-	// EnableVisibilityToKafka is key for enable kafka
-	EnableVisibilityToKafka
+	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
+	AdvancedVisibilityWritingMode
 	// EmitShardDiffLog whether emit the shard diff log
 	EmitShardDiffLog
 	// EnableReadVisibilityFromES is key for enable read from elastic search

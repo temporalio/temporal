@@ -501,3 +501,12 @@ func ConvertIndexedValueTypeToThriftType(fieldType interface{}, logger log.Logge
 		return fieldType.(workflow.IndexedValueType) // it will panic and been captured by logger
 	}
 }
+
+// GetDefaultAdvancedVisibilityWritingMode get default advancedVisibilityWritingMode based on
+// whether related config exists in static config file.
+func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) string {
+	if isAdvancedVisConfigExist {
+		return AdvancedVisibilityWritingModeOn
+	}
+	return AdvancedVisibilityWritingModeOff
+}

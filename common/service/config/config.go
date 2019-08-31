@@ -58,8 +58,6 @@ type (
 		Kafka messaging.KafkaConfig `yaml:"kafka"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
-		// ElasticSearch is config for connecting to ElasticSearch
-		ElasticSearch elasticsearch.Config `yaml:"elasticsearch"`
 		// PublicClient is config for connecting to cadence frontend
 		PublicClient PublicClient `yaml:"publicClient"`
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
@@ -123,6 +121,8 @@ type (
 		DefaultStore string `yaml:"defaultStore" validate:"nonzero"`
 		// VisibilityStore is the name of the datastore to be used for visibility records
 		VisibilityStore string `yaml:"visibilityStore" validate:"nonzero"`
+		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
+		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
 		// HistoryMaxConns is the desired number of conns to history store. Value specified
 		// here overrides the MaxConns config specified as part of datastore
 		HistoryMaxConns int `yaml:"historyMaxConns"`
@@ -143,6 +143,8 @@ type (
 		Cassandra *Cassandra `yaml:"cassandra"`
 		// SQL contains the config for a SQL based datastore
 		SQL *SQL `yaml:"sql"`
+		// ElasticSearch contains the config for a ElasticSearch datastore
+		ElasticSearch *elasticsearch.Config `yaml:"elasticsearch"`
 	}
 
 	// VisibilityConfig is config for visibility sampling

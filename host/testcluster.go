@@ -72,7 +72,7 @@ type (
 		MessagingClientConfig *MessagingClientConfig
 		Persistence           persistencetests.TestBaseOptions
 		HistoryConfig         *HistoryConfig
-		ESConfig              elasticsearch.Config
+		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
 	}
 
@@ -120,9 +120,11 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	messagingClient := getMessagingClient(options.MessagingClientConfig, logger)
 	var esClient elasticsearch.Client
 	var esVisibilityMgr persistence.VisibilityManager
+	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
 	if options.WorkerConfig.EnableIndexer {
+		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
-		esClient, err = elasticsearch.NewClient(&options.ESConfig)
+		esClient, err = elasticsearch.NewClient(options.ESConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +143,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
-		dynamicconfig.GetBoolPropertyFnFilteredByDomain(options.WorkerConfig.EnableIndexer))
+		dynamicconfig.GetBoolPropertyFnFilteredByDomain(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
@@ -161,7 +163,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		Logger:              logger,
 		ClusterNo:           options.ClusterNo,
 		EnableEventsV2:      options.EnableEventsV2,
-		ESConfig:            &options.ESConfig,
+		ESConfig:            options.ESConfig,
 		ESClient:            esClient,
 		ArchiverMetadata:    archiverBase.metadata,
 		ArchiverProvider:    archiverBase.provider,

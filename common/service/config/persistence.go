@@ -70,3 +70,8 @@ func (c *Persistence) Validate() error {
 	}
 	return nil
 }
+
+// IsAdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
+func (c *Persistence) IsAdvancedVisibilityConfigExist() bool {
+	return len(c.AdvancedVisibilityStore) != 0
+}
