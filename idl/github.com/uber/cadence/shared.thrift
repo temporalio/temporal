@@ -77,6 +77,10 @@ exception RetryTaskError {
   5: optional i64 (js.type = "Long") nextEventId
 }
 
+exception RetryTaskV2Error {
+  1: required string message
+}
+
 exception ClientVersionNotSupportedError {
   1: required string featureVersion
   2: required string clientImpl

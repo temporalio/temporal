@@ -399,6 +399,18 @@ func (c *retryableClient) ReplicateRawEvents(
 	return backoff.Retry(op, c.policy, c.isRetryable)
 }
 
+func (c *retryableClient) ReplicateEventsV2(
+	ctx context.Context,
+	request *h.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption) error {
+
+	op := func() error {
+		return c.client.ReplicateEventsV2(ctx, request, opts...)
+	}
+
+	return backoff.Retry(op, c.policy, c.isRetryable)
+}
+
 func (c *retryableClient) SyncShardStatus(
 	ctx context.Context,
 	request *h.SyncShardStatusRequest,

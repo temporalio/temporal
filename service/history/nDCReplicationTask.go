@@ -48,22 +48,25 @@ type (
 		getNewEvents() []*shared.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
-		getRequest() *h.ReplicateEventsRequest
+		getNewVersionHistory() *persistence.VersionHistory
+		getRequest() *h.ReplicateEventsV2Request
 		generateNewRunTask(taskStartTime time.Time) (nDCReplicationTask, error)
 	}
 
 	nDCReplicationTaskImpl struct {
-		sourceCluster    string
-		domainID         string
-		execution        *shared.WorkflowExecution
-		version          int64
-		firstEvent       *shared.HistoryEvent
-		lastEvent        *shared.HistoryEvent
-		eventTime        time.Time
-		historyEvents    []*shared.HistoryEvent
-		newHistoryEvents []*shared.HistoryEvent
+		sourceCluster     string
+		domainID          string
+		execution         *shared.WorkflowExecution
+		version           int64
+		firstEvent        *shared.HistoryEvent
+		lastEvent         *shared.HistoryEvent
+		eventTime         time.Time
+		events            []*shared.HistoryEvent
+		newEvents         []*shared.HistoryEvent
+		versionHistory    *persistence.VersionHistory
+		newVersionHistory *persistence.VersionHistory
 
-		request *h.ReplicateEventsRequest
+		request *h.ReplicateEventsV2Request
 
 		startTime time.Time
 		logger    log.Logger
@@ -89,33 +92,44 @@ var (
 
 func newNDCReplicationTask(
 	clusterMetadata cluster.Metadata,
+	historySerializer persistence.PayloadSerializer,
 	taskStartTime time.Time,
 	logger log.Logger,
-	request *h.ReplicateEventsRequest,
+	request *h.ReplicateEventsV2Request,
 ) (*nDCReplicationTaskImpl, error) {
 
-	if err := validateReplicateEventsRequest(
+	events, newEvents, err := validateReplicateEventsRequest(
+		historySerializer,
 		request,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
 	domainID := request.GetDomainUUID()
 	execution := request.WorkflowExecution
+	versionHistory := &shared.VersionHistory{
+		BranchToken: nil,
+		Items:       request.VersionHistoryItems,
+	}
+	newVersionHistory := &shared.VersionHistory{
+		BranchToken: nil,
+		Items:       request.NewRunVersionHistoryItems,
+	}
 
-	version := request.GetVersion()
+	firstEvent := events[0]
+	lastEvent := events[len(events)-1]
+	version := firstEvent.GetVersion()
+
 	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(version)
 
-	history := request.History
-	newHistoryEvents := []*shared.HistoryEvent{}
-	if request.NewRunHistory != nil && request.NewRunHistory.Events != nil {
-		newHistoryEvents = request.NewRunHistory.Events
-	}
-	historyEvents := history.Events
-	firstEvent := history.Events[0]
-	lastEvent := history.Events[len(history.Events)-1]
 	eventTime := int64(0)
-	for _, event := range historyEvents {
+	for _, event := range events {
+		if event.GetTimestamp() > eventTime {
+			eventTime = event.GetTimestamp()
+		}
+	}
+	for _, event := range newEvents {
 		if event.GetTimestamp() > eventTime {
 			eventTime = event.GetTimestamp()
 		}
@@ -131,15 +145,17 @@ func newNDCReplicationTask(
 	)
 
 	return &nDCReplicationTaskImpl{
-		sourceCluster:    sourceCluster,
-		domainID:         domainID,
-		execution:        execution,
-		version:          version,
-		firstEvent:       firstEvent,
-		lastEvent:        lastEvent,
-		eventTime:        time.Unix(0, eventTime),
-		historyEvents:    historyEvents,
-		newHistoryEvents: newHistoryEvents,
+		sourceCluster:     sourceCluster,
+		domainID:          domainID,
+		execution:         execution,
+		version:           version,
+		firstEvent:        firstEvent,
+		lastEvent:         lastEvent,
+		eventTime:         time.Unix(0, eventTime),
+		events:            events,
+		newEvents:         newEvents,
+		versionHistory:    persistence.NewVersionHistoryFromThrift(versionHistory),
+		newVersionHistory: persistence.NewVersionHistoryFromThrift(newVersionHistory),
 
 		request: request,
 
@@ -185,11 +201,11 @@ func (t *nDCReplicationTaskImpl) getSourceCluster() string {
 }
 
 func (t *nDCReplicationTaskImpl) getEvents() []*shared.HistoryEvent {
-	return t.historyEvents
+	return t.events
 }
 
 func (t *nDCReplicationTaskImpl) getNewEvents() []*shared.HistoryEvent {
-	return t.newHistoryEvents
+	return t.newEvents
 }
 
 func (t *nDCReplicationTaskImpl) getLogger() log.Logger {
@@ -200,7 +216,11 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 	panic("implement this")
 }
 
-func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsRequest {
+func (t *nDCReplicationTaskImpl) getNewVersionHistory() *persistence.VersionHistory {
+	panic("implement this")
+}
+
+func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsV2Request {
 	return t.request
 }
 
@@ -208,10 +228,10 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 	taskStartTime time.Time,
 ) (nDCReplicationTask, error) {
 
-	if len(t.newHistoryEvents) == 0 {
+	if len(t.newEvents) == 0 {
 		return nil, ErrNoNewRunHistory
 	}
-	newHistoryEvents := t.newHistoryEvents
+	newHistoryEvents := t.newEvents
 
 	if t.getLastEvent().GetEventType() != shared.EventTypeWorkflowExecutionContinuedAsNew ||
 		t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes == nil {
@@ -245,12 +265,12 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 			WorkflowId: t.execution.WorkflowId,
 			RunId:      common.StringPtr(newRunID),
 		},
-		version:          t.version,
-		firstEvent:       newFirstEvent,
-		lastEvent:        newLastEvent,
-		eventTime:        time.Unix(0, newEventTime),
-		historyEvents:    newHistoryEvents,
-		newHistoryEvents: []*shared.HistoryEvent{},
+		version:    t.version,
+		firstEvent: newFirstEvent,
+		lastEvent:  newLastEvent,
+		eventTime:  time.Unix(0, newEventTime),
+		events:     newHistoryEvents,
+		newEvents:  []*shared.HistoryEvent{},
 
 		request: nil,
 
@@ -260,43 +280,51 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 }
 
 func validateReplicateEventsRequest(
-	request *h.ReplicateEventsRequest,
-) error {
+	historySerializer persistence.PayloadSerializer,
+	request *h.ReplicateEventsV2Request,
+) ([]*shared.HistoryEvent, []*shared.HistoryEvent, error) {
 
 	if valid := validateUUID(request.GetDomainUUID()); !valid {
-		return ErrInvalidDomainID
+		return nil, nil, ErrInvalidDomainID
 	}
 	if request.WorkflowExecution == nil {
-		return ErrInvalidExecution
+		return nil, nil, ErrInvalidExecution
 	}
 	if valid := validateUUID(request.WorkflowExecution.GetRunId()); !valid {
-		return ErrInvalidRunID
-	}
-	if request.History == nil || len(request.History.Events) == 0 {
-		return ErrEmptyHistoryRawEventBatch
+		return nil, nil, ErrInvalidRunID
 	}
 
-	historyEvents := request.History.Events
-	if request.GetFirstEventId() != historyEvents[0].GetEventId() ||
-		request.GetNextEventId() != historyEvents[len(historyEvents)-1].GetEventId()+1 {
-		return ErrEventIDMismatch
+	events, err := deserializeBlob(historySerializer, request.Events)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(events) == 0 {
+		return nil, nil, ErrEmptyHistoryRawEventBatch
 	}
 
-	for _, event := range request.History.Events {
-		if event.GetVersion() != request.GetVersion() {
-			return ErrEventVersionMismatch
+	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	version, err := validateEvents(events)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(newRunEvents) != 0 {
+		newRunVersion, err := validateEvents(newRunEvents)
+		if err != nil {
+			return nil, nil, err
+		}
+		if version != newRunVersion {
+			return nil, nil, ErrEventVersionMismatch
 		}
 	}
 
-	if request.NewRunHistory != nil {
-		for _, event := range request.NewRunHistory.Events {
-			if event.GetVersion() != request.GetVersion() {
-				return ErrEventVersionMismatch
-			}
-		}
-	}
+	// TODO add validation on version history
 
-	return nil
+	return events, newRunEvents, nil
 }
 
 func validateUUID(input string) bool {
@@ -304,4 +332,32 @@ func validateUUID(input string) bool {
 		return false
 	}
 	return true
+}
+
+func validateEvents(events []*shared.HistoryEvent) (int64, error) {
+
+	firstEvent := events[0]
+	firstEventID := firstEvent.GetEventId()
+	version := firstEvent.GetVersion()
+
+	for index, event := range events {
+		if event.GetEventId() != firstEventID+int64(index) {
+			return 0, ErrEventIDMismatch
+		}
+		if event.GetVersion() != version {
+			return 0, ErrEventVersionMismatch
+		}
+	}
+	return version, nil
+}
+
+func deserializeBlob(
+	historySerializer persistence.PayloadSerializer,
+	blob *shared.DataBlob,
+) ([]*shared.HistoryEvent, error) {
+
+	return historySerializer.DeserializeBatchEvents(&persistence.DataBlob{
+		Encoding: common.EncodingTypeThriftRW,
+		Data:     blob.Data,
+	})
 }

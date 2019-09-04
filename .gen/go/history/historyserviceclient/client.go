@@ -111,6 +111,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	ReplicateEventsV2(
+		ctx context.Context,
+		ReplicateV2Request *history.ReplicateEventsV2Request,
+		opts ...yarpc.CallOption,
+	) error
+
 	ReplicateRawEvents(
 		ctx context.Context,
 		ReplicateRequest *history.ReplicateRawEventsRequest,
@@ -505,6 +511,29 @@ func (c client) ReplicateEvents(
 	}
 
 	err = history.HistoryService_ReplicateEvents_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReplicateEventsV2(
+	ctx context.Context,
+	_ReplicateV2Request *history.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_ReplicateEventsV2_Helper.Args(_ReplicateV2Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ReplicateEventsV2_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_ReplicateEventsV2_Helper.UnwrapResponse(&result)
 	return
 }
 

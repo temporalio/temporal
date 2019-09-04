@@ -492,6 +492,20 @@ func (_m *MockHistoryEngine) ReplicateRawEvents(ctx context.Context, request *go
 	return r0
 }
 
+// ReplicateEventsV2 is mock implementation for ReplicateEventsV2 of HistoryEngine
+func (_m *MockHistoryEngine) ReplicateEventsV2(ctx context.Context, request *gohistory.ReplicateEventsV2Request) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.ReplicateEventsV2Request) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SyncShardStatus is mock implementation for SyncShardStatus of HistoryEngine
 func (_m *MockHistoryEngine) SyncShardStatus(ctx context.Context, request *gohistory.SyncShardStatusRequest) error {
 	ret := _m.Called(request)

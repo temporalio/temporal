@@ -456,6 +456,37 @@ func (mr *_MockClientRecorder) ReplicateEvents(
 	return mr.mock.ctrl.RecordCall(mr.mock, "ReplicateEvents", args...)
 }
 
+// ReplicateEventsV2 responds to a ReplicateEventsV2 call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ReplicateEventsV2(gomock.Any(), ...).Return(...)
+// 	... := client.ReplicateEventsV2(...)
+func (m *MockClient) ReplicateEventsV2(
+	ctx context.Context,
+	_ReplicateV2Request *history.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _ReplicateV2Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ReplicateEventsV2", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ReplicateEventsV2(
+	ctx interface{},
+	_ReplicateV2Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ReplicateV2Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ReplicateEventsV2", args...)
+}
+
 // ReplicateRawEvents responds to a ReplicateRawEvents call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

@@ -56,7 +56,7 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 		Batches: make([]NDCTestBatch, 0),
 	}
 	curr := root
-	//eventRanches := make([][]Vertex, 0, totalBranchNumber)
+	// eventRanches := make([][]Vertex, 0, totalBranchNumber)
 	for currentBranch > 0 {
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()

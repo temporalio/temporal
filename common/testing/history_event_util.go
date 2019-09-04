@@ -118,7 +118,7 @@ func (h *HistoryAttributesGeneratorImpl) GenerateHistoryEvents(
 	history := make([]*shared.History, 0, len(batches))
 	eventID := startEventID
 
-	//TODO: Marker and EventTypeUpsertWorkflowSearchAttributes need to be added to the model and also to generate event attributes
+	// TODO: Marker and EventTypeUpsertWorkflowSearchAttributes need to be added to the model and also to generate event attributes
 	for _, batch := range batches {
 		historyEvents := make([]*shared.HistoryEvent, 0)
 		for _, event := range batch.Events {
@@ -705,7 +705,7 @@ func getDefaultHistoryEvent(eventID, version int64) *shared.HistoryEvent {
 func InitializeHistoryEventGenerator() Generator {
 	generator := NewEventGenerator(time.Now().UnixNano())
 
-	//Functions
+	// Functions
 	notPendingDecisionTask := func() bool {
 		count := 0
 		for _, e := range generator.ListGeneratedVertices() {
@@ -799,7 +799,7 @@ func InitializeHistoryEventGenerator() Generator {
 		return true
 	}
 
-	//Setup decision task model
+	// Setup decision task model
 	decisionModel := NewHistoryEventModel()
 	decisionSchedule := NewHistoryEventVertex(shared.EventTypeDecisionTaskScheduled.String())
 	decisionStart := NewHistoryEventVertex(shared.EventTypeDecisionTaskStarted.String())
@@ -820,7 +820,7 @@ func InitializeHistoryEventGenerator() Generator {
 	decisionModel.AddEdge(decisionScheduleToStart, decisionStartToComplete, decisionStartToFail, decisionStartToTimedOut,
 		decisionFailToSchedule, decisionTimedOutToSchedule)
 
-	//Setup workflow model
+	// Setup workflow model
 	workflowModel := NewHistoryEventModel()
 	workflowStart := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionStarted.String())
 	workflowSignal := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionSignaled.String())
@@ -828,7 +828,7 @@ func InitializeHistoryEventGenerator() Generator {
 	continueAsNew := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionContinuedAsNew.String())
 	workflowFail := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionFailed.String())
 	workflowCancel := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCanceled.String())
-	workflowCancelRequest := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCancelRequested.String()) //?
+	workflowCancelRequest := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionCancelRequested.String())
 	workflowTerminate := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionTerminated.String())
 	workflowTimedOut := NewHistoryEventVertex(shared.EventTypeWorkflowExecutionTimedOut.String())
 	workflowStartToSignal := NewHistoryEventEdge(workflowStart, workflowSignal)
@@ -846,14 +846,14 @@ func InitializeHistoryEventGenerator() Generator {
 	workflowModel.AddEdge(workflowStartToSignal, workflowStartToDecisionSchedule, workflowSignalToDecisionSchedule,
 		decisionCompleteToCAN, decisionCompleteToWorkflowComplete, decisionCompleteToWorkflowFailed, workflowCancelRequestToCancel)
 
-	//Setup activity model
+	// Setup activity model
 	activityModel := NewHistoryEventModel()
 	activitySchedule := NewHistoryEventVertex(shared.EventTypeActivityTaskScheduled.String())
 	activityStart := NewHistoryEventVertex(shared.EventTypeActivityTaskStarted.String())
 	activityComplete := NewHistoryEventVertex(shared.EventTypeActivityTaskCompleted.String())
 	activityFail := NewHistoryEventVertex(shared.EventTypeActivityTaskFailed.String())
 	activityTimedOut := NewHistoryEventVertex(shared.EventTypeActivityTaskTimedOut.String())
-	activityCancelRequest := NewHistoryEventVertex(shared.EventTypeActivityTaskCancelRequested.String()) //?
+	activityCancelRequest := NewHistoryEventVertex(shared.EventTypeActivityTaskCancelRequested.String())
 	activityCancel := NewHistoryEventVertex(shared.EventTypeActivityTaskCanceled.String())
 	activityCancelRequestFail := NewHistoryEventVertex(shared.EventTypeRequestCancelActivityTaskFailed.String())
 	decisionCompleteToATSchedule := NewHistoryEventEdge(decisionComplete, activitySchedule)
@@ -893,7 +893,7 @@ func InitializeHistoryEventGenerator() Generator {
 		activityFailToDecisionSchedule, activityTimedOutToDecisionSchedule, activityCancelReqToCancel, activityCancelReqToCancelFail,
 		activityCancelToDecisionSchedule, decisionCompleteToActivityCancelRequest, activityCancelRequestFailToDecisionSchedule)
 
-	//Setup timer model
+	// Setup timer model
 	timerModel := NewHistoryEventModel()
 	timerStart := NewHistoryEventVertex(shared.EventTypeTimerStarted.String())
 	timerFired := NewHistoryEventVertex(shared.EventTypeTimerFired.String())
@@ -910,7 +910,7 @@ func InitializeHistoryEventGenerator() Generator {
 	timerCancelToDecisionSchedule.SetCondition(notPendingDecisionTask)
 	timerModel.AddEdge(timerStartToFire, decisionCompleteToCancel, decisionCompleteToTimerStart, timerFiredToDecisionSchedule, timerCancelToDecisionSchedule)
 
-	//Setup child workflow model
+	// Setup child workflow model
 	childWorkflowModel := NewHistoryEventModel()
 	childWorkflowInitial := NewHistoryEventVertex(shared.EventTypeStartChildWorkflowExecutionInitiated.String())
 	childWorkflowInitialFail := NewHistoryEventVertex(shared.EventTypeStartChildWorkflowExecutionFailed.String())
@@ -946,7 +946,7 @@ func InitializeHistoryEventGenerator() Generator {
 		childWorkflowCompleteToDecisionSchedule, childWorkflowTerminateToDecisionSchedule, childWorkflowTimedOutToDecisionSchedule,
 		childWorkflowInitialFailToDecisionSchedule)
 
-	//Setup external workflow model
+	// Setup external workflow model
 	externalWorkflowModel := NewHistoryEventModel()
 	externalWorkflowSignal := NewHistoryEventVertex(shared.EventTypeSignalExternalWorkflowExecutionInitiated.String())
 	externalWorkflowSignalFailed := NewHistoryEventVertex(shared.EventTypeSignalExternalWorkflowExecutionFailed.String())
@@ -973,11 +973,11 @@ func InitializeHistoryEventGenerator() Generator {
 		externalWorkflowSignaledToDecisionSchedule, externalWorkflowSignalFailedToDecisionSchedule,
 		externalWorkflowCanceledToDecisionSchedule, externalWorkflowCancelFailToDecisionSchedule)
 
-	//Config event generator
+	// Config event generator
 	generator.SetBatchGenerationRule(canDoBatch)
 	generator.AddInitialEntryVertex(workflowStart)
 	generator.AddExitVertex(workflowComplete, workflowFail, workflowTerminate, workflowTimedOut, continueAsNew)
-	//generator.AddRandomEntryVertex(workflowSignal, workflowTerminate, workflowTimedOut)
+	// generator.AddRandomEntryVertex(workflowSignal, workflowTerminate, workflowTimedOut)
 	generator.AddModel(decisionModel)
 	generator.AddModel(workflowModel)
 	generator.AddModel(activityModel)

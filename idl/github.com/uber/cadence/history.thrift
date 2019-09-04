@@ -299,6 +299,16 @@ struct ReplicateRawEventsRequest {
   70: optional i32 newRunEventStoreVersion
 }
 
+struct ReplicateEventsV2Request {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution workflowExecution
+  30: optional list<shared.VersionHistoryItem> versionHistoryItems
+  40: optional shared.DataBlob events
+  50: optional list<shared.VersionHistoryItem> newRunVersionHistoryItems
+  60: optional shared.DataBlob newRunEvents
+  70: optional bool resetWorkflow
+}
+
 struct SyncShardStatusRequest {
   10: optional string sourceCluster
   20: optional i64 (js.type = "Long") shardId
@@ -697,6 +707,17 @@ service HistoryService {
       5: shared.LimitExceededError limitExceededError,
       6: shared.RetryTaskError retryTaskError,
       7: shared.ServiceBusyError serviceBusyError,
+    )
+
+  void ReplicateEventsV2(1: ReplicateEventsV2Request replicateV2Request)
+    throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+        4: ShardOwnershipLostError shardOwnershipLostError,
+        5: shared.LimitExceededError limitExceededError,
+        6: shared.RetryTaskV2Error retryTaskError,
+        7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**

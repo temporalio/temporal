@@ -454,6 +454,23 @@ func (c *metricClient) ReplicateRawEvents(
 	return err
 }
 
+func (c *metricClient) ReplicateEventsV2(
+	context context.Context,
+	request *h.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsV2Scope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientReplicateEventsV2Scope, metrics.CadenceClientLatency)
+	err := c.client.ReplicateEventsV2(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsV2Scope, metrics.CadenceClientFailures)
+	}
+
+	return err
+}
+
 func (c *metricClient) SyncShardStatus(
 	context context.Context,
 	request *h.SyncShardStatusRequest,

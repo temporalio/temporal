@@ -1295,6 +1295,44 @@ func (h *Handler) ReplicateRawEvents(
 	return nil
 }
 
+// ReplicateEventsV2 is called by processor to replicate history events for passive domains
+func (h *Handler) ReplicateEventsV2(
+	ctx context.Context,
+	replicateRequest *hist.ReplicateEventsV2Request,
+) (retError error) {
+
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryReplicateEventsV2Scope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := replicateRequest.GetDomainUUID()
+	if domainID == "" {
+		return h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	workflowExecution := replicateRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.ReplicateEventsV2(ctx, replicateRequest)
+	if err2 != nil {
+		return h.error(err2, scope, domainID, workflowID)
+	}
+
+	return nil
+}
+
 // SyncShardStatus is called by processor to sync history shard information from another cluster
 func (h *Handler) SyncShardStatus(
 	ctx context.Context,

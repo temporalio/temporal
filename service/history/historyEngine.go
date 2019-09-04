@@ -73,6 +73,7 @@ type (
 		timerProcessor            timerQueueProcessor
 		taskAllocator             taskAllocator
 		replicator                *historyReplicator
+		nDCReplicator             nDCHistoryReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
 		historyEventNotifier      historyEventNotifier
 		tokenSerializer           common.TaskTokenSerializer
@@ -179,10 +180,29 @@ func NewEngineWithShardContext(
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
-		replicatorProcessor := newReplicatorQueueProcessor(shard, historyEngImpl.historyCache, publisher, executionManager, historyManager, historyV2Manager, logger)
-		historyEngImpl.replicatorProcessor = replicatorProcessor
-		historyEngImpl.replicator = newHistoryReplicator(shard, clock.NewRealTimeSource(), historyEngImpl, historyCache, shard.GetDomainCache(), historyManager, historyV2Manager,
-			logger)
+		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
+			shard,
+			historyEngImpl.historyCache,
+			publisher, executionManager,
+			historyManager,
+			historyV2Manager,
+			logger,
+		)
+		historyEngImpl.replicator = newHistoryReplicator(
+			shard,
+			clock.NewRealTimeSource(),
+			historyEngImpl,
+			historyCache,
+			shard.GetDomainCache(),
+			historyManager,
+			historyV2Manager,
+			logger,
+		)
+		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
+			shard,
+			historyCache,
+			logger,
+		)
 	}
 	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
@@ -1794,6 +1814,14 @@ func (e *historyEngineImpl) ReplicateRawEvents(
 ) error {
 
 	return e.replicator.ApplyRawEvents(ctx, replicateRequest)
+}
+
+func (e *historyEngineImpl) ReplicateEventsV2(
+	ctx ctx.Context,
+	replicateRequest *h.ReplicateEventsV2Request,
+) error {
+
+	return e.nDCReplicator.ApplyEvents(ctx, replicateRequest)
 }
 
 func (e *historyEngineImpl) SyncShardStatus(

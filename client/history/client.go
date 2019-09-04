@@ -629,6 +629,24 @@ func (c *clientImpl) ReplicateRawEvents(
 	return err
 }
 
+func (c *clientImpl) ReplicateEventsV2(
+	ctx context.Context,
+	request *h.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.ReplicateEventsV2(ctx, request, opts...)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
 func (c *clientImpl) SyncShardStatus(
 	ctx context.Context,
 	request *h.SyncShardStatusRequest,

@@ -72,6 +72,7 @@ type (
 		RecordChildExecutionCompleted(ctx context.Context, request *h.RecordChildExecutionCompletedRequest) error
 		ReplicateEvents(ctx context.Context, request *h.ReplicateEventsRequest) error
 		ReplicateRawEvents(ctx context.Context, request *h.ReplicateRawEventsRequest) error
+		ReplicateEventsV2(ctx context.Context, request *h.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *h.SyncActivityRequest) error
 		GetReplicationMessages(ctx context.Context, taskID int64) (*replicator.ReplicationMessages, error)
