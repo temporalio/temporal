@@ -29,5 +29,6 @@ frontend.validSearchAttributes:
       user: 1
       CustomDomain: 1
       Operator: 1
+      RolloutID: 1
 system.minRetentionDays:
     - value: 0
