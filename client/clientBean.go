@@ -271,7 +271,7 @@ func (d *dnsUpdater) Start() {
 			if err != nil {
 				d.logger.Error("Failed to update DNS", tag.Error(err), tag.Address(d.dnsAddress))
 			}
-			if res.changed {
+			if res != nil && res.changed {
 				if len(res.updates.Additions) > 0 {
 					d.logger.Info("Add new peers by DNS lookup", tag.Address(d.dnsAddress), tag.Addresses(identifiersToStringList(res.updates.Additions)))
 				}
