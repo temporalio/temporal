@@ -911,6 +911,9 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 		FailureReason:                       failureReason,
 		FailureDetails:                      failureDetails,
 		LastCompletionResult:                lastCompletionResult,
+		Header:                              attr.Header,
+		Memo:                                attr.Memo,
+		SearchAttributes:                    attr.SearchAttributes,
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(

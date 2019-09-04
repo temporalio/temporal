@@ -856,6 +856,10 @@ func (s *integrationSuite) TestCronWorkflow() {
 	taskList := &workflow.TaskList{}
 	taskList.Name = common.StringPtr(tl)
 
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
+	}
+
 	request := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
 		Domain:                              common.StringPtr(s.domainName),
@@ -867,6 +871,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
 		CronSchedule:                        common.StringPtr(cronSchedule), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		Memo:                                memo,
 	}
 
 	startWorkflowTS := time.Now()
@@ -963,6 +968,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal(0, len(attributes.GetLastCompletionResult()))
+	s.Equal(memo, attributes.Memo)
 
 	events = s.getHistory(s.domainName, executions[1])
 	lastEvent = events[len(events)-1]
@@ -971,6 +977,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+	s.Equal(memo, attributes.Memo)
 
 	events = s.getHistory(s.domainName, executions[2])
 	lastEvent = events[len(events)-1]
@@ -979,6 +986,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+	s.Equal(memo, attributes.Memo)
 
 	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
 	var closedExecutions []*workflow.WorkflowExecutionInfo
