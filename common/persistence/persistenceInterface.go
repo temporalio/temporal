@@ -493,6 +493,10 @@ type (
 		PageSize int
 		// Pagination token
 		NextPageToken []byte
+		// LastNodeID is the last known node ID attached to a history node
+		LastNodeID int64
+		// LastTransactionID is the last known transaction ID attached to a history node
+		LastTransactionID int64
 		// Used in sharded data stores to identify which shard to use
 		ShardID int
 	}
@@ -513,6 +517,10 @@ type (
 		History []*DataBlob
 		// Pagination token
 		NextPageToken []byte
+		// LastNodeID is the last known node ID attached to a history node
+		LastNodeID int64
+		// LastTransactionID is the last known transaction ID attached to a history node
+		LastTransactionID int64
 	}
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response

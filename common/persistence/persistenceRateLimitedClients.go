@@ -715,6 +715,15 @@ func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranchByBatch(request
 	return response, err
 }
 
+// ReadHistoryBranchByBatch returns history node data for a branch
+func (p *historyV2RateLimitedPersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.ReadRawHistoryBranch(request)
+	return response, err
+}
+
 // ForkHistoryBranch forks a new branch from a old branch
 func (p *historyV2RateLimitedPersistenceClient) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {

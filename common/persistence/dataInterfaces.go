@@ -1014,7 +1014,7 @@ type (
 	}
 
 	// AppendHistoryEventsRequest is used to append new events to workflow execution history
-	//Deprecated: use v2 API-AppendHistoryNodes() instead
+	// Deprecated: use v2 API-AppendHistoryNodes() instead
 	AppendHistoryEventsRequest struct {
 		DomainID          string
 		Execution         workflow.WorkflowExecution
@@ -1028,7 +1028,7 @@ type (
 	}
 
 	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
-	//Deprecated: use v2 API-AppendHistoryNodes() instead
+	// Deprecated: use v2 API-AppendHistoryNodes() instead
 	GetWorkflowExecutionHistoryRequest struct {
 		DomainID  string
 		Execution workflow.WorkflowExecution
@@ -1069,7 +1069,7 @@ type (
 	}
 
 	// DeleteWorkflowExecutionHistoryRequest is used to delete workflow execution history
-	//Deprecated: use v2 API-AppendHistoryNodes() instead
+	// Deprecated: use v2 API-AppendHistoryNodes() instead
 	DeleteWorkflowExecutionHistoryRequest struct {
 		DomainID  string
 		Execution workflow.WorkflowExecution
@@ -1230,7 +1230,7 @@ type (
 		DeleteRequestCancelInfoCount int
 	}
 
-	//UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest
+	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest
 	UpdateWorkflowExecutionResponse struct {
 		MutableStateUpdateSessionStats *MutableStateUpdateSessionStats
 	}
@@ -1302,6 +1302,18 @@ type (
 		Size int
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
+	}
+
+	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
+	ReadRawHistoryBranchResponse struct {
+		// HistoryEventBlobs history event blobs
+		HistoryEventBlobs []*DataBlob
+		// Token to read next page if there are more events beyond page size.
+		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
+		// Empty means we have reached the last page, not need to continue
+		NextPageToken []byte
+		// Size of history read from store
+		Size int
 	}
 
 	// ForkHistoryBranchRequest is used to fork a history branch
@@ -1471,14 +1483,14 @@ type (
 		Closeable
 		GetName() string
 
-		//Deprecated: use v2 API-AppendHistoryNodes() instead
+		// Deprecated: use v2 API-AppendHistoryNodes() instead
 		AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error)
 		// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
-		//Deprecated: use v2 API-ReadHistoryBranch() instead
+		// Deprecated: use v2 API-ReadHistoryBranch() instead
 		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error)
-		//Deprecated: use v2 API-ReadHistoryBranchByBatch() instead
+		// Deprecated: use v2 API-ReadHistoryBranchByBatch() instead
 		GetWorkflowExecutionHistoryByBatch(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryByBatchResponse, error)
-		//Deprecated: use v2 API-DeleteHistoryBranch instead
+		// Deprecated: use v2 API-DeleteHistoryBranch instead
 		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
 	}
 
@@ -1497,6 +1509,9 @@ type (
 		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
 		ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error)
+		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
+		// NOTE: this API should only be used by 3+DC
+		ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
 		ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
 		// CompleteForkBranch will complete the forking process after update mutableState, this is to help preventing data leakage
