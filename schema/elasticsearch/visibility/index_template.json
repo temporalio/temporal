@@ -56,7 +56,10 @@
             "environment": { "type": "keyword"},
             "addon": { "type": "keyword"},
             "addon-type": { "type": "keyword"},
-            "user": { "type": "keyword"}
+            "user": { "type": "keyword"},
+            "CustomDomain": { "type": "keyword"},
+            "Operator": { "type": "keyword"},
+            "RolloutID": { "type": "keyword"}
           }
         }
       }
