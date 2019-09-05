@@ -103,15 +103,10 @@ type (
 
 	// QueryVisibilityRequest is the request to query archived visibility records
 	QueryVisibilityRequest struct {
-		DomainID          string
-		EarliestCloseTime int64
-		LatestCloseTime   int64
-		PageSize          int
-		NextPageToken     []byte
-		WorkflowID        *string
-		RunID             *string
-		WorkflowTypeName  *string
-		CloseStatus       *shared.WorkflowExecutionCloseStatus
+		DomainID      string
+		PageSize      int
+		NextPageToken []byte
+		Query         string
 	}
 
 	// QueryVisibilityResponse is the response of querying archived visibility records

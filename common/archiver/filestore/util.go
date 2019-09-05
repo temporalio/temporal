@@ -191,16 +191,6 @@ func hash(s string) string {
 
 // Validation
 
-func validateQueryRequest(request *archiver.QueryVisibilityRequest) error {
-	if request.DomainID == "" {
-		return errors.New("DomainID is empty")
-	}
-	if request.PageSize == 0 {
-		return errors.New("PageSize should not be 0")
-	}
-	return nil
-}
-
 func validateDirPath(dirPath string) error {
 	if len(dirPath) == 0 {
 		return errEmptyDirectoryPath

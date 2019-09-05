@@ -158,6 +158,7 @@ var keys = map[Key]string{
 	TransferProcessorUpdateAckInterval:                    "history.transferProcessorUpdateAckInterval",
 	TransferProcessorUpdateAckIntervalJitterCoefficient:   "history.transferProcessorUpdateAckIntervalJitterCoefficient",
 	TransferProcessorCompleteTransferInterval:             "history.transferProcessorCompleteTransferInterval",
+	TransferProcessorVisibilityArchivalTimeLimit:          "history.transferProcessorVisibilityArchivalTimeLimit",
 	ReplicatorTaskBatchSize:                               "history.replicatorTaskBatchSize",
 	ReplicatorTaskWorkerCount:                             "history.replicatorTaskWorkerCount",
 	ReplicatorTaskMaxRetryCount:                           "history.replicatorTaskMaxRetryCount",
@@ -438,6 +439,8 @@ const (
 	TransferProcessorUpdateAckIntervalJitterCoefficient
 	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
 	TransferProcessorCompleteTransferInterval
+	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
+	TransferProcessorVisibilityArchivalTimeLimit
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor

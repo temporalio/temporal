@@ -29,10 +29,11 @@ package frontend
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
-	reflect "reflect"
 )
 
 // MockWorkflowHandler is a mock of Interface interface
@@ -175,6 +176,21 @@ func (m *MockWorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, G
 func (mr *MockWorkflowHandlerMockRecorder) GetWorkflowExecutionHistory(ctx, GetRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistory", reflect.TypeOf((*MockWorkflowHandler)(nil).GetWorkflowExecutionHistory), ctx, GetRequest)
+}
+
+// ListArchivedWorkflowExecutions mocks base method
+func (m *MockWorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, ListRequest *shared.ListArchivedWorkflowExecutionsRequest) (*shared.ListArchivedWorkflowExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListArchivedWorkflowExecutions", ctx, ListRequest)
+	ret0, _ := ret[0].(*shared.ListArchivedWorkflowExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListArchivedWorkflowExecutions indicates an expected call of ListArchivedWorkflowExecutions
+func (mr *MockWorkflowHandlerMockRecorder) ListArchivedWorkflowExecutions(ctx, ListRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArchivedWorkflowExecutions", reflect.TypeOf((*MockWorkflowHandler)(nil).ListArchivedWorkflowExecutions), ctx, ListRequest)
 }
 
 // ListClosedWorkflowExecutions mocks base method

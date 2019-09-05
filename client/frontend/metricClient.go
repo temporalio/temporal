@@ -134,6 +134,24 @@ func (c *metricClient) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+func (c *metricClient) ListArchivedWorkflowExecutions(
+	ctx context.Context,
+	request *shared.ListArchivedWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ListArchivedWorkflowExecutionsResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientListArchivedWorkflowExecutionsScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientListArchivedWorkflowExecutionsScope, metrics.CadenceClientLatency)
+	resp, err := c.client.ListArchivedWorkflowExecutions(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientListArchivedWorkflowExecutionsScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *shared.ListClosedWorkflowExecutionsRequest,

@@ -229,8 +229,8 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 			Retention:                0,
 			HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-			VisibilityArchivalStatus: workflow.ArchivalStatusDisabled,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 			BadBinaries:              workflow.BadBinaries{Binaries: map[string]*workflow.BadBinaryInfo{}},
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{

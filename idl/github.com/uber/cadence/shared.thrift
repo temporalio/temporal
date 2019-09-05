@@ -911,6 +911,7 @@ struct History {
 
 struct WorkflowExecutionFilter {
   10: optional string workflowId
+  20: optional string runId
 }
 
 struct WorkflowTypeFilter {
@@ -1308,6 +1309,18 @@ struct ListWorkflowExecutionsRequest {
 }
 
 struct ListWorkflowExecutionsResponse {
+  10: optional list<WorkflowExecutionInfo> executions
+  20: optional binary nextPageToken
+}
+
+struct ListArchivedWorkflowExecutionsRequest {
+  10: optional string domain
+  20: optional i32 pageSize
+  30: optional binary nextPageToken
+  40: optional string query
+}
+
+struct ListArchivedWorkflowExecutionsResponse {
   10: optional list<WorkflowExecutionInfo> executions
   20: optional binary nextPageToken
 }

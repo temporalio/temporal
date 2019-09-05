@@ -122,6 +122,22 @@ func (c *retryableClient) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+func (c *retryableClient) ListArchivedWorkflowExecutions(
+	ctx context.Context,
+	request *shared.ListArchivedWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ListArchivedWorkflowExecutionsResponse, error) {
+
+	var resp *shared.ListArchivedWorkflowExecutionsResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListArchivedWorkflowExecutions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *shared.ListClosedWorkflowExecutionsRequest,

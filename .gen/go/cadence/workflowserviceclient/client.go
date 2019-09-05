@@ -86,6 +86,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.GetWorkflowExecutionHistoryResponse, error)
 
+	ListArchivedWorkflowExecutions(
+		ctx context.Context,
+		ListRequest *shared.ListArchivedWorkflowExecutionsRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.ListArchivedWorkflowExecutionsResponse, error)
+
 	ListClosedWorkflowExecutions(
 		ctx context.Context,
 		ListRequest *shared.ListClosedWorkflowExecutionsRequest,
@@ -459,6 +465,29 @@ func (c client) GetWorkflowExecutionHistory(
 	}
 
 	success, err = cadence.WorkflowService_GetWorkflowExecutionHistory_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ListArchivedWorkflowExecutions(
+	ctx context.Context,
+	_ListRequest *shared.ListArchivedWorkflowExecutionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListArchivedWorkflowExecutionsResponse, err error) {
+
+	args := cadence.WorkflowService_ListArchivedWorkflowExecutions_Helper.Args(_ListRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_ListArchivedWorkflowExecutions_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_ListArchivedWorkflowExecutions_Helper.UnwrapResponse(&result)
 	return
 }
 

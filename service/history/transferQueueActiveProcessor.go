@@ -464,9 +464,19 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
+	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 	err = t.recordWorkflowClosed(
-		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp.UnixNano(),
-		workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(), visibilityMemo,
+		scope,
+		domainID,
+		execution,
+		workflowTypeName,
+		workflowStartTimestamp,
+		workflowExecutionTimestamp.UnixNano(),
+		workflowCloseTimestamp,
+		workflowCloseStatus,
+		workflowHistoryLength,
+		task.GetTaskID(),
+		visibilityMemo,
 		searchAttr,
 	)
 	if err != nil {

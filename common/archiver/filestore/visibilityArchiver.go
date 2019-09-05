@@ -43,9 +43,10 @@ const (
 
 type (
 	visibilityArchiver struct {
-		container *archiver.VisibilityBootstrapContainer
-		fileMode  os.FileMode
-		dirMode   os.FileMode
+		container   *archiver.VisibilityBootstrapContainer
+		fileMode    os.FileMode
+		dirMode     os.FileMode
+		queryParser QueryParser
 	}
 
 	queryVisibilityToken struct {
@@ -54,6 +55,13 @@ type (
 	}
 
 	visibilityRecord archiver.ArchiveVisibilityRequest
+
+	queryVisibilityRequest struct {
+		domainID      string
+		pageSize      int
+		nextPageToken []byte
+		parsedQuery   *parsedQuery
+	}
 )
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
@@ -70,9 +78,10 @@ func NewVisibilityArchiver(
 		return nil, errInvalidDirMode
 	}
 	return &visibilityArchiver{
-		container: container,
-		fileMode:  os.FileMode(fileMode),
-		dirMode:   os.FileMode(dirMode),
+		container:   container,
+		fileMode:    os.FileMode(fileMode),
+		dirMode:     os.FileMode(dirMode),
+		queryParser: NewQueryParser(),
 	}, nil
 }
 
@@ -133,20 +142,38 @@ func (v *visibilityArchiver) Query(
 		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidURI.Error()}
 	}
 
-	if err := validateQueryRequest(request); err != nil {
+	if err := archiver.ValidateQueryRequest(request); err != nil {
 		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidQueryVisibilityRequest.Error()}
 	}
 
+	parsedQuery, err := v.queryParser.Parse(request.Query)
+	if err != nil {
+		return nil, &shared.BadRequestError{Message: err.Error()}
+	}
+
+	return v.query(ctx, URI, &queryVisibilityRequest{
+		domainID:      request.DomainID,
+		pageSize:      request.PageSize,
+		nextPageToken: request.NextPageToken,
+		parsedQuery:   parsedQuery,
+	})
+}
+
+func (v *visibilityArchiver) query(
+	ctx context.Context,
+	URI archiver.URI,
+	request *queryVisibilityRequest,
+) (*archiver.QueryVisibilityResponse, error) {
 	var token *queryVisibilityToken
-	if request.NextPageToken != nil {
+	if request.nextPageToken != nil {
 		var err error
-		token, err = deserializeQueryVisibilityToken(request.NextPageToken)
+		token, err = deserializeQueryVisibilityToken(request.nextPageToken)
 		if err != nil {
 			return nil, &shared.BadRequestError{Message: archiver.ErrNextPageTokenCorrupted.Error()}
 		}
 	}
 
-	dirPath := path.Join(URI.Path(), request.DomainID)
+	dirPath := path.Join(URI.Path(), request.domainID)
 	exists, err := directoryExists(dirPath)
 	if err != nil {
 		return nil, &shared.InternalServiceError{Message: err.Error()}
@@ -180,13 +207,13 @@ func (v *visibilityArchiver) Query(
 			return nil, &shared.InternalServiceError{Message: err.Error()}
 		}
 
-		if record.CloseTimestamp < request.EarliestCloseTime {
+		if record.CloseTimestamp < request.parsedQuery.earliestCloseTime {
 			break
 		}
 
-		if matchQuery(record, request) {
+		if matchQuery(record, request.parsedQuery) {
 			response.Executions = append(response.Executions, convertToExecutionInfo(record))
-			if len(response.Executions) == request.PageSize {
+			if len(response.Executions) == request.pageSize {
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
 						LastCloseTime: record.CloseTimestamp,
@@ -272,20 +299,20 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 	return filteredFilenames, nil
 }
 
-func matchQuery(record *visibilityRecord, request *archiver.QueryVisibilityRequest) bool {
-	if record.CloseTimestamp < request.EarliestCloseTime || record.CloseTimestamp > request.LatestCloseTime {
+func matchQuery(record *visibilityRecord, query *parsedQuery) bool {
+	if record.CloseTimestamp < query.earliestCloseTime || record.CloseTimestamp > query.latestCloseTime {
 		return false
 	}
-	if request.WorkflowID != nil && record.WorkflowID != *request.WorkflowID {
+	if query.workflowID != nil && record.WorkflowID != *query.workflowID {
 		return false
 	}
-	if request.RunID != nil && record.RunID != *request.RunID {
+	if query.runID != nil && record.RunID != *query.runID {
 		return false
 	}
-	if request.WorkflowTypeName != nil && record.WorkflowTypeName != *request.WorkflowTypeName {
+	if query.workflowTypeName != nil && record.WorkflowTypeName != *query.workflowTypeName {
 		return false
 	}
-	if request.CloseStatus != nil && record.CloseStatus != *request.CloseStatus {
+	if query.closeStatus != nil && record.CloseStatus != *query.closeStatus {
 		return false
 	}
 	return true

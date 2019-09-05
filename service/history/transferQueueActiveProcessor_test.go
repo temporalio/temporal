@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/matching"
@@ -37,6 +36,8 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -49,6 +50,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	dc "github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -76,6 +78,8 @@ type (
 		mockTxProcessor          *MockTransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MockTimerQueueProcessor
+		mockArchivalMetadata     *archiver.MockArchivalMetadata
+		mockArchiverProvider     *provider.MockArchiverProvider
 
 		domainID                     string
 		domainEntry                  *cache.DomainCacheEntry
@@ -113,8 +117,12 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.version = int64(4096)
 	// ack manager will use the domain information
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:           &persistence.DomainInfo{ID: validDomainID},
-		Config:         &persistence.DomainConfig{Retention: 1},
+		Info: &persistence.DomainInfo{ID: validDomainID},
+		Config: &persistence.DomainConfig{
+			Retention:                1,
+			VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			VisibilityArchivalURI:    "test:///visibility/archival",
+		},
 		IsGlobalDomain: true,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -127,7 +135,16 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
+	s.mockArchivalMetadata = &archiver.MockArchivalMetadata{}
+	s.mockArchiverProvider = &provider.MockArchiverProvider{}
+	s.mockService = service.NewTestService(
+		s.mockClusterMetadata,
+		s.mockMessagingClient,
+		metricsClient,
+		s.mockClientBean,
+		s.mockArchivalMetadata,
+		s.mockArchiverProvider,
+	)
 
 	shardContext := &shardContextImpl{
 		service:                   s.mockService,
@@ -207,6 +224,8 @@ func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
+	s.mockArchivalMetadata.AssertExpectations(s.T())
+	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
 func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
@@ -674,6 +693,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent(
 		CompletionEvent:    event,
 	}).Return(nil).Times(1)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
 
 	_, err = s.transferQueueActiveProcessor.process(transferTask, true)
 	s.Nil(err)
@@ -728,6 +748,10 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
+	mVisibilityArchiver := &archiver.VisibilityArchiverMock{}
+	mVisibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	s.mockArchiverProvider.On("GetVisibilityArchiver", mock.Anything, mock.Anything).Return(mVisibilityArchiver, nil)
 
 	_, err = s.transferQueueActiveProcessor.process(transferTask, true)
 	s.Nil(err)

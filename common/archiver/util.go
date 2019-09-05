@@ -34,8 +34,9 @@ var (
 	errEmptyRunID            = errors.New("RunID is empty")
 	errInvalidPageSize       = errors.New("PageSize should be greater than 0")
 	errEmptyWorkflowTypeName = errors.New("WorkflowTypeName is empty")
-	errEmptyExecutionTime    = errors.New("ExecutionTimestamp is empty")
+	errEmptyStartTime        = errors.New("StartTimestamp is empty")
 	errEmptyCloseTime        = errors.New("CloseTimestamp is empty")
+	errEmptyQuery            = errors.New("Query string is empty")
 )
 
 // TagLoggerWithArchiveHistoryRequestAndURI tags logger with fields in the archive history request and the URI
@@ -115,11 +116,25 @@ func ValidateVisibilityArchivalRequest(request *ArchiveVisibilityRequest) error 
 	if request.WorkflowTypeName == "" {
 		return errEmptyWorkflowTypeName
 	}
-	if request.ExecutionTimestamp == 0 {
-		return errEmptyExecutionTime
+	if request.StartTimestamp == 0 {
+		return errEmptyStartTime
 	}
 	if request.CloseTimestamp == 0 {
 		return errEmptyCloseTime
+	}
+	return nil
+}
+
+// ValidateQueryRequest validates the query visibility request
+func ValidateQueryRequest(request *QueryVisibilityRequest) error {
+	if request.DomainID == "" {
+		return errEmptyDomainID
+	}
+	if request.PageSize == 0 {
+		return errInvalidPageSize
+	}
+	if request.Query == "" {
+		return errEmptyQuery
 	}
 	return nil
 }

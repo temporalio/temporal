@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -54,6 +55,8 @@ type visibilityArchiverSuite struct {
 	testArchivalURI    archiver.URI
 	testQueryDirectory string
 	visibilityRecords  []*visibilityRecord
+
+	controller *gomock.Controller
 }
 
 func TestVisibilityArchiverSuite(t *testing.T) {
@@ -79,6 +82,11 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.container = &archiver.VisibilityBootstrapContainer{
 		Logger: loggerimpl.NewLogger(zapLogger),
 	}
+	s.controller = gomock.NewController(s.T())
+}
+
+func (s *visibilityArchiverSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *visibilityArchiverSuite) TestValidateURI() {
@@ -117,8 +125,8 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		WorkflowID:         testWorkflowID,
 		RunID:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     int64(0), // workflow without backoff
-		ExecutionTimestamp: time.Now().UnixNano(),
+		StartTimestamp:     time.Now().UnixNano(),
+		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
 		CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
 		HistoryLength:      int64(101),
@@ -157,8 +165,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		WorkflowID:         testWorkflowID,
 		RunID:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
-		StartTimestamp:     int64(0), // workflow without backoff
-		ExecutionTimestamp: closeTimestamp.Add(-time.Hour).UnixNano(),
+		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
+		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
 		CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
 		HistoryLength:      int64(101),
@@ -191,14 +199,14 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 
 func (s *visibilityArchiverSuite) TestMatchQuery() {
 	testCases := []struct {
-		queryRequest *archiver.QueryVisibilityRequest
-		record       *visibilityRecord
-		shouldMatch  bool
+		query       *parsedQuery
+		record      *visibilityRecord
+		shouldMatch bool
 	}{
 		{
-			queryRequest: &archiver.QueryVisibilityRequest{
-				EarliestCloseTime: int64(1000),
-				LatestCloseTime:   int64(12345),
+			query: &parsedQuery{
+				earliestCloseTime: int64(1000),
+				latestCloseTime:   int64(12345),
 			},
 			record: &visibilityRecord{
 				CloseTimestamp: int64(1999),
@@ -206,9 +214,9 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			shouldMatch: true,
 		},
 		{
-			queryRequest: &archiver.QueryVisibilityRequest{
-				EarliestCloseTime: int64(1000),
-				LatestCloseTime:   int64(12345),
+			query: &parsedQuery{
+				earliestCloseTime: int64(1000),
+				latestCloseTime:   int64(12345),
 			},
 			record: &visibilityRecord{
 				CloseTimestamp: int64(999),
@@ -216,10 +224,10 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			shouldMatch: false,
 		},
 		{
-			queryRequest: &archiver.QueryVisibilityRequest{
-				EarliestCloseTime: int64(1000),
-				LatestCloseTime:   int64(12345),
-				WorkflowID:        common.StringPtr("random workflowID"),
+			query: &parsedQuery{
+				earliestCloseTime: int64(1000),
+				latestCloseTime:   int64(12345),
+				workflowID:        common.StringPtr("random workflowID"),
 			},
 			record: &visibilityRecord{
 				CloseTimestamp: int64(2000),
@@ -227,11 +235,11 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			shouldMatch: false,
 		},
 		{
-			queryRequest: &archiver.QueryVisibilityRequest{
-				EarliestCloseTime: int64(1000),
-				LatestCloseTime:   int64(12345),
-				WorkflowID:        common.StringPtr("random workflowID"),
-				RunID:             common.StringPtr("random runID"),
+			query: &parsedQuery{
+				earliestCloseTime: int64(1000),
+				latestCloseTime:   int64(12345),
+				workflowID:        common.StringPtr("random workflowID"),
+				runID:             common.StringPtr("random runID"),
 			},
 			record: &visibilityRecord{
 				CloseTimestamp:   int64(12345),
@@ -242,10 +250,10 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			shouldMatch: true,
 		},
 		{
-			queryRequest: &archiver.QueryVisibilityRequest{
-				EarliestCloseTime: int64(1000),
-				LatestCloseTime:   int64(12345),
-				WorkflowTypeName:  common.StringPtr("some random type name"),
+			query: &parsedQuery{
+				earliestCloseTime: int64(1000),
+				latestCloseTime:   int64(12345),
+				workflowTypeName:  common.StringPtr("some random type name"),
 			},
 			record: &visibilityRecord{
 				CloseTimestamp: int64(12345),
@@ -253,11 +261,11 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			shouldMatch: false,
 		},
 		{
-			queryRequest: &archiver.QueryVisibilityRequest{
-				EarliestCloseTime: int64(1000),
-				LatestCloseTime:   int64(12345),
-				WorkflowTypeName:  common.StringPtr("some random type name"),
-				CloseStatus:       shared.WorkflowExecutionCloseStatusContinuedAsNew.Ptr(),
+			query: &parsedQuery{
+				earliestCloseTime: int64(1000),
+				latestCloseTime:   int64(12345),
+				workflowTypeName:  common.StringPtr("some random type name"),
+				closeStatus:       shared.WorkflowExecutionCloseStatusContinuedAsNew.Ptr(),
 			},
 			record: &visibilityRecord{
 				CloseTimestamp:   int64(12345),
@@ -269,7 +277,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 	}
 
 	for _, tc := range testCases {
-		s.Equal(tc.shouldMatch, matchQuery(tc.record, tc.queryRequest))
+		s.Equal(tc.shouldMatch, matchQuery(tc.record, tc.query))
 	}
 }
 
@@ -318,10 +326,8 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:          testDomainID,
-		EarliestCloseTime: int64(1),
-		LatestCloseTime:   int64(101),
-		PageSize:          1,
+		DomainID: testDomainID,
+		PageSize: 1,
 	}
 	response, err := visibilityArchiver.Query(context.Background(), URI, request)
 	s.Error(err)
@@ -335,13 +341,32 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidRequest() {
 	s.Nil(response)
 }
 
+func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(nil, errors.New("invalid query"))
+	visibilityArchiver.queryParser = mockParser
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, &archiver.QueryVisibilityRequest{
+		DomainID: "some random domainID",
+		PageSize: 10,
+		Query:    "some invalid query",
+	})
+	s.Error(err)
+	s.Nil(response)
+}
+
 func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		earliestCloseTime: int64(1),
+		latestCloseTime:   int64(101),
+	}, nil)
+	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:          testDomainID,
-		EarliestCloseTime: int64(1),
-		LatestCloseTime:   int64(101),
-		PageSize:          1,
+		DomainID: testDomainID,
+		Query:    "parsed by mockParser",
+		PageSize: 1,
 	}
 	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request)
 	s.NoError(err)
@@ -352,12 +377,17 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		earliestCloseTime: int64(1),
+		latestCloseTime:   int64(101),
+	}, nil)
+	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:          testDomainID,
-		EarliestCloseTime: int64(1),
-		LatestCloseTime:   int64(101),
-		PageSize:          1,
-		NextPageToken:     []byte{1, 2, 3},
+		DomainID:      testDomainID,
+		Query:         "parsed by mockParser",
+		PageSize:      1,
+		NextPageToken: []byte{1, 2, 3},
 	}
 	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request)
 	s.Error(err)
@@ -366,12 +396,17 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 
 func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		earliestCloseTime: int64(1),
+		latestCloseTime:   int64(10001),
+		workflowID:        common.StringPtr(testWorkflowID),
+	}, nil)
+	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:          testDomainID,
-		EarliestCloseTime: int64(1),
-		LatestCloseTime:   int64(10001),
-		PageSize:          10,
-		WorkflowID:        common.StringPtr(testWorkflowID),
+		DomainID: testDomainID,
+		PageSize: 10,
+		Query:    "parsed by mockParser",
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
 	s.NoError(err)
@@ -385,12 +420,17 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		earliestCloseTime: int64(1),
+		latestCloseTime:   int64(10001),
+		closeStatus:       shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+	}, nil).AnyTimes()
+	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:          testDomainID,
-		EarliestCloseTime: int64(1),
-		LatestCloseTime:   int64(10001),
-		PageSize:          2,
-		CloseStatus:       shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+		DomainID: testDomainID,
+		PageSize: 2,
+		Query:    "parsed by mockParser",
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
 	s.NoError(err)
@@ -417,6 +457,13 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	defer os.RemoveAll(dir)
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		earliestCloseTime: int64(10),
+		latestCloseTime:   int64(10001),
+		closeStatus:       shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+	}, nil).AnyTimes()
+	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI("file://" + dir)
 	s.NoError(err)
 	for _, record := range s.visibilityRecords {
@@ -425,11 +472,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	}
 
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:          testDomainID,
-		EarliestCloseTime: int64(10),
-		LatestCloseTime:   int64(10001),
-		PageSize:          1,
-		CloseStatus:       shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+		DomainID: testDomainID,
+		PageSize: 1,
+		Query:    "parsed by mockParser",
 	}
 	executions := []*shared.WorkflowExecutionInfo{}
 	for len(executions) == 0 || request.NextPageToken != nil {
@@ -457,14 +502,14 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	s.visibilityRecords = []*visibilityRecord{
 		{
-			DomainID:           testDomainID,
-			WorkflowID:         testWorkflowID,
-			RunID:              testRunID,
-			WorkflowTypeName:   testWorkflowTypeName,
-			ExecutionTimestamp: 1,
-			CloseTimestamp:     10000,
-			CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
-			HistoryLength:      101,
+			DomainID:         testDomainID,
+			WorkflowID:       testWorkflowID,
+			RunID:            testRunID,
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTimestamp:   1,
+			CloseTimestamp:   10000,
+			CloseStatus:      shared.WorkflowExecutionCloseStatusFailed,
+			HistoryLength:    101,
 		},
 		{
 			DomainID:           testDomainID,
@@ -472,7 +517,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			RunID:              "some random run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
 			StartTimestamp:     2,
-			ExecutionTimestamp: 2,
+			ExecutionTimestamp: 0,
 			CloseTimestamp:     1000,
 			CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:      123,
@@ -482,7 +527,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowID:         "another workflow ID",
 			RunID:              "another run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
-			ExecutionTimestamp: 3,
+			StartTimestamp:     3,
+			ExecutionTimestamp: 0,
 			CloseTimestamp:     10,
 			CloseStatus:        shared.WorkflowExecutionCloseStatusContinuedAsNew,
 			HistoryLength:      456,
@@ -492,7 +538,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowID:         "and another workflow ID",
 			RunID:              "and another run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
-			ExecutionTimestamp: 3,
+			StartTimestamp:     3,
+			ExecutionTimestamp: 0,
 			CloseTimestamp:     5,
 			CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:      456,
@@ -502,7 +549,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowID:         "another workflow ID",
 			RunID:              "another run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
-			ExecutionTimestamp: 3,
+			StartTimestamp:     3,
+			ExecutionTimestamp: 0,
 			CloseTimestamp:     10000,
 			CloseStatus:        shared.WorkflowExecutionCloseStatusContinuedAsNew,
 			HistoryLength:      456,

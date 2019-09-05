@@ -2317,6 +2317,88 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
 	return resp, nil
 }
 
+// ListArchivedWorkflowExecutions - retrieves archived info for closed workflow executions in a domain
+func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
+	ctx context.Context,
+	listRequest *gen.ListArchivedWorkflowExecutionsRequest,
+) (resp *gen.ListArchivedWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendClientListArchivedWorkflowExecutionsScope, listRequest)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if listRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok := wh.allow(listRequest); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if listRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if listRequest.GetPageSize() <= 0 {
+		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
+	}
+
+	if !wh.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
+		return nil, wh.error(&gen.BadRequestError{Message: "Cluster is not configured for visibility archival"}, scope)
+	}
+
+	if !wh.GetArchivalMetadata().GetVisibilityConfig().ReadEnabled() {
+		return nil, wh.error(&gen.BadRequestError{Message: "Cluster is not configured for reading archived visibility records"}, scope)
+	}
+
+	entry, err := wh.domainCache.GetDomain(listRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if entry.GetConfig().VisibilityArchivalStatus != shared.ArchivalStatusEnabled {
+		return nil, wh.error(&gen.BadRequestError{Message: "Domain is not configured for visibility archival"}, scope)
+	}
+
+	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalURI)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	visibilityArchiver, err := wh.GetArchiverProvider().GetVisibilityArchiver(URI.Scheme(), common.FrontendServiceName)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	archiverRequest := &archiver.QueryVisibilityRequest{
+		DomainID:      entry.GetInfo().ID,
+		PageSize:      int(listRequest.GetPageSize()),
+		NextPageToken: listRequest.NextPageToken,
+		Query:         listRequest.GetQuery(),
+	}
+
+	archiverResponse, err := visibilityArchiver.Query(ctx, URI, archiverRequest)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// special handling of ExecutionTime for cron or retry
+	for _, execution := range archiverResponse.Executions {
+		if execution.GetExecutionTime() == 0 {
+			execution.ExecutionTime = common.Int64Ptr(execution.GetStartTime())
+		}
+	}
+
+	return &gen.ListArchivedWorkflowExecutionsResponse{
+		Executions:    archiverResponse.Executions,
+		NextPageToken: archiverResponse.NextPageToken,
+	}, nil
+}
+
 // ListClosedWorkflowExecutions - retrieves info for closed workflow executions in a domain
 func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
 	ctx context.Context,

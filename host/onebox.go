@@ -436,7 +436,13 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		ClusterMetadata:  c.clusterMetadata,
 		DomainCache:      domainCache,
 	}
-	err = c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+	visibilityArchiverBootstrapContainer := &carchiver.VisibilityBootstrapContainer{
+		Logger:          c.logger,
+		MetricsClient:   c.frontEndService.GetMetricsClient(),
+		ClusterMetadata: c.clusterMetadata,
+		DomainCache:     domainCache,
+	}
+	err = c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, visibilityArchiverBootstrapContainer)
 	if err != nil {
 		c.logger.Fatal("Failed to register archiver bootstrap container for frontend service", tag.Error(err))
 	}
@@ -517,7 +523,13 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 			ClusterMetadata:  c.clusterMetadata,
 			DomainCache:      domainCache,
 		}
-		err = c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
+		visibilityArchiverBootstrapContainer := &carchiver.VisibilityBootstrapContainer{
+			Logger:          c.logger,
+			MetricsClient:   service.GetMetricsClient(),
+			ClusterMetadata: c.clusterMetadata,
+			DomainCache:     domainCache,
+		}
+		err = c.archiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, visibilityArchiverBootstrapContainer)
 		if err != nil {
 			c.logger.Fatal("Failed to register archiver bootstrap container for history service", tag.Error(err))
 		}

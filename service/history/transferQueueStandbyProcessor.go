@@ -340,10 +340,20 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
-
+		scope := t.metricsClient.Scope(metrics.TransferStandbyTaskCloseExecutionScope)
 		return t.recordWorkflowClosed(
-			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp.UnixNano(),
-			workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, transferTask.GetTaskID(), visibilityMemo, searchAttr,
+			scope,
+			transferTask.DomainID,
+			execution,
+			workflowTypeName,
+			workflowStartTimestamp,
+			workflowExecutionTimestamp.UnixNano(),
+			workflowCloseTimestamp,
+			workflowCloseStatus,
+			workflowHistoryLength,
+			transferTask.GetTaskID(),
+			visibilityMemo,
+			searchAttr,
 		)
 	}, standbyTaskPostActionNoOp) // no op post action, since the entire workflow is finished
 }
