@@ -24,8 +24,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/.gen/go/shared"
 )
 
 type (
@@ -40,7 +40,7 @@ func TestHistoryEventTestSuite(t *testing.T) {
 }
 
 func (s *historyEventTestSuit) SetupSuite() {
-	s.generator = InitializeHistoryEventGenerator()
+	s.generator = InitializeHistoryEventGenerator("domain")
 }
 
 func (s *historyEventTestSuit) SetupTest() {
@@ -49,56 +49,22 @@ func (s *historyEventTestSuit) SetupTest() {
 
 // This is a sample about how to use the generator
 func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
-
-	totalBranchNumber := 2
-	currentBranch := totalBranchNumber
-	root := &NDCTestBranch{
-		Batches: make([]NDCTestBatch, 0),
-	}
-	curr := root
-	// eventRanches := make([][]Vertex, 0, totalBranchNumber)
-	for currentBranch > 0 {
-		for s.generator.HasNextVertex() {
-			events := s.generator.GetNextVertices()
-			newBatch := NDCTestBatch{
-				Events: events,
-			}
-			curr.Batches = append(curr.Batches, newBatch)
-			for _, e := range events {
-				fmt.Println(e.GetName())
-			}
-		}
-		currentBranch--
-		if currentBranch > 0 {
-			resetIdx := s.generator.RandomResetToResetPoint()
-			curr = root.Split(resetIdx)
+	for s.generator.HasNextVertex() {
+		events := s.generator.GetNextVertices()
+		for _, e := range events {
+			fmt.Println(e.GetName())
+			fmt.Println(e.GetData().(*shared.HistoryEvent).GetEventId())
 		}
 	}
 	s.NotEmpty(s.generator.ListGeneratedVertices())
-	queue := []*NDCTestBranch{root}
-	for len(queue) > 0 {
-		b := queue[0]
-		queue = queue[1:]
-		for _, batch := range b.Batches {
-			for _, event := range batch.Events {
-				fmt.Println(event.GetName())
-			}
-		}
-		queue = append(queue, b.Next...)
-	}
 
-	// Generator one branch of history events
-	batches := []NDCTestBatch{}
-	batches = append(batches, root.Batches...)
-	batches = append(batches, root.Next[0].Batches...)
-	identity := "test-event-generator"
-	wid := uuid.New()
-	rid := uuid.New()
-	wt := "event-generator-workflow-type"
-	tl := "event-generator-taskList"
-	domain := "event-generator"
-	domainID := uuid.New()
-	attributeGenerator := NewHistoryAttributesGenerator(wid, rid, tl, wt, domain, domainID, identity)
-	history := attributeGenerator.GenerateHistoryEvents(batches, 1, 100)
-	s.NotEmpty(history)
+	newGenerator := s.generator.RandomResetToResetPoint()
+	for newGenerator.HasNextVertex() {
+		events := newGenerator.GetNextVertices()
+		for _, e := range events {
+			fmt.Println(e.GetName())
+			fmt.Println(e.GetData().(*shared.HistoryEvent).GetEventId())
+		}
+	}
+	s.NotEmpty(newGenerator.ListGeneratedVertices())
 }

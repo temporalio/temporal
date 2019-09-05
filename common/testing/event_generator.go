@@ -23,11 +23,11 @@ package testing
 import (
 	"math/rand"
 	"strings"
-	"time"
 )
 
 const (
 	emptyCandidateIndex = -1
+	versionBumpGap      = int64(100)
 )
 
 var (
@@ -42,6 +42,8 @@ type (
 		name                 string
 		isStrictOnNextVertex bool
 		maxNextGeneration    int
+		dataFunc             func(...interface{}) interface{}
+		data                 interface{}
 	}
 
 	// HistoryEventModel is a graph represents relationships among history event types
@@ -60,8 +62,10 @@ type (
 		exitVertices        map[Vertex]bool
 		randomEntryVertices []Vertex
 		dice                *rand.Rand
+		seed                int64
 		canDoBatch          func([]Vertex) bool
 		resetPoints         []ResetPoint
+		resetCount          int64
 	}
 
 	// ResetPoint is a mark in the generated event history that generator can be reset to
@@ -90,6 +94,7 @@ type (
 func NewEventGenerator(
 	seed int64,
 ) Generator {
+
 	return &EventGenerator{
 		connections:         make(map[Vertex][]Edge),
 		previousVertices:    make([]Vertex, 0),
@@ -98,8 +103,10 @@ func NewEventGenerator(
 		exitVertices:        make(map[Vertex]bool),
 		randomEntryVertices: make([]Vertex, 0),
 		dice:                rand.New(rand.NewSource(seed)),
+		seed:                seed,
 		canDoBatch:          defaultBatchFunc,
 		resetPoints:         make([]ResetPoint, 0),
+		resetCount:          0,
 	}
 }
 
@@ -184,7 +191,6 @@ func (g *EventGenerator) Reset() {
 
 	g.leafVertices = make([]Vertex, 0)
 	g.previousVertices = make([]Vertex, 0)
-	g.dice = rand.New(rand.NewSource(time.Now().Unix()))
 }
 
 // ListResetPoint returns a list of available point to reset the event generator
@@ -195,27 +201,45 @@ func (g *EventGenerator) ListResetPoint() []ResetPoint {
 }
 
 // RandomResetToResetPoint randomly pick a reset point and reset the event generator to the point
-func (g *EventGenerator) RandomResetToResetPoint() int {
+func (g *EventGenerator) RandomResetToResetPoint() Generator {
 
 	// Random reset does not reset to index 0
 	nextIdx := g.dice.Intn(len(g.resetPoints)-1) + 1
-	g.ResetToResetPoint(nextIdx)
-	return nextIdx
+	return g.ResetToResetPoint(nextIdx)
 }
 
 // ResetToResetPoint resets to the corresponding reset point based on the input reset point index
 func (g *EventGenerator) ResetToResetPoint(
 	index int,
-) {
+) Generator {
 
 	if index >= len(g.resetPoints) {
 		panic("The reset point does not exist.")
 	}
 	toReset := g.resetPoints[index]
-	g.previousVertices = toReset.previousVertices
-	g.leafVertices = toReset.leafVertices
-	g.resetPoints = g.resetPoints[index:]
-	g.dice = rand.New(rand.NewSource(time.Now().Unix()))
+	previousVertices := make([]Vertex, len(toReset.previousVertices))
+	copy(previousVertices, toReset.previousVertices)
+	leafVertices := make([]Vertex, len(toReset.leafVertices))
+	copy(leafVertices, toReset.leafVertices)
+	entryVertices := make([]Vertex, len(g.entryVertices))
+	copy(entryVertices, g.entryVertices)
+	randomEntryVertices := make([]Vertex, len(g.randomEntryVertices))
+	copy(randomEntryVertices, g.randomEntryVertices)
+	resetPoints := make([]ResetPoint, len(g.resetPoints[index:]))
+	copy(resetPoints, g.resetPoints[index:])
+	return &EventGenerator{
+		connections:         copyConnections(g.connections),
+		previousVertices:    previousVertices,
+		leafVertices:        leafVertices,
+		entryVertices:       entryVertices,
+		exitVertices:        copyExitVertices(g.exitVertices),
+		randomEntryVertices: randomEntryVertices,
+		dice:                rand.New(rand.NewSource(g.seed)),
+		seed:                g.seed,
+		canDoBatch:          g.canDoBatch,
+		resetPoints:         resetPoints,
+		resetCount:          g.resetCount + 1,
+	}
 }
 
 // SetBatchGenerationRule sets a function to determine next generated batch of history events
@@ -274,6 +298,7 @@ func (g *EventGenerator) getEntryVertex() Vertex {
 	nextRange := len(g.entryVertices)
 	nextIdx := g.dice.Intn(nextRange)
 	vertex := g.entryVertices[nextIdx]
+	vertex.GenerateData(nil)
 	return vertex
 }
 
@@ -285,6 +310,13 @@ func (g *EventGenerator) getRandomVertex() Vertex {
 	nextRange := len(g.randomEntryVertices)
 	nextIdx := g.dice.Intn(nextRange)
 	vertex := g.randomEntryVertices[nextIdx]
+	lastEvent := g.previousVertices[len(g.previousVertices)-1]
+
+	versionBump := int64(0)
+	if g.shouldBumpVersion() {
+		versionBump = versionBumpGap
+	}
+	vertex.GenerateData(lastEvent.GetData(), int64(1), versionBump, g.resetCount)
 	return vertex
 }
 
@@ -335,10 +367,16 @@ func (g *EventGenerator) randomNextVertex(
 ) []Vertex {
 
 	nextVertex := g.leafVertices[nextVertexIdx]
-	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 1
+	versionBump := int64(0)
+	if g.shouldBumpVersion() {
+		versionBump = versionBumpGap
+	}
+
+	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 2
 	res := make([]Vertex, 0)
-	for i := 0; i < count; i++ {
+	for i := 1; i < count; i++ {
 		endVertex := g.pickRandomVertex(nextVertex)
+		endVertex.GenerateData(nextVertex.GetData(), int64(i), versionBump, g.resetCount)
 		res = append(res, endVertex)
 		if _, ok := g.exitVertices[endVertex]; ok {
 			res = []Vertex{endVertex}
@@ -364,6 +402,11 @@ func (g *EventGenerator) pickRandomVertex(
 		newConnection.GetAction()()
 	}
 	return endVertex
+}
+
+func (g *EventGenerator) shouldBumpVersion() bool {
+	// 1//1000 to bump the version
+	return g.dice.Intn(1000) == 500
 }
 
 // NewHistoryEventEdge initials a new edge between two HistoryEventVertexes
@@ -493,6 +536,39 @@ func (he *HistoryEventVertex) SetMaxNextVertex(
 func (he HistoryEventVertex) GetMaxNextVertex() int {
 
 	return he.maxNextGeneration
+}
+
+// SetDataFunc sets the data generation function
+func (he *HistoryEventVertex) SetDataFunc(
+	dataFunc func(...interface{}) interface{},
+) {
+
+	he.dataFunc = dataFunc
+}
+
+// GetDataFunc returns the data generation function
+func (he HistoryEventVertex) GetDataFunc() func(...interface{}) interface{} {
+
+	return he.dataFunc
+}
+
+// GenerateData generates the data and return
+func (he *HistoryEventVertex) GenerateData(
+	input ...interface{},
+) interface{} {
+
+	if he.dataFunc == nil {
+		return nil
+	}
+
+	he.data = he.dataFunc(input...)
+	return he.data
+}
+
+// GetData returns the vertex data
+func (he HistoryEventVertex) GetData() interface{} {
+
+	return he.data
 }
 
 // NewHistoryEventModel initials new history event model

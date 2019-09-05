@@ -55,9 +55,9 @@ type (
 		// ListResetPoint lists all available reset points
 		ListResetPoint() []ResetPoint
 		// RandomResetToResetPoint randomly pick a reset point to reset and return the reset point index
-		RandomResetToResetPoint() int
+		RandomResetToResetPoint() Generator
 		// ResetToResetPoint resets the generator to a reset point
-		ResetToResetPoint(int)
+		ResetToResetPoint(int) Generator
 		// SetBatchGenerationRule sets a function that used in GetNextVertex to return batch result
 		SetBatchGenerationRule(func([]Vertex) bool)
 	}
@@ -75,6 +75,12 @@ type (
 		// MaxNextVertex means the max neighbors can branch out from this vertex
 		SetMaxNextVertex(int)
 		GetMaxNextVertex() int
+
+		// SetVertexDataFunc sets a function to generate end vertex data
+		SetDataFunc(func(...interface{}) interface{})
+		GetDataFunc() func(...interface{}) interface{}
+		GenerateData(...interface{}) interface{}
+		GetData() interface{}
 	}
 
 	// Edge is the connection between two vertices

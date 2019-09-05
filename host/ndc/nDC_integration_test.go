@@ -105,7 +105,6 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	c, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterName[1])))
 	s.Require().NoError(err)
 	s.passive = c
-	s.generator = test.InitializeHistoryEventGenerator()
 }
 
 func (s *nDCIntegrationTestSuite) SetupTest() {
@@ -146,6 +145,14 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 	root := &test.NDCTestBranch{
 		Batches: make([]test.NDCTestBatch, 0),
 	}
+	wid := uuid.New()
+	rid := uuid.New()
+	wt := "event-generator-workflow-type"
+	tl := "event-generator-taskList"
+	domain := *resp.DomainInfo.Name
+	version := int64(100)
+
+	s.generator = test.InitializeHistoryEventGenerator(domain)
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
 		newBatch := test.NDCTestBatch{
@@ -153,17 +160,6 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 		}
 		root.Batches = append(root.Batches, newBatch)
 	}
-
-	identity := "test-event-generator"
-	wid := uuid.New()
-	rid := uuid.New()
-	wt := "event-generator-workflow-type"
-	tl := "event-generator-taskList"
-	domain := *resp.DomainInfo.Name
-	domainID := *resp.DomainInfo.UUID
-	version := int64(100)
-	attributeGenerator := test.NewHistoryAttributesGenerator(wid, rid, tl, wt, domainID, domain, identity)
-	historyBatch := attributeGenerator.GenerateHistoryEvents(root.Batches, 1, version)
 
 	historyClient := s.passive.GetHistoryClient()
 	replicationInfo := make(map[string]*shared.ReplicationInfo)
@@ -177,9 +173,14 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 		LastEventId: common.Int64Ptr(0),
 	}
 
-	for _, batch := range historyBatch {
+	for _, batch := range root.Batches {
 		// Generate a new run history only when the last event is continue as new
-		newRunHistory := generateNewRunHistory(batch.Events[len(batch.Events)-1], version, domain, wid, rid, wt, tl)
+		newRunHistory := generateNewRunHistory(batch.Events[len(batch.Events)-1].GetData().(shared.HistoryEvent), version, domain, wid, rid, wt, tl)
+		batchHistory := shared.History{}
+		for _, event := range batch.Events {
+			historyEvent := event.GetData().(shared.HistoryEvent)
+			batchHistory.Events = append(batchHistory.Events, &historyEvent)
+		}
 		err = historyClient.ReplicateEvents(createContext(), &history.ReplicateEventsRequest{
 			SourceCluster: common.StringPtr("active"),
 			DomainUUID:    resp.DomainInfo.UUID,
@@ -187,10 +188,10 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 				WorkflowId: common.StringPtr(wid),
 				RunId:      common.StringPtr(rid),
 			},
-			FirstEventId:            batch.Events[0].EventId,
-			NextEventId:             common.Int64Ptr(*batch.Events[len(batch.Events)-1].EventId + int64(1)),
+			FirstEventId:            batch.Events[0].GetData().(shared.HistoryEvent).EventId,
+			NextEventId:             common.Int64Ptr(*batch.Events[len(batch.Events)-1].GetData().(shared.HistoryEvent).EventId + int64(1)),
 			Version:                 common.Int64Ptr(version),
-			History:                 batch,
+			History:                 &batchHistory,
 			NewRunHistory:           newRunHistory,
 			ForceBufferEvents:       common.BoolPtr(false),
 			EventStoreVersion:       common.Int32Ptr(persistence.EventStoreVersionV2),
@@ -217,21 +218,29 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 
 	// compare origin events with replicated events
 	batchIndex := 0
-	batch := historyBatch[batchIndex].GetEvents()
+	batch := root.Batches[batchIndex].Events
 	eventIndex := 0
 	for _, event := range replicatedHistory.GetHistory().GetEvents() {
 		if eventIndex >= len(batch) {
 			batchIndex++
-			batch = historyBatch[batchIndex].GetEvents()
+			batch = root.Batches[batchIndex].Events
 			eventIndex = 0
 		}
-		originEvent := batch[eventIndex]
+		originEvent := batch[eventIndex].GetData().(shared.HistoryEvent)
 		eventIndex++
 		s.Equal(originEvent.GetEventType().String(), event.GetEventType().String(), "The replicated event and the origin event are not the same")
 	}
 }
 
-func generateNewRunHistory(event *shared.HistoryEvent, version int64, domain, wid, rid, workflowType, taskList string) *shared.History {
+func generateNewRunHistory(
+	event shared.HistoryEvent,
+	version int64,
+	domain string,
+	workflowID string,
+	runID string,
+	workflowType string,
+	taskList string,
+) *shared.History {
 
 	if event.GetWorkflowExecutionContinuedAsNewEventAttributes() != nil {
 		event.WorkflowExecutionContinuedAsNewEventAttributes.NewExecutionRunId = common.StringPtr(uuid.New())
@@ -247,8 +256,8 @@ func generateNewRunHistory(event *shared.HistoryEvent, version int64, domain, wi
 						WorkflowType:         common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(workflowType)}),
 						ParentWorkflowDomain: common.StringPtr(domain),
 						ParentWorkflowExecution: &shared.WorkflowExecution{
-							WorkflowId: common.StringPtr(wid),
-							RunId:      common.StringPtr(rid),
+							WorkflowId: common.StringPtr(workflowID),
+							RunId:      common.StringPtr(runID),
 						},
 						ParentInitiatedEventId: common.Int64Ptr(event.GetEventId()),
 						TaskList: common.TaskListPtr(shared.TaskList{
@@ -257,11 +266,11 @@ func generateNewRunHistory(event *shared.HistoryEvent, version int64, domain, wi
 						}),
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(10),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-						ContinuedExecutionRunId:             common.StringPtr(rid),
+						ContinuedExecutionRunId:             common.StringPtr(runID),
 						Initiator:                           shared.ContinueAsNewInitiatorCronSchedule.Ptr(),
-						OriginalExecutionRunId:              common.StringPtr(rid),
+						OriginalExecutionRunId:              common.StringPtr(runID),
 						Identity:                            common.StringPtr("NDC-test"),
-						FirstExecutionRunId:                 common.StringPtr(rid),
+						FirstExecutionRunId:                 common.StringPtr(runID),
 						Attempt:                             common.Int32Ptr(0),
 						ExpirationTimestamp:                 common.Int64Ptr(time.Now().Add(time.Minute).UnixNano()),
 					},
