@@ -91,9 +91,17 @@ func NewArchivalMetadata(
 		domainDefaults.History.URI,
 	)
 
+	visibilityConfig := NewArchivalConfig(
+		visibilityStatus,
+		dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, visibilityStatus),
+		dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, visibilityReadEnabled),
+		domainDefaults.Visibility.Status,
+		domainDefaults.Visibility.URI,
+	)
+
 	return &archivalMetadata{
 		historyConfig:    historyConfig,
-		visibilityConfig: NewDisabledArchvialConfig(),
+		visibilityConfig: visibilityConfig,
 	}
 }
 

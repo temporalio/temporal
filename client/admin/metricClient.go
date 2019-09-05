@@ -79,6 +79,42 @@ func (c *metricClient) DescribeHistoryHost(
 	return resp, err
 }
 
+func (c *metricClient) RemoveTask(
+	ctx context.Context,
+	request *shared.RemoveTaskRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientCloseShardScope, metrics.CadenceClientLatency)
+	err := c.client.RemoveTask(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientFailures)
+	}
+	return err
+}
+
+func (c *metricClient) CloseShard(
+	ctx context.Context,
+	request *shared.CloseShardRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientCloseShardScope, metrics.CadenceClientLatency)
+	err := c.client.CloseShard(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientFailures)
+	}
+	return err
+}
+
 func (c *metricClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *admin.DescribeWorkflowExecutionRequest,

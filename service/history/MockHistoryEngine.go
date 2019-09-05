@@ -93,6 +93,29 @@ func (_m *MockHistoryEngine) DescribeMutableState(ctx context.Context, request *
 	return r0, r1
 }
 
+// QueryWorkflow is mock implementation for QueryWorkflow of HistoryEngine
+func (_m *MockHistoryEngine) QueryWorkflow(ctx context.Context, request *gohistory.QueryWorkflowRequest) (*gohistory.QueryWorkflowResponse, error) {
+	ret := _m.Called(ctx, request)
+
+	var r0 *gohistory.QueryWorkflowResponse
+	if rf, ok := ret.Get(0).(func(*gohistory.QueryWorkflowRequest) *gohistory.QueryWorkflowResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gohistory.QueryWorkflowResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*gohistory.QueryWorkflowRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetMutableState is mock implementation for GetMutableState of HistoryEngine
 func (_m *MockHistoryEngine) GetMutableState(ctx context.Context, request *gohistory.GetMutableStateRequest) (*gohistory.GetMutableStateResponse, error) {
 	ret := _m.Called(ctx, request)

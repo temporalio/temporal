@@ -51,7 +51,7 @@ services:
       - kafka
       - elasticsearch
   cadence-web:
-    image: ubercadence/web:3.1.2
+    image: ubercadence/web:3.4.1
     environment:
       - "CADENCE_TCHANNEL_PEERS=cadence:7933"
     ports:

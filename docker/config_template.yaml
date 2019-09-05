@@ -6,6 +6,10 @@ persistence:
     numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}
     defaultStore: default
     visibilityStore: visibility
+    {{- $es := default .Env.ENABLE_ES "false" | lower -}}
+    {{- if eq $es "true" }}
+    advancedVisibilityStore: es-visibility
+    {{- end }}
     datastores:
         {{- $db := default .Env.DB "cassandra" | lower -}}
         {{- if eq $db "cassandra" }}
@@ -36,6 +40,15 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ default .Env.MYSQL_USER "" }}
                 password: {{ default .Env.MYSQL_PWD "" }}
+        {{- end }}
+        {{- if eq $es "true" }}
+        es-visibility:
+            elasticsearch:
+                url:
+                    scheme: "http"
+                    host: "{{ default .Env.ES_SEEDS "" }}:9200"
+                indices:
+                    visibility: cadence-visibility-dev
         {{- end }}
 
 ringpop:
@@ -143,14 +156,6 @@ kafka:
         visibility:
             topic: cadence-visibility-dev
             dlq-topic: cadence-visibility-dev-dlq
-
-elasticsearch:
-    enable: false
-    url:
-        scheme: "http"
-        host: "{{ default .Env.ES_SEEDS "" }}:9200"
-    indices:
-        visibility: cadence-visibility-dev
 
 publicClient:
     hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7933

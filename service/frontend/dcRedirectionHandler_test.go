@@ -195,6 +195,29 @@ func (s *dcRedirectionHandlerSuite) TestGetWorkflowExecutionHistory() {
 	s.Nil(err)
 }
 
+func (s *dcRedirectionHandlerSuite) TestListArchivedWorkflowExecutions() {
+	apiName := "ListArchivedWorkflowExecutions"
+
+	s.mockDCRedirectionPolicy.On("WithDomainNameRedirect",
+		s.domainName, apiName, mock.Anything).Return(nil).Times(1)
+
+	req := &shared.ListArchivedWorkflowExecutionsRequest{
+		Domain: common.StringPtr(s.domainName),
+	}
+	resp, err := s.handler.ListArchivedWorkflowExecutions(context.Background(), req)
+	s.Nil(err)
+	// the resp is initialized to nil, since inner function is not called
+	s.Nil(resp)
+
+	callFn := s.mockDCRedirectionPolicy.Calls[0].Arguments[2].(func(string) error)
+	s.mockFrontendHandler.EXPECT().ListArchivedWorkflowExecutions(gomock.Any(), req).Return(&shared.ListArchivedWorkflowExecutionsResponse{}, nil).Times(1)
+	err = callFn(s.currentClusterName)
+	s.Nil(err)
+	s.mockRemoteFrontendClient.EXPECT().ListArchivedWorkflowExecutions(gomock.Any(), req).Return(&shared.ListArchivedWorkflowExecutionsResponse{}, nil).Times(1)
+	err = callFn(s.alternativeClusterName)
+	s.Nil(err)
+}
+
 func (s *dcRedirectionHandlerSuite) TestListClosedWorkflowExecutions() {
 	apiName := "ListClosedWorkflowExecutions"
 

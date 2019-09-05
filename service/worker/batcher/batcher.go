@@ -22,7 +22,6 @@ package batcher
 
 import (
 	"context"
-	"time"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
@@ -35,16 +34,6 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/worker"
-)
-
-const (
-	// maximum time waiting for this batcher to start before giving up
-	maxStartupTime         = time.Minute * 3
-	backOffInitialInterval = time.Second
-	backOffMaxInterval     = time.Minute
-	rpcTimeout             = time.Second
-
-	waitingForGlobalDomainCreationRacingCondition = time.Second * 20
 )
 
 type (
@@ -104,13 +93,6 @@ func (s *Batcher) Start() error {
 		MetricsScope:              s.tallyScope,
 		BackgroundActivityContext: ctx,
 		Tracer:                    opentracing.GlobalTracer(),
-	}
-	// TODO https://github.com/uber/cadence/issues/2309
-	// Remove it in next release
-	legacyWorker := worker.New(s.svcClient, common.SystemGlobalDomainName, BatcherTaskListName, workerOpts)
-	err := legacyWorker.Start()
-	if err != nil {
-		return err
 	}
 	batchWorker := worker.New(s.svcClient, common.SystemLocalDomainName, BatcherTaskListName, workerOpts)
 	return batchWorker.Start()

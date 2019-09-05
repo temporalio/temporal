@@ -123,6 +123,13 @@ enum TimeoutType {
   HEARTBEAT,
 }
 
+enum ParentClosePolicy {
+	ABANDON,
+	REQUEST_CANCEL,
+	TERMINATE,
+}
+
+
 // whenever this list of decision is changed
 // do change the mutableStateBuilder.go
 // function shouldBufferEvent
@@ -236,12 +243,6 @@ enum WorkflowExecutionCloseStatus {
   TERMINATED,
   CONTINUED_AS_NEW,
   TIMED_OUT,
-}
-
-enum ChildPolicy {
-  TERMINATE,
-  REQUEST_CANCEL,
-  ABANDON,
 }
 
 enum QueryTaskCompletedType {
@@ -358,7 +359,7 @@ struct WorkflowExecutionConfiguration {
   10: optional TaskList taskList
   20: optional i32 executionStartToCloseTimeoutSeconds
   30: optional i32 taskStartToCloseTimeoutSeconds
-  40: optional ChildPolicy childPolicy
+//  40: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
 }
 
 struct TransientDecisionInfo {
@@ -459,7 +460,8 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   50: optional binary input
   60: optional i32 executionStartToCloseTimeoutSeconds
   70: optional i32 taskStartToCloseTimeoutSeconds
-  80: optional ChildPolicy childPolicy
+//  80: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
+  81: optional ParentClosePolicy parentClosePolicy
   90: optional binary control
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional RetryPolicy retryPolicy
@@ -495,7 +497,7 @@ struct WorkflowExecutionStartedEventAttributes {
   30: optional binary input
   40: optional i32 executionStartToCloseTimeoutSeconds
   50: optional i32 taskStartToCloseTimeoutSeconds
-  52: optional ChildPolicy childPolicy
+//  52: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
   54: optional string continuedExecutionRunId
   55: optional ContinueAsNewInitiator initiator
   56: optional string continuedFailureReason
@@ -787,7 +789,8 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   50:  optional binary input
   60:  optional i32 executionStartToCloseTimeoutSeconds
   70:  optional i32 taskStartToCloseTimeoutSeconds
-  80:  optional ChildPolicy childPolicy
+//  80:  optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
+  81:  optional ParentClosePolicy parentClosePolicy
   90:  optional binary control
   100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   110: optional WorkflowIdReusePolicy workflowIdReusePolicy
@@ -917,6 +920,7 @@ struct History {
 
 struct WorkflowExecutionFilter {
   10: optional string workflowId
+  20: optional string runId
 }
 
 struct WorkflowTypeFilter {
@@ -1048,7 +1052,7 @@ struct StartWorkflowExecutionRequest {
   80: optional string identity
   90: optional string requestId
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
-  110: optional ChildPolicy childPolicy
+//  110: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
   120: optional RetryPolicy retryPolicy
   130: optional string cronSchedule
   140: optional Memo memo
@@ -1318,6 +1322,18 @@ struct ListWorkflowExecutionsResponse {
   20: optional binary nextPageToken
 }
 
+struct ListArchivedWorkflowExecutionsRequest {
+  10: optional string domain
+  20: optional i32 pageSize
+  30: optional binary nextPageToken
+  40: optional string query
+}
+
+struct ListArchivedWorkflowExecutionsResponse {
+  10: optional list<WorkflowExecutionInfo> executions
+  20: optional binary nextPageToken
+}
+
 struct CountWorkflowExecutionsRequest {
   10: optional string domain
   20: optional string query
@@ -1402,6 +1418,7 @@ struct PendingChildExecutionInfo {
   20: optional string runID
   30: optional string workflowTypName
   40: optional i64 (js.type = "Long") initiatedID
+  50: optional ParentClosePolicy parentClosePolicy
 }
 
 struct DescribeWorkflowExecutionResponse {
@@ -1441,6 +1458,16 @@ struct DescribeHistoryHostRequest {
   10: optional string               hostAddress //ip:port
   20: optional i32                  shardIdForHost
   30: optional WorkflowExecution    executionForHost
+}
+
+struct RemoveTaskRequest {
+  10: optional i32                      shardID
+  20: optional i32                      type
+  30: optional i64 (js.type = "Long")   taskID
+}
+
+struct CloseShardRequest {
+  10: optional i32               shardID
 }
 
 struct DescribeHistoryHostResponse{

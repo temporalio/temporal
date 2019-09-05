@@ -468,9 +468,19 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
+	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 	err = t.recordWorkflowClosed(
-		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowExecutionTimestamp.UnixNano(),
-		workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength, task.GetTaskID(), visibilityMemo,
+		scope,
+		domainID,
+		execution,
+		workflowTypeName,
+		workflowStartTimestamp,
+		workflowExecutionTimestamp.UnixNano(),
+		workflowCloseTimestamp,
+		workflowCloseStatus,
+		workflowHistoryLength,
+		task.GetTaskID(),
+		visibilityMemo,
 		searchAttr,
 	)
 	if err != nil {
@@ -848,7 +858,6 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             common.StringPtr(ci.CreateRequestID),
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-			ChildPolicy:           attributes.ChildPolicy,
 			RetryPolicy:           attributes.RetryPolicy,
 			CronSchedule:          attributes.CronSchedule,
 			Memo:                  attributes.Memo,
@@ -1233,9 +1242,14 @@ func (t *transferQueueActiveProcessorImpl) requestCancelCompleted(
 				return ErrMissingRequestCancelInfo
 			}
 
-			_, err := msBuilder.AddExternalWorkflowExecutionCancelRequested(
+			domainEntry, err := t.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+			if err != nil {
+				return &workflow.EntityNotExistsError{Message: "Request Domain not found."}
+			}
+
+			_, err = msBuilder.AddExternalWorkflowExecutionCancelRequested(
 				initiatedEventID,
-				request.GetDomainUUID(),
+				domainEntry.GetInfo().Name,
 				request.CancelRequest.WorkflowExecution.GetWorkflowId(),
 				request.CancelRequest.WorkflowExecution.GetRunId(),
 			)
@@ -1262,9 +1276,14 @@ func (t *transferQueueActiveProcessorImpl) requestSignalCompleted(
 				return ErrMissingSignalInfo
 			}
 
-			_, err := msBuilder.AddExternalWorkflowExecutionSignaled(
+			domainEntry, err := t.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+			if err != nil {
+				return &workflow.EntityNotExistsError{Message: "Request Domain not found."}
+			}
+
+			_, err = msBuilder.AddExternalWorkflowExecutionSignaled(
 				initiatedEventID,
-				request.GetDomainUUID(),
+				domainEntry.GetInfo().Name,
 				request.SignalRequest.WorkflowExecution.GetWorkflowId(),
 				request.SignalRequest.WorkflowExecution.GetRunId(),
 				request.SignalRequest.Control)
@@ -1291,10 +1310,15 @@ func (t *transferQueueActiveProcessorImpl) requestCancelFailed(
 				return ErrMissingRequestCancelInfo
 			}
 
-			_, err := msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
+			domainEntry, err := t.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+			if err != nil {
+				return &workflow.EntityNotExistsError{Message: "Request Domain not found."}
+			}
+
+			_, err = msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
 				common.EmptyEventID,
 				initiatedEventID,
-				request.GetDomainUUID(),
+				domainEntry.GetInfo().Name,
 				request.CancelRequest.WorkflowExecution.GetWorkflowId(),
 				request.CancelRequest.WorkflowExecution.GetRunId(),
 				workflow.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution)
@@ -1321,10 +1345,15 @@ func (t *transferQueueActiveProcessorImpl) requestSignalFailed(
 				return ErrMissingSignalInfo
 			}
 
-			_, err := msBuilder.AddSignalExternalWorkflowExecutionFailedEvent(
+			domainEntry, err := t.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+			if err != nil {
+				return &workflow.EntityNotExistsError{Message: "Request Domain not found."}
+			}
+
+			_, err = msBuilder.AddSignalExternalWorkflowExecutionFailedEvent(
 				common.EmptyEventID,
 				initiatedEventID,
-				request.GetDomainUUID(),
+				domainEntry.GetInfo().Name,
 				request.SignalRequest.WorkflowExecution.GetWorkflowId(),
 				request.SignalRequest.WorkflowExecution.GetRunId(),
 				request.SignalRequest.Control,

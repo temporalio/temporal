@@ -344,6 +344,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTimerTask(r
 	return err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) DeleteTask(request *DeleteTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.DeleteTask(request)
+	return err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
@@ -706,6 +715,15 @@ func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranchByBatch(request
 	return response, err
 }
 
+// ReadHistoryBranchByBatch returns history node data for a branch
+func (p *historyV2RateLimitedPersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.ReadRawHistoryBranch(request)
+	return response, err
+}
+
 // ForkHistoryBranch forks a new branch from a old branch
 func (p *historyV2RateLimitedPersistenceClient) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
@@ -730,5 +748,13 @@ func (p *historyV2RateLimitedPersistenceClient) GetHistoryTree(request *GetHisto
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.GetHistoryTree(request)
+	return response, err
+}
+
+func (p *historyV2RateLimitedPersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.GetAllHistoryTreeBranches(request)
 	return response, err
 }

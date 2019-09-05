@@ -123,18 +123,6 @@ kafka:
       cluster: test
     cadence-visibility-dev-dlq:
       cluster: test
-  applications:
-    visibility:
-      topic: cadence-visibility-dev
-      dlq-topic: cadence-visibility-dev-dlq
-
-elasticsearch:
-  enable: false
-  url:
-    scheme: "http"
-    host: "127.0.0.1:9200"
-  indices:
-    visibility: cadence-visibility-dev
 
 publicClient:
   hostPort: "localhost:7933"

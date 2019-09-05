@@ -21,6 +21,10 @@
 package persistence
 
 import (
+	"fmt"
+
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -29,6 +33,7 @@ type (
 		visibilityManager          VisibilityManager
 		esVisibilityManager        VisibilityManager
 		enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithDomainFilter
+		advancedVisWritingMode     dynamicconfig.StringPropertyFn
 	}
 )
 
@@ -36,11 +41,13 @@ var _ VisibilityManager = (*visibilityManagerWrapper)(nil)
 
 // NewVisibilityManagerWrapper create a visibility manager that operate on DB or ElasticSearch based on dynamic config.
 func NewVisibilityManagerWrapper(visibilityManager, esVisibilityManager VisibilityManager,
-	enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithDomainFilter) VisibilityManager {
+	enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithDomainFilter,
+	advancedVisWritingMode dynamicconfig.StringPropertyFn) VisibilityManager {
 	return &visibilityManagerWrapper{
 		visibilityManager:          visibilityManager,
 		esVisibilityManager:        esVisibilityManager,
 		enableReadVisibilityFromES: enableReadVisibilityFromES,
+		advancedVisWritingMode:     advancedVisWritingMode,
 	}
 }
 
@@ -58,21 +65,39 @@ func (v *visibilityManagerWrapper) GetName() string {
 }
 
 func (v *visibilityManagerWrapper) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
-	if v.esVisibilityManager != nil {
+	switch v.advancedVisWritingMode() {
+	case common.AdvancedVisibilityWritingModeOff:
+		return v.visibilityManager.RecordWorkflowExecutionStarted(request)
+	case common.AdvancedVisibilityWritingModeOn:
+		return v.esVisibilityManager.RecordWorkflowExecutionStarted(request)
+	case common.AdvancedVisibilityWritingModeDual:
 		if err := v.esVisibilityManager.RecordWorkflowExecutionStarted(request); err != nil {
 			return err
 		}
+		return v.visibilityManager.RecordWorkflowExecutionStarted(request)
+	default:
+		return &shared.InternalServiceError{
+			Message: fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()),
+		}
 	}
-	return v.visibilityManager.RecordWorkflowExecutionStarted(request)
 }
 
 func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
-	if v.esVisibilityManager != nil {
+	switch v.advancedVisWritingMode() {
+	case common.AdvancedVisibilityWritingModeOff:
+		return v.visibilityManager.RecordWorkflowExecutionClosed(request)
+	case common.AdvancedVisibilityWritingModeOn:
+		return v.esVisibilityManager.RecordWorkflowExecutionClosed(request)
+	case common.AdvancedVisibilityWritingModeDual:
 		if err := v.esVisibilityManager.RecordWorkflowExecutionClosed(request); err != nil {
 			return err
 		}
+		return v.visibilityManager.RecordWorkflowExecutionClosed(request)
+	default:
+		return &shared.InternalServiceError{
+			Message: fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()),
+		}
 	}
-	return v.visibilityManager.RecordWorkflowExecutionClosed(request)
 }
 
 func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {

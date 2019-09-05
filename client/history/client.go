@@ -177,6 +177,52 @@ func (c *clientImpl) DescribeHistoryHost(
 	return response, nil
 }
 
+func (c *clientImpl) RemoveTask(
+	ctx context.Context,
+	request *workflow.RemoveTaskRequest,
+	opts ...yarpc.CallOption) error {
+	var err error
+	var client historyserviceclient.Interface
+	if request.ShardID != nil {
+		client, err = c.getClientForShardID(int(request.GetShardID()))
+	}
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		err = client.RemoveTask(ctx, request, opts...)
+		return err
+	}
+
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
+func (c *clientImpl) CloseShard(
+	ctx context.Context,
+	request *workflow.CloseShardRequest,
+	opts ...yarpc.CallOption) error {
+
+	var err error
+	var client historyserviceclient.Interface
+	if request.ShardID != nil {
+		client, err = c.getClientForShardID(int(request.GetShardID()))
+	}
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		err = client.CloseShard(ctx, request, opts...)
+		return err
+	}
+
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *h.DescribeMutableStateRequest,
@@ -685,6 +731,31 @@ func (c *clientImpl) SyncActivity(
 	}
 	err = c.executeWithRedirect(ctx, client, op)
 	return err
+}
+
+func (c *clientImpl) QueryWorkflow(
+	ctx context.Context,
+	request *h.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (*h.QueryWorkflowResponse, error) {
+	client, err := c.getClientForWorkflowID(request.Execution.GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *h.QueryWorkflowResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.QueryWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) GetReplicationMessages(

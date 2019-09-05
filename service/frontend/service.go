@@ -45,7 +45,6 @@ type Config struct {
 	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
 	EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
 	VisibilityListMaxQPS            dynamicconfig.IntPropertyFnWithDomainFilter
-	EnableVisibilityToKafka         dynamicconfig.BoolPropertyFn
 	EnableReadVisibilityFromES      dynamicconfig.BoolPropertyFnWithDomainFilter
 	ESVisibilityListMaxQPS          dynamicconfig.IntPropertyFnWithDomainFilter
 	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
@@ -83,7 +82,7 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableVisibilityToKafka bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFromES bool) *Config {
 	return &Config{
 		NumHistoryShards:                    numHistoryShards,
 		PersistenceMaxQPS:                   dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
@@ -91,8 +90,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableVisibil
 		EnableVisibilitySampling:            dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		EnableReadFromClosedExecutionV2:     dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
 		VisibilityListMaxQPS:                dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
-		EnableVisibilityToKafka:             dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, enableVisibilityToKafka),
-		EnableReadVisibilityFromES:          dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, false),
+		EnableReadVisibilityFromES:          dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		ESVisibilityListMaxQPS:              dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendESVisibilityListMaxQPS, 3),
 		ESIndexMaxResultWindow:              dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
@@ -126,7 +124,8 @@ type Service struct {
 
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, params.ESConfig.Enable)
+	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
+	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
 	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
 	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
 	return &Service{
@@ -167,7 +166,7 @@ func (s *Service) Start() {
 	}
 
 	var visibilityFromES persistence.VisibilityManager
-	if s.config.EnableVisibilityToKafka() {
+	if params.ESConfig != nil {
 		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
 		visibilityConfigForES := &config.VisibilityConfig{
 			MaxQPS:                 s.config.PersistenceMaxQPS,
@@ -178,7 +177,12 @@ func (s *Service) Start() {
 		visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 			nil, base.GetMetricsClient(), log)
 	}
-	visibility := persistence.NewVisibilityManagerWrapper(visibilityFromDB, visibilityFromES, s.config.EnableReadVisibilityFromES)
+	visibility := persistence.NewVisibilityManagerWrapper(
+		visibilityFromDB,
+		visibilityFromES,
+		s.config.EnableReadVisibilityFromES,
+		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+	)
 
 	history, err := pFactory.NewHistoryManager()
 	if err != nil {
@@ -210,7 +214,13 @@ func (s *Service) Start() {
 		ClusterMetadata:  base.GetClusterMetadata(),
 		DomainCache:      domainCache,
 	}
-	err = params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, &archiver.VisibilityBootstrapContainer{})
+	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
+		Logger:          base.GetLogger(),
+		MetricsClient:   base.GetMetricsClient(),
+		ClusterMetadata: base.GetClusterMetadata(),
+		DomainCache:     domainCache,
+	}
+	err = params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, visibilityArchiverBootstrapContainer)
 	if err != nil {
 		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
 	}

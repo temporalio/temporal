@@ -41,7 +41,11 @@ type sqlHistoryV2Manager struct {
 }
 
 // newHistoryV2Persistence creates an instance of HistoryManager
-func newHistoryV2Persistence(db sqldb.Interface, logger log.Logger) (p.HistoryV2Store, error) {
+func newHistoryV2Persistence(
+	db sqldb.Interface,
+	logger log.Logger,
+) (p.HistoryV2Store, error) {
+
 	return &sqlHistoryV2Manager{
 		sqlStore: sqlStore{
 			db:     db,
@@ -50,7 +54,10 @@ func newHistoryV2Persistence(db sqldb.Interface, logger log.Logger) (p.HistoryV2
 	}, nil
 }
 
-func (m *sqlHistoryV2Manager) serializeAncestors(ans []*shared.HistoryBranchRange) ([]byte, error) {
+func (m *sqlHistoryV2Manager) serializeAncestors(
+	ans []*shared.HistoryBranchRange,
+) ([]byte, error) {
+
 	ancestors, err := json.Marshal(ans)
 	if err != nil {
 		return nil, err
@@ -58,7 +65,10 @@ func (m *sqlHistoryV2Manager) serializeAncestors(ans []*shared.HistoryBranchRang
 	return ancestors, nil
 }
 
-func (m *sqlHistoryV2Manager) deserializeAncestors(jsonStr []byte) ([]*shared.HistoryBranchRange, error) {
+func (m *sqlHistoryV2Manager) deserializeAncestors(
+	jsonStr []byte,
+) ([]*shared.HistoryBranchRange, error) {
+
 	var ans []*shared.HistoryBranchRange
 	err := json.Unmarshal(jsonStr, &ans)
 	if err != nil {
@@ -68,7 +78,10 @@ func (m *sqlHistoryV2Manager) deserializeAncestors(jsonStr []byte) ([]*shared.Hi
 }
 
 // AppendHistoryNodes add(or override) a node to a history branch
-func (m *sqlHistoryV2Manager) AppendHistoryNodes(request *p.InternalAppendHistoryNodesRequest) error {
+func (m *sqlHistoryV2Manager) AppendHistoryNodes(
+	request *p.InternalAppendHistoryNodesRequest,
+) error {
+
 	branchInfo := request.BranchInfo
 	beginNodeID := p.GetBeginNodeID(branchInfo)
 
@@ -152,12 +165,21 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(request *p.InternalAppendHistor
 }
 
 // ReadHistoryBranch returns history node data for a branch
-func (m *sqlHistoryV2Manager) ReadHistoryBranch(request *p.InternalReadHistoryBranchRequest) (*p.InternalReadHistoryBranchResponse, error) {
+func (m *sqlHistoryV2Manager) ReadHistoryBranch(
+	request *p.InternalReadHistoryBranchRequest,
+) (*p.InternalReadHistoryBranchResponse, error) {
+
 	minNodeID := request.MinNodeID
+	maxNodeID := request.MaxNodeID
+
+	lastNodeID := request.LastNodeID
+	lastTxnID := request.LastTransactionID
 
 	if request.NextPageToken != nil && len(request.NextPageToken) > 0 {
 		var lastNodeID int64
 		var err error
+		// TODO the inner pagination token can be replaced by a dummy token
+		//  since lastNodeID & lastTxnID are both provided
 		if lastNodeID, err = deserializePageToken(request.NextPageToken); err != nil {
 			return nil, &shared.InternalServiceError{
 				Message: fmt.Sprintf("invalid next page token %v", request.NextPageToken)}
@@ -169,7 +191,8 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(request *p.InternalReadHistoryBr
 		TreeID:    sqldb.MustParseUUID(request.TreeID),
 		BranchID:  sqldb.MustParseUUID(request.BranchID),
 		MinNodeID: &minNodeID,
-		MaxNodeID: &request.MaxNodeID,
+		MaxNodeID: &maxNodeID,
+		MinTxnID:  &lastTxnID,
 		PageSize:  &request.PageSize,
 		ShardID:   request.ShardID,
 	}
@@ -180,26 +203,34 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(request *p.InternalReadHistoryBr
 	}
 
 	history := make([]*p.DataBlob, 0, int(request.PageSize))
-	lastNodeID := int64(-1)
-	lastTxnID := int64(-1)
 	eventBlob := &p.DataBlob{}
 
 	for _, row := range rows {
 		eventBlob.Data = row.Data
 		eventBlob.Encoding = common.EncodingType(row.DataEncoding)
+
+		if *row.TxnID < lastTxnID {
+			// assuming that business logic layer is correct and transaction ID only increase
+			// thus, valid event batch will come with increasing transaction ID
+
+			// event batches with smaller node ID
+			//  -> should not be possible since records are already sorted
+			// event batches with same node ID
+			//  -> batch with higher transaction ID is valid
+			// event batches with larger node ID
+			//  -> batch with lower transaction ID is invalid (happens before)
+			//  -> batch with higher transaction ID is valid
+			continue
+		}
+
 		switch {
 		case row.NodeID < lastNodeID:
 			return nil, &shared.InternalServiceError{
 				Message: fmt.Sprintf("corrupted data, nodeID cannot decrease"),
 			}
 		case row.NodeID == lastNodeID:
-			if *row.TxnID < lastTxnID {
-				// skip the nodes with smaller txn_id
-				continue
-			} else {
-				return nil, &shared.InternalServiceError{
-					Message: fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"),
-				}
+			return nil, &shared.InternalServiceError{
+				Message: fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"),
 			}
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
@@ -214,12 +245,13 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(request *p.InternalReadHistoryBr
 	if len(rows) >= request.PageSize {
 		pagingToken = serializePageToken(lastNodeID)
 	}
-	response := &p.InternalReadHistoryBranchResponse{
-		History:       history,
-		NextPageToken: pagingToken,
-	}
 
-	return response, nil
+	return &p.InternalReadHistoryBranchResponse{
+		History:           history,
+		NextPageToken:     pagingToken,
+		LastNodeID:        lastNodeID,
+		LastTransactionID: lastTxnID,
+	}, nil
 }
 
 // ForkHistoryBranch forks a new branch from an existing branch
@@ -266,7 +298,10 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(request *p.InternalReadHistoryBr
 //       \
 //       8[8,9]
 //
-func (m *sqlHistoryV2Manager) ForkHistoryBranch(request *p.InternalForkHistoryBranchRequest) (*p.InternalForkHistoryBranchResponse, error) {
+func (m *sqlHistoryV2Manager) ForkHistoryBranch(
+	request *p.InternalForkHistoryBranchRequest,
+) (*p.InternalForkHistoryBranchResponse, error) {
+
 	forkB := request.ForkBranchInfo
 	treeID := *forkB.TreeID
 	newAncestors := make([]*shared.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
@@ -337,7 +372,10 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(request *p.InternalForkHistoryBr
 }
 
 // DeleteHistoryBranch removes a branch
-func (m *sqlHistoryV2Manager) DeleteHistoryBranch(request *p.InternalDeleteHistoryBranchRequest) error {
+func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
+	request *p.InternalDeleteHistoryBranchRequest,
+) error {
+
 	branch := request.BranchInfo
 	treeID := *branch.TreeID
 	brsToDelete := branch.Ancestors
@@ -419,7 +457,10 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(request *p.InternalDeleteHisto
 }
 
 // UpdateHistoryBranch update a branch
-func (m *sqlHistoryV2Manager) CompleteForkBranch(request *p.InternalCompleteForkBranchRequest) error {
+func (m *sqlHistoryV2Manager) CompleteForkBranch(
+	request *p.InternalCompleteForkBranchRequest,
+) error {
+
 	branch := request.BranchInfo
 	treeID := sqldb.MustParseUUID(*branch.TreeID)
 	branchID := sqldb.MustParseUUID(*branch.BranchID)
@@ -477,11 +518,23 @@ func (m *sqlHistoryV2Manager) CompleteForkBranch(request *p.InternalCompleteFork
 	})
 }
 
+func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
+	request *p.GetAllHistoryTreeBranchesRequest,
+) (*p.GetAllHistoryTreeBranchesResponse, error) {
+
+	// TODO https://github.com/uber/cadence/issues/2458
+	// Implement it when we need
+	panic("not implemented yet")
+}
+
 // GetHistoryTree returns all branch information of a tree
-func (m *sqlHistoryV2Manager) GetHistoryTree(request *p.GetHistoryTreeRequest) (*p.GetHistoryTreeResponse, error) {
+func (m *sqlHistoryV2Manager) GetHistoryTree(
+	request *p.GetHistoryTreeRequest,
+) (*p.GetHistoryTreeResponse, error) {
+
 	treeID := sqldb.MustParseUUID(request.TreeID)
 	branches := make([]*shared.HistoryBranch, 0)
-	forkingBranches := make([]p.ForkingInProgressBranch, 0)
+	forkingBranches := make([]p.HistoryBranchDetail, 0)
 
 	treeFilter := &sqldb.HistoryTreeFilter{
 		TreeID:  treeID,
@@ -497,7 +550,8 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(request *p.GetHistoryTreeRequest) (
 			return nil, err
 		}
 		if row.InProgress {
-			br := p.ForkingInProgressBranch{
+			br := p.HistoryBranchDetail{
+				TreeID:   request.TreeID,
 				BranchID: row.BranchID.String(),
 				ForkTime: time.Unix(0, treeInfo.GetCreatedTimeNanos()),
 				Info:     treeInfo.GetInfo(),

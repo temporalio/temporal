@@ -66,6 +66,37 @@ func (m *MockClient) EXPECT() *_MockClientRecorder {
 	return m.recorder
 }
 
+// CloseShard responds to a CloseShard call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().CloseShard(gomock.Any(), ...).Return(...)
+// 	... := client.CloseShard(...)
+func (m *MockClient) CloseShard(
+	ctx context.Context,
+	_Request *shared.CloseShardRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "CloseShard", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) CloseShard(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "CloseShard", args...)
+}
+
 // DescribeHistoryHost responds to a DescribeHistoryHost call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -264,6 +295,39 @@ func (mr *_MockClientRecorder) PollMutableState(
 	return mr.mock.ctrl.RecordCall(mr.mock, "PollMutableState", args...)
 }
 
+// QueryWorkflow responds to a QueryWorkflow call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().QueryWorkflow(gomock.Any(), ...).Return(...)
+// 	... := client.QueryWorkflow(...)
+func (m *MockClient) QueryWorkflow(
+	ctx context.Context,
+	_QueryRequest *history.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (success *history.QueryWorkflowResponse, err error) {
+
+	args := []interface{}{ctx, _QueryRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "QueryWorkflow", args...)
+	success, _ = ret[i].(*history.QueryWorkflowResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) QueryWorkflow(
+	ctx interface{},
+	_QueryRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _QueryRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
+}
+
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -423,6 +487,37 @@ func (mr *_MockClientRecorder) RemoveSignalMutableState(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _RemoveRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "RemoveSignalMutableState", args...)
+}
+
+// RemoveTask responds to a RemoveTask call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RemoveTask(gomock.Any(), ...).Return(...)
+// 	... := client.RemoveTask(...)
+func (m *MockClient) RemoveTask(
+	ctx context.Context,
+	_Request *shared.RemoveTaskRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RemoveTask", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RemoveTask(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RemoveTask", args...)
 }
 
 // ReplicateEvents responds to a ReplicateEvents call based on the mock expectations. This

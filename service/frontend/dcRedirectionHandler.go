@@ -283,6 +283,36 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+// ListArchivedWorkflowExecutions API call
+func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
+	ctx context.Context,
+	request *shared.ListArchivedWorkflowExecutionsRequest,
+) (resp *shared.ListArchivedWorkflowExecutionsResponse, retError error) {
+
+	var apiName = "ListArchivedWorkflowExecutions"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListArchviedWorkflowExecutionsScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListArchivedWorkflowExecutions(ctx, request)
+		default:
+			remoteClient := handler.clientBeanProvider().GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListArchivedWorkflowExecutions(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 // ListClosedWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 	ctx context.Context,

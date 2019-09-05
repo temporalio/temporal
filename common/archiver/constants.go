@@ -53,8 +53,10 @@ var (
 	ErrContextTimeout = errors.New("archive aborted because context timed out")
 	// ErrInvalidGetHistoryRequest is the error for invalid GetHistory request
 	ErrInvalidGetHistoryRequest = errors.New("get archived history request is invalid")
-	// ErrGetHistoryTokenCorrupted is the error for corrupted GetHistory token
-	ErrGetHistoryTokenCorrupted = errors.New("next page token is corrupted")
+	// ErrInvalidQueryVisibilityRequest is the error for invalid Query Visibility request
+	ErrInvalidQueryVisibilityRequest = errors.New("query visiblity request is invalid")
+	// ErrNextPageTokenCorrupted is the error for corrupted GetHistory token
+	ErrNextPageTokenCorrupted = errors.New("next page token is corrupted")
 	// ErrHistoryNotExist is the error for non-exist history
 	ErrHistoryNotExist = errors.New("requested workflow history does not exist")
 )

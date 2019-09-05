@@ -22,6 +22,7 @@ package collection
 
 import (
 	"math/rand"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -105,5 +106,41 @@ func (s *PriorityQueueSuite) TestRandomNumber() {
 			result = append(result, s.pq.Remove().(*testPriorityQueueItem).value)
 		}
 		s.Equal(expected, result)
+	}
+}
+
+type testTask struct {
+	id       string
+	priority int
+}
+
+func BenchmarkConcurrentPriorityQueue(b *testing.B) {
+	queue := NewConcurrentPriorityQueue(func(this interface{}, other interface{}) bool {
+		return this.(*testTask).priority < other.(*testTask).priority
+	})
+
+	for i := 0; i < 100; i++ {
+		go send(queue)
+	}
+
+	for n := 0; n < b.N; n++ {
+		remove(queue)
+	}
+}
+
+func remove(queue Queue) interface{} {
+	for queue.IsEmpty() {
+		runtime.Gosched()
+	}
+	return queue.Remove()
+}
+
+func send(queue Queue) {
+	for {
+		t := &testTask{
+			id:       "abc",
+			priority: rand.Int() % numPriorities,
+		}
+		queue.Add(t)
 	}
 }

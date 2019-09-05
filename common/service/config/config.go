@@ -58,8 +58,6 @@ type (
 		Kafka messaging.KafkaConfig `yaml:"kafka"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
-		// ElasticSearch is config for connecting to ElasticSearch
-		ElasticSearch elasticsearch.Config `yaml:"elasticsearch"`
 		// PublicClient is config for connecting to cadence frontend
 		PublicClient PublicClient `yaml:"publicClient"`
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
@@ -123,6 +121,8 @@ type (
 		DefaultStore string `yaml:"defaultStore" validate:"nonzero"`
 		// VisibilityStore is the name of the datastore to be used for visibility records
 		VisibilityStore string `yaml:"visibilityStore" validate:"nonzero"`
+		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
+		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
 		// HistoryMaxConns is the desired number of conns to history store. Value specified
 		// here overrides the MaxConns config specified as part of datastore
 		HistoryMaxConns int `yaml:"historyMaxConns"`
@@ -143,6 +143,8 @@ type (
 		Cassandra *Cassandra `yaml:"cassandra"`
 		// SQL contains the config for a SQL based datastore
 		SQL *SQL `yaml:"sql"`
+		// ElasticSearch contains the config for a ElasticSearch datastore
+		ElasticSearch *elasticsearch.Config `yaml:"elasticsearch"`
 	}
 
 	// VisibilityConfig is config for visibility sampling
@@ -334,13 +336,7 @@ type (
 
 	// HistoryArchiverProvider contains the config for all history archivers
 	HistoryArchiverProvider struct {
-		Filestore *FilestoreHistoryArchiver `yaml:"filestore"`
-	}
-
-	// FilestoreHistoryArchiver contain the config for filestore history archiver
-	FilestoreHistoryArchiver struct {
-		FileMode string `yaml:"fileMode"`
-		DirMode  string `yaml:"dirMode"`
+		Filestore *FilestoreArchiver `yaml:"filestore"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -355,11 +351,14 @@ type (
 
 	// VisibilityArchiverProvider contains the config for all visibility archivers
 	VisibilityArchiverProvider struct {
-		Filestore *FilestoreVisibilityArchiver `yaml:"filestore"`
+		Filestore *FilestoreArchiver `yaml:"filestore"`
 	}
 
-	// FilestoreVisibilityArchiver contain the config for filestore visibility archiver
-	FilestoreVisibilityArchiver struct{}
+	// FilestoreArchiver contain the config for filestore archiver
+	FilestoreArchiver struct {
+		FileMode string `yaml:"fileMode"`
+		DirMode  string `yaml:"dirMode"`
+	}
 
 	// PublicClient is config for connecting to cadence frontend
 	PublicClient struct {

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -54,6 +55,8 @@ const (
 	v2templateDeleteBranch = `DELETE FROM history_tree WHERE tree_id = ? AND branch_id = ? `
 
 	v2templateUpdateBranch = `UPDATE history_tree set in_progress = ? WHERE tree_id = ? AND branch_id = ? `
+
+	v2templateScanAllTreeBranches = `SELECT tree_id, branch_id, fork_time, info FROM history_tree `
 )
 
 type (
@@ -63,13 +66,20 @@ type (
 )
 
 // NewHistoryV2PersistenceFromSession returns new HistoryV2Store
-func NewHistoryV2PersistenceFromSession(session *gocql.Session, logger log.Logger) p.HistoryV2Store {
+func NewHistoryV2PersistenceFromSession(
+	session *gocql.Session,
+	logger log.Logger,
+) p.HistoryV2Store {
+
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
 }
 
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
-func newHistoryV2Persistence(cfg config.Cassandra, logger log.Logger) (p.HistoryV2Store,
-	error) {
+func newHistoryV2Persistence(
+	cfg config.Cassandra,
+	logger log.Logger,
+) (p.HistoryV2Store, error) {
+
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
 	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -87,7 +97,11 @@ func newHistoryV2Persistence(cfg config.Cassandra, logger log.Logger) (p.History
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}, nil
 }
 
-func convertCommonErrors(operation string, err error) error {
+func convertCommonErrors(
+	operation string,
+	err error,
+) error {
+
 	if err == gocql.ErrNotFound {
 		return &workflow.EntityNotExistsError{
 			Message: fmt.Sprintf("%v failed. Error: %v ", operation, err),
@@ -106,7 +120,10 @@ func convertCommonErrors(operation string, err error) error {
 
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
-func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(request *p.InternalAppendHistoryNodesRequest) error {
+func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
+	request *p.InternalAppendHistoryNodesRequest,
+) error {
+
 	branchInfo := request.BranchInfo
 	beginNodeID := p.GetBeginNodeID(branchInfo)
 
@@ -147,12 +164,17 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(request *p.InternalAp
 
 // ReadHistoryBranch returns history node data for a branch
 // NOTE: For branch that has ancestors, we need to query Cassandra multiple times, because it doesn't support OR/UNION operator
-func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(request *p.InternalReadHistoryBranchRequest) (*p.InternalReadHistoryBranchResponse, error) {
+func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
+	request *p.InternalReadHistoryBranchRequest,
+) (*p.InternalReadHistoryBranchResponse, error) {
+
 	treeID := request.TreeID
 	branchID := request.BranchID
 
-	query := h.session.Query(v2templateReadData,
-		treeID, branchID, request.MinNodeID, request.MaxNodeID)
+	lastNodeID := request.LastNodeID
+	lastTxnID := request.LastTransactionID
+
+	query := h.session.Query(v2templateReadData, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
 	if iter == nil {
@@ -163,27 +185,42 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(request *p.InternalRea
 	pagingToken := iter.PageState()
 
 	history := make([]*p.DataBlob, 0, int(request.PageSize))
-	lastNodeID := int64(-1)
-	lastTxnID := int64(-1)
+
 	eventBlob := &p.DataBlob{}
 	nodeID := int64(0)
 	txnID := int64(0)
 
 	for iter.Scan(&nodeID, &txnID, &eventBlob.Data, &eventBlob.Encoding) {
-		if nodeID == lastNodeID {
-			if txnID < lastTxnID {
-				// skip the nodes with smaller txn_id
-				continue
-			} else {
-				return nil, &workflow.InternalServiceError{
-					Message: fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"),
-				}
-			}
+		if txnID < lastTxnID {
+			// assuming that business logic layer is correct and transaction ID only increase
+			// thus, valid event batch will come with increasing transaction ID
+
+			// event batches with smaller node ID
+			//  -> should not be possible since records are already sorted
+			// event batches with same node ID
+			//  -> batch with higher transaction ID is valid
+			// event batches with larger node ID
+			//  -> batch with lower transaction ID is invalid (happens before)
+			//  -> batch with higher transaction ID is valid
+			continue
 		}
-		lastTxnID = txnID
-		lastNodeID = nodeID
-		history = append(history, eventBlob)
-		eventBlob = &p.DataBlob{}
+
+		switch {
+		case nodeID < lastNodeID:
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("corrupted data, nodeID cannot decrease"),
+			}
+		case nodeID == lastNodeID:
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"),
+			}
+		default: // row.NodeID > lastNodeID:
+			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
+			lastTxnID = txnID
+			lastNodeID = nodeID
+			history = append(history, eventBlob)
+			eventBlob = &p.DataBlob{}
+		}
 	}
 
 	if err := iter.Close(); err != nil {
@@ -192,12 +229,12 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(request *p.InternalRea
 		}
 	}
 
-	response := &p.InternalReadHistoryBranchResponse{
-		History:       history,
-		NextPageToken: pagingToken,
-	}
-
-	return response, nil
+	return &p.InternalReadHistoryBranchResponse{
+		History:           history,
+		NextPageToken:     pagingToken,
+		LastNodeID:        lastNodeID,
+		LastTransactionID: lastTxnID,
+	}, nil
 }
 
 // ForkHistoryBranch forks a new branch from an existing branch
@@ -244,7 +281,10 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(request *p.InternalRea
 //       \
 //       8[8,9]
 //
-func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(request *p.InternalForkHistoryBranchRequest) (*p.InternalForkHistoryBranchResponse, error) {
+func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
+	request *p.InternalForkHistoryBranchRequest,
+) (*p.InternalForkHistoryBranchResponse, error) {
+
 	forkB := request.ForkBranchInfo
 	treeID := *forkB.TreeID
 	newAncestors := make([]*workflow.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
@@ -302,7 +342,10 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(request *p.InternalFor
 }
 
 // UpdateHistoryBranch update a branch
-func (h *cassandraHistoryV2Persistence) CompleteForkBranch(request *p.InternalCompleteForkBranchRequest) error {
+func (h *cassandraHistoryV2Persistence) CompleteForkBranch(
+	request *p.InternalCompleteForkBranchRequest,
+) error {
+
 	branch := request.BranchInfo
 	treeID := *branch.TreeID
 	branchID := *branch.BranchID
@@ -330,7 +373,10 @@ func (h *cassandraHistoryV2Persistence) CompleteForkBranch(request *p.InternalCo
 }
 
 // DeleteHistoryBranch removes a branch
-func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(request *p.InternalDeleteHistoryBranchRequest) error {
+func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
+	request *p.InternalDeleteHistoryBranchRequest,
+) error {
+
 	branch := request.BranchInfo
 	treeID := *branch.TreeID
 	brsToDelete := branch.Ancestors
@@ -391,22 +437,75 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(request *p.InternalD
 	return nil
 }
 
-func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(batch *gocql.Batch, treeID, branchID string, beginNodeID int64) {
+func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
+	batch *gocql.Batch,
+	treeID string,
+	branchID string,
+	beginNodeID int64,
+) {
+
 	batch.Query(v2templateRangeDeleteData,
 		treeID,
 		branchID,
 		beginNodeID)
 }
 
+func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
+	request *p.GetAllHistoryTreeBranchesRequest,
+) (*p.GetAllHistoryTreeBranchesResponse, error) {
+
+	query := h.session.Query(v2templateScanAllTreeBranches)
+
+	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
+	if iter == nil {
+		return nil, &workflow.InternalServiceError{
+			Message: "GetAllHistoryTreeBranches operation failed.  Not able to create query iterator.",
+		}
+	}
+	pagingToken := iter.PageState()
+
+	branches := make([]p.HistoryBranchDetail, 0, int(request.PageSize))
+	treeUUID := gocql.UUID{}
+	branchUUID := gocql.UUID{}
+	forkTime := time.Time{}
+	info := ""
+
+	for iter.Scan(&treeUUID, &branchUUID, &forkTime, &info) {
+		branchDetail := p.HistoryBranchDetail{
+			TreeID:   treeUUID.String(),
+			BranchID: branchUUID.String(),
+			ForkTime: forkTime,
+			Info:     info,
+		}
+		branches = append(branches, branchDetail)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err),
+		}
+	}
+
+	response := &p.GetAllHistoryTreeBranchesResponse{
+		Branches:      branches,
+		NextPageToken: pagingToken,
+	}
+
+	return response, nil
+}
+
 // GetHistoryTree returns all branch information of a tree
-func (h *cassandraHistoryV2Persistence) GetHistoryTree(request *p.GetHistoryTreeRequest) (*p.GetHistoryTreeResponse, error) {
+func (h *cassandraHistoryV2Persistence) GetHistoryTree(
+	request *p.GetHistoryTreeRequest,
+) (*p.GetHistoryTreeResponse, error) {
+
 	treeID := request.TreeID
 
 	query := h.session.Query(v2templateReadAllBranches, treeID)
 
 	pagingToken := []byte{}
 	branches := make([]*workflow.HistoryBranch, 0)
-	forkingBranches := make([]p.ForkingInProgressBranch, 0)
+	forkingBranches := make([]p.HistoryBranchDetail, 0)
 
 	var iter *gocql.Iter
 	for {
@@ -426,7 +525,8 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(request *p.GetHistoryTree
 
 		for iter.Scan(&branchUUID, &ancsResult, &forkingInProgress, &forkTime, &info) {
 			if forkingInProgress {
-				br := p.ForkingInProgressBranch{
+				br := p.HistoryBranchDetail{
+					TreeID:   treeID,
 					BranchID: branchUUID.String(),
 					ForkTime: forkTime,
 					Info:     info,
@@ -465,7 +565,10 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(request *p.GetHistoryTree
 	}, nil
 }
 
-func (h *cassandraHistoryV2Persistence) parseBranchAncestors(ancestors []map[string]interface{}) []*workflow.HistoryBranchRange {
+func (h *cassandraHistoryV2Persistence) parseBranchAncestors(
+	ancestors []map[string]interface{},
+) []*workflow.HistoryBranchRange {
+
 	ans := make([]*workflow.HistoryBranchRange, 0, len(ancestors))
 	for _, e := range ancestors {
 		an := &workflow.HistoryBranchRange{}

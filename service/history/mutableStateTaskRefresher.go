@@ -146,7 +146,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasks(
 		return err
 	}
 
-	if r.config.EnableVisibilityToKafka() {
+	if r.config.AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		if err := r.refreshTasksForWorkflowSearchAttr(
 			now,
 			mutableState,

@@ -28,7 +28,6 @@ import (
 // Config for connecting to ElasticSearch
 type (
 	Config struct {
-		Enable  bool              `yaml:enable`
 		URL     url.URL           `yaml:url`
 		Indices map[string]string `yaml:indices`
 	}

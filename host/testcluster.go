@@ -55,10 +55,12 @@ type (
 
 	// ArchiverBase is a base struct for archiver provider being used in integration tests
 	ArchiverBase struct {
-		metadata       archiver.ArchivalMetadata
-		provider       provider.ArchiverProvider
-		storeDirectory string
-		historyURI     string
+		metadata                 archiver.ArchivalMetadata
+		provider                 provider.ArchiverProvider
+		historyStoreDirectory    string
+		visibilityStoreDirectory string
+		historyURI               string
+		visibilityURI            string
 	}
 
 	// TestClusterConfig are config for a test cluster
@@ -72,7 +74,7 @@ type (
 		MessagingClientConfig *MessagingClientConfig
 		Persistence           persistencetests.TestBaseOptions
 		HistoryConfig         *HistoryConfig
-		ESConfig              elasticsearch.Config
+		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
 	}
 
@@ -120,9 +122,11 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	messagingClient := getMessagingClient(options.MessagingClientConfig, logger)
 	var esClient elasticsearch.Client
 	var esVisibilityMgr persistence.VisibilityManager
+	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
 	if options.WorkerConfig.EnableIndexer {
+		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
-		esClient, err = elasticsearch.NewClient(&options.ESConfig)
+		esClient, err = elasticsearch.NewClient(options.ESConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +145,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
-		dynamicconfig.GetBoolPropertyFnFilteredByDomain(options.WorkerConfig.EnableIndexer))
+		dynamicconfig.GetBoolPropertyFnFilteredByDomain(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
@@ -161,7 +165,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		Logger:              logger,
 		ClusterNo:           options.ClusterNo,
 		EnableEventsV2:      options.EnableEventsV2,
-		ESConfig:            &options.ESConfig,
+		ESConfig:            options.ESConfig,
 		ESClient:            esClient,
 		ArchiverMetadata:    archiverBase.metadata,
 		ArchiverProvider:    archiverBase.provider,
@@ -195,31 +199,42 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		}
 	}
 
-	storeDirectory, err := ioutil.TempDir("", "test-archiver")
+	historyStoreDirectory, err := ioutil.TempDir("", "test-history-archival")
 	if err != nil {
-		logger.Fatal("Failed to create temp dir for archiver", tag.Error(err))
+		logger.Fatal("Failed to create temp dir for history archival", tag.Error(err))
 	}
-	cfg := &config.FilestoreHistoryArchiver{
-		FileMode: "0700",
-		DirMode:  "0600",
+	visibilityStoreDirectory, err := ioutil.TempDir("", "test-visibility-archival")
+	if err != nil {
+		logger.Fatal("Failed to create temp dir for visibility archival", tag.Error(err))
 	}
-	provider := provider.NewArchiverProvider(&config.HistoryArchiverProvider{
-		Filestore: cfg,
-	}, nil)
+	cfg := &config.FilestoreArchiver{
+		FileMode: "0666",
+		DirMode:  "0766",
+	}
+	provider := provider.NewArchiverProvider(
+		&config.HistoryArchiverProvider{
+			Filestore: cfg,
+		},
+		&config.VisibilityArchiverProvider{
+			Filestore: cfg,
+		},
+	)
 	return &ArchiverBase{
 		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalDomainDefaults{
 			History: config.HistoryArchivalDomainDefaults{
 				Status: "enabled",
-				URI:    "testScheme://test/archive/path",
+				URI:    "testScheme://test/history/archive/path",
 			},
 			Visibility: config.VisibilityArchivalDomainDefaults{
 				Status: "enabled",
-				URI:    "testScheme://test/archive/path",
+				URI:    "testScheme://test/visibility/archive/path",
 			},
 		}),
-		provider:       provider,
-		storeDirectory: storeDirectory,
-		historyURI:     filestore.URIScheme + "://" + storeDirectory,
+		provider:                 provider,
+		historyStoreDirectory:    historyStoreDirectory,
+		visibilityStoreDirectory: visibilityStoreDirectory,
+		historyURI:               filestore.URIScheme + "://" + historyStoreDirectory,
+		visibilityURI:            filestore.URIScheme + "://" + visibilityStoreDirectory,
 	}
 }
 
@@ -237,7 +252,8 @@ func (tc *TestCluster) TearDownCluster() {
 	tc.host.Stop()
 	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()
-	os.RemoveAll(tc.archiverBase.storeDirectory)
+	os.RemoveAll(tc.archiverBase.historyStoreDirectory)
+	os.RemoveAll(tc.archiverBase.visibilityStoreDirectory)
 }
 
 // GetFrontendClient returns a frontend client from the test cluster

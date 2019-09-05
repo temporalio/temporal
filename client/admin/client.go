@@ -87,6 +87,38 @@ func (c *clientImpl) DescribeHistoryHost(
 	return client.DescribeHistoryHost(ctx, request, opts...)
 }
 
+func (c *clientImpl) RemoveTask(
+	ctx context.Context,
+	request *shared.RemoveTaskRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RemoveTask(ctx, request, opts...)
+}
+
+func (c *clientImpl) CloseShard(
+	ctx context.Context,
+	request *shared.CloseShardRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CloseShard(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *admin.DescribeWorkflowExecutionRequest,

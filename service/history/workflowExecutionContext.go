@@ -117,6 +117,8 @@ type (
 			baseRunID string,
 			baseRunNextEventID int64,
 		) (retError error)
+
+		getQueryRegistry() QueryRegistry
 	}
 )
 
@@ -135,6 +137,7 @@ type (
 		msBuilder       mutableState
 		stats           *persistence.ExecutionStats
 		updateCondition int64
+		queryRegistry   QueryRegistry
 	}
 )
 
@@ -151,7 +154,6 @@ func newWorkflowExecutionContext(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
-
 	lg := logger.WithTags(
 		tag.WorkflowID(execution.GetWorkflowId()),
 		tag.WorkflowRunID(execution.GetRunId()),
@@ -171,6 +173,7 @@ func newWorkflowExecutionContext(
 		stats: &persistence.ExecutionStats{
 			HistorySize: 0,
 		},
+		queryRegistry: NewQueryRegistry(),
 	}
 }
 
@@ -1123,4 +1126,8 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		)
 	}
 	return nil
+}
+
+func (c *workflowExecutionContextImpl) getQueryRegistry() QueryRegistry {
+	return c.queryRegistry
 }

@@ -74,6 +74,12 @@ func (feature *FeatureImpl) SupportStickyQuery() bool {
 	return feature.featureVersion.major > 0
 }
 
+// SupportConsistentQuery whether a client supports consistent query
+func (feature *FeatureImpl) SupportConsistentQuery() bool {
+	// TODO: andrewjdawson2016 once client side changes for consistent query are done then update this
+	return false
+}
+
 func parseVersion(versionStr string) version {
 	var major int64
 	var minor int64

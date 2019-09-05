@@ -1,0 +1,135 @@
+persistence:
+  defaultStore: cass-default
+  visibilityStore: cass-visibility
+  advancedVisibilityStore: es-visibility
+  numHistoryShards: 4
+  datastores:
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "cadence"
+        consistency: "One"
+    cass-visibility:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "cadence_visibility"
+        consistency: "One"
+    es-visibility:
+      elasticsearch:
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: cadence-visibility-dev
+
+ringpop:
+  name: cadence
+  bootstrapMode: hosts
+  bootstrapHosts: ["127.0.0.1:7933", "127.0.0.1:7934", "127.0.0.1:7935"]
+  maxJoinDuration: 30s
+
+services:
+  frontend:
+    rpc:
+      port: 7933
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 7936
+
+  matching:
+    rpc:
+      port: 7935
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 7938
+
+  history:
+    rpc:
+      port: 7934
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 7937
+
+  worker:
+    rpc:
+      port: 7939
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 7940
+
+clusterMetadata:
+  enableGlobalDomain: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 0
+      rpcName: "cadence-frontend"
+      rpcAddress: "localhost:7933"
+
+dcRedirectionPolicy:
+  policy: "noop"
+  toDC: ""
+
+archival:
+  history:
+    status: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  visibility:
+    status: "disabled"
+    enableRead: false
+
+domainDefaults:
+  archival:
+    history:
+      status: "enabled"
+      URI: "file:///tmp/cadence_archival/development"
+    visibility:
+      status: "disabled"
+
+kafka:
+  tls:
+    enabled: false
+  clusters:
+    test:
+      brokers:
+        - 127.0.0.1:9092
+  topics:
+    cadence-visibility-dev:
+      cluster: test
+    cadence-visibility-dev-dlq:
+      cluster: test
+  applications:
+    visibility:
+      topic: cadence-visibility-dev
+      dlq-topic: cadence-visibility-dev-dlq
+
+publicClient:
+  hostPort: "localhost:7933"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development_es.yaml"
+  pollInterval: "10s"
+

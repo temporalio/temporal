@@ -74,6 +74,36 @@ func (c *retryableClient) DescribeHistoryHost(
 	return resp, err
 }
 
+func (c *retryableClient) RemoveTask(
+	ctx context.Context,
+	request *shared.RemoveTaskRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		var err error
+		err = c.client.RemoveTask(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return err
+}
+
+func (c *retryableClient) CloseShard(
+	ctx context.Context,
+	request *shared.CloseShardRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		var err error
+		err = c.client.CloseShard(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return err
+}
+
 func (c *retryableClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *admin.DescribeWorkflowExecutionRequest,

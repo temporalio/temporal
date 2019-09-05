@@ -146,24 +146,35 @@ func (s *server) startService() common.Daemon {
 		log.Fatalf("need to provide an endpoint config for PublicClient")
 	}
 
-	params.ESConfig = &s.cfg.ElasticSearch
-	params.ESConfig.Enable = dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, params.ESConfig.Enable)() // force override with dynamic config
+	advancedVisMode := dc.GetStringProperty(
+		dynamicconfig.AdvancedVisibilityWritingMode,
+		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
+	)()
+	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
 	if params.ClusterMetadata.IsGlobalDomainEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, params.ESConfig.Enable)
-	} else if params.ESConfig.Enable {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, params.ESConfig.Enable)
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, isAdvancedVisEnabled)
+	} else if isAdvancedVisEnabled {
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, isAdvancedVisEnabled)
 	} else {
 		params.MessagingClient = nil
 	}
 
-	// enable visibility to kafka and enable visibility to elastic search are using one config
-	if params.ESConfig.Enable {
-		esClient, err := elasticsearch.NewClient(&s.cfg.ElasticSearch)
+	if isAdvancedVisEnabled {
+		// verify config of advanced visibility store
+		advancedVisStoreKey := s.cfg.Persistence.AdvancedVisibilityStore
+		advancedVisStore, ok := s.cfg.Persistence.DataStores[advancedVisStoreKey]
+		if !ok {
+			log.Fatalf("not able to find advanced visibility store in config: %v", advancedVisStoreKey)
+		}
+
+		params.ESConfig = advancedVisStore.ElasticSearch
+		esClient, err := elasticsearch.NewClient(params.ESConfig)
 		if err != nil {
 			log.Fatalf("error creating elastic search client: %v", err)
 		}
 		params.ESClient = esClient
 
+		// verify index name
 		indexName, ok := params.ESConfig.Indices[common.VisibilityAppName]
 		if !ok || len(indexName) == 0 {
 			log.Fatalf("elastic search config missing visibility index")

@@ -225,6 +225,7 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(
 			CreateRequestID:       v.CreateRequestID,
 			DomainName:            v.DomainName,
 			WorkflowTypeName:      v.WorkflowTypeName,
+			ParentClosePolicy:     v.ParentClosePolicy,
 		}
 
 		// Needed for backward compatibility reason.
@@ -355,6 +356,7 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(
 			StartedRunID:          v.StartedRunID,
 			DomainName:            v.DomainName,
 			WorkflowTypeName:      v.WorkflowTypeName,
+			ParentClosePolicy:     v.ParentClosePolicy,
 		}
 		newInfos = append(newInfos, i)
 	}
@@ -731,6 +733,12 @@ func (m *executionManagerImpl) DeserializeVersionHistories(
 		return nil, err
 	}
 	return NewVersionHistoriesFromThrift(versionHistories), nil
+}
+
+func (m *executionManagerImpl) DeleteTask(
+	request *DeleteTaskRequest,
+) error {
+	return m.persistence.DeleteTask(request)
 }
 
 func (m *executionManagerImpl) DeleteWorkflowExecution(

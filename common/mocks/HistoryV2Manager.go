@@ -103,6 +103,26 @@ func (_m *HistoryV2Manager) ReadHistoryBranchByBatch(request *persistence.ReadHi
 	return r0, r1
 }
 
+// ReadRawHistoryBranch provides a mock function with given fields: request
+func (_m *HistoryV2Manager) ReadRawHistoryBranch(request *persistence.ReadHistoryBranchRequest) (*persistence.ReadRawHistoryBranchResponse, error) {
+	ret := _m.Called(request)
+	var r0 *persistence.ReadRawHistoryBranchResponse
+	if rf, ok := ret.Get(0).(func(*persistence.ReadHistoryBranchRequest) *persistence.ReadRawHistoryBranchResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.ReadRawHistoryBranchResponse)
+		}
+	}
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.ReadHistoryBranchRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
 // ForkHistoryBranch provides a mock function with given fields: request
 func (_m *HistoryV2Manager) ForkHistoryBranch(request *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 	ret := _m.Called(request)
@@ -160,6 +180,25 @@ func (_m *HistoryV2Manager) GetHistoryTree(request *persistence.GetHistoryTreeRe
 	}
 	var r1 error
 	if rf, ok := ret.Get(1).(func(*persistence.GetHistoryTreeRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+func (_m *HistoryV2Manager) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.GetAllHistoryTreeBranchesResponse, error) {
+	ret := _m.Called(request)
+	var r0 *persistence.GetAllHistoryTreeBranchesResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetAllHistoryTreeBranchesRequest) *persistence.GetAllHistoryTreeBranchesResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetAllHistoryTreeBranchesResponse)
+		}
+	}
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetAllHistoryTreeBranchesRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

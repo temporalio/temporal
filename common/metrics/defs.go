@@ -147,6 +147,8 @@ const (
 	PersistenceDeleteWorkflowExecutionScope
 	// PersistenceDeleteCurrentWorkflowExecutionScope tracks DeleteCurrentWorkflowExecution calls made by service to persistence layer
 	PersistenceDeleteCurrentWorkflowExecutionScope
+	// PersistenceDeleteTaskScope tracks RemoveTask calls made by service to persistence layer
+	PersistenceDeleteTaskScope
 	// PersistenceGetCurrentExecutionScope tracks GetCurrentExecution calls made by service to persistence layer
 	PersistenceGetCurrentExecutionScope
 	// PersistenceGetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
@@ -285,6 +287,8 @@ const (
 	HistoryClientSyncActivityScope
 	// HistoryClientGetReplicationTasksScope tracks RPC calls to history service
 	HistoryClientGetReplicationTasksScope
+	// HistoryClientQueryWorkflowScope tracks RPC calls to history service
+	HistoryClientQueryWorkflowScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -311,6 +315,8 @@ const (
 	FrontendClientDescribeWorkflowExecutionScope
 	// FrontendClientGetWorkflowExecutionHistoryScope tracks RPC calls to frontend service
 	FrontendClientGetWorkflowExecutionHistoryScope
+	// FrontendClientListArchivedWorkflowExecutionsScope tracks RPC calls to frontend service
+	FrontendClientListArchivedWorkflowExecutionsScope
 	// FrontendClientListClosedWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListClosedWorkflowExecutionsScope
 	// FrontendClientListDomainsScope tracks RPC calls to frontend service
@@ -375,6 +381,8 @@ const (
 	FrontendClientGetReplicationTasksScope
 	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributeScope
+	// AdminClientCloseShardScope tracks RPC calls to admin service
+	AdminClientCloseShardScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowExecutionScope tracks RPC calls to admin service
@@ -391,6 +399,8 @@ const (
 	DCRedirectionDescribeWorkflowExecutionScope
 	// DCRedirectionGetWorkflowExecutionHistoryScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkflowExecutionHistoryScope
+	// DCRedirectionListArchviedWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionListArchviedWorkflowExecutionsScope
 	// DCRedirectionListClosedWorkflowExecutionsScope tracks RPC calls for dc redirection
 	DCRedirectionListClosedWorkflowExecutionsScope
 	// DCRedirectionListDomainsScope tracks RPC calls for dc redirection
@@ -482,6 +492,8 @@ const (
 	PersistenceCompleteForkBranchScope
 	// PersistenceGetHistoryTreeScope tracks GetHistoryTree calls made by service to persistence layer
 	PersistenceGetHistoryTreeScope
+	// PersistenceGetAllHistoryTreeBranchesScope tracks GetHistoryTree calls made by service to persistence layer
+	PersistenceGetAllHistoryTreeBranchesScope
 
 	// ClusterMetadataArchivalConfigScope tracks ArchivalConfig calls to ClusterMetadata
 	ClusterMetadataArchivalConfigScope
@@ -550,6 +562,10 @@ const (
 	AdminDescribeWorkflowExecutionScope
 	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryScope
+	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
+	AdminRemoveTaskScope
+	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
+	AdminCloseShardTaskScope
 
 	NumAdminScopes
 )
@@ -804,6 +820,8 @@ const (
 	SessionCountStatsScope
 	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
 	HistoryResetWorkflowExecutionScope
+	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service
+	HistoryQueryWorkflowScope
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
 	HistoryProcessDeleteHistoryEventScope
 	// WorkflowCompletionStatsScope tracks workflow completion updates
@@ -890,6 +908,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceResetWorkflowExecutionScope:                   {operation: "ResetWorkflowExecution"},
 		PersistenceDeleteWorkflowExecutionScope:                  {operation: "DeleteWorkflowExecution"},
 		PersistenceDeleteCurrentWorkflowExecutionScope:           {operation: "DeleteCurrentWorkflowExecution"},
+		PersistenceDeleteTaskScope:                               {operation: "PersistenceDelete"},
 		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
 		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
@@ -938,6 +957,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteHistoryBranchScope:                      {operation: "DeleteHistoryBranch"},
 		PersistenceCompleteForkBranchScope:                       {operation: "CompleteForkBranch"},
 		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree"},
+		PersistenceGetAllHistoryTreeBranchesScope:                {operation: "GetAllHistoryTreeBranches"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 
@@ -968,6 +988,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientSyncShardStatusScope:                   {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationTasksScope:               {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollForActivityTaskScope:              {operation: "MatchingClientPollForActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                  {operation: "MatchingClientAddActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -981,6 +1002,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientDescribeTaskListScope:                 {operation: "FrontendClientDescribeTaskList", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:        {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkflowExecutionHistoryScope:      {operation: "FrontendClientGetWorkflowExecutionHistory", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListArchivedWorkflowExecutionsScope:   {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListClosedWorkflowExecutionsScope:     {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListDomainsScope:                      {operation: "FrontendClientListDomains", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListOpenWorkflowExecutionsScope:       {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
@@ -1016,11 +1038,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientCloseShardScope:                          {operation: "AdminClientCloseShard", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		DCRedirectionDeprecateDomainScope:                   {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeDomainScope:                    {operation: "DCRedirectionDescribeDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeTaskListScope:                  {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeWorkflowExecutionScope:         {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionHistoryScope:       {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListArchviedWorkflowExecutionsScope:    {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListClosedWorkflowExecutionsScope:      {operation: "DCRedirectionListClosedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListDomainsScope:                       {operation: "DCRedirectionListDomains", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListOpenWorkflowExecutionsScope:        {operation: "DCRedirectionListOpenWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1091,6 +1115,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// Frontend Scope Names
 	Frontend: {
 		// Admin API scope co-locates with with frontend
+		AdminRemoveTaskScope:                     {operation: "AdminRemoveTask"},
+		AdminCloseShardTaskScope:                 {operation: "AdminCloseShardTask"},
 		AdminDescribeHistoryHostScope:            {operation: "DescribeHistoryHost"},
 		AdminDescribeWorkflowExecutionScope:      {operation: "DescribeWorkflowExecution"},
 		AdminGetWorkflowExecutionRawHistoryScope: {operation: "GetWorkflowExecutionRawHistory"},
@@ -1151,6 +1177,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRemoveSignalMutableStateScope:                   {operation: "RemoveSignalMutableState"},
 		HistoryTerminateWorkflowExecutionScope:                 {operation: "TerminateWorkflowExecution"},
 		HistoryResetWorkflowExecutionScope:                     {operation: "ResetWorkflowExecution"},
+		HistoryQueryWorkflowScope:                              {operation: "QueryWorkflow"},
 		HistoryProcessDeleteHistoryEventScope:                  {operation: "ProcessDeleteHistoryEvent"},
 		HistoryScheduleDecisionTaskScope:                       {operation: "ScheduleDecisionTask"},
 		HistoryRecordChildExecutionCompletedScope:              {operation: "RecordChildExecutionCompleted"},
@@ -1471,6 +1498,8 @@ const (
 	ReplicationTasksFetched
 	ReplicationTasksReturned
 	GetReplicationMessagesForShardLatency
+	ArchiveVisibilityAttemptCount
+	ArchiveVisibilityFailedCount
 
 	NumHistoryMetrics
 )
@@ -1758,6 +1787,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicationTasksFetched:                           {metricName: "replication_tasks_fetched", metricType: Timer},
 		ReplicationTasksReturned:                          {metricName: "replication_tasks_returned", metricType: Timer},
 		GetReplicationMessagesForShardLatency:             {metricName: "get_replication_messages_for_shard", metricType: Timer},
+		ArchiveVisibilityAttemptCount:                     {metricName: "archive_visibility_attempt_count", metricType: Counter},
+		ArchiveVisibilityFailedCount:                      {metricName: "archive_visibility_failed_count", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},

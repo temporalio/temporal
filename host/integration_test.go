@@ -856,6 +856,10 @@ func (s *integrationSuite) TestCronWorkflow() {
 	taskList := &workflow.TaskList{}
 	taskList.Name = common.StringPtr(tl)
 
+	memo := &workflow.Memo{
+		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
+	}
+
 	request := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
 		Domain:                              common.StringPtr(s.domainName),
@@ -867,6 +871,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
 		CronSchedule:                        common.StringPtr(cronSchedule), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		Memo:                                memo,
 	}
 
 	startWorkflowTS := time.Now()
@@ -963,6 +968,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal(0, len(attributes.GetLastCompletionResult()))
+	s.Equal(memo, attributes.Memo)
 
 	events = s.getHistory(s.domainName, executions[1])
 	lastEvent = events[len(events)-1]
@@ -971,6 +977,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+	s.Equal(memo, attributes.Memo)
 
 	events = s.getHistory(s.domainName, executions[2])
 	lastEvent = events[len(events)-1]
@@ -979,6 +986,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+	s.Equal(memo, attributes.Memo)
 
 	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
 	var closedExecutions []*workflow.WorkflowExecutionInfo
@@ -1018,8 +1026,13 @@ func (s *integrationSuite) TestCronWorkflow() {
 		executionInfo := closedExecutions[i]
 		// Roundup to compare on the precision of seconds
 		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The execution time calculate based on last execution close time
+		// However, the current execution time is based on the current start time
+		// This code is to remove the diff between current start time and last execution close time
+		// TODO: Remove this line once we unify the time source
+		executionTimeDiff := executionInfo.GetStartTime()/1000000000 - lastExecution.GetCloseTime()/1000000000
 		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
-		s.Equal(int64(0), int64(expectedBackoff)%(targetBackoffDuration.Nanoseconds()/1000000000))
+		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo
 	}
 }
@@ -1617,7 +1630,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		Header:                              header,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 		Identity:                            common.StringPtr(identity),
 	}
 
@@ -1628,7 +1640,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	// decider logic
 	childComplete := false
 	childExecutionStarted := false
-	var parentStartedEvent *workflow.HistoryEvent
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 
@@ -1654,7 +1665,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 			if !childExecutionStarted {
 				s.Logger.Info("Starting child execution.")
 				childExecutionStarted = true
-				parentStartedEvent = history.Events[0]
 
 				return nil, []*workflow.Decision{{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
@@ -1666,7 +1676,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						Header:                              header,
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
-						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 						Control:                             nil,
 						Memo:                                memo,
 						SearchAttributes:                    searchAttr,
@@ -1738,8 +1747,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(childExecutionStarted)
-	s.Equal(workflow.ChildPolicyRequestCancel,
-		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
@@ -1758,7 +1765,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(we.GetRunId(), childStartedEvent.WorkflowExecutionStartedEventAttributes.ParentWorkflowExecution.GetRunId())
 	s.Equal(startedEvent.ChildWorkflowExecutionStartedEventAttributes.GetInitiatedEventId(),
 		childStartedEvent.WorkflowExecutionStartedEventAttributes.GetParentInitiatedEventId())
-	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 	s.Equal(header, startedEvent.ChildWorkflowExecutionStartedEventAttributes.Header)
 	s.Equal(header, childStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
 	s.Equal(memo, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetMemo())
@@ -1809,7 +1815,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		Input:                               nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 		Identity:                            common.StringPtr(identity),
 	}
 
@@ -1820,7 +1825,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	// decider logic
 	childExecutionStarted := false
-	var parentStartedEvent *workflow.HistoryEvent
 	var terminatedEvent *workflow.HistoryEvent
 	var startChildWorkflowTS time.Time
 	// Parent Decider Logic
@@ -1831,7 +1835,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution.")
 			childExecutionStarted = true
-			parentStartedEvent = history.Events[0]
 			startChildWorkflowTS = time.Now()
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
@@ -1842,7 +1845,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 					Input:                               nil,
 					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
 					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
-					ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 					Control:                             nil,
 					CronSchedule:                        common.StringPtr(cronSchedule),
 				},
@@ -1898,8 +1900,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.True(childExecutionStarted)
-	s.Equal(workflow.ChildPolicyRequestCancel,
-		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution Started event
 	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
@@ -1978,8 +1978,13 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		executionInfo := closedExecutions[i]
 		// Round up the time precision to seconds
 		expectedBackoff := executionInfo.GetExecutionTime()/1000000000 - lastExecution.GetExecutionTime()/1000000000
+		// The execution time calculate based on last execution close time
+		// However, the current execution time is based on the current start time
+		// This code is to remove the diff between current start time and last execution close time
+		// TODO: Remove this line once we unify the time source.
+		executionTimeDiff := executionInfo.GetStartTime()/1000000000 - lastExecution.GetCloseTime()/1000000000
 		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
-		s.Equal(int64(0), int64(expectedBackoff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
+		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo
 	}
 }
@@ -3719,6 +3724,15 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	s.Equal(workflow.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType())
 	startdEventAttributes := firstEvent.WorkflowExecutionStartedEventAttributes
 	s.Equal(memo, startdEventAttributes.Memo)
+
+	// verify DescribeWorkflowExecution result
+	descRequest := &workflow.DescribeWorkflowExecutionRequest{
+		Domain:    common.StringPtr(s.domainName),
+		Execution: execution,
+	}
+	descResp, err := s.engine.DescribeWorkflowExecution(createContext(), descRequest)
+	s.Nil(err)
+	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
 
 	// verify closed visibility
 	var closdExecutionInfo *workflow.WorkflowExecutionInfo

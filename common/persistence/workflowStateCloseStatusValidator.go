@@ -134,6 +134,7 @@ func validateWorkflowCloseStatus(
 	return nil
 }
 
+// ToThriftWorkflowExecutionCloseStatus convert persistence representation of close status to thrift representation
 func ToThriftWorkflowExecutionCloseStatus(
 	closeStatus int,
 ) workflow.WorkflowExecutionCloseStatus {

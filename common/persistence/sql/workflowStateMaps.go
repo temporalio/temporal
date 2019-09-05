@@ -379,6 +379,7 @@ func updateChildExecutionInfos(
 				CreateRequestID:        &v.CreateRequestID,
 				DomainName:             &v.DomainName,
 				WorkflowTypeName:       &v.WorkflowTypeName,
+				ParentClosePolicy:      common.Int32Ptr(int32(v.ParentClosePolicy)),
 			}
 			blob, err := childExecutionInfoToBlob(info)
 			if err != nil {
@@ -453,6 +454,7 @@ func getChildExecutionInfoMap(
 			CreateRequestID:       rowInfo.GetCreateRequestID(),
 			DomainName:            rowInfo.GetDomainName(),
 			WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
+			ParentClosePolicy:     workflow.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
 		}
 		if rowInfo.InitiatedEvent != nil {
 			info.InitiatedEvent = persistence.NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.GetInitiatedEventEncoding()))

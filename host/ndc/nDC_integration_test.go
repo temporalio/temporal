@@ -31,6 +31,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -43,8 +46,6 @@ import (
 	test "github.com/uber/cadence/common/testing"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/host"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 type (
@@ -79,7 +80,6 @@ func TestNDCIntegrationTestSuite(t *testing.T) {
 }
 
 func (s *nDCIntegrationTestSuite) SetupSuite() {
-
 	zapLogger, err := zap.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
@@ -108,14 +108,11 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 }
 
 func (s *nDCIntegrationTestSuite) SetupTest() {
-
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.generator.Reset()
 }
 
 func (s *nDCIntegrationTestSuite) TearDownSuite() {
-
 	s.active.TearDownCluster()
 	s.passive.TearDownCluster()
 }
@@ -149,7 +146,7 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 	rid := uuid.New()
 	wt := "event-generator-workflow-type"
 	tl := "event-generator-taskList"
-	domain := *resp.DomainInfo.Name
+	domain := resp.DomainInfo.GetName()
 	version := int64(100)
 
 	s.generator = test.InitializeHistoryEventGenerator(domain)
@@ -175,7 +172,7 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 
 	for _, batch := range root.Batches {
 		// Generate a new run history only when the last event is continue as new
-		newRunHistory := generateNewRunHistory(batch.Events[len(batch.Events)-1].GetData().(shared.HistoryEvent), version, domain, wid, rid, wt, tl)
+		newRunHistory := generateNewRunHistory(batch.Events[len(batch.Events)-1].GetData().(*shared.HistoryEvent), version, domain, wid, rid, wt, tl)
 		batchHistory := shared.History{}
 		for _, event := range batch.Events {
 			historyEvent := event.GetData().(shared.HistoryEvent)
@@ -233,7 +230,7 @@ func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
 }
 
 func generateNewRunHistory(
-	event shared.HistoryEvent,
+	event *shared.HistoryEvent,
 	version int64,
 	domain string,
 	workflowID string,

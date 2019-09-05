@@ -154,6 +154,47 @@ func newAdminWorkflowCommands() []cli.Command {
 	}
 }
 
+func newAdminShardManagementCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "closeShard",
+			Aliases: []string{"clsh"},
+			Usage:   "close a shard given a shard id",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "ShardID for the cadence cluster to manage",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminShardManagement(c)
+			},
+		},
+		{
+			Name:    "removeTask",
+			Aliases: []string{"rmtk"},
+			Usage:   "remove a task based on shardID, typeID and taskID",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "ShardID for the cadence cluster to manage",
+				},
+				cli.Int64Flag{
+					Name:  FlagRemoveTaskID,
+					Usage: "task id which user want to specify",
+				},
+				cli.IntFlag{
+					Name:  FlagRemoveTypeID,
+					Usage: "type id which user want to specify: 2 (transfer task), 3 (timer task), 4 (replication task)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRemoveTask(c)
+			},
+		},
+	}
+}
+
 func newAdminHistoryHostCommands() []cli.Command {
 	return []cli.Command{
 		{

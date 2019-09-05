@@ -179,6 +179,7 @@ struct ChildExecutionInfo {
   28: optional string createRequestID
   30: optional string domainName
   32: optional string workflowTypeName
+  35: optional i32 parentClosePolicy
 }
 
 struct SignalInfo {

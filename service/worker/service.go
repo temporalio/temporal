@@ -88,7 +88,7 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 // NewConfig builds the new Config for cadence-worker service
 func NewConfig(params *service.BootstrapParams) *Config {
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
-	return &Config{
+	config := &Config{
 		ReplicationCfg: &replicator.Config{
 			PersistenceMaxQPS:                  dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
 			ReplicatorMetaTaskConcurrency:      dc.GetIntProperty(dynamicconfig.WorkerReplicatorMetaTaskConcurrency, 64),
@@ -104,14 +104,6 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			ArchivalsPerIteration:         dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
 			TimeLimitPerArchivalIteration: dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
 		},
-		IndexerCfg: &indexer.Config{
-			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 1000),
-			ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
-			ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
-			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
-			ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
-			ValidSearchAttributes:    dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
-		},
 		ScannerCfg: &scanner.Config{
 			PersistenceMaxQPS: dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
 			Persistence:       &params.PersistenceConfig,
@@ -124,6 +116,21 @@ func NewConfig(params *service.BootstrapParams) *Config {
 		EnableBatcher:   dc.GetBoolProperty(dynamicconfig.EnableBatcher, false),
 		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 	}
+	advancedVisWritingMode := dc.GetStringProperty(
+		dynamicconfig.AdvancedVisibilityWritingMode,
+		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
+	)
+	if advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff {
+		config.IndexerCfg = &indexer.Config{
+			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 1000),
+			ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
+			ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
+			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
+			ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
+			ValidSearchAttributes:    dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		}
+	}
+	return config
 }
 
 // Start is called to start the service
@@ -134,7 +141,7 @@ func (s *Service) Start() {
 	s.metricsClient = base.GetMetricsClient()
 	s.logger.Info("service starting", tag.ComponentWorker)
 
-	if s.params.ESConfig.Enable {
+	if s.config.IndexerCfg != nil {
 		s.startIndexer(base)
 	}
 

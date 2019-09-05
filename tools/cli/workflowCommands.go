@@ -1315,12 +1315,15 @@ func processResets(c *cli.Context, domain string, wes chan shared.WorkflowExecut
 				if err == nil {
 					break
 				}
+				if _, ok := err.(*shared.BadRequestError); ok {
+					break
+				}
 				fmt.Println("failed and retry...: ", wid, rid, err)
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(2000)))
 			}
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
 			if err != nil {
-				fmt.Println("[ERROR] failed processing: ", wid, rid)
+				fmt.Println("[ERROR] failed processing: ", wid, rid, err.Error())
 			}
 		case <-done:
 			wg.Done()
@@ -1332,24 +1335,27 @@ func processResets(c *cli.Context, domain string, wes chan shared.WorkflowExecut
 // ResetInBatch resets workflow in batch
 func ResetInBatch(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	inFileName := getRequiredOption(c, FlagInputFile)
-	excFileName := getRequiredOption(c, FlagExcludeFile)
-	separator := getRequiredOption(c, FlagInputSeparator)
 	reason := getRequiredOption(c, FlagReason)
 	resetType := getRequiredOption(c, FlagResetType)
+
+	inFileName := c.String(FlagInputFile)
+	query := c.String(FlagListQuery)
+	excFileName := c.String(FlagExcludeFile)
+	separator := c.String(FlagInputSeparator)
+	skipOpen := c.Bool(FlagSkipCurrent)
+	parallel := c.Int(FlagParallism)
+
 	extraForResetType, ok := resetTypesMap[resetType]
 	if !ok {
 		ErrorAndExit("Not supported reset type", nil)
-	} else {
+	} else if len(extraForResetType) > 0 {
 		getRequiredOption(c, extraForResetType)
 	}
 
-	if !c.IsSet(FlagSkipCurrent) {
-		ErrorAndExit("need to specify whether skip on current is open", nil)
+	if inFileName == "" && query == "" {
+		ErrorAndExit("Must provide input file or list query to get target workflows to reset", nil)
 	}
-	skipOpen := c.Bool(FlagSkipCurrent)
 
-	parallel := c.Int(FlagParallism)
 	wg := &sync.WaitGroup{}
 
 	wes := make(chan shared.WorkflowExecution)
@@ -1387,40 +1393,68 @@ func ResetInBatch(c *cli.Context) {
 	}
 	fmt.Println("num of excludes:", len(excludes))
 
-	inFile, err := os.Open(inFileName)
-	if err != nil {
-		ErrorAndExit("Open failed", err)
-	}
-	defer inFile.Close()
-	scanner := bufio.NewScanner(inFile)
-	idx := 0
-	for scanner.Scan() {
-		idx++
-		line := strings.TrimSpace(scanner.Text())
-		if len(line) == 0 {
-			fmt.Printf("line %v is empty, skipped\n", idx)
-			continue
+	if len(inFileName) > 0 {
+		inFile, err := os.Open(inFileName)
+		if err != nil {
+			ErrorAndExit("Open failed", err)
 		}
-		cols := strings.Split(line, separator)
-		if len(cols) < 1 {
-			ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 1 cols separated by comma, only %v ", idx, len(cols)))
-		}
-		fmt.Printf("Start processing line %v ...\n", idx)
-		wid := strings.TrimSpace(cols[0])
-		rid := ""
-		if len(cols) > 1 {
-			rid = strings.TrimSpace(cols[1])
-		}
+		defer inFile.Close()
+		scanner := bufio.NewScanner(inFile)
+		idx := 0
+		for scanner.Scan() {
+			idx++
+			line := strings.TrimSpace(scanner.Text())
+			if len(line) == 0 {
+				fmt.Printf("line %v is empty, skipped\n", idx)
+				continue
+			}
+			cols := strings.Split(line, separator)
+			if len(cols) < 1 {
+				ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 1 cols separated by comma, only %v ", idx, len(cols)))
+			}
+			fmt.Printf("Start processing line %v ...\n", idx)
+			wid := strings.TrimSpace(cols[0])
+			rid := ""
+			if len(cols) > 1 {
+				rid = strings.TrimSpace(cols[1])
+			}
 
-		_, ok := excludes[wid]
-		if ok {
-			fmt.Println("already processed, skip: ", wid, rid)
-			continue
-		}
+			_, ok := excludes[wid]
+			if ok {
+				fmt.Println("skip by exclude file: ", wid, rid)
+				continue
+			}
 
-		wes <- shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(rid),
+			wes <- shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(wid),
+				RunId:      common.StringPtr(rid),
+			}
+		}
+	} else {
+		wfClient := getWorkflowClient(c)
+		pageSize := 1000
+		var nextPageToken []byte
+		var result []*s.WorkflowExecutionInfo
+		for {
+			result, nextPageToken = scanWorkflowExecutions(wfClient, pageSize, nextPageToken, query, c)
+			for _, we := range result {
+				wid := we.Execution.GetWorkflowId()
+				rid := we.Execution.GetRunId()
+				_, ok := excludes[wid]
+				if ok {
+					fmt.Println("skip by exclude file: ", wid, rid)
+					continue
+				}
+
+				wes <- shared.WorkflowExecution{
+					WorkflowId: common.StringPtr(wid),
+					RunId:      common.StringPtr(rid),
+				}
+			}
+
+			if nextPageToken == nil {
+				break
+			}
 		}
 	}
 
@@ -1504,7 +1538,7 @@ func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, 
 }
 
 func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
-	fmt.Println("switch", resetType)
+	fmt.Println("resetType:", resetType)
 	switch resetType {
 	case "LastDecisionCompleted":
 		resetBaseRunID, decisionFinishID, err = getLastDecisionCompletedID(ctx, domain, wid, rid, frontendClient)
@@ -1590,7 +1624,7 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 	}
 
 	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
+		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", &shared.BadRequestError{"no DecisionFinishID"})
 	}
 	return
 }

@@ -568,8 +568,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 ) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRecordActivityTaskHeartbeatScope)
-	defer sw.Stop()
+	scope := wh.getDefaultScope(metrics.FrontendRecordActivityTaskHeartbeatScope)
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return nil, wh.error(err, scope)
@@ -599,8 +598,13 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 		return nil, wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRecordActivityTaskHeartbeatScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
@@ -650,7 +654,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 ) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRecordActivityTaskHeartbeatByIDScope)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRecordActivityTaskHeartbeatByIDScope, heartbeatRequest)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -757,9 +761,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCompletedScope)
-	defer sw.Stop()
-
+	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCompletedScope)
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return wh.error(err, scope)
 	}
@@ -790,8 +792,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		return wh.error(errIdentityTooLong, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondActivityTaskCompletedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
@@ -840,7 +847,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCompletedByIDScope)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCompletedByIDScope, completeRequest)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -949,9 +956,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskFailedScope)
-	defer sw.Stop()
-
+	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskFailedScope)
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return wh.error(err, scope)
 	}
@@ -979,8 +984,13 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondActivityTaskFailedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	if len(failedRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errIdentityTooLong, scope)
@@ -1021,7 +1031,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskFailedByIDScope)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskFailedByIDScope, failedRequest)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1118,9 +1128,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCanceledScope)
-	defer sw.Stop()
-
+	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCanceledScope)
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return wh.error(err, scope)
 	}
@@ -1148,8 +1156,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 		return wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondActivityTaskCanceledScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	if len(cancelRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errIdentityTooLong, scope)
@@ -1202,7 +1215,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondActivityTaskCanceledScope)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCanceledScope, cancelRequest)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -1310,9 +1323,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 ) (resp *gen.RespondDecisionTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondDecisionTaskCompletedScope)
-	defer sw.Stop()
-
+	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskCompletedScope)
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1340,8 +1351,13 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 		return nil, wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondDecisionTaskCompletedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	histResp, err := wh.history.RespondDecisionTaskCompleted(ctx, &h.RespondDecisionTaskCompletedRequest{
 		DomainUUID:      common.StringPtr(taskToken.DomainID),
@@ -1389,9 +1405,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondDecisionTaskFailedScope)
-	defer sw.Stop()
-
+	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskFailedScope)
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return wh.error(err, scope)
 	}
@@ -1419,8 +1433,13 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 		return wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondDecisionTaskFailedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	if len(failedRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errIdentityTooLong, scope)
@@ -1460,9 +1479,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 ) (retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendRespondQueryTaskCompletedScope)
-	defer sw.Stop()
-
+	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return wh.error(err, scope)
 	}
@@ -1490,8 +1507,13 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return wh.error(err, scope)
 	}
 
-	// add domain tag to scope, so further metrics will have the domain tag
-	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondQueryTaskCompletedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
 
 	matchingRequest := &m.RespondQueryTaskCompletedRequest{
 		DomainUUID:       common.StringPtr(queryTaskToken.DomainID),
@@ -2314,6 +2336,88 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
 	return resp, nil
 }
 
+// ListArchivedWorkflowExecutions - retrieves archived info for closed workflow executions in a domain
+func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
+	ctx context.Context,
+	listRequest *gen.ListArchivedWorkflowExecutionsRequest,
+) (resp *gen.ListArchivedWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendClientListArchivedWorkflowExecutionsScope, listRequest)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if listRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok := wh.allow(listRequest); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if listRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if listRequest.GetPageSize() <= 0 {
+		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
+	}
+
+	if !wh.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
+		return nil, wh.error(&gen.BadRequestError{Message: "Cluster is not configured for visibility archival"}, scope)
+	}
+
+	if !wh.GetArchivalMetadata().GetVisibilityConfig().ReadEnabled() {
+		return nil, wh.error(&gen.BadRequestError{Message: "Cluster is not configured for reading archived visibility records"}, scope)
+	}
+
+	entry, err := wh.domainCache.GetDomain(listRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if entry.GetConfig().VisibilityArchivalStatus != shared.ArchivalStatusEnabled {
+		return nil, wh.error(&gen.BadRequestError{Message: "Domain is not configured for visibility archival"}, scope)
+	}
+
+	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalURI)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	visibilityArchiver, err := wh.GetArchiverProvider().GetVisibilityArchiver(URI.Scheme(), common.FrontendServiceName)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	archiverRequest := &archiver.QueryVisibilityRequest{
+		DomainID:      entry.GetInfo().ID,
+		PageSize:      int(listRequest.GetPageSize()),
+		NextPageToken: listRequest.NextPageToken,
+		Query:         listRequest.GetQuery(),
+	}
+
+	archiverResponse, err := visibilityArchiver.Query(ctx, URI, archiverRequest)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// special handling of ExecutionTime for cron or retry
+	for _, execution := range archiverResponse.Executions {
+		if execution.GetExecutionTime() == 0 {
+			execution.ExecutionTime = common.Int64Ptr(execution.GetStartTime())
+		}
+	}
+
+	return &gen.ListArchivedWorkflowExecutionsResponse{
+		Executions:    archiverResponse.Executions,
+		NextPageToken: archiverResponse.NextPageToken,
+	}, nil
+}
+
 // ListClosedWorkflowExecutions - retrieves info for closed workflow executions in a domain
 func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
 	ctx context.Context,
@@ -2718,11 +2822,6 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		return nil, wh.error(err, scope)
 	}
 
-	matchingRequest := &m.QueryWorkflowRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		QueryRequest: queryRequest,
-	}
-
 	// we should always use the mutable state, since it contains the sticky tasklist information
 	response, err := wh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -2755,11 +2854,40 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		response.GetClientFeatureVersion(),
 		response.GetClientImpl(),
 	)
-
 	queryRequest.Execution.RunId = response.Execution.RunId
-	if len(response.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
-		matchingRequest.TaskList = response.StickyTaskList
-		stickyDecisionTimeout := response.GetStickyTaskListScheduleToStartTimeout()
+	if clientFeature.SupportConsistentQuery() {
+		req := &h.QueryWorkflowRequest{
+			DomainUUID: common.StringPtr(domainID),
+			Execution:  queryRequest.GetExecution(),
+			Query:      queryRequest.GetQuery(),
+		}
+		resp, err := wh.history.QueryWorkflow(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return &gen.QueryWorkflowResponse{
+			QueryResult:   resp.GetQueryResult(),
+			QueryRejected: nil,
+		}, nil
+	}
+	return wh.queryDirectlyThroughMatching(ctx, response, clientFeature, domainID, queryRequest, scope)
+}
+
+func (wh *WorkflowHandler) queryDirectlyThroughMatching(
+	ctx context.Context,
+	getMutableStateResponse *h.GetMutableStateResponse,
+	clientFeature client.Feature,
+	domainID string,
+	queryRequest *gen.QueryWorkflowRequest,
+	scope metrics.Scope,
+) (*gen.QueryWorkflowResponse, error) {
+	matchingRequest := &m.QueryWorkflowRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		QueryRequest: queryRequest,
+	}
+	if len(getMutableStateResponse.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
+		matchingRequest.TaskList = getMutableStateResponse.StickyTaskList
+		stickyDecisionTimeout := getMutableStateResponse.GetStickyTaskListScheduleToStartTimeout()
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickyness
 		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(stickyDecisionTimeout)*time.Second)
@@ -2783,8 +2911,8 @@ func (wh *WorkflowHandler) QueryWorkflow(
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.WorkflowTaskListName(response.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(response.GetNextEventId()))
+			tag.WorkflowTaskListName(getMutableStateResponse.GetStickyTaskList().GetName()),
+			tag.WorkflowNextEventID(getMutableStateResponse.GetNextEventId()))
 		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = wh.history.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
 			DomainUUID: common.StringPtr(domainID),
@@ -2796,7 +2924,7 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		}
 	}
 
-	matchingRequest.TaskList = response.TaskList
+	matchingRequest.TaskList = getMutableStateResponse.TaskList
 	matchingResp, err := wh.matching.QueryWorkflow(ctx, matchingRequest)
 	if err != nil {
 		wh.Service.GetLogger().Info("QueryWorkflowFailed.",
@@ -3005,6 +3133,11 @@ func (wh *WorkflowHandler) startRequestProfileWithDomain(scope int, d domainGett
 	sw := metricsScope.StartTimer(metrics.CadenceLatency)
 	metricsScope.IncCounter(metrics.CadenceRequests)
 	return metricsScope, sw
+}
+
+// getDefaultScope returns a default scope to use for request metrics
+func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
+	return wh.metricsClient.Scope(scope).Tagged(metrics.DomainUnknownTag())
 }
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
@@ -3343,4 +3476,12 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 		return nil, wh.error(err, scope)
 	}
 	return resp, nil
+}
+
+type domainWrapper struct {
+	domain string
+}
+
+func (d domainWrapper) GetDomain() string {
+	return d.domain
 }

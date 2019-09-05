@@ -44,6 +44,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	CloseShard(
+		ctx context.Context,
+		Request *shared.CloseShardRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	DescribeHistoryHost(
 		ctx context.Context,
 		Request *shared.DescribeHistoryHostRequest,
@@ -61,6 +67,12 @@ type Interface interface {
 		GetRequest *admin.GetWorkflowExecutionRawHistoryRequest,
 		opts ...yarpc.CallOption,
 	) (*admin.GetWorkflowExecutionRawHistoryResponse, error)
+
+	RemoveTask(
+		ctx context.Context,
+		Request *shared.RemoveTaskRequest,
+		opts ...yarpc.CallOption,
+	) error
 }
 
 // New builds a new client for the AdminService service.
@@ -107,6 +119,29 @@ func (c client) AddSearchAttribute(
 	}
 
 	err = admin.AdminService_AddSearchAttribute_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) CloseShard(
+	ctx context.Context,
+	_Request *shared.CloseShardRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_CloseShard_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_CloseShard_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_CloseShard_Helper.UnwrapResponse(&result)
 	return
 }
 
@@ -176,5 +211,28 @@ func (c client) GetWorkflowExecutionRawHistory(
 	}
 
 	success, err = admin.AdminService_GetWorkflowExecutionRawHistory_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RemoveTask(
+	ctx context.Context,
+	_Request *shared.RemoveTaskRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_RemoveTask_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_RemoveTask_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_RemoveTask_Helper.UnwrapResponse(&result)
 	return
 }

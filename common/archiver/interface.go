@@ -32,7 +32,7 @@ import (
 )
 
 type (
-	// ArchiveHistoryRequest is request to Archive
+	// ArchiveHistoryRequest is request to Archive workflow history
 	ArchiveHistoryRequest struct {
 		ShardID              int
 		DomainID             string
@@ -78,13 +78,47 @@ type (
 		ValidateURI(URI) error
 	}
 
-	// ycyang TODO: implement visibility archiver
-
 	// VisibilityBootstrapContainer contains components needed by all visibility Archiver implementations
-	VisibilityBootstrapContainer struct{}
+	VisibilityBootstrapContainer struct {
+		Logger          log.Logger
+		MetricsClient   metrics.Client
+		ClusterMetadata cluster.Metadata
+		DomainCache     cache.DomainCache
+	}
+
+	// ArchiveVisibilityRequest is request to Archive single workflow visibility record
+	ArchiveVisibilityRequest struct {
+		DomainID           string
+		WorkflowID         string
+		RunID              string
+		WorkflowTypeName   string
+		StartTimestamp     int64
+		ExecutionTimestamp int64
+		CloseTimestamp     int64
+		CloseStatus        shared.WorkflowExecutionCloseStatus
+		HistoryLength      int64
+		Memo               *shared.Memo
+		SearchAttributes   map[string][]byte
+	}
+
+	// QueryVisibilityRequest is the request to query archived visibility records
+	QueryVisibilityRequest struct {
+		DomainID      string
+		PageSize      int
+		NextPageToken []byte
+		Query         string
+	}
+
+	// QueryVisibilityResponse is the response of querying archived visibility records
+	QueryVisibilityResponse struct {
+		Executions    []*shared.WorkflowExecutionInfo
+		NextPageToken []byte
+	}
 
 	// VisibilityArchiver is used to archive visibility and read archived visibility
 	VisibilityArchiver interface {
+		Archive(context.Context, URI, *ArchiveVisibilityRequest, ...ArchiveOption) error
+		Query(context.Context, URI, *QueryVisibilityRequest) (*QueryVisibilityResponse, error)
 		ValidateURI(URI) error
 	}
 )

@@ -71,6 +71,24 @@ func (c *metricClient) DescribeHistoryHost(
 	return resp, err
 }
 
+func (c *metricClient) RemoveTask(
+	context context.Context,
+	request *shared.RemoveTaskRequest,
+	opts ...yarpc.CallOption) error {
+	err := c.client.RemoveTask(context, request, opts...)
+
+	return err
+}
+
+func (c *metricClient) CloseShard(
+	context context.Context,
+	request *shared.CloseShardRequest,
+	opts ...yarpc.CallOption) error {
+	err := c.client.CloseShard(context, request, opts...)
+
+	return err
+}
+
 func (c *metricClient) DescribeMutableState(
 	context context.Context,
 	request *h.DescribeMutableStateRequest,
@@ -518,6 +536,24 @@ func (c *metricClient) GetReplicationMessages(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.HistoryClientGetReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+
+	return resp, err
+}
+
+func (c *metricClient) QueryWorkflow(
+	ctx context.Context,
+	request *h.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (*h.QueryWorkflowResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientQueryWorkflowScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientQueryWorkflowScope, metrics.CadenceClientLatency)
+	resp, err := c.client.QueryWorkflow(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientQueryWorkflowScope, metrics.CadenceClientFailures)
 	}
 
 	return resp, err

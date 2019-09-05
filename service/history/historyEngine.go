@@ -119,6 +119,9 @@ var (
 	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "exceeded workflow execution limit for signal events"}
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
+	// ErrQueryTimeout is the error indicating query timed out before being answered
+	ErrQueryTimeout = errors.New("query timed out")
+
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowCloseState = map[int]bool{
@@ -478,12 +481,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	)
 	if err != nil {
 		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-			currentBranchToken, getTokenErr := msBuilder.GetCurrentBranchToken()
-			if getTokenErr != nil {
-				return nil, getTokenErr
-			}
 			if t.StartRequestID == *request.RequestId {
-				e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 				return &workflow.StartWorkflowExecutionResponse{
 					RunId: common.StringPtr(t.RunID),
 				}, nil
@@ -491,7 +489,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			}
 
 			if msBuilder.GetCurrentVersion() < t.LastWriteVersion {
-				e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 				return nil, ce.NewDomainNotActiveError(
 					*request.Domain,
 					clusterMetadata.GetCurrentClusterName(),
@@ -512,11 +509,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				execution,
 				startRequest.StartRequest.GetWorkflowIdReusePolicy(),
 			); err != nil {
-				currentBranchToken, getTokenErr := msBuilder.GetCurrentBranchToken()
-				if getTokenErr != nil {
-					return nil, getTokenErr
-				}
-				e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 				return nil, err
 			}
 			err = context.createWorkflowExecution(
@@ -667,6 +659,48 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	}
 
 	return response, nil
+}
+
+func (e *historyEngineImpl) QueryWorkflow(
+	ctx ctx.Context,
+	request *h.QueryWorkflowRequest,
+) (*h.QueryWorkflowResponse, error) {
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetDomainUUID(), *request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
+	queryRegistry := context.getQueryRegistry()
+	release(nil)
+	query := queryRegistry.BufferQuery(request.GetQuery())
+	domainCache, err := e.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+	if err != nil {
+		return nil, err
+	}
+	timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(domainCache.GetInfo().Name))
+	defer timer.Stop()
+
+	select {
+	case <-query.TerminationCh():
+		switch query.State() {
+		case QueryStateCompleted:
+			result := query.QueryResult()
+			switch result.GetResultType() {
+			case workflow.QueryResultTypeAnswered:
+				return &h.QueryWorkflowResponse{
+					QueryResult: result.GetAnswer(),
+				}, nil
+			case workflow.QueryResultTypeFailed:
+				return nil, &workflow.QueryFailedError{Message: fmt.Sprintf("%v: %v", result.GetErrorReason(), result.GetErrorDetails())}
+			}
+		case QueryStateExpired:
+			return nil, ErrQueryTimeout
+		}
+	case <-timer.C:
+		return nil, ErrQueryTimeout
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return nil, &workflow.InternalServiceError{Message: "query entered unexpected state, this should be impossible"}
 }
 
 func (e *historyEngineImpl) getMutableState(
@@ -835,7 +869,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			TaskList:                            &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionInfo.WorkflowTimeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(executionInfo.DecisionTimeoutValue),
-			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 		},
 		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
 			Execution: &workflow.WorkflowExecution{
@@ -846,6 +879,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			StartTime:        common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
 			HistoryLength:    common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
 			AutoResetPoints:  executionInfo.AutoResetPoints,
+			Memo:             &workflow.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &workflow.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
 		},
 	}
@@ -926,10 +960,11 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if len(msBuilder.GetPendingChildExecutionInfos()) > 0 {
 		for _, ch := range msBuilder.GetPendingChildExecutionInfos() {
 			p := &workflow.PendingChildExecutionInfo{
-				WorkflowID:      common.StringPtr(ch.StartedWorkflowID),
-				RunID:           common.StringPtr(ch.StartedRunID),
-				WorkflowTypName: common.StringPtr(ch.WorkflowTypeName),
-				InitiatedID:     common.Int64Ptr(ch.InitiatedID),
+				WorkflowID:        common.StringPtr(ch.StartedWorkflowID),
+				RunID:             common.StringPtr(ch.StartedRunID),
+				WorkflowTypName:   common.StringPtr(ch.WorkflowTypeName),
+				InitiatedID:       common.Int64Ptr(ch.InitiatedID),
+				ParentClosePolicy: common.ParentClosePolicyPtr(ch.ParentClosePolicy),
 			}
 			result.PendingChildren = append(result.PendingChildren, p)
 		}
@@ -1659,11 +1694,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	)
 
 	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-		currentBranchToken, getTokenErr := msBuilder.GetCurrentBranchToken()
-		if getTokenErr != nil {
-			return nil, getTokenErr
-		}
-		e.deleteEvents(domainID, execution, eventStoreVersion, currentBranchToken)
 		if t.StartRequestID == *request.RequestId {
 			return &workflow.StartWorkflowExecutionResponse{
 				RunId: common.StringPtr(t.RunID),
@@ -2065,42 +2095,6 @@ func createDeleteHistoryEventTimerTask(
 	expiryTime := clock.NewRealTimeSource().Now().Add(retention)
 	return &persistence.DeleteHistoryEventTask{
 		VisibilityTimestamp: expiryTime,
-	}
-}
-
-func (e *historyEngineImpl) deleteEvents(
-	domainID string,
-	execution workflow.WorkflowExecution,
-	eventStoreVersion int32,
-	branchToken []byte,
-) {
-
-	var err error
-	defer func() {
-		// This is the only code path that deleting history could cause history corruption(missing first batch).
-		// We will use this warn log to verify this issue: https://github.com/uber/cadence/issues/2441
-		e.logger.Warn("encounter WorkflowExecutionAlreadyStartedError, deleting duplicated history",
-			tag.ShardID(e.shard.GetShardID()),
-			tag.WorkflowDomainID(domainID),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Number(int64(eventStoreVersion)),
-			tag.Error(err))
-	}()
-	// We created the history events but failed to create workflow execution, so cleanup the history which could cause
-	// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
-	// are always created for a unique run_id which is not visible beyond this call yet.
-	// TODO: Handle error on deletion of execution history
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		err = e.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-			BranchToken: branchToken,
-			ShardID:     common.IntPtr(e.shard.GetShardID()),
-		})
-	} else {
-		err = e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-			DomainID:  domainID,
-			Execution: execution,
-		})
 	}
 }
 

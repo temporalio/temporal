@@ -442,6 +442,19 @@ func (p *workflowExecutionPersistenceClient) RangeCompleteTimerTask(request *Ran
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) DeleteTask(request *DeleteTaskRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteTaskScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteTaskScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRangeCompleteTimerTaskScope, err)
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *WorkflowExecutionAlreadyStartedError:
@@ -1090,6 +1103,18 @@ func (p *historyV2PersistenceClient) ReadHistoryBranchByBatch(request *ReadHisto
 	return response, err
 }
 
+// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
+func (p *historyV2PersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
+	response, err := p.persistence.ReadRawHistoryBranch(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)
+	}
+	return response, err
+}
+
 // ForkHistoryBranch forks a new branch from a old branch
 func (p *historyV2PersistenceClient) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceForkHistoryBranchScope, metrics.PersistenceRequests)
@@ -1124,6 +1149,17 @@ func (p *historyV2PersistenceClient) CompleteForkBranch(request *CompleteForkBra
 		p.updateErrorMetric(metrics.PersistenceCompleteForkBranchScope, err)
 	}
 	return err
+}
+
+func (p *historyV2PersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetAllHistoryTreeBranches(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetAllHistoryTreeBranchesScope, err)
+	}
+	return response, err
 }
 
 // GetHistoryTree returns all branch information of a tree

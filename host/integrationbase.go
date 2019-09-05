@@ -135,7 +135,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 	options.EnableEventsV2 = TestFlags.EnableEventsV2
 	options.FrontendAddress = TestFlags.FrontendAddr
-	if options.ESConfig.Enable {
+	if options.ESConfig != nil {
 		options.ESConfig.Indices[common.VisibilityAppName] += uuid.New()
 	}
 	return &options, nil
@@ -229,8 +229,8 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 			Retention:                0,
 			HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-			VisibilityArchivalStatus: workflow.ArchivalStatusDisabled,
-			VisibilityArchivalURI:    "",
+			VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 			BadBinaries:              workflow.BadBinaries{Binaries: map[string]*workflow.BadBinaryInfo{}},
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{

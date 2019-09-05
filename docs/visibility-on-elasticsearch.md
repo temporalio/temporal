@@ -58,16 +58,20 @@ cadence --do samples-domain wf list -q 'CustomKeywordField in ("keyword2", "keyw
 
 ## Configuration
 ```
-elasticsearch:
-  enable: false
-  url:
-    scheme: "http"
-    host: "127.0.0.1:9200"
-  indices:
-    visibility: cadence-visibility-dev
+persistence:
+  ...
+  advancedVisibilityStore: es-visibility
+  ...
+  datastore:
+    es-visibility:
+      elasticsearch:
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: cadence-visibility-dev
 ```
-This part is used to config ElasticSearch. 
- - `enable` is used to control whether Cadence should write visibility data to ES.
+This part is used to config advanced visibility store to ElasticSearch. 
  - `url` is for Cadence to discover ES 
  - `indices/visibility` is ElasticSearch index name for the deployment.  
 
@@ -83,7 +87,9 @@ kafka:
 Also need to add a kafka topic to visibility, see above for example.  
 
 There are dynamic configs to control ElasticSearch visibility features:
-- `system.enableVisibilityToKafka` is a boolean property to control whether Cadence should write visibility data to ES.
-When it is true, Cadence will write to both DB (Cassandra or MySQL) and ES.
+- `system.advancedVisibilityWritingMode` is an int property to control how to write visibility to data store.  
+`"off"` means do not write to advanced data store,   
+`"on"` means only write to advanced data store,   
+`"dual"` means write to both DB (Cassandra or MySQL) and advanced data store
 - `system.enableReadVisibilityFromES` is a boolean property to control whether Cadence List APIs should use ES as source or not.
 

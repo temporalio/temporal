@@ -283,7 +283,8 @@ const (
 		`create_request_id: ?, ` +
 		`event_data_encoding: ?, ` +
 		`domain_name: ?, ` +
-		`workflow_type_name: ?` +
+		`workflow_type_name: ?, ` +
+		`parent_close_policy: ?` +
 		`}`
 
 	templateRequestCancelInfoType = `{` +
@@ -1885,6 +1886,53 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 	} else if resp.RunID == runID {
 		return &p.ConditionFailedError{
 			Msg: fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) DeleteTask(request *p.DeleteTaskRequest) error {
+	var domainID, workflowID, runID string
+	switch request.Type {
+	case rowTypeTransferTask:
+		domainID = rowTypeTransferDomainID
+		workflowID = rowTypeTransferWorkflowID
+		runID = rowTypeTransferRunID
+
+	case rowTypeTimerTask:
+		domainID = rowTypeTimerDomainID
+		workflowID = rowTypeTimerWorkflowID
+		runID = rowTypeTimerRunID
+
+	case rowTypeReplicationTask:
+		domainID = rowTypeReplicationDomainID
+		workflowID = rowTypeReplicationWorkflowID
+		runID = rowTypeReplicationRunID
+
+	default:
+		return fmt.Errorf("DeleteTask type id is not one of 2 (transfer task), 3 (timer task), 4 (replication task) ")
+
+	}
+
+	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
+		request.ShardID,
+		request.Type,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		request.TaskID)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("DeleteTask operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteTask operation failed. Error: %v", err),
 		}
 	}
 

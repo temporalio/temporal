@@ -468,6 +468,18 @@ service WorkflowService {
     )
 
   /**
+  * ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific domain.
+  **/
+  shared.ListArchivedWorkflowExecutionsResponse ListArchivedWorkflowExecutions(1: shared.ListArchivedWorkflowExecutionsRequest listRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.ServiceBusyError serviceBusyError,
+      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+    )
+
+  /**
   * ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
   **/
   shared.ListWorkflowExecutionsResponse ScanWorkflowExecutions(1: shared.ListWorkflowExecutionsRequest listRequest)
