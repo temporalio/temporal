@@ -1,0 +1,1 @@
+ALTER TYPE activity_info ADD last_failure_details blob;

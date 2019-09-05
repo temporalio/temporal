@@ -1175,20 +1175,20 @@ func (_m *mockMutableState) CopyToPersistence() *persistence.WorkflowMutableStat
 	return r0
 }
 
-// CreateActivityRetryTimer provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) RetryActivity(_a0 *persistence.ActivityInfo, _a1 string) (bool, error) {
-	ret := _m.Called(_a0, _a1)
+// RetryActivity provides a mock function with given fields: ai, failureReason, failureDetails
+func (_m *mockMutableState) RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails []byte) (bool, error) {
+	ret := _m.Called(ai, failureReason, failureDetails)
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(*persistence.ActivityInfo, string) bool); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(*persistence.ActivityInfo, string, []byte) bool); ok {
+		r0 = rf(ai, failureReason, failureDetails)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.ActivityInfo, string) error); ok {
-		r1 = rf(_a0, _a1)
+	if rf, ok := ret.Get(1).(func(*persistence.ActivityInfo, string, []byte) error); ok {
+		r1 = rf(ai, failureReason, failureDetails)
 	} else {
 		r1 = ret.Error(1)
 	}

@@ -2153,6 +2153,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
 		LastFailureReason:        "some random error",
 		LastWorkerIdentity:       uuid.New(),
+		LastFailureDetails:       []byte(uuid.New()),
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
 	s.NoError(err2)
@@ -2197,6 +2198,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(activityInfos[0].NonRetriableErrors, ai.NonRetriableErrors)
 	s.Equal(activityInfos[0].LastFailureReason, ai.LastFailureReason)
 	s.Equal(activityInfos[0].LastWorkerIdentity, ai.LastWorkerIdentity)
+	s.Equal(activityInfos[0].LastFailureDetails, ai.LastFailureDetails)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, int64(5), nil, nil, []int64{1}, nil, nil)
 	s.NoError(err2)

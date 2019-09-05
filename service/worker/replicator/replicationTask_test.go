@@ -26,16 +26,14 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/uber/cadence/.gen/go/history/historyservicetest"
-	"github.com/uber/cadence/common/clock"
-
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
@@ -245,6 +243,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 				Attempt:            replicationAttr.Attempt,
 				LastFailureReason:  replicationAttr.LastFailureReason,
 				LastWorkerIdentity: replicationAttr.LastWorkerIdentity,
+				LastFailureDetails: replicationAttr.LastFailureDetails,
 			},
 		},
 		task,
@@ -667,6 +666,7 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicator.
 		Attempt:            common.Int32Ptr(59),
 		LastFailureReason:  common.StringPtr("some random failure reason"),
 		LastWorkerIdentity: common.StringPtr("some random worker identity"),
+		LastFailureDetails: []byte("some random failure details"),
 	}
 	replicationTask := &replicator.ReplicationTask{
 		TaskType:                    replicator.ReplicationTaskTypeSyncActivity.Ptr(),

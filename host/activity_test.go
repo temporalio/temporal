@@ -307,8 +307,11 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(workflow.PendingActivityStateScheduled, pendingActivity.GetState())
 			if i == 0 {
 				s.Equal("cadenceInternal:Timeout HEARTBEAT", pendingActivity.GetLastFailureReason())
+				s.Nil(pendingActivity.GetLastFailureDetails())
 			} else { // i == 1
-				s.Equal("retryable-error", pendingActivity.GetLastFailureReason())
+				expectedErrString := "retryable-error"
+				s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
+				s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())
 			}
 			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
 
@@ -504,7 +507,9 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.Nil(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
 		if pendingActivity.GetActivityID() == "A" {
-			s.Equal("bad-luck-please-retry", pendingActivity.GetLastFailureReason())
+			expectedErrString := "bad-luck-please-retry"
+			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
+			s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())
 			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
 		}
 	}
@@ -516,7 +521,9 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.Nil(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
 		if pendingActivity.GetActivityID() == "A" {
-			s.Equal("bad-bug", pendingActivity.GetLastFailureReason())
+			expectedErrString := "bad-bug"
+			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
+			s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())
 			s.Equal(identity2, pendingActivity.GetLastWorkerIdentity())
 		}
 	}

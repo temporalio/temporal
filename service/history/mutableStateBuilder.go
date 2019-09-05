@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -1010,6 +1009,7 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	ai.Attempt = request.GetAttempt()
 	ai.LastFailureReason = request.GetLastFailureReason()
 	ai.LastWorkerIdentity = request.GetLastWorkerIdentity()
+	ai.LastFailureDetails = request.GetLastFailureDetails()
 
 	if resetActivityTimerTaskStatus {
 		ai.TimerTaskStatus = TimerTaskStatusNone
@@ -3782,6 +3782,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(event
 func (e *mutableStateBuilder) RetryActivity(
 	ai *persistence.ActivityInfo,
 	failureReason string,
+	failureDetails []byte,
 ) (bool, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
@@ -3820,6 +3821,7 @@ func (e *mutableStateBuilder) RetryActivity(
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.LastFailureReason = failureReason
 	ai.LastWorkerIdentity = ai.StartedIdentity
+	ai.LastFailureDetails = failureDetails
 
 	if err := e.taskGenerator.generateActivityRetryTasks(
 		ai.ScheduleID,

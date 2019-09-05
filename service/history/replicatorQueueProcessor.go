@@ -257,6 +257,7 @@ func (p *replicatorQueueProcessorImpl) getSyncActivityTask(task *persistence.Rep
 			Attempt:            common.Int32Ptr(activityInfo.Attempt),
 			LastFailureReason:  common.StringPtr(activityInfo.LastFailureReason),
 			LastWorkerIdentity: common.StringPtr(activityInfo.LastWorkerIdentity),
+			LastFailureDetails: activityInfo.LastFailureDetails,
 		},
 	}
 

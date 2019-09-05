@@ -290,6 +290,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityDetails := []byte("some random activity progress")
 	activityLastFailureReason := "some random reason"
 	activityLastWorkerIdentity := "some random worker identity"
+	activityLastFailureDetails := []byte("some random failure details")
 
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{
@@ -312,6 +313,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		Attempt:                  activityAttempt,
 		LastFailureReason:        activityLastFailureReason,
 		LastWorkerIdentity:       activityLastWorkerIdentity,
+		LastFailureDetails:       activityLastFailureDetails,
 	}, true)
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
 		&persistence.GetDomainResponse{
@@ -344,6 +346,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 			Attempt:            common.Int32Ptr(activityAttempt),
 			LastFailureReason:  common.StringPtr(activityLastFailureReason),
 			LastWorkerIdentity: common.StringPtr(activityLastWorkerIdentity),
+			LastFailureDetails: activityLastFailureDetails,
 		},
 	}).Return(nil).Once()
 
@@ -391,6 +394,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityDetails := []byte("some random activity progress")
 	activityLastFailureReason := "some random reason"
 	activityLastWorkerIdentity := "some random worker identity"
+	activityLastFailureDetails := []byte("some random failure details")
 
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{
@@ -413,6 +417,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		Attempt:                  activityAttempt,
 		LastFailureReason:        activityLastFailureReason,
 		LastWorkerIdentity:       activityLastWorkerIdentity,
+		LastFailureDetails:       activityLastFailureDetails,
 	}, true)
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
 		&persistence.GetDomainResponse{
@@ -445,6 +450,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 			Attempt:            common.Int32Ptr(activityAttempt),
 			LastFailureReason:  common.StringPtr(activityLastFailureReason),
 			LastWorkerIdentity: common.StringPtr(activityLastWorkerIdentity),
+			LastFailureDetails: activityLastFailureDetails,
 		},
 	}).Return(nil).Once()
 

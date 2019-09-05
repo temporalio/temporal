@@ -430,7 +430,7 @@ ExpireActivityTimers:
 		if timeoutType != workflow.TimeoutTypeScheduleToStart {
 			// ScheduleToStart (queue timeout) is not retriable. Instead of retry, customer should set larger
 			// ScheduleToStart timeout.
-			ok, err := msBuilder.RetryActivity(ai, getTimeoutErrorReason(timeoutType))
+			ok, err := msBuilder.RetryActivity(ai, getTimeoutErrorReason(timeoutType), nil)
 			if err != nil {
 				return err
 			}
