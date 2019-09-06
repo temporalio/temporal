@@ -347,11 +347,9 @@ func (e *historyEngineImpl) createMutableState(
 	domainEntry *cache.DomainCacheEntry,
 ) mutableState {
 
-	var msBuilder mutableState
-	if clusterMetadata.IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
-		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
-		// target clusters or not
-		msBuilder = newMutableStateBuilderWithReplicationState(
+	domainName := domainEntry.GetInfo().Name
+	if e.config.EnableEventsV2(domainName) && e.config.EnableNDC(domainName) {
+		return newMutableStateBuilderWithVersionHistories(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
@@ -359,16 +357,26 @@ func (e *historyEngineImpl) createMutableState(
 			domainEntry.GetReplicationPolicy(),
 			domainEntry.GetInfo().Name,
 		)
-	} else {
-		msBuilder = newMutableStateBuilder(
+	}
+
+	if domainEntry.IsGlobalDomain() {
+		// all workflows within a global domain should have replication state,
+		// no matter whether it will be replicated to multiple target clusters or not
+		return newMutableStateBuilderWithReplicationState(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
+			domainEntry.GetFailoverVersion(),
+			domainEntry.GetReplicationPolicy(),
 			domainEntry.GetInfo().Name,
 		)
 	}
-
-	return msBuilder
+	return newMutableStateBuilder(
+		e.shard,
+		e.shard.GetEventsCache(),
+		e.logger,
+		domainEntry.GetInfo().Name,
+	)
 }
 
 func (e *historyEngineImpl) generateFirstDecisionTask(

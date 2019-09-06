@@ -59,7 +59,7 @@ type (
 		// ResetToResetPoint resets the generator to a reset point
 		ResetToResetPoint(int) Generator
 		// SetBatchGenerationRule sets a function that used in GetNextVertex to return batch result
-		SetBatchGenerationRule(func([]Vertex) bool)
+		SetBatchGenerationRule(func([]Vertex, []Vertex) bool)
 	}
 
 	// Vertex represents a state in the model. A state represents a type of an Cadence event
@@ -67,7 +67,7 @@ type (
 		// The name of the vertex. Usually, this will be the Cadence event type
 		SetName(string)
 		GetName() string
-		Equals(Vertex) bool
+		//Equals(Vertex) bool
 		// IsStrictOnNextVertex means if the vertex must be followed by its children
 		// When IsStrictOnNextVertex set to true, it means this event can only follow by its neighbors
 		SetIsStrictOnNextVertex(bool)
@@ -81,6 +81,7 @@ type (
 		GetDataFunc() func(...interface{}) interface{}
 		GenerateData(...interface{}) interface{}
 		GetData() interface{}
+		DeepCopy() Vertex
 	}
 
 	// Edge is the connection between two vertices

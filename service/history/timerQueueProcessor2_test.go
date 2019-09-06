@@ -117,7 +117,8 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
-			TableVersion: persistence.DomainTableVersionV1,
+			FailoverVersion: common.EmptyVersion,
+			TableVersion:    persistence.DomainTableVersionV1,
 		},
 		nil,
 	)

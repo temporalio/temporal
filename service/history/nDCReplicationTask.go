@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -213,11 +214,11 @@ func (t *nDCReplicationTaskImpl) getLogger() log.Logger {
 }
 
 func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory {
-	panic("implement this")
+	return t.versionHistory
 }
 
 func (t *nDCReplicationTaskImpl) getNewVersionHistory() *persistence.VersionHistory {
-	panic("implement this")
+	return t.newVersionHistory
 }
 
 func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsV2Request {
@@ -284,6 +285,8 @@ func validateReplicateEventsRequest(
 	request *h.ReplicateEventsV2Request,
 ) ([]*shared.HistoryEvent, []*shared.HistoryEvent, error) {
 
+	// TODO add validation on version history
+
 	if valid := validateUUID(request.GetDomainUUID()); !valid {
 		return nil, nil, ErrInvalidDomainID
 	}
@@ -302,28 +305,27 @@ func validateReplicateEventsRequest(
 		return nil, nil, ErrEmptyHistoryRawEventBatch
 	}
 
-	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	version, err := validateEvents(events)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if len(newRunEvents) != 0 {
-		newRunVersion, err := validateEvents(newRunEvents)
-		if err != nil {
-			return nil, nil, err
-		}
-		if version != newRunVersion {
-			return nil, nil, ErrEventVersionMismatch
-		}
+	if request.NewRunEvents == nil {
+		return events, nil, nil
 	}
 
-	// TODO add validation on version history
+	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)
+	if err != nil {
+		return nil, nil, err
+	}
 
+	newRunVersion, err := validateEvents(newRunEvents)
+	if err != nil {
+		return nil, nil, err
+	}
+	if version != newRunVersion {
+		return nil, nil, ErrEventVersionMismatch
+	}
 	return events, newRunEvents, nil
 }
 
@@ -355,6 +357,10 @@ func deserializeBlob(
 	historySerializer persistence.PayloadSerializer,
 	blob *shared.DataBlob,
 ) ([]*shared.HistoryEvent, error) {
+
+	if blob == nil {
+		return nil, nil
+	}
 
 	return historySerializer.DeserializeBatchEvents(&persistence.DataBlob{
 		Encoding: common.EncodingTypeThriftRW,

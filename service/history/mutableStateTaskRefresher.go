@@ -213,11 +213,17 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	taskGenerator mutableStateTaskGenerator,
 ) error {
 
+	startEvent, err := mutableState.GetStartEvent()
+	if err != nil {
+		return err
+	}
+
 	executionInfo := mutableState.GetExecutionInfo()
 
 	if executionInfo.CloseStatus == persistence.WorkflowCloseStatusNone {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
+			startEvent,
 		)
 	}
 

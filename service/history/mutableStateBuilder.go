@@ -1619,6 +1619,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
 		e.unixNanoToTime(event.GetTimestamp()),
+		event,
 	); err != nil {
 		return nil, err
 	}
@@ -1675,6 +1676,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 	}
 	if err := e.taskGenerator.generateRecordWorkflowStartedTasks(
 		e.unixNanoToTime(event.GetTimestamp()),
+		event,
 	); err != nil {
 		return nil, err
 	}
@@ -3535,12 +3537,22 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
 	// TODO use version history for both local & global workflow
+	domainName := domainEntry.GetInfo().Name
 	var newStateBuilder *mutableStateBuilder
-	if domainEntry.IsGlobalDomain() {
-		// all workflows within a global domain should have replication state,
-		// no matter whether it will be replicated to multiple
-		// target clusters or not, for 2DC case
-		if e.GetReplicationState() != nil {
+	if e.config.EnableEventsV2(domainName) && e.config.EnableNDC(domainName) {
+		newStateBuilder = newMutableStateBuilderWithVersionHistories(
+			e.shard,
+			e.shard.GetEventsCache(),
+			e.logger,
+			domainEntry.GetFailoverVersion(),
+			domainEntry.GetReplicationPolicy(),
+			domainEntry.GetInfo().Name,
+		)
+	} else {
+		if domainEntry.IsGlobalDomain() {
+			// all workflows within a global domain should have replication state,
+			// no matter whether it will be replicated to multiple
+			// target clusters or not, for 2DC case
 			newStateBuilder = newMutableStateBuilderWithReplicationState(
 				e.shard,
 				e.eventsCache,
@@ -3549,21 +3561,10 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 				e.replicationPolicy,
 				e.domainName,
 			)
-		} else if e.GetVersionHistories() != nil {
-			newStateBuilder = newMutableStateBuilderWithVersionHistories(
-				e.shard,
-				e.eventsCache,
-				e.logger,
-				e.GetCurrentVersion(),
-				e.replicationPolicy,
-				e.domainName,
-			)
 		} else {
-			return nil, nil, &workflow.InternalServiceError{Message: "Continue as new missing both replication state and version history."}
+			// TODO we need to migrate existing local domain workflow to use version history
+			newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainName)
 		}
-	} else {
-		// TODO we need to migrate existing local domain workflow to use version history
-		newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainName)
 	}
 
 	domainID := domainEntry.GetInfo().ID

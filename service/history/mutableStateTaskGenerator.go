@@ -37,13 +37,14 @@ type (
 	mutableStateTaskGenerator interface {
 		generateWorkflowStartTasks(
 			now time.Time,
-			event *shared.HistoryEvent,
+			startEvent *shared.HistoryEvent,
 		) error
 		generateWorkflowCloseTasks(
 			now time.Time,
 		) error
 		generateRecordWorkflowStartedTasks(
 			now time.Time,
+			startEvent *shared.HistoryEvent,
 		) error
 		generateDelayedDecisionTasks(
 			now time.Time,
@@ -120,17 +121,14 @@ func newMutableStateTaskGenerator(
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	now time.Time,
-	event *shared.HistoryEvent,
+	startEvent *shared.HistoryEvent,
 ) error {
 
-	attr := event.WorkflowExecutionStartedEventAttributes
+	attr := startEvent.WorkflowExecutionStartedEventAttributes
 	firstDecisionDelayDuration := time.Duration(attr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	startVersion, err := r.mutableState.GetStartVersion()
-	if err != nil {
-		return err
-	}
+	startVersion := startEvent.GetVersion()
 
 	workflowTimeoutDuration := time.Duration(executionInfo.WorkflowTimeout) * time.Second
 	workflowTimeoutDuration = workflowTimeoutDuration + firstDecisionDelayDuration
@@ -186,10 +184,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	startEvent *shared.HistoryEvent,
 ) error {
 
-	startVersion, err := r.mutableState.GetStartVersion()
-	if err != nil {
-		return err
-	}
+	startVersion := startEvent.GetVersion()
 
 	startAttr := startEvent.WorkflowExecutionStartedEventAttributes
 	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
@@ -228,12 +223,10 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	now time.Time,
+	startEvent *shared.HistoryEvent,
 ) error {
 
-	startVersion, err := r.mutableState.GetStartVersion()
-	if err != nil {
-		return err
-	}
+	startVersion := startEvent.GetVersion()
 
 	r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
 		// TaskID is set by shard

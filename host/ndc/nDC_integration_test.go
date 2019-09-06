@@ -22,7 +22,9 @@ package ndc
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -54,22 +56,22 @@ type (
 		// not merely log an error
 		*require.Assertions
 		suite.Suite
-		active    *host.TestCluster
-		passive   *host.TestCluster
-		logger    log.Logger
-		generator test.Generator
+		active     *host.TestCluster
+		passive    *host.TestCluster
+		generator  test.Generator
+		serializer persistence.PayloadSerializer
+		logger     log.Logger
+
+		domainName string
+		domainID   string
 	}
 )
 
 var (
 	clusterName              = []string{"active", "standby"}
 	clusterReplicationConfig = []*workflow.ClusterReplicationConfiguration{
-		{
-			ClusterName: common.StringPtr(clusterName[0]),
-		},
-		{
-			ClusterName: common.StringPtr(clusterName[1]),
-		},
+		{ClusterName: common.StringPtr(clusterName[0])},
+		{ClusterName: common.StringPtr(clusterName[1])},
 	}
 )
 
@@ -83,6 +85,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	zapLogger, err := zap.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
+	s.serializer = persistence.NewPayloadSerializer()
 	s.logger = loggerimpl.NewLogger(zapLogger)
 
 	fileName := "../testdata/xdc_integration_test_clusters.yaml"
@@ -97,14 +100,20 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 
 	var clusterConfigs []*host.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
+	clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
+	clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
 
-	c, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
+	cluster, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
-	s.active = c
+	s.active = cluster
 
-	c, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterName[1])))
+	cluster, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterName[1])))
 	s.Require().NoError(err)
-	s.passive = c
+	s.passive = cluster
+
+	s.registerDomain()
+
+	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 101)
 }
 
 func (s *nDCIntegrationTestSuite) SetupTest() {
@@ -117,168 +126,239 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 	s.passive.TearDownCluster()
 }
 
-func (s *nDCIntegrationTestSuite) TestSimpleNDC() {
+func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 
-	domainName := "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
-	client1 := s.active.GetFrontendClient() // active
-	regReq := &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domainName),
-		IsGlobalDomain:                         common.BoolPtr(true),
-		Clusters:                               clusterReplicationConfig,
-		ActiveClusterName:                      common.StringPtr(clusterName[0]),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
-	}
-	err := client1.RegisterDomain(createContext(), regReq)
-	s.NoError(err)
+	workflowID := uuid.New()
 
-	descReq := &shared.DescribeDomainRequest{
-		Name: common.StringPtr(domainName),
-	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp)
-	// Wait for domain cache to pick the change
-	time.Sleep(cache.DomainCacheRefreshInterval)
-	root := &test.NDCTestBranch{
-		Batches: make([]test.NDCTestBatch, 0),
-	}
-	wid := uuid.New()
-	rid := uuid.New()
-	wt := "event-generator-workflow-type"
-	tl := "event-generator-taskList"
-	domain := resp.DomainInfo.GetName()
-	version := int64(100)
+	workflowType := "event-generator-workflow-type"
+	tasklist := "event-generator-taskList"
 
-	s.generator = test.InitializeHistoryEventGenerator(domain)
+	historyClient := s.active.GetHistoryClient()
+	print := func(value interface{}) string {
+		bytes, _ := json.MarshalIndent(value, "", "  ")
+		return string(bytes)
+	}
+	//versions := []int64{101, 1, 201}
+	//for _, version := range versions {
+	runID := uuid.New()
+	historyBatch := []*shared.History{}
+	s.generator.Reset()
+	fmt.Printf("##########\n")
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		newBatch := test.NDCTestBatch{
-			Events: events,
+		history := &shared.History{}
+		for _, event := range events {
+			history.Events = append(history.Events, event.GetData().(*shared.HistoryEvent))
 		}
-		root.Batches = append(root.Batches, newBatch)
+		historyBatch = append(historyBatch, history)
 	}
 
-	historyClient := s.passive.GetHistoryClient()
-	replicationInfo := make(map[string]*shared.ReplicationInfo)
-	replicationInfo["active"] = &shared.ReplicationInfo{
-		Version:     common.Int64Ptr(version),
-		LastEventId: common.Int64Ptr(0),
-	}
-
-	replicationInfo["standby"] = &shared.ReplicationInfo{
-		Version:     common.Int64Ptr(version),
-		LastEventId: common.Int64Ptr(0),
-	}
-
-	for _, batch := range root.Batches {
-		// Generate a new run history only when the last event is continue as new
-		newRunHistory := generateNewRunHistory(batch.Events[len(batch.Events)-1].GetData().(*shared.HistoryEvent), version, domain, wid, rid, wt, tl)
-		batchHistory := shared.History{}
+	// TODO temporary code to generate version history
+	//  we should generate version as part of modeled based testing
+	versionHistory := persistence.NewVersionHistory(nil, nil)
+	for _, batch := range historyBatch {
 		for _, event := range batch.Events {
-			historyEvent := event.GetData().(shared.HistoryEvent)
-			batchHistory.Events = append(batchHistory.Events, &historyEvent)
+			fmt.Printf("++++++++++\n")
+			fmt.Printf("## SEEING:\n%v\n.", print(event))
+			fmt.Printf("++++++++++\n")
+			err := versionHistory.AddOrUpdateItem(
+				persistence.NewVersionHistoryItem(
+					event.GetEventId(),
+					event.GetVersion(),
+				))
+			s.NoError(err)
 		}
-		err = historyClient.ReplicateEvents(createContext(), &history.ReplicateEventsRequest{
-			SourceCluster: common.StringPtr("active"),
-			DomainUUID:    resp.DomainInfo.UUID,
+	}
+
+	for _, batch := range historyBatch {
+
+		// TODO temporary code to generate first event & version history
+		//  we should generate these as part of modeled based testing
+		lastEvent := batch.Events[len(batch.Events)-1]
+		newRunEventBlob, newRunVersionHistory := s.generateNewRunHistory(
+			lastEvent, s.domainName, workflowID, runID, 101, workflowType, tasklist,
+		)
+
+		// must serialize events batch after attempt on continue as new as generateNewRunHistory will
+		// modify the NewExecutionRunId attr
+		eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
+		s.NoError(err)
+
+		err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
+			DomainUUID: common.StringPtr(s.domainID),
 			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(wid),
-				RunId:      common.StringPtr(rid),
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
 			},
-			FirstEventId:            batch.Events[0].GetData().(shared.HistoryEvent).EventId,
-			NextEventId:             common.Int64Ptr(*batch.Events[len(batch.Events)-1].GetData().(shared.HistoryEvent).EventId + int64(1)),
-			Version:                 common.Int64Ptr(version),
-			History:                 &batchHistory,
-			NewRunHistory:           newRunHistory,
-			ForceBufferEvents:       common.BoolPtr(false),
-			EventStoreVersion:       common.Int32Ptr(persistence.EventStoreVersionV2),
-			NewRunEventStoreVersion: common.Int32Ptr(persistence.EventStoreVersionV2),
-			ResetWorkflow:           common.BoolPtr(false),
+			VersionHistoryItems:       s.toThriftVersionHistoryItems(versionHistory),
+			Events:                    s.toThriftDataBlob(eventBlob),
+			NewRunVersionHistoryItems: s.toThriftVersionHistoryItems(newRunVersionHistory),
+			NewRunEvents:              s.toThriftDataBlob(newRunEventBlob),
+			ResetWorkflow:             common.BoolPtr(false),
 		})
 		s.Nil(err, "Failed to replicate history event")
 	}
 
 	// get replicated history events from passive side
-	passiveClient := s.passive.GetFrontendClient()
-	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(createContext(), &shared.GetWorkflowExecutionHistoryRequest{
-		Domain: common.StringPtr(domain),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(rid),
+	passiveClient := s.active.GetFrontendClient()
+	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
+		s.createContext(),
+		&shared.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+			MaximumPageSize:        common.Int32Ptr(1000),
+			NextPageToken:          nil,
+			WaitForNewEvent:        common.BoolPtr(false),
+			HistoryEventFilterType: shared.HistoryEventFilterTypeAllEvent.Ptr(),
 		},
-		MaximumPageSize:        common.Int32Ptr(10000),
-		NextPageToken:          nil,
-		WaitForNewEvent:        common.BoolPtr(false),
-		HistoryEventFilterType: shared.HistoryEventFilterTypeAllEvent.Ptr(),
-	})
+	)
 	s.Nil(err, "Failed to get history event from passive side")
 
 	// compare origin events with replicated events
 	batchIndex := 0
-	batch := root.Batches[batchIndex].Events
+	batch := historyBatch[batchIndex].Events
 	eventIndex := 0
 	for _, event := range replicatedHistory.GetHistory().GetEvents() {
 		if eventIndex >= len(batch) {
 			batchIndex++
-			batch = root.Batches[batchIndex].Events
+			batch = historyBatch[batchIndex].Events
 			eventIndex = 0
 		}
-		originEvent := batch[eventIndex].GetData().(shared.HistoryEvent)
+		originEvent := batch[eventIndex]
 		eventIndex++
 		s.Equal(originEvent.GetEventType().String(), event.GetEventType().String(), "The replicated event and the origin event are not the same")
 	}
+	//}
 }
 
-func generateNewRunHistory(
+func (s *nDCIntegrationTestSuite) registerDomain() {
+	s.domainName = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
+	client1 := s.active.GetFrontendClient() // active
+	err := client1.RegisterDomain(s.createContext(), &shared.RegisterDomainRequest{
+		Name:                                   common.StringPtr(s.domainName),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	})
+	s.Require().NoError(err)
+
+	descReq := &shared.DescribeDomainRequest{
+		Name: common.StringPtr(s.domainName),
+	}
+	resp, err := client1.DescribeDomain(s.createContext(), descReq)
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+	s.domainID = resp.GetDomainInfo().GetUUID()
+	// Wait for domain cache to pick the change
+	time.Sleep(2 * cache.DomainCacheRefreshInterval)
+
+	s.logger.Info(fmt.Sprintf("Domain name: %v - ID: %v", s.domainName, s.domainID))
+}
+
+func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	event *shared.HistoryEvent,
-	version int64,
 	domain string,
 	workflowID string,
 	runID string,
+	version int64,
 	workflowType string,
 	taskList string,
-) *shared.History {
+) (*persistence.DataBlob, *persistence.VersionHistory) {
 
-	if event.GetWorkflowExecutionContinuedAsNewEventAttributes() != nil {
-		event.WorkflowExecutionContinuedAsNewEventAttributes.NewExecutionRunId = common.StringPtr(uuid.New())
-		return &shared.History{
-			Events: []*shared.HistoryEvent{
-				{
-					EventId:   common.Int64Ptr(1),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted),
-					Version:   common.Int64Ptr(version),
-					TaskId:    common.Int64Ptr(1),
-					WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:         common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(workflowType)}),
-						ParentWorkflowDomain: common.StringPtr(domain),
-						ParentWorkflowExecution: &shared.WorkflowExecution{
-							WorkflowId: common.StringPtr(workflowID),
-							RunId:      common.StringPtr(runID),
-						},
-						ParentInitiatedEventId: common.Int64Ptr(event.GetEventId()),
-						TaskList: common.TaskListPtr(shared.TaskList{
-							Name: common.StringPtr(taskList),
-							Kind: common.TaskListKindPtr(shared.TaskListKindNormal),
-						}),
-						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(10),
-						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-						ContinuedExecutionRunId:             common.StringPtr(runID),
-						Initiator:                           shared.ContinueAsNewInitiatorCronSchedule.Ptr(),
-						OriginalExecutionRunId:              common.StringPtr(runID),
-						Identity:                            common.StringPtr("NDC-test"),
-						FirstExecutionRunId:                 common.StringPtr(runID),
-						Attempt:                             common.Int32Ptr(0),
-						ExpirationTimestamp:                 common.Int64Ptr(time.Now().Add(time.Minute).UnixNano()),
-					},
-				},
-			},
-		}
+	// TODO temporary code to generate first event & version history
+	//  we should generate these as part of modeled based testing
+
+	if event.GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
+		return nil, nil
 	}
-	return nil
+
+	event.WorkflowExecutionContinuedAsNewEventAttributes.NewExecutionRunId = common.StringPtr(uuid.New())
+
+	newRunFirstEvent := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(common.FirstEventID),
+		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+		EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted),
+		Version:   common.Int64Ptr(version),
+		TaskId:    common.Int64Ptr(1),
+		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:         common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(workflowType)}),
+			ParentWorkflowDomain: common.StringPtr(domain),
+			ParentWorkflowExecution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(uuid.New()),
+				RunId:      common.StringPtr(uuid.New()),
+			},
+			ParentInitiatedEventId: common.Int64Ptr(event.GetEventId()),
+			TaskList: common.TaskListPtr(shared.TaskList{
+				Name: common.StringPtr(taskList),
+				Kind: common.TaskListKindPtr(shared.TaskListKindNormal),
+			}),
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(10),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+			ContinuedExecutionRunId:             common.StringPtr(runID),
+			Initiator:                           shared.ContinueAsNewInitiatorCronSchedule.Ptr(),
+			OriginalExecutionRunId:              common.StringPtr(runID),
+			Identity:                            common.StringPtr("NDC-test"),
+			FirstExecutionRunId:                 common.StringPtr(runID),
+			Attempt:                             common.Int32Ptr(0),
+			ExpirationTimestamp:                 common.Int64Ptr(time.Now().Add(time.Minute).UnixNano()),
+		},
+	}
+
+	eventBlob, err := s.serializer.SerializeBatchEvents([]*shared.HistoryEvent{newRunFirstEvent}, common.EncodingTypeThriftRW)
+	s.NoError(err)
+
+	newRunVersionHistory := persistence.NewVersionHistory(nil, nil)
+	err = newRunVersionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+		newRunFirstEvent.GetEventId(),
+		newRunFirstEvent.GetVersion(),
+	))
+	s.NoError(err)
+
+	return eventBlob, newRunVersionHistory
 }
 
-func createContext() context.Context {
+func (s *nDCIntegrationTestSuite) toThriftDataBlob(
+	blob *persistence.DataBlob,
+) *shared.DataBlob {
+
+	if blob == nil {
+		return nil
+	}
+
+	var encodingType shared.EncodingType
+	switch blob.GetEncoding() {
+	case common.EncodingTypeThriftRW:
+		encodingType = shared.EncodingTypeThriftRW
+	case common.EncodingTypeJSON,
+		common.EncodingTypeGob,
+		common.EncodingTypeUnknown,
+		common.EncodingTypeEmpty:
+		panic(fmt.Sprintf("unsupported encoding type: %v", blob.GetEncoding()))
+	default:
+		panic(fmt.Sprintf("unknown encoding type: %v", blob.GetEncoding()))
+	}
+
+	return &shared.DataBlob{
+		EncodingType: encodingType.Ptr(),
+		Data:         blob.Data,
+	}
+}
+
+func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(
+	versionHistory *persistence.VersionHistory,
+) []*shared.VersionHistoryItem {
+	if versionHistory == nil {
+		return nil
+	}
+
+	return versionHistory.ToThrift().Items
+}
+
+func (s *nDCIntegrationTestSuite) createContext() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
 	return ctx
 }

@@ -22,6 +22,7 @@ package testing
 
 import (
 	"fmt"
+	"runtime/debug"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -40,7 +41,7 @@ func TestHistoryEventTestSuite(t *testing.T) {
 }
 
 func (s *historyEventTestSuit) SetupSuite() {
-	s.generator = InitializeHistoryEventGenerator("domain")
+	s.generator = InitializeHistoryEventGenerator("domain", 1)
 }
 
 func (s *historyEventTestSuit) SetupTest() {
@@ -49,21 +50,41 @@ func (s *historyEventTestSuit) SetupTest() {
 
 // This is a sample about how to use the generator
 func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("stacktrace from panic: \n" + string(debug.Stack()))
+		}
+	}()
+	maxEventID := int64(0)
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
+		fmt.Println("########################")
 		for _, e := range events {
+			event := e.GetData().(*shared.HistoryEvent)
+			if maxEventID > event.GetEventId() {
+				s.Fail("event id sequence is incorrect")
+			}
+			maxEventID = event.GetEventId()
 			fmt.Println(e.GetName())
-			fmt.Println(e.GetData().(*shared.HistoryEvent).GetEventId())
+			fmt.Println(event.GetEventId())
 		}
 	}
 	s.NotEmpty(s.generator.ListGeneratedVertices())
+	fmt.Println("==========================")
+	newGenerator := s.generator.ResetToResetPoint(0)
+	maxEventID = int64(0)
 
-	newGenerator := s.generator.RandomResetToResetPoint()
 	for newGenerator.HasNextVertex() {
 		events := newGenerator.GetNextVertices()
+		fmt.Println("########################")
 		for _, e := range events {
+			event := e.GetData().(*shared.HistoryEvent)
+			if maxEventID > event.GetEventId() {
+				s.Fail("event id sequence is incorrect")
+			}
+			maxEventID = event.GetEventId()
 			fmt.Println(e.GetName())
-			fmt.Println(e.GetData().(*shared.HistoryEvent).GetEventId())
+			fmt.Println(event.GetEventId())
 		}
 	}
 	s.NotEmpty(newGenerator.ListGeneratedVertices())

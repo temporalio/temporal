@@ -34,7 +34,7 @@ func NewVersionHistoryItem(
 	inputVersion int64,
 ) *VersionHistoryItem {
 
-	if inputEventID < 0 || inputVersion < 0 {
+	if inputEventID < 0 || (inputVersion < 0 && inputVersion != common.EmptyVersion) {
 		panic(fmt.Sprintf(
 			"invalid version history item event ID: %v, version: %v",
 			inputEventID,

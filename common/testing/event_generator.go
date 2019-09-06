@@ -22,7 +22,6 @@ package testing
 
 import (
 	"math/rand"
-	"strings"
 )
 
 const (
@@ -31,7 +30,7 @@ const (
 )
 
 var (
-	defaultBatchFunc = func(batch []Vertex) bool {
+	defaultBatchFunc = func(batch []Vertex, history []Vertex) bool {
 		return len(batch) == 0
 	}
 )
@@ -55,15 +54,15 @@ type (
 	// The event generator will generate next history event
 	// based on the history event transition graph defined in the model
 	EventGenerator struct {
-		connections         map[Vertex][]Edge
+		connections         map[string][]Edge
 		previousVertices    []Vertex
 		leafVertices        []Vertex
 		entryVertices       []Vertex
-		exitVertices        map[Vertex]bool
+		exitVertices        map[string]bool
 		randomEntryVertices []Vertex
 		dice                *rand.Rand
 		seed                int64
-		canDoBatch          func([]Vertex) bool
+		canDoBatch          func([]Vertex, []Vertex) bool
 		resetPoints         []ResetPoint
 		resetCount          int64
 	}
@@ -96,16 +95,16 @@ func NewEventGenerator(
 ) Generator {
 
 	return &EventGenerator{
-		connections:         make(map[Vertex][]Edge),
+		connections:         make(map[string][]Edge),
 		previousVertices:    make([]Vertex, 0),
 		leafVertices:        make([]Vertex, 0),
 		entryVertices:       make([]Vertex, 0),
-		exitVertices:        make(map[Vertex]bool),
+		exitVertices:        make(map[string]bool),
 		randomEntryVertices: make([]Vertex, 0),
 		dice:                rand.New(rand.NewSource(seed)),
 		seed:                seed,
 		canDoBatch:          defaultBatchFunc,
-		resetPoints:         make([]ResetPoint, 0),
+		resetPoints:         []ResetPoint{},
 		resetCount:          0,
 	}
 }
@@ -127,7 +126,7 @@ func (g *EventGenerator) AddExitVertex(
 ) {
 
 	for _, v := range exit {
-		g.exitVertices[v] = true
+		g.exitVertices[v.GetName()] = true
 	}
 }
 
@@ -145,10 +144,10 @@ func (g *EventGenerator) AddModel(
 ) {
 
 	for _, e := range model.ListEdges() {
-		if _, ok := g.connections[e.GetStartVertex()]; !ok {
-			g.connections[e.GetStartVertex()] = make([]Edge, 0)
+		if _, ok := g.connections[e.GetStartVertex().GetName()]; !ok {
+			g.connections[e.GetStartVertex().GetName()] = make([]Edge, 0)
 		}
-		g.connections[e.GetStartVertex()] = append(g.connections[e.GetStartVertex()], e)
+		g.connections[e.GetStartVertex().GetName()] = append(g.connections[e.GetStartVertex().GetName()], e)
 	}
 }
 
@@ -162,7 +161,7 @@ func (g EventGenerator) ListGeneratedVertices() []Vertex {
 func (g *EventGenerator) HasNextVertex() bool {
 
 	for _, prev := range g.previousVertices {
-		if _, ok := g.exitVertices[prev]; ok {
+		if _, ok := g.exitVertices[prev.GetName()]; ok {
 			return false
 		}
 	}
@@ -177,7 +176,7 @@ func (g *EventGenerator) GetNextVertices() []Vertex {
 	}
 
 	batch := make([]Vertex, 0)
-	for g.HasNextVertex() && g.canDoBatch(batch) {
+	for g.HasNextVertex() && g.canDoBatch(batch, g.previousVertices) {
 		res := g.generateNextEventBatch()
 		g.updateContext(res)
 		batch = append(batch, res...)
@@ -204,7 +203,7 @@ func (g *EventGenerator) ListResetPoint() []ResetPoint {
 func (g *EventGenerator) RandomResetToResetPoint() Generator {
 
 	// Random reset does not reset to index 0
-	nextIdx := g.dice.Intn(len(g.resetPoints)-1) + 1
+	nextIdx := g.dice.Intn(len(g.resetPoints) - 1)
 	return g.ResetToResetPoint(nextIdx)
 }
 
@@ -244,7 +243,7 @@ func (g *EventGenerator) ResetToResetPoint(
 
 // SetBatchGenerationRule sets a function to determine next generated batch of history events
 func (g *EventGenerator) SetBatchGenerationRule(
-	canDoBatchFunc func([]Vertex) bool,
+	canDoBatchFunc func([]Vertex, []Vertex) bool,
 ) {
 
 	g.canDoBatch = canDoBatchFunc
@@ -297,7 +296,7 @@ func (g *EventGenerator) getEntryVertex() Vertex {
 	}
 	nextRange := len(g.entryVertices)
 	nextIdx := g.dice.Intn(nextRange)
-	vertex := g.entryVertices[nextIdx]
+	vertex := g.entryVertices[nextIdx].DeepCopy()
 	vertex.GenerateData(nil)
 	return vertex
 }
@@ -309,14 +308,14 @@ func (g *EventGenerator) getRandomVertex() Vertex {
 	}
 	nextRange := len(g.randomEntryVertices)
 	nextIdx := g.dice.Intn(nextRange)
-	vertex := g.randomEntryVertices[nextIdx]
-	lastEvent := g.previousVertices[len(g.previousVertices)-1]
+	vertex := g.randomEntryVertices[nextIdx].DeepCopy()
+	parentEvent := g.previousVertices[len(g.previousVertices)-1]
 
 	versionBump := int64(0)
 	if g.shouldBumpVersion() {
 		versionBump = versionBumpGap
 	}
-	vertex.GenerateData(lastEvent.GetData(), int64(1), versionBump, g.resetCount)
+	vertex.GenerateData(parentEvent.GetData(), parentEvent.GetData(), versionBump, g.resetCount)
 	return vertex
 }
 
@@ -353,7 +352,7 @@ func (g *EventGenerator) findAccessibleVertex(
 		vertexIndex = len(g.leafVertices) - 1
 		candidate = g.leafVertices[vertexIndex]
 	}
-	neighbors := g.connections[candidate]
+	neighbors := g.connections[candidate.GetName()]
 	for _, nextV := range neighbors {
 		if nextV.GetCondition() == nil || nextV.GetCondition()() {
 			return true, vertexIndex
@@ -372,13 +371,15 @@ func (g *EventGenerator) randomNextVertex(
 		versionBump = versionBumpGap
 	}
 
-	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 2
+	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 1
 	res := make([]Vertex, 0)
-	for i := 1; i < count; i++ {
+	latestVertex := g.previousVertices[len(g.previousVertices)-1]
+	for i := 0; i < count; i++ {
 		endVertex := g.pickRandomVertex(nextVertex)
-		endVertex.GenerateData(nextVertex.GetData(), int64(i), versionBump, g.resetCount)
+		endVertex.GenerateData(nextVertex.GetData(), latestVertex.GetData(), versionBump, g.resetCount)
+		latestVertex = endVertex
 		res = append(res, endVertex)
-		if _, ok := g.exitVertices[endVertex]; ok {
+		if _, ok := g.exitVertices[endVertex.GetName()]; ok {
 			res = []Vertex{endVertex}
 			return res
 		}
@@ -390,7 +391,7 @@ func (g *EventGenerator) pickRandomVertex(
 	nextVertex Vertex,
 ) Vertex {
 
-	neighbors := g.connections[nextVertex]
+	neighbors := g.connections[nextVertex.GetName()]
 	neighborsRange := len(neighbors)
 	nextIdx := g.dice.Intn(neighborsRange)
 	for neighbors[nextIdx].GetCondition() != nil && !neighbors[nextIdx].GetCondition()() {
@@ -401,7 +402,7 @@ func (g *EventGenerator) pickRandomVertex(
 	if newConnection.GetAction() != nil {
 		newConnection.GetAction()()
 	}
-	return endVertex
+	return endVertex.DeepCopy()
 }
 
 func (g *EventGenerator) shouldBumpVersion() bool {
@@ -500,12 +501,12 @@ func (he *HistoryEventVertex) SetName(
 }
 
 // Equals compares two vertex
-func (he *HistoryEventVertex) Equals(
-	v Vertex,
-) bool {
-
-	return strings.EqualFold(he.name, v.GetName())
-}
+//func (he *HistoryEventVertex) Equals(
+//	v Vertex,
+//) bool {
+//
+//	return strings.EqualFold(he.name, v.GetName()) && he.data == v.GetData()
+//}
 
 // SetIsStrictOnNextVertex sets if a vertex can be added between the current vertex and its child Vertices
 func (he *HistoryEventVertex) SetIsStrictOnNextVertex(
@@ -569,6 +570,18 @@ func (he *HistoryEventVertex) GenerateData(
 func (he HistoryEventVertex) GetData() interface{} {
 
 	return he.data
+}
+
+// GetData returns the vertex data
+func (he HistoryEventVertex) DeepCopy() Vertex {
+
+	return &HistoryEventVertex{
+		name:                 he.GetName(),
+		isStrictOnNextVertex: he.IsStrictOnNextVertex(),
+		maxNextGeneration:    he.GetMaxNextVertex(),
+		dataFunc:             he.GetDataFunc(),
+		data:                 he.GetData(),
+	}
 }
 
 // NewHistoryEventModel initials new history event model

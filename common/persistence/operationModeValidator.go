@@ -81,8 +81,8 @@ func ValidateUpdateWorkflowModeState(
 
 	switch mode {
 	case UpdateWorkflowModeUpdateCurrent:
-		if currentWorkflowState == WorkflowStateZombie ||
-			(newWorkflowState != nil && *newWorkflowState == WorkflowStateZombie) {
+		if (currentWorkflowState == WorkflowStateZombie && newWorkflowState == nil) ||
+			(currentWorkflowState == WorkflowStateZombie && newWorkflowState != nil && *newWorkflowState == WorkflowStateZombie) {
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf(
 					"Invalid workflow update mode %v, state: %v",
