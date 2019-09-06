@@ -6,6 +6,7 @@
 *.iml
 *.cov
 *.html
+.gobincache/
 .tmp/
 .vscode/
 /vendor
