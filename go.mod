@@ -69,8 +69,8 @@ require (
 	github.com/uber-go/kafka-client v0.2.2
 	github.com/uber-go/mapdecode v1.0.0 // indirect
 	github.com/uber-go/tally v3.3.11+incompatible
-	github.com/uber/jaeger-client-go v2.16.0+incompatible // indirect
-	github.com/uber/jaeger-lib v2.0.0+incompatible // indirect
+	github.com/uber/jaeger-client-go v2.15.0+incompatible // indirect
+	github.com/uber/jaeger-lib v1.5.0 // indirect
 	github.com/uber/ringpop-go v0.8.5
 	github.com/uber/tchannel-go v1.14.0
 	github.com/urfave/cli v1.20.0
