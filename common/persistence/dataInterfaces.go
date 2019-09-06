@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -141,6 +142,8 @@ const (
 	// that do not have a target workflow
 	TransferTaskTransferTargetRunID = "30000000-0000-f000-f000-000000000002"
 )
+
+const numItemsInGarbageInfo = 3
 
 type (
 	// InvalidPersistenceRequestError represents invalid request to persistence
@@ -2408,6 +2411,20 @@ func NewHistoryBranchToken(treeID string) ([]byte, error) {
 	return token, nil
 }
 
+// NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
+func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
+	bi := &workflow.HistoryBranch{
+		TreeID:    &treeID,
+		BranchID:  &branchID,
+		Ancestors: []*workflow.HistoryBranchRange{},
+	}
+	token, err := internalThriftEncoder.Encode(bi)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
 // NewHistoryBranchTokenFromAnother make up a branchToken
 func NewHistoryBranchTokenFromAnother(branchID string, anotherToken []byte) ([]byte, error) {
 	var branch workflow.HistoryBranch
@@ -2426,4 +2443,21 @@ func NewHistoryBranchTokenFromAnother(branchID string, anotherToken []byte) ([]b
 		return nil, err
 	}
 	return token, nil
+}
+
+func BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID string) string {
+	return fmt.Sprintf("%v:%v:%v", domainID, workflowID, runID)
+}
+
+func SplitHistoryGarbageCleanupInfo(info string) (domainID, workflowID, runID string, err error) {
+	ss := strings.Split(info, ":")
+	// workflowID can contain ":" so len(ss) can be greater than 3
+	if len(ss) < numItemsInGarbageInfo {
+		return "", "", "", fmt.Errorf("not able to split info for  %s", info)
+	}
+	domainID = ss[0]
+	runID = ss[len(ss)-1]
+	workflowEnd := len(info) - len(runID) - 1
+	workflowID = info[len(domainID)+1 : workflowEnd]
+	return
 }

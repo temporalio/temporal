@@ -36,7 +36,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/batcher"
@@ -147,29 +146,22 @@ func (s *Service) Start() {
 
 	replicatorEnabled := base.GetClusterMetadata().IsGlobalDomainEnabled()
 	archiverEnabled := base.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	scannerEnabled := s.config.ScannerCfg.Persistence.DefaultStoreType() == config.StoreTypeSQL
 	batcherEnabled := s.config.EnableBatcher()
 
-	if replicatorEnabled || archiverEnabled || scannerEnabled || batcherEnabled {
-		pConfig := s.params.PersistenceConfig
-		pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
-		pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
+	pConfig := s.params.PersistenceConfig
+	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
+	pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
+	s.ensureSystemDomainExists(pFactory, base.GetClusterMetadata().GetCurrentClusterName())
 
-		if archiverEnabled || scannerEnabled {
-			s.ensureSystemDomainExists(pFactory, base.GetClusterMetadata().GetCurrentClusterName())
-		}
-		if replicatorEnabled {
-			s.startReplicator(base, pFactory)
-		}
-		if archiverEnabled {
-			s.startArchiver(base, pFactory)
-		}
-		if scannerEnabled {
-			s.startScanner(base)
-		}
-		if batcherEnabled {
-			s.startBatcher(base)
-		}
+	s.startScanner(base)
+	if replicatorEnabled {
+		s.startReplicator(base, pFactory)
+	}
+	if archiverEnabled {
+		s.startArchiver(base, pFactory)
+	}
+	if batcherEnabled {
+		s.startBatcher(base)
 	}
 
 	s.logger.Info("service started", tag.ComponentWorker)
@@ -205,6 +197,7 @@ func (s *Service) startScanner(base service.Service) {
 	params := &scanner.BootstrapParams{
 		Config:        *s.config.ScannerCfg,
 		SDKClient:     s.params.PublicClient,
+		ClientBean:    base.GetClientBean(),
 		MetricsClient: s.metricsClient,
 		Logger:        s.logger,
 		TallyScope:    s.params.MetricScope,

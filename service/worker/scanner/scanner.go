@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
@@ -60,6 +61,8 @@ type (
 		Config Config
 		// SDKClient is an instance of cadence sdk client
 		SDKClient workflowserviceclient.Interface
+		// clientBean is an instance of ClientBean
+		ClientBean client.Bean
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		Logger        log.Logger
@@ -72,8 +75,10 @@ type (
 	scannerContext struct {
 		taskDB        p.TaskManager
 		domainDB      p.MetadataManager
+		historyDB     p.HistoryV2Manager
 		cfg           Config
 		sdkClient     workflowserviceclient.Interface
+		clientBean    client.Bean
 		metricsClient metrics.Client
 		tallyScope    tally.Scope
 		logger        log.Logger
@@ -104,6 +109,7 @@ func New(params *BootstrapParams) *Scanner {
 		context: scannerContext{
 			cfg:           cfg,
 			sdkClient:     params.SDKClient,
+			clientBean:    params.ClientBean,
 			metricsClient: params.MetricsClient,
 			tallyScope:    params.TallyScope,
 			zapLogger:     zapLogger,
@@ -124,35 +130,41 @@ func (s *Scanner) Start() error {
 		MaxConcurrentDecisionTaskExecutionSize: maxConcurrentDecisionTaskExecutionSize,
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
-	go s.startWorkflowWithRetry()
+
+	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL {
+		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
+	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra {
+		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
+	}
+
 	worker := worker.New(s.context.sdkClient, common.SystemLocalDomainName, tlScannerTaskListName, workerOpts)
 	return worker.Start()
 }
 
-func (s *Scanner) startWorkflowWithRetry() error {
+func (s *Scanner) startWorkflowWithRetry(options cclient.StartWorkflowOptions, wfType string) error {
 	client := cclient.NewClient(s.context.sdkClient, common.SystemLocalDomainName, &cclient.Options{})
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	return backoff.Retry(func() error {
-		return s.startWorkflow(client)
+		return s.startWorkflow(client, options, wfType)
 	}, policy, func(err error) bool {
 		return true
 	})
 }
 
-func (s *Scanner) startWorkflow(client cclient.Client) error {
+func (s *Scanner) startWorkflow(client cclient.Client, options cclient.StartWorkflowOptions, wfType string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	_, err := client.StartWorkflow(ctx, tlScannerWFStartOptions, tlScannerWFTypeName)
+	_, err := client.StartWorkflow(ctx, options, wfType)
 	cancel()
 	if err != nil {
 		if _, ok := err.(*shared.WorkflowExecutionAlreadyStartedError); ok {
 			return nil
 		}
-		s.context.logger.Error("error starting scanner workflow", tag.Error(err))
+		s.context.logger.Error("error starting "+wfType+" workflow", tag.Error(err))
 		return err
 	}
-	s.context.logger.Info("Scanner workflow successfully started")
+	s.context.logger.Info(wfType + " workflow successfully started")
 	return nil
 }
 
@@ -167,7 +179,12 @@ func (s *Scanner) buildContext() error {
 	if err != nil {
 		return err
 	}
+	historyDB, err := pFactory.NewHistoryV2Manager()
+	if err != nil {
+		return err
+	}
 	s.context.taskDB = taskDB
 	s.context.domainDB = domainDB
+	s.context.historyDB = historyDB
 	return nil
 }

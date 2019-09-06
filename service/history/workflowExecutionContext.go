@@ -645,7 +645,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 		execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch: true,
-			Info:        historyGarbageCleanupInfo(domainID, workflowID, runID),
+			Info:        persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID),
 			BranchToken: branchToken,
 			Events:      events,
 			// TransactionID is set by shard context

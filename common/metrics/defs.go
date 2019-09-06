@@ -884,6 +884,8 @@ const (
 	TaskListScavengerScope
 	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
 	BatcherScope
+	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
+	HistoryScavengerScope
 
 	NumWorkerScopes
 )
@@ -1270,6 +1272,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverPumpScope:                   {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
+		HistoryScavengerScope:               {operation: "historyscavenger"},
 		BatcherScope:                        {operation: "batcher"},
 	},
 }
@@ -1574,6 +1577,10 @@ const (
 	ExecutorTasksDroppedCount
 	BatcherProcessorSuccess
 	BatcherProcessorFailures
+	HistoryScavengerSuccessCount
+	HistoryScavengerErrorCount
+	HistoryScavengerSkipCount
+
 	NumWorkerMetrics
 )
 
@@ -1855,6 +1862,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ExecutorTasksDroppedCount:              {metricName: "executor_dropped", metricType: Counter},
 		BatcherProcessorSuccess:                {metricName: "batcher_processor_requests", metricType: Counter},
 		BatcherProcessorFailures:               {metricName: "batcher_processor_errors", metricType: Counter},
+		HistoryScavengerSuccessCount:           {metricName: "scavenger_success", metricType: Counter},
+		HistoryScavengerErrorCount:             {metricName: "scavenger_errors", metricType: Counter},
+		HistoryScavengerSkipCount:              {metricName: "scavenger_skips", metricType: Counter},
 	},
 }
 
