@@ -56,33 +56,55 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 		}
 	}()
 	maxEventID := int64(0)
+	maxVersion := int64(1)
+	maxTaskID := int64(0)
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
+
 		fmt.Println("########################")
 		for _, e := range events {
 			event := e.GetData().(*shared.HistoryEvent)
-			if maxEventID > event.GetEventId() {
+			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}
 			maxEventID = event.GetEventId()
+			if maxVersion > event.GetVersion() {
+				s.Fail("event version is incorrect")
+			}
+			maxVersion = event.GetVersion()
+			if maxTaskID > event.GetTaskId() {
+				s.Fail("event task id is incorrect")
+			}
+			maxTaskID = event.GetTaskId()
 			fmt.Println(e.GetName())
 			fmt.Println(event.GetEventId())
 		}
 	}
 	s.NotEmpty(s.generator.ListGeneratedVertices())
 	fmt.Println("==========================")
-	newGenerator := s.generator.ResetToResetPoint(0)
-	maxEventID = int64(0)
-
+	newGenerator := s.generator.RandomResetToResetPoint()
+	previousEvents := newGenerator.ListGeneratedVertices()
+	lastEvent := previousEvents[len(previousEvents)-1].GetData().(*shared.HistoryEvent)
+	maxEventID = lastEvent.GetEventId()
+	maxVersion = lastEvent.GetVersion()
+	maxTaskID = lastEvent.GetTaskId()
 	for newGenerator.HasNextVertex() {
 		events := newGenerator.GetNextVertices()
 		fmt.Println("########################")
 		for _, e := range events {
 			event := e.GetData().(*shared.HistoryEvent)
-			if maxEventID > event.GetEventId() {
+			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}
 			maxEventID = event.GetEventId()
+			if maxVersion > event.GetVersion() {
+				s.Fail("event version is incorrect")
+			}
+			maxVersion = event.GetVersion()
+			if maxTaskID > event.GetTaskId() {
+				s.Fail("event task id is incorrect")
+			}
+			maxTaskID = event.GetTaskId()
 			fmt.Println(e.GetName())
 			fmt.Println(event.GetEventId())
 		}
