@@ -144,7 +144,7 @@ func (c *client) archiveInline(ctx context.Context, request *ClientRequest, tagg
 	defer func() {
 		if err != nil {
 			c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.ArchiverClientInlineArchiveFailureCount)
-			taggedLogger.Error("failed to perform workflow history archival inline", tag.Error(err))
+			taggedLogger.Info("failed to perform workflow history archival inline", tag.Error(err))
 		}
 	}()
 	c.metricsClient.IncCounter(metrics.ArchiverClientScope, metrics.ArchiverClientInlineArchiveAttemptCount)
