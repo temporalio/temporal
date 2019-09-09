@@ -28,6 +28,7 @@ enum ReplicationTaskType {
   SyncShardStatus
   SyncActivity
   HistoryMetadata
+  HistoryV2
 }
 
 enum DomainOperation {
@@ -59,6 +60,7 @@ struct HistoryTaskAttributes {
   100: optional i32 eventStoreVersion
   110: optional i32 newRunEventStoreVersion
   120: optional bool resetWorkflow
+  130: optional bool newRunNDC
 }
 
 struct HistoryMetadataTaskAttributes {
@@ -92,14 +94,26 @@ struct SyncActicvityTaskAttributes {
   130: optional string lastWorkerIdentity
 }
 
+struct HistoryTaskV2Attributes {
+  10: optional string domainId
+  20: optional string workflowId
+  30: optional string runId
+  40: optional list<shared.VersionHistoryItem> versionHistoryItems
+  50: optional shared.DataBlob events
+  // new run events does not need version history since there is no prior events
+  70: optional shared.DataBlob newRunEvents
+  80: optional bool resetWorkflow
+}
+
 struct ReplicationTask {
   10: optional ReplicationTaskType taskType
   11: optional i64 (js.type = "Long") sourceTaskId
   20: optional DomainTaskAttributes domainTaskAttributes
-  30: optional HistoryTaskAttributes historyTaskAttributes
+  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done
   40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes
   50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes
-  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes
+  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done
+  70: optional HistoryTaskV2Attributes historyTaskV2Attributes
 }
 
 struct ReplicationToken {

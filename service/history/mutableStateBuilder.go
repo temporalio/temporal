@@ -3536,7 +3536,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
-	// TODO use version history for both local & global workflow
 	domainName := domainEntry.GetInfo().Name
 	var newStateBuilder *mutableStateBuilder
 	if e.config.EnableEventsV2(domainName) && e.config.EnableNDC(domainName) {
@@ -3562,7 +3561,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 				e.domainName,
 			)
 		} else {
-			// TODO we need to migrate existing local domain workflow to use version history
 			newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainName)
 		}
 	}
@@ -4447,18 +4445,30 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 	if err != nil {
 		return nil, err
 	}
-	return []persistence.Task{
-		&persistence.HistoryReplicationTask{
-			FirstEventID:            firstEvent.GetEventId(),
-			NextEventID:             lastEvent.GetEventId() + 1,
-			Version:                 firstEvent.GetVersion(),
-			LastReplicationInfo:     e.GetReplicationState().LastReplicationInfo,
-			EventStoreVersion:       e.GetEventStoreVersion(),
-			BranchToken:             currentBranchToken,
-			NewRunEventStoreVersion: 0,
-			NewRunBranchToken:       nil,
-		},
-	}, nil
+
+	replicationTask := &persistence.HistoryReplicationTask{
+		FirstEventID:            firstEvent.GetEventId(),
+		NextEventID:             lastEvent.GetEventId() + 1,
+		Version:                 firstEvent.GetVersion(),
+		BranchToken:             currentBranchToken,
+		NewRunEventStoreVersion: 0,
+		NewRunBranchToken:       nil,
+	}
+
+	// TODO after NDC release and migration is done, remove this check
+	if e.GetReplicationState() != nil {
+		replicationTask.LastReplicationInfo = e.GetReplicationState().LastReplicationInfo
+		replicationTask.EventStoreVersion = e.GetEventStoreVersion()
+	} else if e.GetVersionHistories() != nil {
+		replicationTask.LastReplicationInfo = nil
+		replicationTask.EventStoreVersion = persistence.EventStoreVersionV2
+	} else {
+		return nil, &workflow.InternalServiceError{
+			Message: "should not generate replication task when missing replication state & version history",
+		}
+	}
+
+	return []persistence.Task{replicationTask}, nil
 }
 
 func (e *mutableStateBuilder) syncActivityToReplicationTask(
@@ -4507,7 +4517,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 }
 
 func (e *mutableStateBuilder) canReplicateEvents() bool {
-	return e.GetReplicationState() != nil &&
+	return (e.GetReplicationState() != nil || e.GetVersionHistories() != nil) &&
 		e.replicationPolicy == cache.ReplicationPolicyMultiCluster
 }
 

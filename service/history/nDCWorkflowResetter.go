@@ -96,58 +96,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	baseVersion int64,
 ) (mutableState, error) {
 
-	baseWorkflow, err := r.transactionMgr.loadNDCWorkflow(
-		ctx,
-		r.domainID,
-		r.workflowID,
-		r.baseRunID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	baseVersionHistories := baseWorkflow.getMutableState().GetVersionHistories()
-	index, err := baseVersionHistories.FindFirstVersionHistoryIndexByItem(
-		persistence.NewVersionHistoryItem(baseEventID, baseVersion),
-	)
-	if err != nil {
-		// TODO we should use a new retry error for 3+DC
-		return nil, newRetryTaskErrorWithHint(
-			ErrRetryBufferEventsMsg,
-			r.domainID,
-			r.workflowID,
-			r.baseRunID,
-			baseWorkflow.getMutableState().GetNextEventID(), // especially here
-		)
-	}
-
-	baseVersionHistory, err := baseVersionHistories.GetVersionHistory(index)
-	if err != nil {
-		return nil, err
-	}
-	baseBranchToken := baseVersionHistory.GetBranchToken()
-
-	baseWorkflowIdentifier := definition.NewWorkflowIdentifier(
-		r.domainID,
-		r.workflowID,
-		r.baseRunID,
-	)
-	resetWorkflowIdentifier := definition.NewWorkflowIdentifier(
-		r.domainID,
-		r.workflowID,
-		r.newRunID,
-	)
-
-	requestID := uuid.New()
-	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
-		ctx,
-		now,
-		baseWorkflowIdentifier,
-		baseBranchToken,
-		baseEventID+1,
-		resetWorkflowIdentifier,
-		requestID,
-	)
+	baseBranchToken, err := r.getBaseBranchToken(ctx, baseEventID, baseVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -163,10 +112,10 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	newBranchToken := resp.NewBranchToken
+	resetBranchToken := resp.NewBranchToken
 	defer func() {
 		if errComplete := r.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
-			BranchToken: newBranchToken,
+			BranchToken: resetBranchToken,
 			Success:     true, // past lessons learnt from Cassandra & gocql tells that we cannot possibly find all timeout errors
 			ShardID:     common.IntPtr(shardID),
 		}); errComplete != nil {
@@ -176,12 +125,63 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		}
 	}()
 
-	if err = rebuildMutableState.SetCurrentBranchToken(
-		newBranchToken,
-	); err != nil {
+	requestID := uuid.New()
+	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
+		ctx,
+		now,
+		definition.NewWorkflowIdentifier(
+			r.domainID,
+			r.workflowID,
+			r.baseRunID,
+		),
+		baseBranchToken,
+		baseEventID+1,
+		definition.NewWorkflowIdentifier(
+			r.domainID,
+			r.workflowID,
+			r.newRunID,
+		),
+		resetBranchToken,
+		requestID,
+	)
+	if err != nil {
 		return nil, err
 	}
 
 	r.newContext.setHistorySize(rebuiltHistorySize)
 	return rebuildMutableState, nil
+}
+
+func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
+	ctx ctx.Context,
+	baseEventID int64,
+	baseVersion int64,
+) (baseBranchToken []byte, retError error) {
+
+	baseWorkflow, err := r.transactionMgr.loadNDCWorkflow(
+		ctx,
+		r.domainID,
+		r.workflowID,
+		r.baseRunID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		baseWorkflow.getReleaseFn()(retError)
+	}()
+
+	baseVersionHistories := baseWorkflow.getMutableState().GetVersionHistories()
+	index, err := baseVersionHistories.FindFirstVersionHistoryIndexByItem(
+		persistence.NewVersionHistoryItem(baseEventID, baseVersion),
+	)
+	if err != nil {
+		return nil, newNDCRetryTaskErrorWithHint()
+	}
+
+	baseVersionHistory, err := baseVersionHistories.GetVersionHistory(index)
+	if err != nil {
+		return nil, err
+	}
+	return baseVersionHistory.GetBranchToken(), nil
 }

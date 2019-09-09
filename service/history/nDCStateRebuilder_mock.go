@@ -29,11 +29,10 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	definition "github.com/uber/cadence/common/definition"
+	reflect "reflect"
+	time "time"
 )
 
 // MocknDCStateRebuilder is a mock of nDCStateRebuilder interface
@@ -60,9 +59,9 @@ func (m *MocknDCStateRebuilder) EXPECT() *MocknDCStateRebuilderMockRecorder {
 }
 
 // rebuild mocks base method
-func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowIdentifier, baseBranchToken []byte, baseNextEventID int64, targetWorkflowIdentifier definition.WorkflowIdentifier, requestID string) (mutableState, int64, error) {
+func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowIdentifier, baseBranchToken []byte, baseNextEventID int64, targetWorkflowIdentifier definition.WorkflowIdentifier, targetBranchToken []byte, requestID string) (mutableState, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "rebuild", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseNextEventID, targetWorkflowIdentifier, requestID)
+	ret := m.ctrl.Call(m, "rebuild", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseNextEventID, targetWorkflowIdentifier, targetBranchToken, requestID)
 	ret0, _ := ret[0].(mutableState)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
@@ -70,7 +69,7 @@ func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, base
 }
 
 // rebuild indicates an expected call of rebuild
-func (mr *MocknDCStateRebuilderMockRecorder) rebuild(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseNextEventID, targetWorkflowIdentifier, requestID interface{}) *gomock.Call {
+func (mr *MocknDCStateRebuilderMockRecorder) rebuild(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseNextEventID, targetWorkflowIdentifier, targetBranchToken, requestID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "rebuild", reflect.TypeOf((*MocknDCStateRebuilder)(nil).rebuild), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseNextEventID, targetWorkflowIdentifier, requestID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "rebuild", reflect.TypeOf((*MocknDCStateRebuilder)(nil).rebuild), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseNextEventID, targetWorkflowIdentifier, targetBranchToken, requestID)
 }

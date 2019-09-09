@@ -20,9 +20,11 @@
 
 package history
 
-import "github.com/uber/cadence/common/persistence"
+import (
+	"github.com/uber/cadence/common/persistence"
+)
 
 const (
-	nDCDefaultPageSize               = 100
-	nDCMutableStateEventStoreVersion = persistence.EventStoreVersionV2
+	nDCDefaultPageSize = 100
+	nDCProtocolVersion = persistence.EventStoreVersionV2
 )

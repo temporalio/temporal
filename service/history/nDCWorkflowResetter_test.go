@@ -146,10 +146,14 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow() {
 
 	mockRebuiltMutableState := &mockMutableState{}
 	defer mockRebuiltMutableState.AssertExpectations(s.T())
-	mockRebuiltMutableState.On("SetCurrentBranchToken", newBranchToken).Return(nil).Times(1)
 
+	mockBaseWorkflowReleaseFnCalled := false
+	mockBaseWorkflowReleaseFn := func(err error) {
+		mockBaseWorkflowReleaseFnCalled = true
+	}
 	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().getMutableState().Return(mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,
@@ -173,6 +177,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow() {
 			s.workflowID,
 			s.newRunID,
 		),
+		newBranchToken,
 		gomock.Any(),
 	).Return(mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
 
@@ -197,4 +202,5 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow() {
 	s.NoError(err)
 	s.Equal(mockRebuiltMutableState, rebuiltMutableState)
 	s.Equal(s.newContext.getHistorySize(), rebuiltHistorySize)
+	s.True(mockBaseWorkflowReleaseFnCalled)
 }

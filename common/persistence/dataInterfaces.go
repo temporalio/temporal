@@ -359,21 +359,23 @@ type (
 
 	// ReplicationTaskInfo describes the replication task created for replication of history events
 	ReplicationTaskInfo struct {
-		DomainID                string
-		WorkflowID              string
-		RunID                   string
-		TaskID                  int64
-		TaskType                int
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		LastReplicationInfo     map[string]*ReplicationInfo
-		ScheduledID             int64
+		DomainID          string
+		WorkflowID        string
+		RunID             string
+		TaskID            int64
+		TaskType          int
+		FirstEventID      int64
+		NextEventID       int64
+		Version           int64
+		ScheduledID       int64
+		BranchToken       []byte
+		NewRunBranchToken []byte
+		ResetWorkflow     bool
+
+		// TODO deprecate when NDC is fully released && migrated
 		EventStoreVersion       int32
-		BranchToken             []byte
 		NewRunEventStoreVersion int32
-		NewRunBranchToken       []byte
-		ResetWorkflow           bool
+		LastReplicationInfo     map[string]*ReplicationInfo
 	}
 
 	// TimerTaskInfo describes a timer task.

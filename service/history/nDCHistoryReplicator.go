@@ -255,8 +255,9 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 		*task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
-		nDCMutableStateEventStoreVersion,
-		nDCMutableStateEventStoreVersion,
+		nDCProtocolVersion,
+		nDCProtocolVersion,
+		true,
 	)
 	if err != nil {
 		return err
@@ -326,13 +327,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareReorder(
 	}
 	if task.getFirstEvent().GetEventId() > nextEventID {
 		// TODO we should use a new retry error for 3+DC
-		return false, newRetryTaskErrorWithHint(
-			ErrRetryBufferEventsMsg,
-			task.getDomainID(),
-			task.getWorkflowID(),
-			task.getRunID(),
-			lastVersionHistoryItem.GetEventID()+1,
-		)
+		return false, newNDCRetryTaskErrorWithHint()
 	}
 	// task.getFirstEvent().GetEventId() == nextEventID
 	return true, nil
@@ -372,8 +367,9 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		*task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
-		nDCMutableStateEventStoreVersion,
-		nDCMutableStateEventStoreVersion,
+		nDCProtocolVersion,
+		nDCProtocolVersion,
+		true,
 	)
 	if err != nil {
 		return err
@@ -489,14 +485,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 	// for non reset workflow execution replication task, just do re-application
 	if !task.getRequest().GetResetWorkflow() {
-		// TODO we should use a new retry error for 3+DC
-		return nil, newRetryTaskErrorWithHint(
-			ErrWorkflowNotFoundMsg,
-			task.getDomainID(),
-			task.getWorkflowID(),
-			task.getRunID(),
-			common.FirstEventID,
-		)
+		return nil, newNDCRetryTaskErrorWithHint()
 	}
 
 	decisionTaskFailedEvent := task.getFirstEvent()
@@ -533,8 +522,9 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		*task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
-		nDCMutableStateEventStoreVersion,
-		nDCMutableStateEventStoreVersion,
+		nDCProtocolVersion,
+		nDCProtocolVersion,
+		true,
 	)
 	if err != nil {
 		return err
@@ -567,4 +557,8 @@ func (r *nDCHistoryReplicatorImpl) notify(
 
 	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
 	r.shard.SetCurrentTime(clusterName, now)
+}
+
+func newNDCRetryTaskErrorWithHint() error {
+	return &shared.RetryTaskV2Error{}
 }

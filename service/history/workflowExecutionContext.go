@@ -684,6 +684,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
+
 	if currentWorkflowMutation.ExecutionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
 		return nil
 	}

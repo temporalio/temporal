@@ -130,7 +130,7 @@ func (r *conflictResolverImpl) reset(
 		}
 
 		// NOTE: passing 0 as newRunEventStoreVersion is safe here, since we don't need the newMutableState of the new run
-		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, resetMutableStateBuilder.GetEventStoreVersion(), 0)
+		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, resetMutableStateBuilder.GetEventStoreVersion(), 0, false)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err

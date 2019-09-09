@@ -132,9 +132,12 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 	}
 
 	// update replication and generate replication task
-	currReplicationTasks, newReplicationTasks := w.generateReplicationTasksForReset(
+	currReplicationTasks, newReplicationTasks, err := w.generateReplicationTasksForReset(
 		currTerminated, currMutableState, newMutableState, domainEntry,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// finally, write to persistence
 	retError = currContext.resetWorkflowExecution(
@@ -148,7 +151,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 }
 
 func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, prevRunVersion int64, domain string) error {
-	if newMutableState.GetReplicationState() != nil {
+	if newMutableState.GetReplicationState() != nil || newMutableState.GetVersionHistories() != nil {
 		clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 		currentVersion := newMutableState.GetCurrentVersion()
 		if currentVersion < prevRunVersion {
@@ -168,7 +171,10 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 }
 
 func (w *workflowResetorImpl) validateResetWorkflowBeforeReplay(baseMutableState, currMutableState mutableState) error {
-	if baseMutableState.GetEventStoreVersion() != persistence.EventStoreVersionV2 {
+	switch baseMutableState.GetEventStoreVersion() {
+	case persistence.EventStoreVersionV2:
+		// noop
+	default:
 		return &workflow.BadRequestError{
 			Message: fmt.Sprintf("reset API is not supported for V1 history events"),
 		}
@@ -287,6 +293,8 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// set the new mutable state with the version in domain
 	if newMutableState.GetReplicationState() != nil {
 		newMutableState.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
+	} else if newMutableState.GetVersionHistories() != nil {
+		newMutableState.UpdateCurrentVersion(domainEntry.GetFailoverVersion(), false)
 	}
 
 	// failed the in-flight decision(started).
@@ -396,60 +404,88 @@ func historyGarbageCleanupInfo(domainID, workflowID, runID string) string {
 	return fmt.Sprintf("%v:%v:%v", domainID, workflowID, runID)
 }
 
-func (w *workflowResetorImpl) setEventIDsWithHistory(msBuilder mutableState) int64 {
+func (w *workflowResetorImpl) setEventIDsWithHistory(msBuilder mutableState) (int64, error) {
 	history := msBuilder.GetHistoryBuilder().GetHistory().Events
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
 	msBuilder.GetExecutionInfo().SetLastFirstEventID(firstEvent.GetEventId())
-	msBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
-	return firstEvent.GetEventId()
+	if msBuilder.GetReplicationState() != nil {
+		msBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
+	} else if msBuilder.GetVersionHistories() != nil {
+		currentVersionHistory, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+		if err != nil {
+			return 0, err
+		}
+		if err := currentVersionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+			lastEvent.GetEventId(), lastEvent.GetVersion(),
+		)); err != nil {
+			return 0, err
+		}
+	}
+	return firstEvent.GetEventId(), nil
 }
 
 func (w *workflowResetorImpl) generateReplicationTasksForReset(
 	terminateCurr bool,
 	currMutableState, newMutableState mutableState,
 	domainEntry *cache.DomainCacheEntry,
-) ([]persistence.Task, []persistence.Task) {
+) ([]persistence.Task, []persistence.Task, error) {
 	var currRepTasks, insertRepTasks []persistence.Task
-	if newMutableState.GetReplicationState() != nil {
+	if newMutableState.GetReplicationState() != nil || newMutableState.GetVersionHistories() != nil {
 		if terminateCurr {
 			// we will generate 2 replication tasks for this case
-			firstEventIDForCurr := w.setEventIDsWithHistory(currMutableState)
+			firstEventIDForCurr, err := w.setEventIDsWithHistory(currMutableState)
+			if err != nil {
+				return nil, nil, err
+			}
 			if domainEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster {
 				currentBranchToken, err := currMutableState.GetCurrentBranchToken()
 				if err != nil {
-					return nil, nil
+					return nil, nil, err
 				}
 				replicationTask := &persistence.HistoryReplicationTask{
-					Version:             currMutableState.GetCurrentVersion(),
-					LastReplicationInfo: currMutableState.GetReplicationState().LastReplicationInfo,
-					FirstEventID:        firstEventIDForCurr,
-					NextEventID:         currMutableState.GetNextEventID(),
-					EventStoreVersion:   currMutableState.GetEventStoreVersion(),
-					BranchToken:         currentBranchToken,
+					Version:      currMutableState.GetCurrentVersion(),
+					FirstEventID: firstEventIDForCurr,
+					NextEventID:  currMutableState.GetNextEventID(),
+					BranchToken:  currentBranchToken,
+				}
+				if currMutableState.GetReplicationState() != nil {
+					replicationTask.LastReplicationInfo = currMutableState.GetReplicationState().LastReplicationInfo
+					replicationTask.EventStoreVersion = currMutableState.GetEventStoreVersion()
+				} else if currMutableState.GetVersionHistories() != nil {
+					replicationTask.LastReplicationInfo = nil
+					replicationTask.EventStoreVersion = persistence.EventStoreVersionV2
 				}
 				currRepTasks = append(currRepTasks, replicationTask)
 			}
 		}
-		firstEventIDForNew := w.setEventIDsWithHistory(newMutableState)
+		firstEventIDForNew, err := w.setEventIDsWithHistory(newMutableState)
+		if err != nil {
+			return nil, nil, err
+		}
 		if domainEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster {
 			newBranchToken, err := newMutableState.GetCurrentBranchToken()
 			if err != nil {
-				return nil, nil
+				return nil, nil, err
 			}
 			replicationTask := &persistence.HistoryReplicationTask{
-				Version:             newMutableState.GetCurrentVersion(),
-				LastReplicationInfo: newMutableState.GetReplicationState().LastReplicationInfo,
-				ResetWorkflow:       true,
-				FirstEventID:        firstEventIDForNew,
-				NextEventID:         newMutableState.GetNextEventID(),
-				EventStoreVersion:   newMutableState.GetEventStoreVersion(),
-				BranchToken:         newBranchToken,
+				Version:       newMutableState.GetCurrentVersion(),
+				ResetWorkflow: true,
+				FirstEventID:  firstEventIDForNew,
+				NextEventID:   newMutableState.GetNextEventID(),
+				BranchToken:   newBranchToken,
+			}
+			if newMutableState.GetReplicationState() != nil {
+				replicationTask.LastReplicationInfo = newMutableState.GetReplicationState().LastReplicationInfo
+				replicationTask.EventStoreVersion = newMutableState.GetEventStoreVersion()
+			} else if newMutableState.GetVersionHistories() != nil {
+				replicationTask.LastReplicationInfo = nil
+				replicationTask.EventStoreVersion = persistence.EventStoreVersionV2
 			}
 			insertRepTasks = append(insertRepTasks, replicationTask)
 		}
 	}
-	return currRepTasks, insertRepTasks
+	return currRepTasks, insertRepTasks, nil
 }
 
 // replay signals in the base run, and also signals in all the runs along the chain of contineAsNew
@@ -655,6 +691,15 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 						domainEntry.GetReplicationPolicy(),
 						domainEntry.GetInfo().Name,
 					)
+				} else if prevMutableState.GetVersionHistories() != nil {
+					resetMutableState = newMutableStateBuilderWithVersionHistories(
+						w.eng.shard,
+						w.eng.shard.GetEventsCache(),
+						w.eng.logger,
+						firstEvent.GetVersion(),
+						domainEntry.GetReplicationPolicy(),
+						domainEntry.GetInfo().Name,
+					)
 				} else {
 					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry.GetInfo().Name)
 				}
@@ -672,7 +717,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				return
 			}
 
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, persistence.EventStoreVersionV2, persistence.EventStoreVersionV2)
+			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, persistence.EventStoreVersionV2, persistence.EventStoreVersionV2, false)
 			if retError != nil {
 				return
 			}
@@ -916,7 +961,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 				newMsBuilder.GetExecutionInfo().EventStoreVersion = persistence.EventStoreVersionV2
 				sBuilder = newStateBuilder(w.eng.shard, newMsBuilder, w.eng.logger)
 			}
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, persistence.EventStoreVersionV2, 0)
+			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, persistence.EventStoreVersionV2, 0, false)
 			if retError != nil {
 				return
 			}
@@ -946,7 +991,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	lastEvent = newRunHistory[len(newRunHistory)-1]
 	// replay new history (including decisionTaskScheduled)
-	_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, persistence.EventStoreVersionV2, 0)
+	_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, persistence.EventStoreVersionV2, 0, false)
 	if retError != nil {
 		return
 	}

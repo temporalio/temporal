@@ -175,6 +175,7 @@ func newHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.M
 			EventStoreVersion:       attr.EventStoreVersion,
 			NewRunEventStoreVersion: attr.NewRunEventStoreVersion,
 			ResetWorkflow:           attr.ResetWorkflow,
+			NewRunNDC:               attr.NewRunNDC,
 		},
 	}
 }

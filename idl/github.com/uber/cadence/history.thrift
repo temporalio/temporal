@@ -287,6 +287,7 @@ struct ReplicateEventsRequest {
   110: optional i32 eventStoreVersion
   120: optional i32 newRunEventStoreVersion
   130: optional bool resetWorkflow
+  140: optional bool newRunNDC
 }
 
 struct ReplicateRawEventsRequest {
@@ -304,7 +305,7 @@ struct ReplicateEventsV2Request {
   20: optional shared.WorkflowExecution workflowExecution
   30: optional list<shared.VersionHistoryItem> versionHistoryItems
   40: optional shared.DataBlob events
-  50: optional list<shared.VersionHistoryItem> newRunVersionHistoryItems
+  // new run events does not need version history since there is no prior events
   60: optional shared.DataBlob newRunEvents
   70: optional bool resetWorkflow
 }

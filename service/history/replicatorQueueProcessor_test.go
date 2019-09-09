@@ -27,6 +27,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -462,7 +463,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 	shardID := common.IntPtr(1)
 
 	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   []byte{},
+		BranchToken:   []byte("asd"),
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      pageSize,
@@ -479,9 +480,9 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		Size:             1,
 		LastFirstEventID: nextEventID,
 	}, nil).Once()
-	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryMgr, s.mockHistoryV2Mgr, nil, nil,
-		false, domainID, workflowID, runID, firstEventID, nextEventID, []byte{},
-		persistence.EventStoreVersionV2, []byte{}, pageSize, shardID)
+	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryMgr, s.mockHistoryV2Mgr,
+		false, domainID, workflowID, runID, persistence.EventStoreVersionV2, []byte("asd"),
+		firstEventID, nextEventID, []byte{}, pageSize, shardID)
 	s.NotNil(hEvents)
 	s.NotNil(bEvents)
 	s.NotNil(token)

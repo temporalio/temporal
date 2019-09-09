@@ -401,6 +401,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 				EventStoreVersion:       replicationAttr.EventStoreVersion,
 				NewRunEventStoreVersion: replicationAttr.NewRunEventStoreVersion,
 				ResetWorkflow:           replicationAttr.ResetWorkflow,
+				NewRunNDC:               replicationAttr.NewRunNDC,
 			},
 		},
 		task,

@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.23",
+  "MinCompatibleVersion": "0.23",
+  "Description": "Add version history",
+  "SchemaUpdateCqlFiles": [
+    "version_histories.cql"
+  ]
+}

@@ -49,23 +49,21 @@ type (
 		getNewEvents() []*shared.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
-		getNewVersionHistory() *persistence.VersionHistory
 		getRequest() *h.ReplicateEventsV2Request
 		generateNewRunTask(taskStartTime time.Time) (nDCReplicationTask, error)
 	}
 
 	nDCReplicationTaskImpl struct {
-		sourceCluster     string
-		domainID          string
-		execution         *shared.WorkflowExecution
-		version           int64
-		firstEvent        *shared.HistoryEvent
-		lastEvent         *shared.HistoryEvent
-		eventTime         time.Time
-		events            []*shared.HistoryEvent
-		newEvents         []*shared.HistoryEvent
-		versionHistory    *persistence.VersionHistory
-		newVersionHistory *persistence.VersionHistory
+		sourceCluster  string
+		domainID       string
+		execution      *shared.WorkflowExecution
+		version        int64
+		firstEvent     *shared.HistoryEvent
+		lastEvent      *shared.HistoryEvent
+		eventTime      time.Time
+		events         []*shared.HistoryEvent
+		newEvents      []*shared.HistoryEvent
+		versionHistory *persistence.VersionHistory
 
 		request *h.ReplicateEventsV2Request
 
@@ -113,10 +111,6 @@ func newNDCReplicationTask(
 		BranchToken: nil,
 		Items:       request.VersionHistoryItems,
 	}
-	newVersionHistory := &shared.VersionHistory{
-		BranchToken: nil,
-		Items:       request.NewRunVersionHistoryItems,
-	}
 
 	firstEvent := events[0]
 	lastEvent := events[len(events)-1]
@@ -146,17 +140,16 @@ func newNDCReplicationTask(
 	)
 
 	return &nDCReplicationTaskImpl{
-		sourceCluster:     sourceCluster,
-		domainID:          domainID,
-		execution:         execution,
-		version:           version,
-		firstEvent:        firstEvent,
-		lastEvent:         lastEvent,
-		eventTime:         time.Unix(0, eventTime),
-		events:            events,
-		newEvents:         newEvents,
-		versionHistory:    persistence.NewVersionHistoryFromThrift(versionHistory),
-		newVersionHistory: persistence.NewVersionHistoryFromThrift(newVersionHistory),
+		sourceCluster:  sourceCluster,
+		domainID:       domainID,
+		execution:      execution,
+		version:        version,
+		firstEvent:     firstEvent,
+		lastEvent:      lastEvent,
+		eventTime:      time.Unix(0, eventTime),
+		events:         events,
+		newEvents:      newEvents,
+		versionHistory: persistence.NewVersionHistoryFromThrift(versionHistory),
 
 		request: request,
 
@@ -217,10 +210,6 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 	return t.versionHistory
 }
 
-func (t *nDCReplicationTaskImpl) getNewVersionHistory() *persistence.VersionHistory {
-	return t.newVersionHistory
-}
-
 func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsV2Request {
 	return t.request
 }
@@ -250,6 +239,14 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 		}
 	}
 
+	newVersionHistory := persistence.NewVersionHistoryFromThrift(&shared.VersionHistory{
+		BranchToken: nil,
+		Items: []*shared.VersionHistoryItem{{
+			EventID: common.Int64Ptr(newLastEvent.GetEventId()),
+			Version: common.Int64Ptr(newLastEvent.GetVersion()),
+		}},
+	})
+
 	logger := t.logger.WithTags(
 		tag.WorkflowID(t.getExecution().GetWorkflowId()),
 		tag.WorkflowRunID(newRunID),
@@ -266,12 +263,13 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 			WorkflowId: t.execution.WorkflowId,
 			RunId:      common.StringPtr(newRunID),
 		},
-		version:    t.version,
-		firstEvent: newFirstEvent,
-		lastEvent:  newLastEvent,
-		eventTime:  time.Unix(0, newEventTime),
-		events:     newHistoryEvents,
-		newEvents:  []*shared.HistoryEvent{},
+		version:        t.version,
+		firstEvent:     newFirstEvent,
+		lastEvent:      newLastEvent,
+		eventTime:      time.Unix(0, newEventTime),
+		events:         newHistoryEvents,
+		newEvents:      []*shared.HistoryEvent{},
+		versionHistory: newVersionHistory,
 
 		request: nil,
 

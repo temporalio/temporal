@@ -144,7 +144,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	mockRebuildMutableState.On("GetVersionHistories").Return(
 		persistence.NewVersionHistories(
 			persistence.NewVersionHistory(
-				nil,
+				branchToken1,
 				[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID1, version)},
 			),
 		),
@@ -159,6 +159,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		branchToken1,
 		lastEventID1+1,
 		workflowIdentifier,
+		branchToken1,
 		requestID,
 	).Return(mockRebuildMutableState, historySize, nil).Times(1)
 
@@ -236,7 +237,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	mockRebuildMutableState.On("GetVersionHistories").Return(
 		persistence.NewVersionHistories(
 			persistence.NewVersionHistory(
-				nil,
+				branchToken1,
 				[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID1, version)},
 			),
 		),
@@ -251,6 +252,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		branchToken1,
 		lastEventID1+1,
 		workflowIdentifier,
+		branchToken1,
 		gomock.Any(),
 	).Return(mockRebuildMutableState, historySize, nil).Times(1)
 

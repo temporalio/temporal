@@ -360,17 +360,15 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	_, historyBatches, token.PersistenceToken, size, err = historyService.PaginateHistory(
 		adh.historyMgr,
 		adh.historyV2Mgr,
-		adh.metricsClient,
-		adh.GetLogger(),
 		true, // this means that we are getting history by batch
 		domainID,
 		execution.GetWorkflowId(),
 		token.RunID,
+		token.EventStoreVersion,
+		token.BranchToken,
 		token.FirstEventID,
 		token.NextEventID,
 		token.PersistenceToken,
-		token.EventStoreVersion,
-		token.BranchToken,
 		pageSize,
 		common.IntPtr(shardID),
 	)

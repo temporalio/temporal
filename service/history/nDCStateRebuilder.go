@@ -47,6 +47,7 @@ type (
 			baseBranchToken []byte,
 			baseNextEventID int64,
 			targetWorkflowIdentifier definition.WorkflowIdentifier,
+			targetBranchToken []byte,
 			requestID string,
 		) (mutableState, int64, error)
 	}
@@ -95,6 +96,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	baseBranchToken []byte,
 	baseNextEventID int64,
 	targetWorkflowIdentifier definition.WorkflowIdentifier,
+	targetBranchToken []byte,
 	requestID string,
 ) (mutableState, int64, error) {
 
@@ -140,7 +142,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 			Message: fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v", baseNextEventID),
 		}
 	}
-	if err := rebuiltMutableState.SetCurrentBranchToken(nil); err != nil {
+	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {
 		return nil, 0, err
 	}
 
@@ -172,7 +174,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		cache.ReplicationPolicyMultiCluster,
 		domainName,
 	)
-	resetMutableStateBuilder.executionInfo.EventStoreVersion = nDCMutableStateEventStoreVersion
+	resetMutableStateBuilder.executionInfo.EventStoreVersion = nDCProtocolVersion
 	stateBuilder := newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 	return resetMutableStateBuilder, stateBuilder
 }
@@ -193,8 +195,9 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 		},
 		events,
 		nil, // no new run history when rebuilding mutable state
-		nDCMutableStateEventStoreVersion,
-		nDCMutableStateEventStoreVersion,
+		nDCProtocolVersion,
+		nDCProtocolVersion,
+		true,
 	)
 	if err != nil {
 		r.logger.Error("nDCStateRebuilder unable to rebuild mutable state.", tag.Error(err))
@@ -215,17 +218,15 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 		_, historyBatches, token, size, err := PaginateHistory(
 			nil,
 			r.historyV2Mgr,
-			nil,
-			r.logger,
 			true,
 			workflowIdentifier.DomainID,
 			workflowIdentifier.WorkflowID,
 			workflowIdentifier.RunID,
+			persistence.EventStoreVersionV2,
+			branchToken,
 			firstEventID,
 			nextEventID,
 			paginationToken,
-			nDCMutableStateEventStoreVersion,
-			branchToken,
 			nDCDefaultPageSize,
 			common.IntPtr(r.shard.GetShardID()),
 		)

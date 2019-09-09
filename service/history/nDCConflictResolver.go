@@ -144,6 +144,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventID()+1,
 		workflowIdentifier,
+		replayVersionHistory.GetBranchToken(),
 		requestID,
 	)
 	if err != nil {
@@ -153,10 +154,6 @@ func (r *nDCConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetVersionHistories()
 	rebuildVersionHistory, err := rebuildVersionHistories.GetCurrentVersionHistory()
-	if err != nil {
-		return nil, err
-	}
-	err = rebuildVersionHistory.SetBranchToken(replayVersionHistory.GetBranchToken())
 	if err != nil {
 		return nil, err
 	}

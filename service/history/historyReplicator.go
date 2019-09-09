@@ -721,7 +721,10 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
-	lastEvent, _, newMutableState, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
+	lastEvent, _, newMutableState, err := sBuilder.applyEvents(
+		domainID, requestID, execution, request.History.Events, newRunHistory,
+		request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion(), request.GetNewRunNDC(),
+	)
 	if err != nil {
 		return err
 	}

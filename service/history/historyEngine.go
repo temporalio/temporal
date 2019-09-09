@@ -345,38 +345,51 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 func (e *historyEngineImpl) createMutableState(
 	clusterMetadata cluster.Metadata,
 	domainEntry *cache.DomainCacheEntry,
-) mutableState {
+	runID string,
+) (mutableState, error) {
 
 	domainName := domainEntry.GetInfo().Name
-	if e.config.EnableEventsV2(domainName) && e.config.EnableNDC(domainName) {
-		return newMutableStateBuilderWithVersionHistories(
+	enableEventsV2 := e.config.EnableEventsV2(domainName)
+	enableNDC := e.config.EnableNDC(domainName)
+
+	var newMutableState mutableState
+	if enableEventsV2 && enableNDC {
+		// version history applies to both local and global domain
+		newMutableState = newMutableStateBuilderWithVersionHistories(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
 			domainEntry.GetFailoverVersion(),
 			domainEntry.GetReplicationPolicy(),
+			domainEntry.GetInfo().Name,
+		)
+	} else if domainEntry.IsGlobalDomain() {
+		// 2DC XDC protocol
+		// all workflows within a global domain should have replication state,
+		// no matter whether it will be replicated to multiple target clusters or not
+		newMutableState = newMutableStateBuilderWithReplicationState(
+			e.shard,
+			e.shard.GetEventsCache(),
+			e.logger,
+			domainEntry.GetFailoverVersion(),
+			domainEntry.GetReplicationPolicy(),
+			domainEntry.GetInfo().Name,
+		)
+	} else {
+		newMutableState = newMutableStateBuilder(
+			e.shard,
+			e.shard.GetEventsCache(),
+			e.logger,
 			domainEntry.GetInfo().Name,
 		)
 	}
 
-	if domainEntry.IsGlobalDomain() {
-		// all workflows within a global domain should have replication state,
-		// no matter whether it will be replicated to multiple target clusters or not
-		return newMutableStateBuilderWithReplicationState(
-			e.shard,
-			e.shard.GetEventsCache(),
-			e.logger,
-			domainEntry.GetFailoverVersion(),
-			domainEntry.GetReplicationPolicy(),
-			domainEntry.GetInfo().Name,
-		)
+	if enableEventsV2 {
+		if err := newMutableState.SetHistoryTree(runID); err != nil {
+			return nil, err
+		}
 	}
-	return newMutableStateBuilder(
-		e.shard,
-		e.shard.GetEventsCache(),
-		e.logger,
-		domainEntry.GetInfo().Name,
-	)
+	return newMutableState, nil
 }
 
 func (e *historyEngineImpl) generateFirstDecisionTask(
@@ -432,16 +445,9 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      common.StringPtr(uuid.New()),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	msBuilder := e.createMutableState(clusterMetadata, domainEntry)
-	var eventStoreVersion int32
-	if e.config.EnableEventsV2(request.GetDomain()) {
-		eventStoreVersion = persistence.EventStoreVersionV2
-	}
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		// NOTE: except for fork(reset), we use runID as treeID for simplicity
-		if err := msBuilder.SetHistoryTree(execution.GetRunId()); err != nil {
-			return nil, err
-		}
+	msBuilder, err := e.createMutableState(clusterMetadata, domainEntry, execution.GetRunId())
+	if err != nil {
+		return nil, err
 	}
 
 	startEvent, err := msBuilder.AddWorkflowExecutionStartedEvent(
@@ -1608,15 +1614,9 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	msBuilder := e.createMutableState(clusterMetadata, domainEntry)
-	var eventStoreVersion int32
-	if e.config.EnableEventsV2(request.GetDomain()) {
-		eventStoreVersion = persistence.EventStoreVersionV2
-	}
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		if err = msBuilder.SetHistoryTree(*execution.RunId); err != nil {
-			return nil, err
-		}
+	msBuilder, err := e.createMutableState(clusterMetadata, domainEntry, execution.GetRunId())
+	if err != nil {
+		return nil, err
 	}
 
 	if prevMutableState != nil {
@@ -2419,7 +2419,7 @@ func (e *historyEngineImpl) GetReplicationMessages(ctx ctx.Context, taskID int64
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
 	defer sw.Stop()
 
-	replicationMessages, err := e.replicatorProcessor.getTasks(taskID)
+	replicationMessages, err := e.replicatorProcessor.getTasks(ctx, taskID)
 	if err != nil {
 		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
 		return nil, err

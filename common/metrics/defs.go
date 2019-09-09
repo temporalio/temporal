@@ -868,6 +868,8 @@ const (
 	HistoryReplicationTaskScope
 	// HistoryMetadataReplicationTaskScope is the scope used by history metadata task replication processing
 	HistoryMetadataReplicationTaskScope
+	// HistoryReplicationTaskV2Scope is the scope used by history task replication processing
+	HistoryReplicationTaskV2Scope
 	// SyncShardTaskScope is the scope used by sync shrad information processing
 	SyncShardTaskScope
 	// SyncActivityTaskScope is the scope used by sync activity information processing
@@ -1269,6 +1271,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DomainReplicationTaskScope:          {operation: "DomainReplicationTask"},
 		HistoryReplicationTaskScope:         {operation: "HistoryReplicationTask"},
 		HistoryMetadataReplicationTaskScope: {operation: "HistoryMetadataReplicationTask"},
+		HistoryReplicationTaskV2Scope:       {operation: "HistoryReplicationTaskV2"},
 		SyncShardTaskScope:                  {operation: "SyncShardTask"},
 		SyncActivityTaskScope:               {operation: "SyncActivityTask"},
 		ESProcessorScope:                    {operation: "ESProcessor"},

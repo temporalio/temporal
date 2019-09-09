@@ -156,8 +156,9 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 		events,
 		[]*shared.HistoryEvent(nil),
-		int32(nDCMutableStateEventStoreVersion),
-		int32(nDCMutableStateEventStoreVersion),
+		int32(nDCProtocolVersion),
+		int32(nDCProtocolVersion),
+		true,
 	).Return(nil, nil, nil, nil).Once()
 
 	err := s.nDCStateRebuilder.applyEvents(workflowIdentifier, mockStateBuilder, events, requestID)
@@ -238,6 +239,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
+	targetBranchToken := []byte("some other random branch token")
 	now := time.Now()
 
 	targetDomainID := uuid.New()
@@ -324,6 +326,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		branchToken,
 		nextEventID,
 		definition.NewWorkflowIdentifier(targetDomainID, targetWorkflowID, targetRunID),
+		targetBranchToken,
 		requestID,
 	)
 	s.NoError(err)
@@ -335,7 +338,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
 	s.Equal(persistence.NewVersionHistories(
 		persistence.NewVersionHistory(
-			nil,
+			targetBranchToken,
 			[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetVersionHistories())

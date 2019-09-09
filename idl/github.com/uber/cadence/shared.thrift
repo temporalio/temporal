@@ -304,6 +304,7 @@ struct TaskList {
 
 enum EncodingType {
   ThriftRW,
+  JSON,
 }
 
 enum QueryRejectCondition {
