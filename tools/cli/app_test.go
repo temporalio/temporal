@@ -677,7 +677,76 @@ func (s *cliAppSuite) TestConvertStringToRealType() {
 	res = convertStringToRealType("2019-01-01T01:01:01Z")
 	s.Equal(time.Date(2019, 1, 1, 1, 1, 1, 0, time.UTC), res)
 
+	// array
+	res = convertStringToRealType(`["a", "b", "c"]`)
+	s.Equal([]interface{}{"a", "b", "c"}, res)
+
 	// string
 	res = convertStringToRealType("test string")
 	s.Equal("test string", res)
+}
+
+func (s *cliAppSuite) TestConvertArray() {
+	t1, _ := time.Parse(defaultDateTimeFormat, "2019-06-07T16:16:34-08:00")
+	t2, _ := time.Parse(defaultDateTimeFormat, "2019-06-07T17:16:34-08:00")
+	testCases := []struct {
+		name     string
+		input    string
+		expected interface{}
+	}{
+		{
+			name:     "string",
+			input:    `["a", "b", "c"]`,
+			expected: []interface{}{"a", "b", "c"},
+		},
+		{
+			name:     "int",
+			input:    `[1, 2, 3]`,
+			expected: []interface{}{"1", "2", "3"},
+		},
+		{
+			name:     "double",
+			input:    `[1.1, 2.2, 3.3]`,
+			expected: []interface{}{"1.1", "2.2", "3.3"},
+		},
+		{
+			name:     "bool",
+			input:    `["true", "false"]`,
+			expected: []interface{}{"true", "false"},
+		},
+		{
+			name:     "datetime",
+			input:    `["2019-06-07T16:16:34-08:00", "2019-06-07T17:16:34-08:00"]`,
+			expected: []interface{}{t1, t2},
+		},
+	}
+	for _, testCase := range testCases {
+		res, err := parseArray(testCase.input)
+		s.Nil(err)
+		s.Equal(testCase.expected, res)
+	}
+
+	testCases2 := []struct {
+		name     string
+		input    string
+		expected error
+	}{
+		{
+			name:  "not array",
+			input: "normal string",
+		},
+		{
+			name:  "empty string",
+			input: "",
+		},
+		{
+			name:  "not json array",
+			input: "[a, b, c]",
+		},
+	}
+	for _, testCase := range testCases2 {
+		res, err := parseArray(testCase.input)
+		s.NotNil(err)
+		s.Nil(res)
+	}
 }

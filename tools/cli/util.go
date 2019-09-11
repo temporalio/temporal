@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -37,6 +38,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
+	"github.com/valyala/fastjson"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 )
@@ -706,6 +708,33 @@ func trimSpace(strs []string) []string {
 	return result
 }
 
+func parseArray(v string) (interface{}, error) {
+	if len(v) > 0 && v[0] == '[' && v[len(v)-1] == ']' {
+		parsedValues, err := fastjson.Parse(v)
+		if err != nil {
+			return nil, err
+		}
+		arr, err := parsedValues.Array()
+		if err != nil {
+			return nil, err
+		}
+		result := make([]interface{}, len(arr))
+		for i, item := range arr {
+			s := item.String()
+			if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' { // remove addition quote from json
+				s = s[1 : len(s)-1]
+				if sTime, err := time.Parse(defaultDateTimeFormat, s); err == nil {
+					result[i] = sTime
+					continue
+				}
+			}
+			result[i] = s
+		}
+		return result, nil
+	}
+	return nil, errors.New("not array")
+}
+
 func convertStringToRealType(v string) interface{} {
 	var genVal interface{}
 	var err error
@@ -717,6 +746,8 @@ func convertStringToRealType(v string) interface{} {
 	} else if genVal, err = strconv.ParseFloat(v, 64); err == nil {
 
 	} else if genVal, err = time.Parse(defaultDateTimeFormat, v); err == nil {
+
+	} else if genVal, err = parseArray(v); err == nil {
 
 	} else {
 		genVal = v
