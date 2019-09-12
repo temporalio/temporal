@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -131,9 +132,6 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		RunID:      s.runID,
 	}).Once()
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", baseBranchLastEventVersion).Return(cluster.TestAlternativeClusterName)
-	s.mockContext.On("updateWorkflowExecutionAsPassive", mock.Anything).Return(nil)
-
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -166,7 +164,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	s.True(compareVersionHistory.Equals(newVersionHistory))
 }
 
-func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_Appendable() {
+func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEventInBetween() {
 
 	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
 		persistence.NewVersionHistoryItem(10, 0),
@@ -184,12 +182,36 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_Appendable() {
 
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
 
-	index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory)
+	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, 150+1)
 	s.NoError(err)
+	s.True(doContinue)
 	s.Equal(0, index)
 }
 
-func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_NotAppendable() {
+func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEventInBetween() {
+
+	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
+		persistence.NewVersionHistoryItem(10, 0),
+		persistence.NewVersionHistoryItem(50, 100),
+		persistence.NewVersionHistoryItem(100, 200),
+		persistence.NewVersionHistoryItem(150, 300),
+	})
+	versionHistories := persistence.NewVersionHistories(versionHistory)
+
+	incomingVersionHistory := versionHistory.Duplicate()
+	incomingFirstEventVersionHistoryItem := persistence.NewVersionHistoryItem(200, 300)
+	err := incomingVersionHistory.AddOrUpdateItem(
+		incomingFirstEventVersionHistoryItem,
+	)
+	s.NoError(err)
+
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
+
+	_, _, err = s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, 150+2)
+	s.IsType(&shared.RetryTaskV2Error{}, err)
+}
+
+func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEventInBetween() {
 	baseBranchToken := []byte("some random base branch token")
 	baseBranchLCAEventID := int64(85)
 	baseBranchLCAEventVersion := int64(200)
@@ -208,7 +230,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_NotAppendable() {
 		persistence.NewVersionHistoryItem(10, 0),
 		persistence.NewVersionHistoryItem(50, 100),
 		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(150, 400),
+		persistence.NewVersionHistoryItem(200, 400),
 	})
 
 	newBranchToken := []byte("some random new branch token")
@@ -219,9 +241,6 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_NotAppendable() {
 		WorkflowID: s.workflowID,
 		RunID:      s.runID,
 	}).Once()
-
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", baseBranchLastEventVersion).Return(cluster.TestAlternativeClusterName)
-	s.mockContext.On("updateWorkflowExecutionAsPassive", mock.Anything).Return(nil)
 
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
@@ -241,7 +260,36 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_NotAppendable() {
 		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
 	}).Return(nil).Once()
 
-	index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory)
+	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, baseBranchLCAEventID+1)
 	s.NoError(err)
+	s.True(doContinue)
 	s.Equal(1, index)
+}
+
+func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissingEventInBetween() {
+	baseBranchToken := []byte("some random base branch token")
+	baseBranchLCAEventID := int64(85)
+	baseBranchLCAEventVersion := int64(200)
+	baseBranchLastEventID := int64(150)
+	baseBranchLastEventVersion := int64(300)
+
+	versionHistory := persistence.NewVersionHistory(baseBranchToken, []*persistence.VersionHistoryItem{
+		persistence.NewVersionHistoryItem(10, 0),
+		persistence.NewVersionHistoryItem(50, 100),
+		persistence.NewVersionHistoryItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
+		persistence.NewVersionHistoryItem(baseBranchLastEventID, baseBranchLastEventVersion),
+	})
+	versionHistories := persistence.NewVersionHistories(versionHistory)
+
+	incomingVersionHistory := persistence.NewVersionHistory(nil, []*persistence.VersionHistoryItem{
+		persistence.NewVersionHistoryItem(10, 0),
+		persistence.NewVersionHistoryItem(50, 100),
+		persistence.NewVersionHistoryItem(baseBranchLCAEventID, baseBranchLCAEventVersion),
+		persistence.NewVersionHistoryItem(200, 400),
+	})
+
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
+
+	_, _, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, baseBranchLCAEventID+2)
+	s.IsType(&shared.RetryTaskV2Error{}, err)
 }

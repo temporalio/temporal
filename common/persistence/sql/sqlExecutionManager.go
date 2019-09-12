@@ -100,7 +100,8 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 
 	newWorkflow := request.NewWorkflowSnapshot
 	executionInfo := newWorkflow.ExecutionInfo
-	replicationState := newWorkflow.ReplicationState
+	startVersion := newWorkflow.StartVersion
+	lastWriteVersion := newWorkflow.LastWriteVersion
 	shardID := m.shardID
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
@@ -190,7 +191,8 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		executionInfo.State,
 		executionInfo.CloseStatus,
 		executionInfo.CreateRequestID,
-		replicationState); err != nil {
+		startVersion,
+		lastWriteVersion); err != nil {
 		return nil, err
 	}
 
@@ -475,7 +477,8 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newExecutionInfo := newWorkflow.ExecutionInfo
-			newReplicationState := newWorkflow.ReplicationState
+			startVersion := newWorkflow.StartVersion
+			lastWriteVersion := newWorkflow.LastWriteVersion
 			newDomainID := sqldb.MustParseUUID(newExecutionInfo.DomainID)
 			newRunID := sqldb.MustParseUUID(newExecutionInfo.RunID)
 
@@ -483,13 +486,6 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				return &workflow.InternalServiceError{
 					Message: fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"),
 				}
-			}
-
-			startVersion := common.EmptyVersion
-			lastWriteVersion := common.EmptyVersion
-			if newReplicationState != nil {
-				startVersion = newReplicationState.StartVersion
-				lastWriteVersion = newReplicationState.LastWriteVersion
 			}
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
@@ -513,12 +509,8 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 			}
 
 		} else {
-			startVersion := common.EmptyVersion
-			lastWriteVersion := common.EmptyVersion
-			if updateWorkflow.ReplicationState != nil {
-				startVersion = updateWorkflow.ReplicationState.StartVersion
-				lastWriteVersion = updateWorkflow.ReplicationState.LastWriteVersion
-			}
+			startVersion := updateWorkflow.StartVersion
+			lastWriteVersion := updateWorkflow.LastWriteVersion
 			// this is only to update the current record
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				shardID,
@@ -573,14 +565,8 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 
 	newWorkflowRunID := sqldb.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.RunID)
 	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
-	newReplicationState := request.NewWorkflowSnapshot.ReplicationState
-
-	startVersion := common.EmptyVersion
-	lastWriteVersion := common.EmptyVersion
-	if newReplicationState != nil {
-		startVersion = newReplicationState.StartVersion
-		lastWriteVersion = newReplicationState.LastWriteVersion
-	}
+	startVersion := request.NewWorkflowSnapshot.StartVersion
+	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
 
 	// 1. update current execution
 	if err := updateCurrentExecution(tx,
@@ -683,17 +669,17 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionInfo := resetWorkflow.ExecutionInfo
-		replicationState := resetWorkflow.ReplicationState
+		startVersion := resetWorkflow.StartVersion
+		lastWriteVersion := resetWorkflow.LastWriteVersion
 		if newWorkflow != nil {
 			executionInfo = newWorkflow.ExecutionInfo
-			replicationState = newWorkflow.ReplicationState
+			startVersion = newWorkflow.StartVersion
+			lastWriteVersion = newWorkflow.LastWriteVersion
 		}
 		runID := sqldb.MustParseUUID(executionInfo.RunID)
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
 		closeStatus := executionInfo.CloseStatus
-		startVersion := replicationState.StartVersion
-		lastWriteVersion := replicationState.LastWriteVersion
 
 		if request.CurrentWorkflowCAS != nil {
 			prevRunID := sqldb.MustParseUUID(request.CurrentWorkflowCAS.PrevRunID)

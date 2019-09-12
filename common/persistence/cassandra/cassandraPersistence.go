@@ -1058,7 +1058,8 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	newWorkflow := request.NewWorkflowSnapshot
 	executionInfo := newWorkflow.ExecutionInfo
-	replicationState := newWorkflow.ReplicationState
+	startVersion := newWorkflow.StartVersion
+	lastWriteVersion := newWorkflow.LastWriteVersion
 	domainID := executionInfo.DomainID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
@@ -1084,7 +1085,8 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			executionInfo.State,
 			executionInfo.CloseStatus,
 			executionInfo.CreateRequestID,
-			replicationState,
+			startVersion,
+			lastWriteVersion,
 			request.PreviousRunID,
 			request.PreviousLastWriteVersion,
 		); err != nil {
@@ -1361,7 +1363,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newExecutionInfo := newWorkflow.ExecutionInfo
-			newReplicationState := newWorkflow.ReplicationState
+			newStartVersion := newWorkflow.StartVersion
+			newLastWriteVersion := newWorkflow.LastWriteVersion
 			newDomainID := newExecutionInfo.DomainID
 			newWorkflowID := newExecutionInfo.WorkflowID
 			newRunID := newExecutionInfo.RunID
@@ -1381,7 +1384,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				newExecutionInfo.State,
 				newExecutionInfo.CloseStatus,
 				newExecutionInfo.CreateRequestID,
-				newReplicationState,
+				newStartVersion,
+				newLastWriteVersion,
 				runID,
 				0, // for continue as new, this is not used
 			); err != nil {
@@ -1394,12 +1398,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				return err
 			}
 		} else {
-			startVersion := common.EmptyVersion
-			lastWriteVersion := common.EmptyVersion
-			if updateWorkflow.ReplicationState != nil {
-				startVersion = updateWorkflow.ReplicationState.StartVersion
-				lastWriteVersion = updateWorkflow.ReplicationState.LastWriteVersion
-			}
+			startVersion := updateWorkflow.StartVersion
+			lastWriteVersion := updateWorkflow.LastWriteVersion
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
 				runID,
@@ -1491,14 +1491,9 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 
 	newRunID := request.NewWorkflowSnapshot.ExecutionInfo.RunID
 	newExecutionInfo := request.NewWorkflowSnapshot.ExecutionInfo
-	newReplicationState := request.NewWorkflowSnapshot.ReplicationState
 
-	startVersion := common.EmptyVersion
-	lastWriteVersion := common.EmptyVersion
-	if newReplicationState != nil {
-		startVersion = newReplicationState.StartVersion
-		lastWriteVersion = newReplicationState.LastWriteVersion
-	}
+	startVersion := request.NewWorkflowSnapshot.StartVersion
+	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
 
 	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 		newRunID,
@@ -1637,17 +1632,17 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionInfo := resetWorkflow.ExecutionInfo
-		replicationState := resetWorkflow.ReplicationState
+		startVersion := resetWorkflow.StartVersion
+		lastWriteVersion := resetWorkflow.LastWriteVersion
 		if newWorkflow != nil {
 			executionInfo = newWorkflow.ExecutionInfo
-			replicationState = newWorkflow.ReplicationState
+			startVersion = newWorkflow.StartVersion
+			lastWriteVersion = newWorkflow.LastWriteVersion
 		}
 		runID := executionInfo.RunID
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
 		closeStatus := executionInfo.CloseStatus
-		startVersion := replicationState.StartVersion
-		lastWriteVersion := replicationState.LastWriteVersion
 
 		if request.CurrentWorkflowCAS != nil {
 			prevRunID = request.CurrentWorkflowCAS.PrevRunID

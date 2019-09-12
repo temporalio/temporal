@@ -636,10 +636,21 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		}
 	}
 
+	startVersion, err := getStartVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+	lastWriteVersion, err := getLastWriteVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+
 	return &InternalWorkflowMutation{
 		ExecutionInfo:    serializedExecutionInfo,
 		ReplicationState: input.ReplicationState,
 		VersionHistories: serializedVersionHistories,
+		StartVersion:     startVersion,
+		LastWriteVersion: lastWriteVersion,
 
 		UpsertActivityInfos:       serializedUpsertActivityInfos,
 		DeleteActivityInfos:       input.DeleteActivityInfos,
@@ -690,10 +701,21 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		return nil, err
 	}
 
+	startVersion, err := getStartVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+	lastWriteVersion, err := getLastWriteVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+
 	return &InternalWorkflowSnapshot{
 		ExecutionInfo:    serializedExecutionInfo,
 		ReplicationState: input.ReplicationState,
 		VersionHistories: serializedVersionHistories,
+		StartVersion:     startVersion,
+		LastWriteVersion: lastWriteVersion,
 
 		ActivityInfos:       serializedActivityInfos,
 		TimerInfos:          input.TimerInfos,
@@ -812,4 +834,52 @@ func (m *executionManagerImpl) RangeCompleteTimerTask(
 
 func (m *executionManagerImpl) Close() {
 	m.persistence.Close()
+}
+
+func getStartVersion(
+	versionHistories *VersionHistories,
+	replicationState *ReplicationState,
+) (int64, error) {
+
+	if replicationState == nil && versionHistories == nil {
+		return common.EmptyVersion, nil
+	}
+
+	if replicationState != nil {
+		return replicationState.StartVersion, nil
+	}
+
+	versionHistory, err := versionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return 0, err
+	}
+	versionHistoryItem, err := versionHistory.GetFirstItem()
+	if err != nil {
+		return 0, err
+	}
+	return versionHistoryItem.GetVersion(), nil
+}
+
+func getLastWriteVersion(
+	versionHistories *VersionHistories,
+	replicationState *ReplicationState,
+) (int64, error) {
+
+	if replicationState == nil && versionHistories == nil {
+		return common.EmptyVersion, nil
+	}
+
+	if replicationState != nil {
+		return replicationState.LastWriteVersion, nil
+	}
+
+	versionHistory, err := versionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return 0, err
+	}
+	versionHistoryItem, err := versionHistory.GetLastItem()
+	if err != nil {
+		return 0, err
+	}
+	return versionHistoryItem.GetVersion(), nil
 }

@@ -29,10 +29,9 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/uber/cadence/common/persistence"
+	reflect "reflect"
 )
 
 // MocknDCBranchMgr is a mock of nDCBranchMgr interface
@@ -59,16 +58,17 @@ func (m *MocknDCBranchMgr) EXPECT() *MocknDCBranchMgrMockRecorder {
 }
 
 // prepareVersionHistory mocks base method
-func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *persistence.VersionHistory) (int, error) {
+func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *persistence.VersionHistory, incomingFirstEventID int64) (bool, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "prepareVersionHistory", ctx, incomingVersionHistory)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "prepareVersionHistory", ctx, incomingVersionHistory, incomingFirstEventID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // prepareVersionHistory indicates an expected call of prepareVersionHistory
-func (mr *MocknDCBranchMgrMockRecorder) prepareVersionHistory(ctx, incomingVersionHistory interface{}) *gomock.Call {
+func (mr *MocknDCBranchMgrMockRecorder) prepareVersionHistory(ctx, incomingVersionHistory, incomingFirstEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareVersionHistory", reflect.TypeOf((*MocknDCBranchMgr)(nil).prepareVersionHistory), ctx, incomingVersionHistory)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareVersionHistory", reflect.TypeOf((*MocknDCBranchMgr)(nil).prepareVersionHistory), ctx, incomingVersionHistory, incomingFirstEventID)
 }

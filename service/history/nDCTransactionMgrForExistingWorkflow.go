@@ -295,12 +295,19 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		}
 	}
 
+	var newContext workflowExecutionContext
+	var newMutableState mutableState
+	if newWorkflow != nil {
+		newContext = newWorkflow.getContext()
+		newMutableState = newWorkflow.getMutableState()
+	}
+
 	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
 		now,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.getMutableState(),
-		newWorkflow.getContext(),
-		newWorkflow.getMutableState(),
+		newContext,
+		newMutableState,
 		currentWorkflow.getContext(),
 		currentWorkflow.getMutableState(),
 		nil,

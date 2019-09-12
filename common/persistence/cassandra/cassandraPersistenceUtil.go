@@ -1183,25 +1183,11 @@ func createOrUpdateCurrentExecution(
 	state int,
 	closeStatus int,
 	createRequestID string,
-	replicationState *p.ReplicationState,
+	startVersion int64,
+	lastWriteVersion int64,
 	previousRunID string,
 	previousLastWriteVersion int64,
 ) error {
-
-	startVersion := common.EmptyVersion
-	lastWriteVersion := common.EmptyVersion
-	if replicationState != nil {
-		startVersion = replicationState.StartVersion
-		lastWriteVersion = replicationState.LastWriteVersion
-	} else {
-		// this is to deal with issue that gocql cannot return null value for value inside user defined type
-		// so we cannot know whether the last write version of current workflow record is null or not
-		// since non global domain (request.ReplicationState == null) will not have workflow reset problem
-		// so the CAS on last write version is not necessary
-		if createMode == p.CreateWorkflowModeWorkflowIDReuse {
-			createMode = p.CreateWorkflowModeContinueAsNew
-		}
-	}
 
 	switch createMode {
 	case p.CreateWorkflowModeContinueAsNew:

@@ -40,7 +40,8 @@ type (
 		prepareVersionHistory(
 			ctx ctx.Context,
 			incomingVersionHistory *persistence.VersionHistory,
-		) (versionHistoryIndex int, retError error)
+			incomingFirstEventID int64,
+		) (bool, int, error)
 	}
 
 	nDCBranchMgrImpl struct {
@@ -77,7 +78,8 @@ func newNDCBranchMgr(
 func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	ctx ctx.Context,
 	incomingVersionHistory *persistence.VersionHistory,
-) (int, error) {
+	incomingFirstEventID int64,
+) (bool, int, error) {
 
 	localVersionHistories := r.mutableState.GetVersionHistories()
 
@@ -85,21 +87,31 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		incomingVersionHistory,
 	)
 	if err != nil {
-		return 0, err
+		return false, 0, err
 	}
 	versionHistory, err := localVersionHistories.GetVersionHistory(versionHistoryIndex)
 	if err != nil {
-		return 0, err
+		return false, 0, err
 	}
 
 	// if can directly append to a branch
 	if versionHistory.IsLCAAppendable(lcaVersionHistoryItem) {
-		return versionHistoryIndex, nil
+		doContinue, err := r.verifyEventsOrder(ctx, versionHistory, incomingFirstEventID)
+		if err != nil {
+			return false, 0, err
+		}
+		return doContinue, versionHistoryIndex, nil
 	}
 
 	newVersionHistory, err := versionHistory.DuplicateUntilLCAItem(lcaVersionHistoryItem)
 	if err != nil {
-		return 0, err
+		return false, 0, err
+	}
+
+	// if cannot directly append to the new branch to be created
+	doContinue, err := r.verifyEventsOrder(ctx, newVersionHistory, incomingFirstEventID)
+	if err != nil || !doContinue {
+		return false, 0, err
 	}
 
 	newVersionHistoryIndex, err := r.createNewBranch(
@@ -109,10 +121,33 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 		newVersionHistory,
 	)
 	if err != nil {
-		return 0, err
+		return false, 0, err
 	}
 
-	return newVersionHistoryIndex, nil
+	return true, newVersionHistoryIndex, nil
+}
+
+func (r *nDCBranchMgrImpl) verifyEventsOrder(
+	ctx ctx.Context,
+	localVersionHistory *persistence.VersionHistory,
+	incomingFirstEventID int64,
+) (bool, error) {
+
+	lastVersionHistoryItem, err := localVersionHistory.GetLastItem()
+	if err != nil {
+		return false, err
+	}
+	nextEventID := lastVersionHistoryItem.GetEventID() + 1
+
+	if incomingFirstEventID < nextEventID {
+		// duplicate replication task
+		return false, nil
+	}
+	if incomingFirstEventID > nextEventID {
+		return false, newNDCRetryTaskErrorWithHint()
+	}
+	// task.getFirstEvent().GetEventId() == nextEventID
+	return true, nil
 }
 
 func (r *nDCBranchMgrImpl) createNewBranch(
@@ -162,12 +197,6 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, &shared.BadRequestError{
 			Message: "nDCBranchMgr encounter branch change during conflict resolution",
 		}
-	}
-
-	if err := r.context.updateWorkflowExecutionAsPassive(
-		r.shard.GetTimeSource().Now(),
-	); err != nil {
-		return 0, err
 	}
 
 	return newIndex, nil

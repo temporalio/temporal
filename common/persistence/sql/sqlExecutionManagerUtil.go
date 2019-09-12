@@ -42,9 +42,18 @@ func applyWorkflowMutationTx(
 	executionInfo := workflowMutation.ExecutionInfo
 	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
+	startVersion := workflowMutation.StartVersion
+	lastWriteVersion := workflowMutation.LastWriteVersion
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
+
+	// TODO remove once 2DC is deprecated
+	//  since current version is only used by 2DC
+	currentVersion := lastWriteVersion
+	if replicationState != nil {
+		currentVersion = replicationState.CurrentVersion
+	}
 
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
 	if err := lockAndCheckNextEventID(tx,
@@ -67,6 +76,9 @@ func applyWorkflowMutationTx(
 		executionInfo,
 		replicationState,
 		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
@@ -190,9 +202,18 @@ func applyWorkflowSnapshotTxAsReset(
 	executionInfo := workflowSnapshot.ExecutionInfo
 	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
+	startVersion := workflowSnapshot.StartVersion
+	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
+
+	// TODO remove once 2DC is deprecated
+	//  since current version is only used by 2DC
+	currentVersion := lastWriteVersion
+	if replicationState != nil {
+		currentVersion = replicationState.CurrentVersion
+	}
 
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
 	if err := lockAndCheckNextEventID(tx,
@@ -215,6 +236,9 @@ func applyWorkflowSnapshotTxAsReset(
 		executionInfo,
 		replicationState,
 		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
@@ -385,14 +409,26 @@ func applyWorkflowSnapshotTxAsNew(
 	executionInfo := workflowSnapshot.ExecutionInfo
 	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
+	startVersion := workflowSnapshot.StartVersion
+	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
+
+	// TODO remove once 2DC is deprecated
+	//  since current version is only used by 2DC
+	currentVersion := lastWriteVersion
+	if replicationState != nil {
+		currentVersion = replicationState.CurrentVersion
+	}
 
 	if err := createExecution(tx,
 		executionInfo,
 		replicationState,
 		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
@@ -572,7 +608,8 @@ func createOrUpdateCurrentExecution(
 	state int,
 	closeStatus int,
 	createRequestID string,
-	replicationState *p.ReplicationState,
+	startVersion int64,
+	lastWriteVersion int64,
 ) error {
 
 	row := sqldb.CurrentExecutionsRow{
@@ -583,13 +620,8 @@ func createOrUpdateCurrentExecution(
 		CreateRequestID:  createRequestID,
 		State:            state,
 		CloseStatus:      closeStatus,
-		StartVersion:     common.EmptyVersion,
-		LastWriteVersion: common.EmptyVersion,
-	}
-
-	if replicationState != nil {
-		row.StartVersion = replicationState.StartVersion
-		row.LastWriteVersion = replicationState.LastWriteVersion
+		StartVersion:     startVersion,
+		LastWriteVersion: lastWriteVersion,
 	}
 
 	switch createMode {
@@ -1171,10 +1203,12 @@ func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
 	versionHistories *p.DataBlob,
+	startVersion int64,
+	lastWriteVersion int64,
+	currentVersion int64,
 	shardID int,
 ) (row *sqldb.ExecutionsRow, err error) {
 
-	lastWriteVersion := common.EmptyVersion
 	info := &sqlblobs.WorkflowExecutionInfo{
 		TaskList:                                &executionInfo.TaskList,
 		WorkflowTypeName:                        &executionInfo.WorkflowTypeName,
@@ -1230,20 +1264,17 @@ func buildExecutionRow(
 		info.CompletionEventEncoding = common.StringPtr(string(completionEvent.Encoding))
 	}
 
+	info.StartVersion = &startVersion
+	info.CurrentVersion = &currentVersion
 	if replicationState == nil && versionHistories == nil {
 		// this is allowed
 	} else if replicationState != nil {
-		lastWriteVersion = replicationState.LastWriteVersion
-		info.StartVersion = &replicationState.StartVersion
-		info.CurrentVersion = &replicationState.CurrentVersion
 		info.LastWriteEventID = &replicationState.LastWriteEventID
 		info.LastReplicationInfo = make(map[string]*sqlblobs.ReplicationInfo, len(replicationState.LastReplicationInfo))
 		for k, v := range replicationState.LastReplicationInfo {
 			info.LastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
 		}
 	} else if versionHistories != nil {
-		// TODO also need to set the start / current / last write version
-
 		info.VersionHistories = versionHistories.Data
 		info.VersionHistoriesEncoding = common.StringPtr(string(versionHistories.GetEncoding()))
 	} else {
@@ -1287,6 +1318,9 @@ func createExecution(
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
 	versionHistories *p.DataBlob,
+	startVersion int64,
+	lastWriteVersion int64,
+	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1301,7 +1335,15 @@ func createExecution(
 	executionInfo.StartTimestamp = time.Now()
 	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
 
-	row, err := buildExecutionRow(executionInfo, replicationState, versionHistories, shardID)
+	row, err := buildExecutionRow(
+		executionInfo,
+		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
+		shardID,
+	)
 	if err != nil {
 		return err
 	}
@@ -1331,6 +1373,9 @@ func updateExecution(
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
 	versionHistories *p.DataBlob,
+	startVersion int64,
+	lastWriteVersion int64,
+	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1344,7 +1389,15 @@ func updateExecution(
 	// TODO we should set the last update time on business logic layer
 	executionInfo.LastUpdatedTimestamp = time.Now()
 
-	row, err := buildExecutionRow(executionInfo, replicationState, versionHistories, shardID)
+	row, err := buildExecutionRow(
+		executionInfo,
+		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
+		shardID,
+	)
 	if err != nil {
 		return err
 	}

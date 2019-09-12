@@ -575,7 +575,7 @@ func (he HistoryEventVertex) GetData() interface{} {
 	return he.data
 }
 
-// GetData returns the vertex data
+// DeepCopy returns the a deep copy of vertex
 func (he HistoryEventVertex) DeepCopy() Vertex {
 
 	return &HistoryEventVertex{

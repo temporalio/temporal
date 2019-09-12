@@ -356,6 +356,8 @@ type (
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
 		VersionHistories *DataBlob
+		StartVersion     int64
+		LastWriteVersion int64
 
 		UpsertActivityInfos       []*InternalActivityInfo
 		DeleteActivityInfos       []int64
@@ -384,6 +386,8 @@ type (
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
 		VersionHistories *DataBlob
+		StartVersion     int64
+		LastWriteVersion int64
 
 		ActivityInfos       []*InternalActivityInfo
 		TimerInfos          []*TimerInfo
