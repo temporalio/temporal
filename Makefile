@@ -201,7 +201,7 @@ cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
 
 cover_ci: $(COVER_ROOT)/cover.out
-	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
+	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite -ignore="*_mock.go" || echo Coveralls failed;
 
 lint:
 	@echo Running linter
