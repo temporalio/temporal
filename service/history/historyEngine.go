@@ -83,6 +83,7 @@ type (
 		archivalClient            warchiver.Client
 		resetor                   workflowResetor
 		replicationTaskProcessors []*ReplicationTaskProcessor
+		publicClient              workflowserviceclient.Interface
 	}
 )
 
@@ -174,6 +175,7 @@ func NewEngineWithShardContext(
 			shard.GetConfig().ArchiveRequestRPS,
 			shard.GetService().GetArchiverProvider(),
 		),
+		publicClient: publicClient,
 	}
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)

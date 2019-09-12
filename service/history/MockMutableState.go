@@ -1505,6 +1505,20 @@ func (_m *mockMutableState) GetCurrentVersion() int64 {
 	return r0
 }
 
+// GetDomainName provides a mock function with given fields:
+func (_m *mockMutableState) GetDomainName() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // GetEventStoreVersion provides a mock function with given fields:
 func (_m *mockMutableState) GetEventStoreVersion() int32 {
 	ret := _m.Called()

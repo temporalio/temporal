@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/batcher"
 	"github.com/uber/cadence/service/worker/indexer"
+	"github.com/uber/cadence/service/worker/parentclosepolicy"
 	"github.com/uber/cadence/service/worker/replicator"
 	"github.com/uber/cadence/service/worker/scanner"
 )
@@ -60,13 +61,14 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ReplicationCfg  *replicator.Config
-		ArchiverConfig  *archiver.Config
-		IndexerCfg      *indexer.Config
-		ScannerCfg      *scanner.Config
-		BatcherCfg      *batcher.Config
-		ThrottledLogRPS dynamicconfig.IntPropertyFn
-		EnableBatcher   dynamicconfig.BoolPropertyFn
+		ReplicationCfg                *replicator.Config
+		ArchiverConfig                *archiver.Config
+		IndexerCfg                    *indexer.Config
+		ScannerCfg                    *scanner.Config
+		BatcherCfg                    *batcher.Config
+		ThrottledLogRPS               dynamicconfig.IntPropertyFn
+		EnableBatcher                 dynamicconfig.BoolPropertyFn
+		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -112,8 +114,9 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			AdminOperationToken: dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),
 			ClusterMetadata:     params.ClusterMetadata,
 		},
-		EnableBatcher:   dc.GetBoolProperty(dynamicconfig.EnableBatcher, false),
-		ThrottledLogRPS: dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
+		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, false),
+		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
+		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 	}
 	advancedVisWritingMode := dc.GetStringProperty(
 		dynamicconfig.AdvancedVisibilityWritingMode,
@@ -147,6 +150,7 @@ func (s *Service) Start() {
 	replicatorEnabled := base.GetClusterMetadata().IsGlobalDomainEnabled()
 	archiverEnabled := base.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
 	batcherEnabled := s.config.EnableBatcher()
+	parentClosePolicyEnabled := s.config.EnableParentClosePolicyWorker()
 
 	pConfig := s.params.PersistenceConfig
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
@@ -163,6 +167,9 @@ func (s *Service) Start() {
 	if batcherEnabled {
 		s.startBatcher(base)
 	}
+	if parentClosePolicyEnabled {
+		s.startParentClosePolicyProcessor(base)
+	}
 
 	s.logger.Info("service started", tag.ComponentWorker)
 	<-s.stopC
@@ -176,6 +183,20 @@ func (s *Service) Stop() {
 	}
 	close(s.stopC)
 	s.params.Logger.Info("service stopped", tag.ComponentWorker)
+}
+
+func (s *Service) startParentClosePolicyProcessor(base service.Service) {
+	params := &parentclosepolicy.BootstrapParams{
+		ServiceClient: s.params.PublicClient,
+		MetricsClient: s.metricsClient,
+		Logger:        s.logger,
+		TallyScope:    s.params.MetricScope,
+		ClientBean:    base.GetClientBean(),
+	}
+	processor := parentclosepolicy.New(params)
+	if err := processor.Start(); err != nil {
+		s.logger.Fatal("error starting parentclosepolicy processor", tag.Error(err))
+	}
 }
 
 func (s *Service) startBatcher(base service.Service) {

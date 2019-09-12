@@ -65,6 +65,7 @@ var keys = map[Key]string{
 	MinRetentionDays:                    "system.minRetentionDays",
 	MaxDecisionStartToCloseSeconds:      "system.maxDecisionStartToCloseSeconds",
 	EnableBatcher:                       "worker.enableBatcher",
+	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -185,6 +186,8 @@ var keys = map[Key]string{
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 	StickyTTL:                                             "history.stickyTTL",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
+	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
+	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -489,6 +492,11 @@ const (
 	EnableEventsV2
 	// UseTerminateAsDefaultParentClosePolicy whether to use Terminate as default ParentClosePolicy, otherwise use Abandon for backward compatibility
 	UseTerminateAsDefaultParentClosePolicy
+	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if
+	// the number of children greater than or equal to this threshold
+	ParentClosePolicyThreshold
+	// NumParentClosePolicySystemWorkflows is key for number of parentClosePolicy system workflows running in total
+	NumParentClosePolicySystemWorkflows
 
 	// HistoryThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	HistoryThrottledLogRPS
@@ -547,6 +555,8 @@ const (
 	ScannerPersistenceMaxQPS
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher
+	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
+	EnableParentClosePolicyWorker
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

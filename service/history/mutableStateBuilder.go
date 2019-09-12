@@ -606,6 +606,10 @@ func (e *mutableStateBuilder) assignTaskIDToEvents() error {
 	return nil
 }
 
+func (e *mutableStateBuilder) GetDomainName() string {
+	return e.domainName
+}
+
 func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
 	if e.executionInfo.StickyTaskList == "" {
 		return false

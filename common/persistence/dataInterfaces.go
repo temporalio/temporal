@@ -2445,10 +2445,12 @@ func NewHistoryBranchTokenFromAnother(branchID string, anotherToken []byte) ([]b
 	return token, nil
 }
 
+// BuildHistoryGarbageCleanupInfo combine the workflow identity information into a string
 func BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID string) string {
 	return fmt.Sprintf("%v:%v:%v", domainID, workflowID, runID)
 }
 
+// SplitHistoryGarbageCleanupInfo returns workflow identity information
 func SplitHistoryGarbageCleanupInfo(info string) (domainID, workflowID, runID string, err error) {
 	ss := strings.Split(info, ":")
 	// workflowID can contain ":" so len(ss) can be greater than 3

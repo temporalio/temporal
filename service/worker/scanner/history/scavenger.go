@@ -107,7 +107,7 @@ func NewScavenger(
 	}
 }
 
-// Start starts the scavenger
+// Run runs the scavenger
 func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) {
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
@@ -287,14 +287,13 @@ func getTaskLoggingTags(err error, task taskDetail) []tag.Tag {
 			tag.WorkflowTreeID(task.treeID),
 			tag.WorkflowBranchID(task.branchID),
 		}
-	} else {
-		return []tag.Tag{
-			tag.WorkflowDomainID(task.domainID),
-			tag.WorkflowID(task.workflowID),
-			tag.WorkflowRunID(task.runID),
-			tag.WorkflowTreeID(task.treeID),
-			tag.WorkflowBranchID(task.branchID),
-		}
+	}
+	return []tag.Tag{
+		tag.WorkflowDomainID(task.domainID),
+		tag.WorkflowID(task.workflowID),
+		tag.WorkflowRunID(task.runID),
+		tag.WorkflowTreeID(task.treeID),
+		tag.WorkflowBranchID(task.branchID),
 	}
 }
 

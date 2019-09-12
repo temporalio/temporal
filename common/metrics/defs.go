@@ -886,6 +886,8 @@ const (
 	BatcherScope
 	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
 	HistoryScavengerScope
+	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
+	ParentClosePolicyProcessorScope
 
 	NumWorkerScopes
 )
@@ -1274,6 +1276,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
 		HistoryScavengerScope:               {operation: "historyscavenger"},
 		BatcherScope:                        {operation: "batcher"},
+		ParentClosePolicyProcessorScope:     {operation: "ParentClosePolicyProcessor"},
 	},
 }
 
@@ -1580,6 +1583,8 @@ const (
 	HistoryScavengerSuccessCount
 	HistoryScavengerErrorCount
 	HistoryScavengerSkipCount
+	ParentClosePolicyProcessorSuccess
+	ParentClosePolicyProcessorFailures
 
 	NumWorkerMetrics
 )
@@ -1865,6 +1870,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryScavengerSuccessCount:           {metricName: "scavenger_success", metricType: Counter},
 		HistoryScavengerErrorCount:             {metricName: "scavenger_errors", metricType: Counter},
 		HistoryScavengerSkipCount:              {metricName: "scavenger_skips", metricType: Counter},
+		ParentClosePolicyProcessorSuccess:      {metricName: "parent_close_policy_processor_requests", metricType: Counter},
+		ParentClosePolicyProcessorFailures:     {metricName: "parent_close_policy_processor_errors", metricType: Counter},
 	},
 }
 

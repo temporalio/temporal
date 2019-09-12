@@ -121,6 +121,7 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
 		GetDecisionInfo(int64) (*decisionInfo, bool)
+		GetDomainName() string
 		GetStartEvent() (*workflow.HistoryEvent, bool)
 		GetCurrentBranch() []byte
 		GetCurrentVersion() int64
