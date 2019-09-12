@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "0.23",
-  "MinCompatibleVersion": "0.23",
-  "Description": "Added last_failure_details to activity_info",
-  "SchemaUpdateCqlFiles": [
-    "activity_last_failure_details.cql"
-  ]
-}
