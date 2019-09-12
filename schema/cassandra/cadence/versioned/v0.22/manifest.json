@@ -1,10 +1,11 @@
 {
   "CurrVersion": "0.22",
   "MinCompatibleVersion": "0.22",
-  "Description": "Add per cluster replication level (last replicated task_id) to shard info",
+  "Description": "Add per cluster replication level (last replicated task_id) to shard info and last failure details to activity info",
   "SchemaUpdateCqlFiles": [
     "request_cancel_signal_batch_event_id.cql",
     "cluster_replication_level.cql",
-    "parent_close_policy.cql"
+    "parent_close_policy.cql",
+    "activity_last_failure_details.cql"
   ]
 }
