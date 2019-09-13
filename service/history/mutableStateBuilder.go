@@ -2406,7 +2406,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		Version:                  event.GetVersion(),
 		ScheduleID:               scheduleEventID,
 		ScheduledEventBatchID:    firstEventID,
-		ScheduledTime:            time.Unix(0, *event.Timestamp),
+		ScheduledTime:            time.Unix(0, event.GetTimestamp()),
 		StartedID:                common.EmptyEventID,
 		StartedTime:              time.Time{},
 		ActivityID:               common.StringDefault(attributes.ActivityId),
