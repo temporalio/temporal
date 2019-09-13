@@ -77,6 +77,11 @@ type Interface interface {
 		QueryRequest *history.QueryWorkflowRequest,
 	) (*history.QueryWorkflowResponse, error)
 
+	ReapplyEvents(
+		ctx context.Context,
+		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	) error
+
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
 		HeartbeatRequest *history.RecordActivityTaskHeartbeatRequest,
@@ -294,6 +299,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.QueryWorkflow),
 				},
 				Signature:    "QueryWorkflow(QueryRequest *history.QueryWorkflowRequest) (*history.QueryWorkflowResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "ReapplyEvents",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ReapplyEvents),
+				},
+				Signature:    "ReapplyEvents(ReapplyEventsRequest *shared.ReapplyEventsRequest)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -563,7 +579,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 32)
+	procedures := make([]transport.Procedure, 0, 33)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -713,6 +729,25 @@ func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Res
 
 	hadError := err != nil
 	result, err := history.HistoryService_QueryWorkflow_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ReapplyEvents(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_ReapplyEvents_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ReapplyEvents(ctx, args.ReapplyEventsRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_ReapplyEvents_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

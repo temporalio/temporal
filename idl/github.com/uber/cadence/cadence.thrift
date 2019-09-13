@@ -598,4 +598,17 @@ service WorkflowService {
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
     )
+
+  /**
+  * ReapplyEvents applies stale events to the current workflow and current run
+  **/
+  void ReapplyEvents(1: shared.ReapplyEventsRequest reapplyEventsRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.DomainNotActiveError domainNotActiveError,
+      4: shared.LimitExceededError limitExceededError,
+      5: shared.ServiceBusyError serviceBusyError,
+      6: shared.EntityNotExistsError entityNotExistError,
+    )
 }

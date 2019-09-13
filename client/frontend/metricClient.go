@@ -707,3 +707,20 @@ func (c *metricClient) GetReplicationMessages(
 	}
 	return resp, err
 }
+
+func (c *metricClient) ReapplyEvents(
+	ctx context.Context,
+	request *shared.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientLatency)
+	err := c.client.ReapplyEvents(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientFailures)
+	}
+	return err
+}

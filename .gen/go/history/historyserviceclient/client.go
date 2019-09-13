@@ -87,6 +87,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*history.QueryWorkflowResponse, error)
 
+	ReapplyEvents(
+		ctx context.Context,
+		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
 		HeartbeatRequest *history.RecordActivityTaskHeartbeatRequest,
@@ -437,6 +443,29 @@ func (c client) QueryWorkflow(
 	}
 
 	success, err = history.HistoryService_QueryWorkflow_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReapplyEvents(
+	ctx context.Context,
+	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_ReapplyEvents_Helper.Args(_ReapplyEventsRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ReapplyEvents_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_ReapplyEvents_Helper.UnwrapResponse(&result)
 	return
 }
 

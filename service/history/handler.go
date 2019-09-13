@@ -1539,6 +1539,14 @@ func (h *Handler) GetReplicationMessages(
 	return &r.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
 }
 
+// ReapplyEvents applies stale events to the current workflow and the current run
+func (h *Handler) ReapplyEvents(
+	ctx context.Context,
+	request *gen.ReapplyEventsRequest,
+) error {
+	return &gen.BadRequestError{Message: "This API is not implemented yet"}
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

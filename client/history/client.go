@@ -810,6 +810,25 @@ func (c *clientImpl) GetReplicationMessages(
 	return response, nil
 }
 
+func (c *clientImpl) ReapplyEvents(
+	ctx context.Context,
+	request *workflow.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) error {
+	client, err := c.getClientForWorkflowID(request.GetWorkflowExecution().GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.ReapplyEvents(ctx, request, opts...)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)

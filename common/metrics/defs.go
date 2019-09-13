@@ -289,6 +289,8 @@ const (
 	HistoryClientGetReplicationTasksScope
 	// HistoryClientQueryWorkflowScope tracks RPC calls to history service
 	HistoryClientQueryWorkflowScope
+	// HistoryClientReapplyEventsScope tracks RPC calls to history service
+	HistoryClientReapplyEventsScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -379,6 +381,8 @@ const (
 	FrontendClientGetSearchAttributesScope
 	// FrontendClientGetReplicationTasksScope tracks RPC calls to frontend service
 	FrontendClientGetReplicationTasksScope
+	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
+	FrontendClientReapplyEventsScope
 	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributeScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
@@ -644,6 +648,8 @@ const (
 	FrontendGetSearchAttributesScope
 	// FrontendGetReplicationTasksScope is the metric scope for frontend.GetReplicationTasks
 	FrontendGetReplicationTasksScope
+	// FrontendReapplyEventsScope is the metric scope for frontend.ReapplyEvents
+	FrontendReapplyEventsScope
 
 	NumFrontendScopes
 )
@@ -991,6 +997,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationTasksScope:               {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReapplyEventsScope:                     {operation: "HistoryClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollForActivityTaskScope:              {operation: "MatchingClientPollForActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                  {operation: "MatchingClientAddActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -1036,6 +1043,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientCountWorkflowExecutionsScope:          {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSearchAttributesScope:              {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetReplicationTasksScope:              {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientReapplyEventsScope:                    {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		AdminClientAddSearchAttributeScope:                  {operation: "AdminClientAddSearchAttribute", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
@@ -1159,6 +1167,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendResetStickyTaskListScope:              {operation: "ResetStickyTaskList"},
 		FrontendGetSearchAttributesScope:              {operation: "GetSearchAttributes"},
 		FrontendGetReplicationTasksScope:              {operation: "GetReplicationTasks"},
+		FrontendReapplyEventsScope:                    {operation: "ReapplyEvents"},
 	},
 	// History Scope Names
 	History: {

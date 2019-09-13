@@ -3478,6 +3478,31 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 	return resp, nil
 }
 
+// ReapplyEvents applies stale events to the current workflow and the current run
+func (wh *WorkflowHandler) ReapplyEvents(
+	ctx context.Context,
+	request *shared.ReapplyEventsRequest,
+) (err error) {
+	defer log.CapturePanic(wh.GetLogger(), &err)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendReapplyEventsScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return wh.error(err, scope)
+	}
+
+	if request == nil {
+		return wh.error(errRequestNotSet, scope)
+	}
+
+	err = wh.history.ReapplyEvents(ctx, request)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
+}
+
 type domainWrapper struct {
 	domain string
 }
