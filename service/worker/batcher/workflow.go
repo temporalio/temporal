@@ -429,6 +429,7 @@ func processTask(
 		if err != nil {
 			return err
 		}
+		activity.RecordHeartbeat(ctx, task.hbd)
 
 		err = procFn(wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
@@ -466,8 +467,6 @@ func processTask(
 				})
 			}
 		}
-
-		activity.RecordHeartbeat(ctx, task.hbd)
 	}
 
 	return nil
