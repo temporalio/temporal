@@ -30,7 +30,7 @@ import (
 
 // GetSearchAttributes get valid search attributes
 func GetSearchAttributes(c *cli.Context) {
-	wfClient := getWorkflowClient(c)
+	wfClient := getWorkflowClientWithOptionalDomain(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 

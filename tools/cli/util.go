@@ -528,6 +528,13 @@ func getWorkflowClient(c *cli.Context) client.Client {
 	return client.NewClient(cFactory.ClientFrontendClient(c), domain, &client.Options{})
 }
 
+func getWorkflowClientWithOptionalDomain(c *cli.Context) client.Client {
+	if !c.GlobalIsSet(FlagDomain) {
+		c.GlobalSet(FlagDomain, "system-domain")
+	}
+	return getWorkflowClient(c)
+}
+
 func getRequiredOption(c *cli.Context, optionName string) string {
 	value := c.String(optionName)
 	if len(value) == 0 {
