@@ -26,7 +26,7 @@ import (
 
 const (
 	emptyCandidateIndex = -1
-	versionBumpGap      = int64(100)
+	defaultVersion      = int64(100)
 )
 
 var (
@@ -65,6 +65,7 @@ type (
 		canDoBatch          func([]Vertex, []Vertex) bool
 		resetPoints         []ResetPoint
 		resetCount          int64
+		version             int64
 	}
 
 	// ResetPoint is a mark in the generated event history that generator can be reset to
@@ -106,6 +107,7 @@ func NewEventGenerator(
 		canDoBatch:          defaultBatchFunc,
 		resetPoints:         []ResetPoint{},
 		resetCount:          0,
+		version:             defaultVersion,
 	}
 }
 
@@ -218,27 +220,17 @@ func (g *EventGenerator) ResetToResetPoint(
 		panic("The reset point does not exist.")
 	}
 	toReset := g.resetPoints[index]
-	previousVertices := make([]Vertex, len(toReset.previousVertices))
-	copy(previousVertices, toReset.previousVertices)
-	leafVertices := make([]Vertex, len(toReset.leafVertices))
-	copy(leafVertices, toReset.leafVertices)
-	entryVertices := make([]Vertex, len(g.entryVertices))
-	copy(entryVertices, g.entryVertices)
-	randomEntryVertices := make([]Vertex, len(g.randomEntryVertices))
-	copy(randomEntryVertices, g.randomEntryVertices)
-	resetPoints := make([]ResetPoint, len(g.resetPoints[index:]))
-	copy(resetPoints, g.resetPoints[index:])
 	return &EventGenerator{
 		connections:         copyConnections(g.connections),
-		previousVertices:    previousVertices,
-		leafVertices:        leafVertices,
-		entryVertices:       entryVertices,
+		previousVertices:    copyVertex(toReset.previousVertices),
+		leafVertices:        copyVertex(toReset.leafVertices),
+		entryVertices:       copyVertex(g.entryVertices),
 		exitVertices:        copyExitVertices(g.exitVertices),
-		randomEntryVertices: randomEntryVertices,
+		randomEntryVertices: copyVertex(g.randomEntryVertices),
 		dice:                rand.New(rand.NewSource(g.seed)),
 		seed:                g.seed,
 		canDoBatch:          g.canDoBatch,
-		resetPoints:         resetPoints,
+		resetPoints:         copyResetPoint(g.resetPoints[index:]),
 		resetCount:          g.resetCount + 1,
 	}
 }
@@ -249,6 +241,18 @@ func (g *EventGenerator) SetBatchGenerationRule(
 ) {
 
 	g.canDoBatch = canDoBatchFunc
+}
+
+// SetVersion sets the event version
+func (g *EventGenerator) SetVersion(version int64) {
+
+	g.version = version
+}
+
+// GetVersion returns event version
+func (g *EventGenerator) GetVersion() int64 {
+
+	return g.version
 }
 
 func (g *EventGenerator) generateNextEventBatch() []Vertex {
@@ -272,10 +276,8 @@ func (g *EventGenerator) generateNextEventBatch() []Vertex {
 
 func (g *EventGenerator) addNewResetPoint() {
 
-	previousVerticesSnapshot := make([]Vertex, len(g.previousVertices))
-	copy(previousVerticesSnapshot, g.previousVertices)
-	leafVerticesSnapshot := make([]Vertex, len(g.leafVertices))
-	copy(leafVerticesSnapshot, g.leafVertices)
+	previousVerticesSnapshot := copyVertex(g.previousVertices)
+	leafVerticesSnapshot := copyVertex(g.leafVertices)
 	newResetPoint := ResetPoint{
 		previousVertices: previousVerticesSnapshot,
 		leafVertices:     leafVerticesSnapshot,
@@ -313,11 +315,7 @@ func (g *EventGenerator) getRandomVertex() Vertex {
 	vertex := g.randomEntryVertices[nextIdx].DeepCopy()
 	parentEvent := g.previousVertices[len(g.previousVertices)-1]
 
-	versionBump := int64(0)
-	if g.shouldBumpVersion() {
-		versionBump = versionBumpGap
-	}
-	vertex.GenerateData(parentEvent.GetData(), parentEvent.GetData(), versionBump, g.resetCount)
+	vertex.GenerateData(parentEvent.GetData(), parentEvent.GetData(), g.version, g.resetCount)
 	return vertex
 }
 
@@ -368,17 +366,13 @@ func (g *EventGenerator) randomNextVertex(
 ) []Vertex {
 
 	nextVertex := g.leafVertices[nextVertexIdx]
-	versionBump := int64(0)
-	if g.shouldBumpVersion() {
-		versionBump = versionBumpGap
-	}
 
 	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 1
 	res := make([]Vertex, 0)
 	latestVertex := g.previousVertices[len(g.previousVertices)-1]
 	for i := 0; i < count; i++ {
 		endVertex := g.pickRandomVertex(nextVertex)
-		endVertex.GenerateData(nextVertex.GetData(), latestVertex.GetData(), versionBump, g.resetCount)
+		endVertex.GenerateData(nextVertex.GetData(), latestVertex.GetData(), g.version, g.resetCount)
 		latestVertex = endVertex
 		res = append(res, endVertex)
 		if _, ok := g.exitVertices[endVertex.GetName()]; ok {
@@ -607,4 +601,24 @@ func (m *HistoryEventModel) AddEdge(
 func (m HistoryEventModel) ListEdges() []Edge {
 
 	return m.edges
+}
+
+func copyVertex(vertex []Vertex) []Vertex {
+	newVertex := make([]Vertex, len(vertex))
+	for idx, v := range vertex {
+		newVertex[idx] = v.DeepCopy()
+	}
+	return newVertex
+}
+
+func copyResetPoint(resetPoints []ResetPoint) []ResetPoint {
+	newResetPoint := make([]ResetPoint, len(resetPoints))
+	for idx, resetPoint := range resetPoints {
+
+		newResetPoint[idx] = ResetPoint{
+			previousVertices: copyVertex(resetPoint.previousVertices),
+			leafVertices:     copyVertex(resetPoint.leafVertices),
+		}
+	}
+	return newResetPoint
 }

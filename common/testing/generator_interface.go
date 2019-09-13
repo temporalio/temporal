@@ -60,6 +60,10 @@ type (
 		ResetToResetPoint(int) Generator
 		// SetBatchGenerationRule sets a function that used in GetNextVertex to return batch result
 		SetBatchGenerationRule(func([]Vertex, []Vertex) bool)
+		// SetVersion sets the event version
+		SetVersion(int64)
+		// GetVersion gets the event version
+		GetVersion() int64
 	}
 
 	// Vertex represents a state in the model. A state represents a type of an Cadence event
