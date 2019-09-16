@@ -23,6 +23,7 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -34,7 +35,7 @@ import (
 )
 
 const (
-	retryLimit       = 10
+	retryLimit       = 20
 	retryBackoffTime = 200 * time.Millisecond
 )
 
@@ -99,50 +100,50 @@ func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	s.True(s.isMutableStateDeleted(domainID, execution))
 }
 
-// TODO: uncomment this test after queryParser for sql is implemented
-// func (s *integrationSuite) TestVisibilityArchival() {
-// 	s.True(s.testCluster.archiverBase.metadata.GetVisibilityConfig().ClusterConfiguredForArchival())
+func (s *integrationSuite) TestVisibilityArchival() {
+	s.True(s.testCluster.archiverBase.metadata.GetVisibilityConfig().ClusterConfiguredForArchival())
 
-// 	domainID := s.getDomainID(s.archivalDomainName)
-// 	workflowID := "archival-visibility-workflow-id"
-// 	workflowType := "archival-visibility-workflow-type"
-// 	taskList := "archival-visibility-task-list"
-// 	numActivities := 3
-// 	numRuns := 5
-// 	startTime := time.Now().UnixNano()
-// 	s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)
-// 	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskList, s.archivalDomainName, domainID, numActivities, numRuns)
-// 	endTime := time.Now().UnixNano()
+	domainID := s.getDomainID(s.archivalDomainName)
+	workflowID := "archival-visibility-workflow-id"
+	workflowType := "archival-visibility-workflow-type"
+	taskList := "archival-visibility-task-list"
+	numActivities := 3
+	numRuns := 5
+	startTime := time.Now().UnixNano()
+	s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)
+	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskList, s.archivalDomainName, domainID, numActivities, numRuns)
+	endTime := time.Now().UnixNano()
 
-// 	var executions []*workflow.WorkflowExecutionInfo
-// 	request := &workflow.ListArchivedWorkflowExecutionsRequest{
-// 		Domain:          common.StringPtr(s.archivalDomainName),
-// 		MaximumPageSize: common.Int32Ptr(2),
-// 		CloseTimeFilter: &workflow.StartTimeFilter{
-// 			EarliestTime: common.Int64Ptr(startTime),
-// 			LatestTime:   common.Int64Ptr(endTime),
-// 		},
-// 		TypeFilter: &workflow.WorkflowTypeFilter{
-// 			Name: common.StringPtr(workflowType),
-// 		},
-// 	}
-// 	for len(executions) == 0 || request.NextPageToken != nil {
-// 		response, err := s.engine.ListArchivedWorkflowExecutions(createContext(), request)
-// 		s.NoError(err)
-// 		s.NotNil(response)
-// 		executions = append(executions, response.GetExecutions()...)
-// 		request.NextPageToken = response.NextPageToken
-// 	}
+	var executions []*workflow.WorkflowExecutionInfo
 
-// 	s.Len(executions, numRuns)
-// 	for _, execution := range executions {
-// 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
-// 		s.Equal(workflowType, execution.GetType().GetName())
-// 		s.NotZero(execution.StartTime)
-// 		s.NotZero(execution.ExecutionTime)
-// 		s.NotZero(execution.CloseTime)
-// 	}
-// }
+	for i := 0; i != retryLimit; i++ {
+		executions = []*workflow.WorkflowExecutionInfo{}
+		request := &workflow.ListArchivedWorkflowExecutionsRequest{
+			Domain:   common.StringPtr(s.archivalDomainName),
+			PageSize: common.Int32Ptr(2),
+			Query:    common.StringPtr(fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType)),
+		}
+		for len(executions) == 0 || request.NextPageToken != nil {
+			response, err := s.engine.ListArchivedWorkflowExecutions(createContext(), request)
+			s.NoError(err)
+			s.NotNil(response)
+			executions = append(executions, response.GetExecutions()...)
+			request.NextPageToken = response.NextPageToken
+		}
+		if len(executions) == numRuns {
+			break
+		}
+		time.Sleep(retryBackoffTime)
+	}
+
+	for _, execution := range executions {
+		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
+		s.Equal(workflowType, execution.GetType().GetName())
+		s.NotZero(execution.StartTime)
+		s.NotZero(execution.ExecutionTime)
+		s.NotZero(execution.CloseTime)
+	}
+}
 
 func (s *integrationSuite) getDomainID(domain string) string {
 	domainResp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
