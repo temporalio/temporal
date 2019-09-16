@@ -57,8 +57,8 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 	}()
 	maxEventID := int64(0)
 	maxVersion := int64(1)
-	maxTaskID := int64(0)
-	for s.generator.HasNextVertex() {
+	maxTaskID := int64(1)
+	for i := 0; i < 10 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 
 		fmt.Println("########################")
@@ -82,14 +82,9 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 	}
 	s.NotEmpty(s.generator.ListGeneratedVertices())
 	fmt.Println("==========================")
-	newGenerator := s.generator.RandomResetToResetPoint()
-	previousEvents := newGenerator.ListGeneratedVertices()
-	lastEvent := previousEvents[len(previousEvents)-1].GetData().(*shared.HistoryEvent)
-	maxEventID = lastEvent.GetEventId()
-	maxVersion = lastEvent.GetVersion()
-	maxTaskID = lastEvent.GetTaskId()
-	for newGenerator.HasNextVertex() {
-		events := newGenerator.GetNextVertices()
+	branchGenerator1 := s.generator.DeepCopy()
+	for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
+		events := branchGenerator1.GetNextVertices()
 		fmt.Println("########################")
 		for _, e := range events {
 			event := e.GetData().(*shared.HistoryEvent)
@@ -109,5 +104,28 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 			fmt.Println(event.GetEventId())
 		}
 	}
-	s.NotEmpty(newGenerator.ListGeneratedVertices())
+	fmt.Println("==========================")
+	history := s.generator.ListGeneratedVertices()
+	maxEventID = history[len(history)-1].GetData().(*shared.HistoryEvent).GetEventId()
+	for i := 0; i < 10 && s.generator.HasNextVertex(); i++ {
+		events := s.generator.GetNextVertices()
+		fmt.Println("########################")
+		for _, e := range events {
+			event := e.GetData().(*shared.HistoryEvent)
+			if maxEventID != event.GetEventId()-1 {
+				s.Fail("event id sequence is incorrect")
+			}
+			maxEventID = event.GetEventId()
+			if maxVersion > event.GetVersion() {
+				s.Fail("event version is incorrect")
+			}
+			maxVersion = event.GetVersion()
+			if maxTaskID > event.GetTaskId() {
+				s.Fail("event task id is incorrect")
+			}
+			maxTaskID = event.GetTaskId()
+			fmt.Println(e.GetName())
+			fmt.Println(event.GetEventId())
+		}
+	}
 }

@@ -56,7 +56,6 @@ type (
 		*require.Assertions
 		suite.Suite
 		active     *host.TestCluster
-		passive    *host.TestCluster
 		generator  test.Generator
 		serializer persistence.PayloadSerializer
 		logger     log.Logger
@@ -68,10 +67,11 @@ type (
 )
 
 var (
-	clusterName              = []string{"active", "standby"}
+	clusterName              = []string{"active", "standby", "other"}
 	clusterReplicationConfig = []*workflow.ClusterReplicationConfiguration{
 		{ClusterName: common.StringPtr(clusterName[0])},
 		{ClusterName: common.StringPtr(clusterName[1])},
+		{ClusterName: common.StringPtr(clusterName[2])},
 	}
 )
 
@@ -88,7 +88,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.serializer = persistence.NewPayloadSerializer()
 	s.logger = loggerimpl.NewLogger(zapLogger)
 
-	fileName := "../testdata/xdc_integration_test_clusters.yaml"
+	fileName := "../testdata/ndc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {
 		fileName = host.TestFlags.TestClusterConfigFile
 	}
@@ -107,10 +107,6 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.active = cluster
 
-	cluster, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterName[1])))
-	s.Require().NoError(err)
-	s.passive = cluster
-
 	s.registerDomain()
 
 	s.version = 101
@@ -128,10 +124,10 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 		s.generator.Reset()
 	}
 	s.active.TearDownCluster()
-	s.passive.TearDownCluster()
 }
 
 func (s *nDCIntegrationTestSuite) TestSingleBranch() {
+
 	workflowID := "ndc-single-branch-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
@@ -145,6 +141,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 		runID := uuid.New()
 		historyBatch := []*shared.History{}
 		s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+		s.generator.SetVersion(version)
 
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
@@ -155,47 +152,16 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 			historyBatch = append(historyBatch, historyEvents)
 		}
 
-		// TODO temporary code to generate version history
-		//  we should generate version as part of modeled based testing
-		versionHistory := persistence.NewVersionHistory(nil, nil)
-		for _, batch := range historyBatch {
-			for _, event := range batch.Events {
-				err := versionHistory.AddOrUpdateItem(
-					persistence.NewVersionHistoryItem(
-						event.GetEventId(),
-						event.GetVersion(),
-					))
-				s.NoError(err)
-			}
-		}
-
-		for _, batch := range historyBatch {
-
-			// TODO temporary code to generate next run first event
-			//  we should generate these as part of modeled based testing
-			lastEvent := batch.Events[len(batch.Events)-1]
-			newRunEventBlob := s.generateNewRunHistory(
-				lastEvent, s.domainName, workflowID, runID, version, workflowType, tasklist,
-			)
-
-			// must serialize events batch after attempt on continue as new as generateNewRunHistory will
-			// modify the NewExecutionRunId attr
-			eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
-			s.NoError(err)
-
-			err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
-				DomainUUID: common.StringPtr(s.domainID),
-				WorkflowExecution: &shared.WorkflowExecution{
-					WorkflowId: common.StringPtr(workflowID),
-					RunId:      common.StringPtr(runID),
-				},
-				VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory),
-				Events:              s.toThriftDataBlob(eventBlob),
-				NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
-				ResetWorkflow:       common.BoolPtr(false),
-			})
-			s.Nil(err, "Failed to replicate history event")
-		}
+		versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
+		s.applyEvents(
+			workflowID,
+			runID,
+			workflowType,
+			tasklist,
+			versionHistory,
+			historyBatch,
+			historyClient,
+		)
 
 		// get replicated history events from passive side
 		passiveClient := s.active.GetFrontendClient()
@@ -232,6 +198,90 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	}
 }
 
+func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
+	workflowID := "ndc-multiple-branches-test" + uuid.New()
+
+	workflowType := "event-generator-workflow-type"
+	tasklist := "event-generator-taskList"
+
+	// active has initial version 0
+	historyClient := s.active.GetHistoryClient()
+
+	versions := []int64{101, 1, 201}
+	for _, version := range versions {
+		runID := uuid.New()
+
+		baseBranch := []*shared.History{}
+		baseGenerator := test.InitializeHistoryEventGenerator(s.domainName, version)
+		baseGenerator.SetVersion(version)
+
+		for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
+			events := baseGenerator.GetNextVertices()
+			historyEvents := &shared.History{}
+			for _, event := range events {
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+			}
+			baseBranch = append(baseBranch, historyEvents)
+		}
+		baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
+
+		branch1 := []*shared.History{}
+		branchVersionHistory1 := baseVersionHistory.Duplicate()
+		branchGenerator1 := baseGenerator.DeepCopy()
+		for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
+			events := branchGenerator1.GetNextVertices()
+			historyEvents := &shared.History{}
+			for _, event := range events {
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+			}
+			branch1 = append(branch1, historyEvents)
+		}
+		branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
+
+		branch2 := []*shared.History{}
+		branchVersionHistory2 := baseVersionHistory.Duplicate()
+		branchGenerator2 := baseGenerator.DeepCopy()
+		branchGenerator2.SetVersion(branchGenerator2.GetVersion() + 1)
+		for i := 0; i < 10 && branchGenerator2.HasNextVertex(); i++ {
+			events := branchGenerator2.GetNextVertices()
+			historyEvents := &shared.History{}
+			for _, event := range events {
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+			}
+			branch2 = append(branch2, historyEvents)
+		}
+		branchVersionHistory2 = s.eventBatchesToVersionHistory(branchVersionHistory2, branch2)
+
+		s.applyEvents(
+			workflowID,
+			runID,
+			workflowType,
+			tasklist,
+			baseVersionHistory,
+			baseBranch,
+			historyClient,
+		)
+		s.applyEvents(
+			workflowID,
+			runID,
+			workflowType,
+			tasklist,
+			branchVersionHistory1,
+			branch1,
+			historyClient,
+		)
+		s.applyEvents(
+			workflowID,
+			runID,
+			workflowType,
+			tasklist,
+			branchVersionHistory2,
+			branch2,
+			historyClient,
+		)
+	}
+}
+
 func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	workflowID := "ndc-handcrafted-multiple-branches-test" + uuid.New()
 	runID := uuid.New()
@@ -243,8 +293,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
 
-	events1 := [][]*shared.HistoryEvent{
-		{
+	eventsBatch1 := []*shared.History{
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(1),
 				Version:   common.Int64Ptr(21),
@@ -268,8 +318,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					Attempt:                    common.Int64Ptr(0),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(3),
 				Version:   common.Int64Ptr(21),
@@ -280,8 +330,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					RequestId:        common.StringPtr(uuid.New()),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(4),
 				Version:   common.Int64Ptr(21),
@@ -318,8 +368,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(20),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(7),
 				Version:   common.Int64Ptr(21),
@@ -331,8 +381,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					Attempt:          common.Int32Ptr(0),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(8),
 				Version:   common.Int64Ptr(21),
@@ -353,8 +403,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					Attempt:                    common.Int64Ptr(0),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(10),
 				Version:   common.Int64Ptr(21),
@@ -365,8 +415,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					RequestId:        common.StringPtr(uuid.New()),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(11),
 				Version:   common.Int64Ptr(21),
@@ -407,11 +457,11 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					RequestId:        common.StringPtr(uuid.New()),
 				},
 			},
-		},
+		}},
 	}
 
-	events2 := [][]*shared.HistoryEvent{
-		{
+	eventsBatch2 := []*shared.History{
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(15),
 				Version:   common.Int64Ptr(31),
@@ -420,11 +470,11 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					TimeoutType: shared.TimeoutTypeStartToClose.Ptr(),
 				},
 			},
-		},
+		}},
 	}
 
-	events3 := [][]*shared.HistoryEvent{
-		{
+	eventsBatch3 := []*shared.History{
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(15),
 				Version:   common.Int64Ptr(30),
@@ -455,8 +505,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					Attempt:                    common.Int64Ptr(0),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(18),
 				Version:   common.Int64Ptr(30),
@@ -467,8 +517,8 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					RequestId:        common.StringPtr(uuid.New()),
 				},
 			},
-		},
-		{
+		}},
+		&shared.History{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(19),
 				Version:   common.Int64Ptr(30),
@@ -489,110 +539,50 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 					Details:                      nil,
 				},
 			},
-		},
+		}},
 	}
 
-	versionHistory1 := persistence.NewVersionHistory(nil, nil)
-	for _, batch := range events1 {
-		for _, event := range batch {
-			err := versionHistory1.AddOrUpdateItem(
-				persistence.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			s.NoError(err)
-		}
-	}
+	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
 	versionHistory2, err := versionHistory1.DuplicateUntilLCAItem(
 		persistence.NewVersionHistoryItem(14, 21),
 	)
 	s.NoError(err)
-	for _, batch := range events2 {
-		for _, event := range batch {
-			err := versionHistory2.AddOrUpdateItem(
-				persistence.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			s.NoError(err)
-		}
-	}
+	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
 
 	versionHistory3, err := versionHistory1.DuplicateUntilLCAItem(
 		persistence.NewVersionHistoryItem(14, 21),
 	)
 	s.NoError(err)
-	for _, batch := range events3 {
-		for _, event := range batch {
-			err := versionHistory3.AddOrUpdateItem(
-				persistence.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			s.NoError(err)
-		}
-	}
+	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
 
-	for _, batch := range events1 {
-		// must serialize events batch after attempt on continue as new as generateNewRunHistory will
-		// modify the NewExecutionRunId attr
-		eventBlob, err := s.serializer.SerializeBatchEvents(batch, common.EncodingTypeThriftRW)
-		s.NoError(err)
-
-		err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
-			DomainUUID: common.StringPtr(s.domainID),
-			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory1),
-			Events:              s.toThriftDataBlob(eventBlob),
-			NewRunEvents:        nil,
-			ResetWorkflow:       common.BoolPtr(false),
-		})
-		s.Nil(err, "Failed to replicate history event")
-	}
-
-	for _, batch := range events3 {
-		// must serialize events batch after attempt on continue as new as generateNewRunHistory will
-		// modify the NewExecutionRunId attr
-		eventBlob, err := s.serializer.SerializeBatchEvents(batch, common.EncodingTypeThriftRW)
-		s.NoError(err)
-
-		err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
-			DomainUUID: common.StringPtr(s.domainID),
-			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory3),
-			Events:              s.toThriftDataBlob(eventBlob),
-			NewRunEvents:        nil,
-			ResetWorkflow:       common.BoolPtr(false),
-		})
-		s.Nil(err, "Failed to replicate history event")
-	}
-
-	for _, batch := range events2 {
-		// must serialize events batch after attempt on continue as new as generateNewRunHistory will
-		// modify the NewExecutionRunId attr
-		eventBlob, err := s.serializer.SerializeBatchEvents(batch, common.EncodingTypeThriftRW)
-		s.NoError(err)
-
-		err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
-			DomainUUID: common.StringPtr(s.domainID),
-			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory2),
-			Events:              s.toThriftDataBlob(eventBlob),
-			NewRunEvents:        nil,
-			ResetWorkflow:       common.BoolPtr(false),
-		})
-		s.Nil(err, "Failed to replicate history event")
-	}
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory1,
+		eventsBatch1,
+		historyClient,
+	)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory3,
+		eventsBatch3,
+		historyClient,
+	)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory2,
+		eventsBatch2,
+		historyClient,
+	)
 }
 
 func (s *nDCIntegrationTestSuite) registerDomain() {
@@ -701,6 +691,69 @@ func (s *nDCIntegrationTestSuite) toThriftDataBlob(
 		EncodingType: encodingType.Ptr(),
 		Data:         blob.Data,
 	}
+}
+
+func (s *nDCIntegrationTestSuite) applyEvents(
+	workflowID string,
+	runID string,
+	workflowType string,
+	tasklist string,
+	versionHistory *persistence.VersionHistory,
+	eventBatches []*shared.History,
+	historyClient host.HistoryClient,
+) {
+
+	for _, batch := range eventBatches {
+
+		// TODO temporary code to generate next run first event
+		//  we should generate these as part of modeled based testing
+		lastEvent := batch.Events[len(batch.Events)-1]
+		newRunEventBlob := s.generateNewRunHistory(
+			lastEvent, s.domainName, workflowID, runID, lastEvent.GetVersion(), workflowType, tasklist,
+		)
+
+		// must serialize events batch after attempt on continue as new as generateNewRunHistory will
+		// modify the NewExecutionRunId attr
+		eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
+		s.NoError(err)
+
+		err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
+			DomainUUID: common.StringPtr(s.domainID),
+			WorkflowExecution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory),
+			Events:              s.toThriftDataBlob(eventBlob),
+			NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
+			ResetWorkflow:       common.BoolPtr(false),
+		})
+		s.Nil(err, "Failed to replicate history event")
+	}
+}
+
+func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
+	versionHistory *persistence.VersionHistory,
+	eventBatches []*shared.History,
+) *persistence.VersionHistory {
+
+	// TODO temporary code to generate version history
+	//  we should generate version as part of modeled based testing
+	if versionHistory == nil {
+		versionHistory = persistence.NewVersionHistory(nil, nil)
+	}
+	for _, batch := range eventBatches {
+		for _, event := range batch.Events {
+			err := versionHistory.AddOrUpdateItem(
+				persistence.NewVersionHistoryItem(
+					event.GetEventId(),
+					event.GetVersion(),
+				))
+			s.NoError(err)
+		}
+	}
+
+	return versionHistory
 }
 
 func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(

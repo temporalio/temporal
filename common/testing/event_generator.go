@@ -63,22 +63,14 @@ type (
 		dice                *rand.Rand
 		seed                int64
 		canDoBatch          func([]Vertex, []Vertex) bool
-		resetPoints         []ResetPoint
-		resetCount          int64
 		version             int64
-	}
-
-	// ResetPoint is a mark in the generated event history that generator can be reset to
-	ResetPoint struct {
-		previousVertices []Vertex
-		leafVertices     []Vertex
 	}
 
 	// HistoryEventEdge is the directional edge of two history events
 	HistoryEventEdge struct {
 		startVertex Vertex
 		endVertex   Vertex
-		condition   func() bool
+		condition   func(...interface{}) bool
 		action      func()
 	}
 
@@ -105,8 +97,6 @@ func NewEventGenerator(
 		dice:                rand.New(rand.NewSource(seed)),
 		seed:                seed,
 		canDoBatch:          defaultBatchFunc,
-		resetPoints:         []ResetPoint{},
-		resetCount:          0,
 		version:             defaultVersion,
 	}
 }
@@ -183,7 +173,6 @@ func (g *EventGenerator) GetNextVertices() []Vertex {
 		g.updateContext(res)
 		batch = append(batch, res...)
 	}
-	g.addNewResetPoint()
 	return batch
 }
 
@@ -192,46 +181,23 @@ func (g *EventGenerator) Reset() {
 
 	g.leafVertices = make([]Vertex, 0)
 	g.previousVertices = make([]Vertex, 0)
-	g.resetPoints = make([]ResetPoint, 0)
-	g.resetCount = 0
+	g.version = defaultVersion
 }
 
-// ListResetPoint returns a list of available point to reset the event generator
-// this will reset the previous generated event history
-func (g *EventGenerator) ListResetPoint() []ResetPoint {
+// DeepCopy copy a new instance of generator
+func (g *EventGenerator) DeepCopy() Generator {
 
-	return g.resetPoints
-}
-
-// RandomResetToResetPoint randomly pick a reset point and reset the event generator to the point
-func (g *EventGenerator) RandomResetToResetPoint() Generator {
-
-	// Random reset does not reset to index 0
-	nextIdx := g.dice.Intn(len(g.resetPoints) - 1)
-	return g.ResetToResetPoint(nextIdx)
-}
-
-// ResetToResetPoint resets to the corresponding reset point based on the input reset point index
-func (g *EventGenerator) ResetToResetPoint(
-	index int,
-) Generator {
-
-	if index >= len(g.resetPoints) {
-		panic("The reset point does not exist.")
-	}
-	toReset := g.resetPoints[index]
 	return &EventGenerator{
 		connections:         copyConnections(g.connections),
-		previousVertices:    copyVertex(toReset.previousVertices),
-		leafVertices:        copyVertex(toReset.leafVertices),
+		previousVertices:    copyVertex(g.previousVertices),
+		leafVertices:        copyVertex(g.leafVertices),
 		entryVertices:       copyVertex(g.entryVertices),
 		exitVertices:        copyExitVertices(g.exitVertices),
 		randomEntryVertices: copyVertex(g.randomEntryVertices),
 		dice:                rand.New(rand.NewSource(g.seed)),
 		seed:                g.seed,
 		canDoBatch:          g.canDoBatch,
-		resetPoints:         copyResetPoint(g.resetPoints[index:]),
-		resetCount:          g.resetCount + 1,
+		version:             g.version,
 	}
 }
 
@@ -274,17 +240,6 @@ func (g *EventGenerator) generateNextEventBatch() []Vertex {
 	return batch
 }
 
-func (g *EventGenerator) addNewResetPoint() {
-
-	previousVerticesSnapshot := copyVertex(g.previousVertices)
-	leafVerticesSnapshot := copyVertex(g.leafVertices)
-	newResetPoint := ResetPoint{
-		previousVertices: previousVerticesSnapshot,
-		leafVertices:     leafVerticesSnapshot,
-	}
-	g.resetPoints = append(g.resetPoints, newResetPoint)
-}
-
 func (g *EventGenerator) updateContext(
 	batch []Vertex,
 ) {
@@ -315,7 +270,7 @@ func (g *EventGenerator) getRandomVertex() Vertex {
 	vertex := g.randomEntryVertices[nextIdx].DeepCopy()
 	parentEvent := g.previousVertices[len(g.previousVertices)-1]
 
-	vertex.GenerateData(parentEvent.GetData(), parentEvent.GetData(), g.version, g.resetCount)
+	vertex.GenerateData(parentEvent.GetData(), parentEvent.GetData(), g.version)
 	return vertex
 }
 
@@ -354,7 +309,7 @@ func (g *EventGenerator) findAccessibleVertex(
 	}
 	neighbors := g.connections[candidate.GetName()]
 	for _, nextV := range neighbors {
-		if nextV.GetCondition() == nil || nextV.GetCondition()() {
+		if nextV.GetCondition() == nil || nextV.GetCondition()(g.previousVertices) {
 			return true, vertexIndex
 		}
 	}
@@ -372,7 +327,7 @@ func (g *EventGenerator) randomNextVertex(
 	latestVertex := g.previousVertices[len(g.previousVertices)-1]
 	for i := 0; i < count; i++ {
 		endVertex := g.pickRandomVertex(nextVertex)
-		endVertex.GenerateData(nextVertex.GetData(), latestVertex.GetData(), g.version, g.resetCount)
+		endVertex.GenerateData(nextVertex.GetData(), latestVertex.GetData(), g.version)
 		latestVertex = endVertex
 		res = append(res, endVertex)
 		if _, ok := g.exitVertices[endVertex.GetName()]; ok {
@@ -390,7 +345,7 @@ func (g *EventGenerator) pickRandomVertex(
 	neighbors := g.connections[nextVertex.GetName()]
 	neighborsRange := len(neighbors)
 	nextIdx := g.dice.Intn(neighborsRange)
-	for neighbors[nextIdx].GetCondition() != nil && !neighbors[nextIdx].GetCondition()() {
+	for neighbors[nextIdx].GetCondition() != nil && !neighbors[nextIdx].GetCondition()(g.previousVertices) {
 		nextIdx = g.dice.Intn(neighborsRange)
 	}
 	newConnection := neighbors[nextIdx]
@@ -447,14 +402,14 @@ func (c HistoryEventEdge) GetEndVertex() Vertex {
 
 // SetCondition sets the condition to access this edge
 func (c *HistoryEventEdge) SetCondition(
-	condition func() bool,
+	condition func(...interface{}) bool,
 ) {
 
 	c.condition = condition
 }
 
 // GetCondition returns the condition
-func (c HistoryEventEdge) GetCondition() func() bool {
+func (c HistoryEventEdge) GetCondition() func(...interface{}) bool {
 
 	return c.condition
 }
@@ -469,6 +424,17 @@ func (c HistoryEventEdge) SetAction(action func()) {
 func (c HistoryEventEdge) GetAction() func() {
 
 	return c.action
+}
+
+// DeepCopy copies a new edge
+func (c *HistoryEventEdge) DeepCopy() Edge {
+
+	return &HistoryEventEdge{
+		startVertex: c.startVertex.DeepCopy(),
+		endVertex:   c.endVertex.DeepCopy(),
+		condition:   c.condition,
+		action:      c.action,
+	}
 }
 
 // NewHistoryEventVertex initials a history event vertex
@@ -601,24 +567,4 @@ func (m *HistoryEventModel) AddEdge(
 func (m HistoryEventModel) ListEdges() []Edge {
 
 	return m.edges
-}
-
-func copyVertex(vertex []Vertex) []Vertex {
-	newVertex := make([]Vertex, len(vertex))
-	for idx, v := range vertex {
-		newVertex[idx] = v.DeepCopy()
-	}
-	return newVertex
-}
-
-func copyResetPoint(resetPoints []ResetPoint) []ResetPoint {
-	newResetPoint := make([]ResetPoint, len(resetPoints))
-	for idx, resetPoint := range resetPoints {
-
-		newResetPoint[idx] = ResetPoint{
-			previousVertices: copyVertex(resetPoint.previousVertices),
-			leafVertices:     copyVertex(resetPoint.leafVertices),
-		}
-	}
-	return newResetPoint
 }

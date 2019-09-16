@@ -52,12 +52,8 @@ type (
 		ListGeneratedVertices() []Vertex
 		// Reset cleans up all the internal states and reset to a brand new generator
 		Reset()
-		// ListResetPoint lists all available reset points
-		ListResetPoint() []ResetPoint
-		// RandomResetToResetPoint randomly pick a reset point to reset and return the reset point index
-		RandomResetToResetPoint() Generator
-		// ResetToResetPoint resets the generator to a reset point
-		ResetToResetPoint(int) Generator
+		// DeepCopy copy a new instance of generator
+		DeepCopy() Generator
 		// SetBatchGenerationRule sets a function that used in GetNextVertex to return batch result
 		SetBatchGenerationRule(func([]Vertex, []Vertex) bool)
 		// SetVersion sets the event version
@@ -97,10 +93,11 @@ type (
 		SetEndVertex(Vertex)
 		GetEndVertex() Vertex
 		// Condition defines a function to determine if this connection is accessible
-		SetCondition(func() bool)
-		GetCondition() func() bool
+		SetCondition(func(...interface{}) bool)
+		GetCondition() func(...interface{}) bool
 		// Action defines function to perform when the end vertex reached
 		SetAction(func())
 		GetAction() func()
+		DeepCopy() Edge
 	}
 )
