@@ -636,6 +636,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 					Attempt:            common.Int32Ptr(activityInfo.Attempt),
 					LastFailureReason:  common.StringPtr(activityInfo.LastFailureReason),
 					LastWorkerIdentity: common.StringPtr(activityInfo.LastWorkerIdentity),
+					LastFailureDetails: activityInfo.LastFailureDetails,
 				},
 			}, nil
 		},

@@ -1241,7 +1241,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal
-	s.mockMutableState.On("ReplicateSignalExternalWorkflowExecutionInitiatedEvent", event, mock.Anything).Return(si, nil).Once()
+	s.mockMutableState.On("ReplicateSignalExternalWorkflowExecutionInitiatedEvent", event.GetEventId(), event, mock.Anything).Return(si, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: targetDomain}).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: targetDomainID, Name: targetDomain},
@@ -1348,7 +1348,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal
-	s.mockMutableState.On("ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent", event, mock.Anything).Return(rci, nil).Once()
+	s.mockMutableState.On("ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent", event.GetEventId(), event, mock.Anything).Return(rci, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: targetDomain}).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: targetDomainID, Name: targetDomain},

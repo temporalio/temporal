@@ -292,6 +292,7 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			NonRetriableErrors:             v.NonRetriableErrors,
 			LastFailureReason:              v.LastFailureReason,
 			LastWorkerIdentity:             v.LastWorkerIdentity,
+			LastFailureDetails:             v.LastFailureDetails,
 			LastHeartbeatTimeoutVisibility: v.LastHeartbeatTimeoutVisibility,
 		}
 		newInfos[k] = a
@@ -411,6 +412,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			NonRetriableErrors:             v.NonRetriableErrors,
 			LastFailureReason:              v.LastFailureReason,
 			LastWorkerIdentity:             v.LastWorkerIdentity,
+			LastFailureDetails:             v.LastFailureDetails,
 			LastHeartbeatTimeoutVisibility: v.LastHeartbeatTimeoutVisibility,
 		}
 		newInfos = append(newInfos, i)

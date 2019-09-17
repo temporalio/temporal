@@ -130,15 +130,24 @@ dcRedirectionPolicy:
     toDC: ""
 
 archival:
+  history:
     status: "enabled"
-    enableReadFromArchival: true
-    defaultBucket: "cadence-development"
-    filestore:
-        storeDirectory: "/tmp/development/blobstore/"
-        defaultBucket: "cadence-development"
-        customBuckets:
-            - "custom-bucket-1"
-            - "custom-bucket-2"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  visibility:
+    status: "disabled"
+    enableRead: false
+
+domainDefaults:
+  archival:
+    history:
+      status: "enabled"
+      URI: "file:///tmp/cadence_archival/development"
+    visibility:
+      status: "disabled"
 
 kafka:
     tls:

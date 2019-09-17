@@ -358,10 +358,6 @@ func (wh *WorkflowHandler) PollForActivityTask(
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if ok := wh.allow(pollRequest); !ok {
-		return nil, wh.error(createServiceBusyError(), scope)
-	}
-
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
 	if err := common.ValidateLongPollContextTimeout(
 		ctx,
@@ -440,10 +436,6 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 
 	if pollRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if ok := wh.allow(pollRequest); !ok {
-		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")

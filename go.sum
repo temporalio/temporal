@@ -223,10 +223,10 @@ github.com/uber-go/mapdecode v1.0.0 h1:euUEFM9KnuCa1OBixz1xM+FIXmpixyay5DLymceOV
 github.com/uber-go/mapdecode v1.0.0/go.mod h1:b5nP15FwXTgpjTjeA9A2uTHXV5UJCl4arwKpP0FP1Hw=
 github.com/uber-go/tally v3.3.11+incompatible h1:b6xn/zbXCPFID3p2P9nUlHWyrNZ3e3U35Ra1/gDR63I=
 github.com/uber-go/tally v3.3.11+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
-github.com/uber/jaeger-client-go v2.16.0+incompatible h1:Q2Pp6v3QYiocMxomCaJuwQGFt7E53bPYqEgug/AoBtY=
-github.com/uber/jaeger-client-go v2.16.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
-github.com/uber/jaeger-lib v2.0.0+incompatible h1:iMSCV0rmXEogjNWPh2D0xk9YVKvrtGoHJNe9ebLu/pw=
-github.com/uber/jaeger-lib v2.0.0+incompatible/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
+github.com/uber/jaeger-client-go v2.15.0+incompatible h1:NP3qsSqNxh8VYr956ur1N/1C1PjvOJnJykCzcD5QHbk=
+github.com/uber/jaeger-client-go v2.15.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
+github.com/uber/jaeger-lib v1.5.0 h1:OHbgr8l656Ub3Fw5k9SWnBfIEwvoHQ+W2y+Aa9D1Uyo=
+github.com/uber/jaeger-lib v1.5.0/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
 github.com/uber/ringpop-go v0.8.5 h1:aBa/SHmmFRcAXA63k7uBheoTL8tCmH7L+OgktB1AF/o=
 github.com/uber/ringpop-go v0.8.5/go.mod h1:zVI6eGO6L7pG14GkntHsSOfmUAWQ7B4lvmzly4IT4ls=
 github.com/uber/tchannel-go v1.14.0 h1:v5mYnfCSI+H76umzo17+o3YdrnUt5W1AcvV+47065B0=
@@ -241,8 +241,6 @@ github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 h1:zzrxE1FKn5ryB
 github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2/go.mod h1:hzfGeIUDq/j97IG+FhNqkowIyEcD88LrW6fyU3K3WqY=
 go.uber.org/atomic v1.4.0 h1:cxzIVoETapQEqDhQu3QfnvXAV4AlzcvUCxkVUFw3+EU=
 go.uber.org/atomic v1.4.0/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
-go.uber.org/cadence v0.0.0-20190702231331-27b0ba2bc456 h1:4nI6vqmnHOgQyeDDepZghHE4YYQuxXFnJvPZA8JKGjs=
-go.uber.org/cadence v0.0.0-20190702231331-27b0ba2bc456/go.mod h1:CQivfHCJ44B1kKL4LLtOhcepUwNoRodZceo/wU5Nthw=
 go.uber.org/cadence v0.9.1-0.20190819173509-c3cd9f8f9745 h1:UfkGg9w9lbfmLNxHMFp5UlCqzqw/kAZglCSAE2v6aeY=
 go.uber.org/cadence v0.9.1-0.20190819173509-c3cd9f8f9745/go.mod h1:CQivfHCJ44B1kKL4LLtOhcepUwNoRodZceo/wU5Nthw=
 go.uber.org/dig v1.7.0 h1:E5/L92iQTNJTjfgJF2KgU+/JpMaiuvK2DHLBj0+kSZk=

@@ -51,35 +51,37 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/worker/parentclosepolicy"
 )
 
 type (
 	transferQueueActiveProcessorSuite struct {
 		suite.Suite
 
-		controller               *gomock.Controller
-		mockShardManager         *mocks.ShardManager
-		mockHistoryEngine        *historyEngineImpl
-		mockMetadataMgr          *mocks.MetadataManager
-		mockVisibilityMgr        *mocks.VisibilityManager
-		mockExecutionMgr         *mocks.ExecutionManager
-		mockHistoryMgr           *mocks.HistoryManager
-		mockHistoryV2Mgr         *mocks.HistoryV2Manager
-		mockMatchingClient       *matchingservicetest.MockClient
-		mockHistoryClient        *historyservicetest.MockClient
-		mockShard                ShardContext
-		mockClusterMetadata      *mocks.ClusterMetadata
-		mockProducer             *mocks.KafkaProducer
-		mockMessagingClient      messaging.Client
-		mockQueueAckMgr          *MockQueueAckMgr
-		mockClientBean           *client.MockClientBean
-		mockService              service.Service
-		logger                   log.Logger
-		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MockTimerQueueProcessor
-		mockArchivalMetadata     *archiver.MockArchivalMetadata
-		mockArchiverProvider     *provider.MockArchiverProvider
+		controller                  *gomock.Controller
+		mockShardManager            *mocks.ShardManager
+		mockHistoryEngine           *historyEngineImpl
+		mockMetadataMgr             *mocks.MetadataManager
+		mockVisibilityMgr           *mocks.VisibilityManager
+		mockExecutionMgr            *mocks.ExecutionManager
+		mockHistoryMgr              *mocks.HistoryManager
+		mockHistoryV2Mgr            *mocks.HistoryV2Manager
+		mockMatchingClient          *matchingservicetest.MockClient
+		mockHistoryClient           *historyservicetest.MockClient
+		mockShard                   ShardContext
+		mockClusterMetadata         *mocks.ClusterMetadata
+		mockProducer                *mocks.KafkaProducer
+		mockMessagingClient         messaging.Client
+		mockQueueAckMgr             *MockQueueAckMgr
+		mockClientBean              *client.MockClientBean
+		mockService                 service.Service
+		logger                      log.Logger
+		mockTxProcessor             *MockTransferQueueProcessor
+		mockReplicationProcessor    *MockReplicatorQueueProcessor
+		mockTimerProcessor          *MockTimerQueueProcessor
+		mockArchivalMetadata        *archiver.MockArchivalMetadata
+		mockArchiverProvider        *provider.MockArchiverProvider
+		mockParentClosePolicyClient *parentclosepolicy.ClientMock
 
 		domainID                     string
 		domainEntry                  *cache.DomainCacheEntry
@@ -207,6 +209,9 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	)
 	s.transferQueueActiveProcessor.queueAckMgr = s.mockQueueAckMgr
 	s.transferQueueActiveProcessor.queueProcessorBase.ackMgr = s.mockQueueAckMgr
+
+	s.mockParentClosePolicyClient = &parentclosepolicy.ClientMock{}
+	s.transferQueueActiveProcessor.parentClosePolicyClient = s.mockParentClosePolicyClient
 
 	s.domainID = validDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
@@ -752,6 +757,243 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 	mVisibilityArchiver := &archiver.VisibilityArchiverMock{}
 	mVisibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	s.mockArchiverProvider.On("GetVisibilityArchiver", mock.Anything, mock.Anything).Return(mVisibilityArchiver, nil)
+
+	_, err = s.transferQueueActiveProcessor.process(transferTask, true)
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent_HasFewChildren() {
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(s.domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+	s.Nil(err)
+
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
+	di.StartedID = event.GetEventId()
+
+	dt := workflow.DecisionTypeStartChildWorkflowExecution
+	parentClosePolicy1 := workflow.ParentClosePolicyAbandon
+	parentClosePolicy2 := workflow.ParentClosePolicyTerminate
+	parentClosePolicy3 := workflow.ParentClosePolicyRequestCancel
+
+	event, _ = msBuilder.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflow.RespondDecisionTaskCompletedRequest{
+		ExecutionContext: nil,
+		Identity:         common.StringPtr("some random identity"),
+		Decisions: []*workflow.Decision{
+			&workflow.Decision{
+				DecisionType: &dt,
+				StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+					WorkflowId: common.StringPtr("child workflow1"),
+					WorkflowType: &workflow.WorkflowType{
+						Name: common.StringPtr("child workflow type"),
+					},
+					TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+					Input:             []byte("random input"),
+					ParentClosePolicy: &parentClosePolicy1,
+				},
+			},
+			&workflow.Decision{
+				DecisionType: &dt,
+				StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+					WorkflowId: common.StringPtr("child workflow2"),
+					WorkflowType: &workflow.WorkflowType{
+						Name: common.StringPtr("child workflow type"),
+					},
+					TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+					Input:             []byte("random input"),
+					ParentClosePolicy: &parentClosePolicy2,
+				},
+			},
+			&workflow.Decision{
+				DecisionType: &dt,
+				StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+					WorkflowId: common.StringPtr("child workflow3"),
+					WorkflowType: &workflow.WorkflowType{
+						Name: common.StringPtr("child workflow type"),
+					},
+					TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+					Input:             []byte("random input"),
+					ParentClosePolicy: &parentClosePolicy3,
+				},
+			},
+		},
+	}, defaultHistoryMaxAutoResetPoints)
+
+	_, _, err = msBuilder.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &workflow.StartChildWorkflowExecutionDecisionAttributes{
+		WorkflowId: common.StringPtr("child workflow1"),
+		WorkflowType: &workflow.WorkflowType{
+			Name: common.StringPtr("child workflow type"),
+		},
+		TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+		Input:             []byte("random input"),
+		ParentClosePolicy: &parentClosePolicy1,
+	})
+	s.Nil(err)
+	_, _, err = msBuilder.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &workflow.StartChildWorkflowExecutionDecisionAttributes{
+		WorkflowId: common.StringPtr("child workflow2"),
+		WorkflowType: &workflow.WorkflowType{
+			Name: common.StringPtr("child workflow type"),
+		},
+		TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+		Input:             []byte("random input"),
+		ParentClosePolicy: &parentClosePolicy2,
+	})
+	s.Nil(err)
+	_, _, err = msBuilder.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &workflow.StartChildWorkflowExecutionDecisionAttributes{
+		WorkflowId: common.StringPtr("child workflow3"),
+		WorkflowType: &workflow.WorkflowType{
+			Name: common.StringPtr("child workflow type"),
+		},
+		TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+		Input:             []byte("random input"),
+		ParentClosePolicy: &parentClosePolicy3,
+	})
+	s.Nil(err)
+
+	msBuilder.FlushBufferedEvents()
+
+	taskID := int64(59)
+	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:    s.version,
+		DomainID:   s.domainID,
+		WorkflowID: execution.GetWorkflowId(),
+		RunID:      execution.GetRunId(),
+		TaskID:     taskID,
+		TaskList:   taskListName,
+		TaskType:   persistence.TransferTaskTypeCloseExecution,
+		ScheduleID: event.GetEventId(),
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
+	mVisibilityArchiver := &archiver.VisibilityArchiverMock{}
+	mVisibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	s.mockArchiverProvider.On("GetVisibilityArchiver", mock.Anything, mock.Anything).Return(mVisibilityArchiver, nil)
+	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(nil, gomock.Any()).Return(nil).Times(1)
+	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(nil, gomock.Any()).Return(nil).Times(1)
+
+	_, err = s.transferQueueActiveProcessor.process(transferTask, true)
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent_HasManyChildren() {
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		s.domainEntry,
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(s.domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+	s.Nil(err)
+
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
+	di.StartedID = event.GetEventId()
+
+	dt := workflow.DecisionTypeStartChildWorkflowExecution
+	parentClosePolicy := workflow.ParentClosePolicyTerminate
+	decisions := []*workflow.Decision{}
+	for i := 0; i < 10; i++ {
+		decisions = append(decisions, &workflow.Decision{
+			DecisionType: &dt,
+			StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+				WorkflowId: common.StringPtr("child workflow" + string(i)),
+				WorkflowType: &workflow.WorkflowType{
+					Name: common.StringPtr("child workflow type"),
+				},
+				TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				Input:             []byte("random input"),
+				ParentClosePolicy: &parentClosePolicy,
+			},
+		})
+	}
+
+	event, _ = msBuilder.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflow.RespondDecisionTaskCompletedRequest{
+		ExecutionContext: nil,
+		Identity:         common.StringPtr("some random identity"),
+		Decisions:        decisions,
+	}, defaultHistoryMaxAutoResetPoints)
+
+	for i := 0; i < 10; i++ {
+		_, _, err = msBuilder.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &workflow.StartChildWorkflowExecutionDecisionAttributes{
+			WorkflowId: common.StringPtr("child workflow" + string(i)),
+			WorkflowType: &workflow.WorkflowType{
+				Name: common.StringPtr("child workflow type"),
+			},
+			TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+			Input:             []byte("random input"),
+			ParentClosePolicy: &parentClosePolicy,
+		})
+		s.Nil(err)
+	}
+
+	msBuilder.FlushBufferedEvents()
+
+	taskID := int64(59)
+	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:    s.version,
+		DomainID:   s.domainID,
+		WorkflowID: execution.GetWorkflowId(),
+		RunID:      execution.GetRunId(),
+		TaskID:     taskID,
+		TaskList:   taskListName,
+		TaskType:   persistence.TransferTaskTypeCloseExecution,
+		ScheduleID: event.GetEventId(),
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
+	mVisibilityArchiver := &archiver.VisibilityArchiverMock{}
+	mVisibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	s.mockArchiverProvider.On("GetVisibilityArchiver", mock.Anything, mock.Anything).Return(mVisibilityArchiver, nil)
+	s.mockParentClosePolicyClient.On("SendParentClosePolicyRequest", mock.Anything).Return(nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(transferTask, true)
 	s.Nil(err)

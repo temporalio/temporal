@@ -260,6 +260,7 @@ const (
 		`non_retriable_errors: ?, ` +
 		`last_failure_reason: ?, ` +
 		`last_worker_identity: ?, ` +
+		`last_failure_details: ?, ` +
 		`event_data_encoding: ?` +
 		`}`
 

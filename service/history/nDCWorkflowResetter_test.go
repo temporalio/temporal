@@ -184,7 +184,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
-		Info:            historyGarbageCleanupInfo(s.domainID, s.workflowID, s.newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.newRunID),
 		ShardID:         common.IntPtr(s.mockShard.GetShardID()),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil).Times(1)
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", &persistence.CompleteForkBranchRequest{

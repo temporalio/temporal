@@ -785,13 +785,14 @@ type pendingActivityInfo struct {
 	State                  *shared.PendingActivityState
 	ScheduledTimestamp     *string `json:",omitempty"` // change from *int64
 	LastStartedTimestamp   *string `json:",omitempty"` // change from *int64
-	HeartbeatDetails       *string `json:",omitempty"` // change from byte[]
+	HeartbeatDetails       *string `json:",omitempty"` // change from []byte
 	LastHeartbeatTimestamp *string `json:",omitempty"` // change from *int64
 	Attempt                *int32  `json:",omitempty"`
 	MaximumAttempts        *int32  `json:",omitempty"`
 	ExpirationTimestamp    *string `json:",omitempty"` // change from *int64
 	LastFailureReason      *string `json:",omitempty"`
 	LastWorkerIdentity     *string `json:",omitempty"`
+	LastFailureDetails     *string `json:",omitempty"` // change from []byte
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse,
@@ -829,6 +830,9 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		}
 		if pa.HeartbeatDetails != nil {
 			tmpAct.HeartbeatDetails = common.StringPtr(string(pa.HeartbeatDetails))
+		}
+		if pa.LastFailureDetails != nil {
+			tmpAct.LastFailureDetails = common.StringPtr(string(pa.LastFailureDetails))
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}

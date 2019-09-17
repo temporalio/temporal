@@ -4012,7 +4012,7 @@ func (s *resetorSuite) TestApplyReset() {
 	forkReq := &p.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      30,
-		Info:            historyGarbageCleanupInfo(domainID, wid, newRunID),
+		Info:            p.BuildHistoryGarbageCleanupInfo(domainID, wid, newRunID),
 		ShardID:         common.IntPtr(s.shardID),
 	}
 	forkResp := &p.ForkHistoryBranchResponse{

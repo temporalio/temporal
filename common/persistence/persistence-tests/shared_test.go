@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,36 +18,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cli
+package persistencetests
 
 import (
-	"os"
-	"sort"
-
-	"github.com/olekukonko/tablewriter"
-	"github.com/urfave/cli"
+	"github.com/uber/cadence/common/persistence"
+	"testing"
 )
 
-// GetSearchAttributes get valid search attributes
-func GetSearchAttributes(c *cli.Context) {
-	wfClient := getWorkflowClientWithOptionalDomain(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
+func TestGarbageCleanupInfo(t *testing.T) {
+	domainID := "10000000-5000-f000-f000-000000000000"
+	workflowID := "workflow-id"
+	runID := "10000000-5000-f000-f000-000000000002"
 
-	resp, err := wfClient.GetSearchAttributes(ctx)
-	if err != nil {
-		ErrorAndExit("Failed to get search attributes.", err)
+	info := persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID)
+	domainID2, workflowID2, runID2, err := persistence.SplitHistoryGarbageCleanupInfo(info)
+	if err != nil || domainID != domainID2 || workflowID != workflowID2 || runID != runID2 {
+		t.Fail()
 	}
+}
 
-	table := tablewriter.NewWriter(os.Stdout)
-	header := []string{"Key", "Value type"}
-	table.SetHeader(header)
-	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
-	rows := [][]string{}
-	for k, v := range resp.Keys {
-		rows = append(rows, []string{k, v.String()})
+func TestGarbageCleanupInfo_WithColonInWorklfowID(t *testing.T) {
+	domainID := "10000000-5000-f000-f000-000000000000"
+	workflowID := "workflow-id:2"
+	runID := "10000000-5000-f000-f000-000000000002"
+
+	info := persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID)
+	domainID2, workflowID2, runID2, err := persistence.SplitHistoryGarbageCleanupInfo(info)
+	if err != nil || domainID != domainID2 || workflowID != workflowID2 || runID != runID2 {
+		t.Fail()
 	}
-	sort.Sort(byKey(rows))
-	table.AppendBulk(rows)
-	table.Render()
 }

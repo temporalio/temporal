@@ -101,7 +101,7 @@ type (
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		RetryActivity(*persistence.ActivityInfo, string) (bool, error)
+		RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails []byte) (bool, error)
 		CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
@@ -121,6 +121,7 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, error)
 		GetCompletionEvent() (*workflow.HistoryEvent, error)
 		GetDecisionInfo(int64) (*decisionInfo, bool)
+		GetDomainName() string
 		GetStartEvent() (*workflow.HistoryEvent, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetVersionHistories() *persistence.VersionHistories
@@ -182,9 +183,9 @@ type (
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent) error
 		ReplicateExternalWorkflowExecutionSignaled(*workflow.HistoryEvent) error
 		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) (*persistence.RequestCancelInfo, error)
+		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.RequestCancelInfo, error)
 		ReplicateSignalExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
-		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) (*persistence.SignalInfo, error)
+		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.SignalInfo, error)
 		ReplicateStartChildWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
 		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.ChildExecutionInfo, error)
 		ReplicateTimerCanceledEvent(*workflow.HistoryEvent) error

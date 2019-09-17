@@ -898,6 +898,10 @@ const (
 	TaskListScavengerScope
 	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
 	BatcherScope
+	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
+	HistoryScavengerScope
+	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
+	ParentClosePolicyProcessorScope
 
 	NumWorkerScopes
 )
@@ -1291,7 +1295,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverPumpScope:                   {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
+		HistoryScavengerScope:               {operation: "historyscavenger"},
 		BatcherScope:                        {operation: "batcher"},
+		ParentClosePolicyProcessorScope:     {operation: "ParentClosePolicyProcessor"},
 	},
 }
 
@@ -1595,6 +1601,12 @@ const (
 	ExecutorTasksDroppedCount
 	BatcherProcessorSuccess
 	BatcherProcessorFailures
+	HistoryScavengerSuccessCount
+	HistoryScavengerErrorCount
+	HistoryScavengerSkipCount
+	ParentClosePolicyProcessorSuccess
+	ParentClosePolicyProcessorFailures
+
 	NumWorkerMetrics
 )
 
@@ -1876,6 +1888,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ExecutorTasksDroppedCount:              {metricName: "executor_dropped", metricType: Counter},
 		BatcherProcessorSuccess:                {metricName: "batcher_processor_requests", metricType: Counter},
 		BatcherProcessorFailures:               {metricName: "batcher_processor_errors", metricType: Counter},
+		HistoryScavengerSuccessCount:           {metricName: "scavenger_success", metricType: Counter},
+		HistoryScavengerErrorCount:             {metricName: "scavenger_errors", metricType: Counter},
+		HistoryScavengerSkipCount:              {metricName: "scavenger_skips", metricType: Counter},
+		ParentClosePolicyProcessorSuccess:      {metricName: "parent_close_policy_processor_requests", metricType: Counter},
+		ParentClosePolicyProcessorFailures:     {metricName: "parent_close_policy_processor_errors", metricType: Counter},
 	},
 }
 

@@ -126,6 +126,7 @@ func newActivityReplicationTask(task *replicator.ReplicationTask, msg messaging.
 			Attempt:            attr.Attempt,
 			LastFailureReason:  attr.LastFailureReason,
 			LastWorkerIdentity: attr.LastWorkerIdentity,
+			LastFailureDetails: attr.LastFailureDetails,
 		},
 	}
 }

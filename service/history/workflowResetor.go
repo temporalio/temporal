@@ -360,7 +360,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	forkResp, retError := w.eng.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      resetDecisionCompletedEventID,
-		Info:            historyGarbageCleanupInfo(domainID, workflowID, newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, newRunID),
 		ShardID:         common.IntPtr(w.eng.shard.GetShardID()),
 	})
 	if retError != nil {
@@ -398,10 +398,6 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 		}
 	}
 	return
-}
-
-func historyGarbageCleanupInfo(domainID, workflowID, runID string) string {
-	return fmt.Sprintf("%v:%v:%v", domainID, workflowID, runID)
 }
 
 func (w *workflowResetorImpl) setEventIDsWithHistory(msBuilder mutableState) (int64, error) {
@@ -850,7 +846,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	forkResp, retError := w.eng.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      decisionFinishEventID,
-		Info:            historyGarbageCleanupInfo(domainID, workflowID, resetAttr.GetNewRunId()),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, resetAttr.GetNewRunId()),
 		ShardID:         shardID,
 	})
 	if retError != nil {

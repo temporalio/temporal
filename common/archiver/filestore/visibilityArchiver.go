@@ -151,6 +151,10 @@ func (v *visibilityArchiver) Query(
 		return nil, &shared.BadRequestError{Message: err.Error()}
 	}
 
+	if parsedQuery.emptyResult {
+		return &archiver.QueryVisibilityResponse{}, nil
+	}
+
 	return v.query(ctx, URI, &queryVisibilityRequest{
 		domainID:      request.DomainID,
 		pageSize:      request.PageSize,

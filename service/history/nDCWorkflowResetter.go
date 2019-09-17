@@ -106,7 +106,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseEventID + 1,
-		Info:            historyGarbageCleanupInfo(r.domainID, r.workflowID, r.newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.domainID, r.workflowID, r.newRunID),
 		ShardID:         common.IntPtr(shardID),
 	})
 	if err != nil {

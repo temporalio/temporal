@@ -165,7 +165,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
-		Info:            historyGarbageCleanupInfo(domainID, workflowID, uuid.New()),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, uuid.New()),
 		ShardID:         common.IntPtr(shardID),
 	})
 	if err != nil {

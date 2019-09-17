@@ -92,6 +92,7 @@ struct SyncActicvityTaskAttributes {
   110: optional i32 attempt
   120: optional string lastFailureReason
   130: optional string lastWorkerIdentity
+  140: optional binary lastFailureDetails
 }
 
 struct HistoryTaskV2Attributes {

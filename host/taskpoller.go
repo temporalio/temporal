@@ -364,6 +364,7 @@ retry:
 			return p.Engine.RespondActivityTaskFailed(createContext(), &workflow.RespondActivityTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Reason:    common.StringPtr(err2.Error()),
+				Details:   []byte(err2.Error()),
 				Identity:  common.StringPtr(p.Identity),
 			})
 		}
@@ -434,6 +435,7 @@ retry:
 				RunID:      common.StringPtr(response.WorkflowExecution.GetRunId()),
 				ActivityID: common.StringPtr(response.GetActivityId()),
 				Reason:     common.StringPtr(err2.Error()),
+				Details:    []byte(err2.Error()),
 				Identity:   common.StringPtr(p.Identity),
 			})
 		}
