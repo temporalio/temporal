@@ -2416,13 +2416,13 @@ func (_m *mockMutableState) ReplicateRequestCancelExternalWorkflowExecutionFaile
 	return r0
 }
 
-// ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(_a0 *shared.HistoryEvent, _a1 string) (*persistence.RequestCancelInfo, error) {
-	ret := _m.Called(_a0, _a1)
+// ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent provides a mock function with given fields: _a0, _a1, _a2
+func (_m *mockMutableState) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(_a0 int64, _a1 *shared.HistoryEvent, _a2 string) (*persistence.RequestCancelInfo, error) {
+	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 *persistence.RequestCancelInfo
-	if rf, ok := ret.Get(0).(func(*shared.HistoryEvent, string) *persistence.RequestCancelInfo); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(int64, *shared.HistoryEvent, string) *persistence.RequestCancelInfo); ok {
+		r0 = rf(_a0, _a1, _a2)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.RequestCancelInfo)
@@ -2430,8 +2430,8 @@ func (_m *mockMutableState) ReplicateRequestCancelExternalWorkflowExecutionIniti
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*shared.HistoryEvent, string) error); ok {
-		r1 = rf(_a0, _a1)
+	if rf, ok := ret.Get(1).(func(int64, *shared.HistoryEvent, string) error); ok {
+		r1 = rf(_a0, _a1, _a2)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2453,13 +2453,13 @@ func (_m *mockMutableState) ReplicateSignalExternalWorkflowExecutionFailedEvent(
 	return r0
 }
 
-// ReplicateSignalExternalWorkflowExecutionInitiatedEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(_a0 *shared.HistoryEvent, _a1 string) (*persistence.SignalInfo, error) {
-	ret := _m.Called(_a0, _a1)
+// ReplicateSignalExternalWorkflowExecutionInitiatedEvent provides a mock function with given fields: _a0, _a1, _a2
+func (_m *mockMutableState) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(_a0 int64, _a1 *shared.HistoryEvent, _a2 string) (*persistence.SignalInfo, error) {
+	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 *persistence.SignalInfo
-	if rf, ok := ret.Get(0).(func(*shared.HistoryEvent, string) *persistence.SignalInfo); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(int64, *shared.HistoryEvent, string) *persistence.SignalInfo); ok {
+		r0 = rf(_a0, _a1, _a2)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.SignalInfo)
@@ -2467,8 +2467,8 @@ func (_m *mockMutableState) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*shared.HistoryEvent, string) error); ok {
-		r1 = rf(_a0, _a1)
+	if rf, ok := ret.Get(1).(func(int64, *shared.HistoryEvent, string) error); ok {
+		r1 = rf(_a0, _a1, _a2)
 	} else {
 		r1 = ret.Error(1)
 	}

@@ -398,7 +398,7 @@ func (b *stateBuilderImpl) applyEvents(
 		case shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			cancelRequestID := uuid.New()
-			rci, err := b.msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+			rci, err := b.msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(firstEvent.GetEventId(), event, cancelRequestID)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -429,7 +429,7 @@ func (b *stateBuilderImpl) applyEvents(
 		case shared.EventTypeSignalExternalWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			signalRequestID := uuid.New()
-			si, err := b.msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+			si, err := b.msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(firstEvent.GetEventId(), event, signalRequestID)
 			if err != nil {
 				return nil, nil, nil, err
 			}

@@ -2110,7 +2110,10 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 	return event, nil
 }
 
-func (e *mutableStateBuilder) ReplicateActivityTaskCanceledEvent(event *workflow.HistoryEvent) error {
+func (e *mutableStateBuilder) ReplicateActivityTaskCanceledEvent(
+	event *workflow.HistoryEvent,
+) error {
+
 	attributes := event.ActivityTaskCanceledEventAttributes
 	scheduleID := attributes.GetScheduledEventId()
 
@@ -2308,7 +2311,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 	}
 
 	event := e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, request)
-	rci, err := e.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+	rci, err := e.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, event, cancelRequestID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2323,6 +2326,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 }
 
 func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	firstEventID int64,
 	event *workflow.HistoryEvent,
 	cancelRequestID string,
 ) (*persistence.RequestCancelInfo, error) {
@@ -2330,9 +2334,10 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 	// TODO: Evaluate if we need cancelRequestID also part of history event
 	initiatedEventID := event.GetEventId()
 	rci := &persistence.RequestCancelInfo{
-		Version:         event.GetVersion(),
-		InitiatedID:     initiatedEventID,
-		CancelRequestID: cancelRequestID,
+		Version:               event.GetVersion(),
+		InitiatedEventBatchID: firstEventID,
+		InitiatedID:           initiatedEventID,
+		CancelRequestID:       cancelRequestID,
 	}
 
 	e.pendingRequestCancelInfoIDs[initiatedEventID] = rci
@@ -2433,7 +2438,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	}
 
 	event := e.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, request)
-	si, err := e.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+	si, err := e.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, event, signalRequestID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2448,6 +2453,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(
+	firstEventID int64,
 	event *workflow.HistoryEvent,
 	signalRequestID string,
 ) (*persistence.SignalInfo, error) {
@@ -2456,12 +2462,13 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 	initiatedEventID := event.GetEventId()
 	attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
 	si := &persistence.SignalInfo{
-		Version:         event.GetVersion(),
-		InitiatedID:     initiatedEventID,
-		SignalRequestID: signalRequestID,
-		SignalName:      attributes.GetSignalName(),
-		Input:           attributes.Input,
-		Control:         attributes.Control,
+		Version:               event.GetVersion(),
+		InitiatedEventBatchID: firstEventID,
+		InitiatedID:           initiatedEventID,
+		SignalRequestID:       signalRequestID,
+		SignalName:            attributes.GetSignalName(),
+		Input:                 attributes.Input,
+		Control:               attributes.Control,
 	}
 
 	e.pendingSignalInfoIDs[initiatedEventID] = si
@@ -3330,7 +3337,9 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	return event, nil
 }
 
-func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(event *workflow.HistoryEvent) error {
+func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
+	event *workflow.HistoryEvent,
+) error {
 	attributes := event.ChildWorkflowExecutionTimedOutEventAttributes
 	initiatedID := attributes.GetInitiatedEventId()
 

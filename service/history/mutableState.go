@@ -180,9 +180,9 @@ type (
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent) error
 		ReplicateExternalWorkflowExecutionSignaled(*workflow.HistoryEvent) error
 		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) (*persistence.RequestCancelInfo, error)
+		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.RequestCancelInfo, error)
 		ReplicateSignalExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
-		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) (*persistence.SignalInfo, error)
+		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.SignalInfo, error)
 		ReplicateStartChildWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
 		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.ChildExecutionInfo, error)
 		ReplicateTimerCanceledEvent(*workflow.HistoryEvent) error
