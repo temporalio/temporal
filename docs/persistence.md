@@ -53,7 +53,7 @@ don't expose these sub-systems today but this may change in future. Visibility i
 search. This includes APIs such as ListOpenWorkflows and ListClosedWorkflows. Today, it is possible to run a cadence 
 server with cadence-core backed by one database and cadence-visibility backed by another kind of database.To get the full 
 feature set of visibility, the recommendation is to use elastic search as the persistence layer. However, it is also possible 
-to run visiblity with limited feature set against cassandra or mysql today.  The top level persistence configuration looks 
+to run visibility with limited feature set against cassandra or mysql today.  The top level persistence configuration looks 
 like the following:
  
 
@@ -108,7 +108,7 @@ persistence:
       sql:
         driverName: "mysql"            -- name of the go sql driver, mysql is the only supported driver today
         databaseName: "cadence"        -- name of the database to connect to
-        connectAddr: "127.0.0.1:3306"  -- conection address, could be ip address or domain socket
+        connectAddr: "127.0.0.1:3306"  -- connection address, could be ip address or domain socket
         connectProtocol: "tcp"         -- connection protocol, tcp or anything that SQL Data Source Name accepts
         user: "uber" 
         password: "uber"
