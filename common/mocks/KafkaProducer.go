@@ -58,18 +58,4 @@ func (_m *KafkaProducer) Publish(msg interface{}) error {
 	return r0
 }
 
-// PublishBatch provides a mock function with given fields: msgs
-func (_m *KafkaProducer) PublishBatch(msgs []interface{}) error {
-	ret := _m.Called(msgs)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func([]interface{}) error); ok {
-		r0 = rf(msgs)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 var _ messaging.Producer = (*KafkaProducer)(nil)

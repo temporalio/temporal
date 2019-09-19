@@ -103,6 +103,11 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 	return newVisibilityPersistence(f.cfg, f.logger)
 }
 
+// NewQueue returns a new queue backed by cassandra
+func (f *Factory) NewQueue(queueType int) (p.Queue, error) {
+	return newQueue(f.cfg, f.logger, queueType)
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.Lock()

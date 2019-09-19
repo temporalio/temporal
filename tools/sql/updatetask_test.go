@@ -65,5 +65,5 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	s.Nil(err)
 	defer conn.Close()
 	dir := "../../schema/mysql/v57/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, "0.1")
+	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, "0.2")
 }

@@ -130,6 +130,16 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 	return NewSQLVisibilityStore(f.cfg, f.logger)
 }
 
+// NewQueue returns a new queue backed by sql
+func (f *Factory) NewQueue(queueType int) (p.Queue, error) {
+	conn, err := f.dbConn.get()
+	if err != nil {
+		return nil, err
+	}
+
+	return newQueue(conn, f.logger, queueType)
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.dbConn.forceClose()

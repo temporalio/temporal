@@ -1871,8 +1871,9 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	return response, nil
 }
 
-func (d *cassandraPersistence) GetReplicationTasks(request *p.GetReplicationTasksRequest) (*p.GetReplicationTasksResponse,
-	error) {
+func (d *cassandraPersistence) GetReplicationTasks(
+	request *p.GetReplicationTasksRequest,
+) (*p.GetReplicationTasksResponse, error) {
 
 	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetReplicationTasksQuery,

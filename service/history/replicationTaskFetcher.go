@@ -22,15 +22,15 @@ package history
 
 import (
 	"context"
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cluster"
 	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	r "github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/service/config"
@@ -154,8 +154,7 @@ func (f *ReplicationTaskFetcher) Stop() {
 
 // fetchTasks collects getReplicationTasks request from shards and send out aggregated request to source frontend.
 func (f *ReplicationTaskFetcher) fetchTasks() {
-	jitter := backoff.NewJitter()
-	timer := time.NewTimer(jitter.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+	timer := time.NewTimer(backoff.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
 
 	requestByShard := make(map[int32]*request)
 
@@ -178,7 +177,7 @@ Loop:
 			if len(requestByShard) == 0 {
 				// We don't receive tasks from previous fetch so processors are all sleeping.
 				f.logger.Debug("Skip fetching as no processor is asking for tasks.")
-				timer.Reset(jitter.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+				timer.Reset(backoff.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
 				continue Loop
 			}
 
@@ -194,7 +193,7 @@ Loop:
 			cancel()
 			if err != nil {
 				f.logger.Error("Failed to get replication tasks", tag.Error(err))
-				timer.Reset(jitter.JitDuration(time.Duration(f.config.ErrorRetryWaitSecs)*time.Second, f.config.TimerJitterCoefficient))
+				timer.Reset(backoff.JitDuration(time.Duration(f.config.ErrorRetryWaitSecs)*time.Second, f.config.TimerJitterCoefficient))
 				continue Loop
 			}
 
@@ -207,7 +206,7 @@ Loop:
 				delete(requestByShard, shardID)
 			}
 
-			timer.Reset(jitter.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+			timer.Reset(backoff.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
 
 		case <-f.done:
 			timer.Stop()

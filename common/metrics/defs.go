@@ -233,6 +233,10 @@ const (
 	PersistenceScanWorkflowExecutionsScope
 	// PersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to persistence layer
 	PersistenceCountWorkflowExecutionsScope
+	// PersistenceEnqueueMessageScope tracks Encueue calls made by service to persistence layer
+	PersistenceEnqueueMessageScope
+	// PersistenceDequeueMessagesScope tracks DequeueMessages calls made by service to persistence layer
+	PersistenceDequeueMessagesScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -375,6 +379,8 @@ const (
 	FrontendClientGetSearchAttributesScope
 	// FrontendClientGetReplicationTasksScope tracks RPC calls to frontend service
 	FrontendClientGetReplicationTasksScope
+	// FrontendClientGetDomainReplicationTasksScope tracks RPC calls to frontend service
+	FrontendClientGetDomainReplicationTasksScope
 	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributeScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
@@ -638,8 +644,10 @@ const (
 	FrontendResetWorkflowExecutionScope
 	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
 	FrontendGetSearchAttributesScope
-	// FrontendGetReplicationTasksScope is the metric scope for frontend.GetReplicationTasks
-	FrontendGetReplicationTasksScope
+	// FrontendGetReplicationMessagesScope is the metric scope for frontend.GetReplicationMessages
+	FrontendGetReplicationMessagesScope
+	// FrontendGetDomainReplicationMessagesScope is the metric scope for frontend.GetDomainReplicationMessages
+	FrontendGetDomainReplicationMessagesScope
 
 	NumFrontendScopes
 )
@@ -956,6 +964,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceCompleteForkBranchScope:                       {operation: "CompleteForkBranch"},
 		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree"},
 		PersistenceGetAllHistoryTreeBranchesScope:                {operation: "GetAllHistoryTreeBranches"},
+		PersistenceEnqueueMessageScope:                           {operation: "EnqueueMessage"},
+		PersistenceDequeueMessagesScope:                          {operation: "DequeueMessages"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 
@@ -1030,6 +1040,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientCountWorkflowExecutionsScope:          {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSearchAttributesScope:              {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetReplicationTasksScope:              {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetDomainReplicationTasksScope:        {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		AdminClientAddSearchAttributeScope:                  {operation: "AdminClientAddSearchAttribute", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
@@ -1152,7 +1163,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeTaskListScope:                 {operation: "DescribeTaskList"},
 		FrontendResetStickyTaskListScope:              {operation: "ResetStickyTaskList"},
 		FrontendGetSearchAttributesScope:              {operation: "GetSearchAttributes"},
-		FrontendGetReplicationTasksScope:              {operation: "GetReplicationTasks"},
+		FrontendGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
+		FrontendGetDomainReplicationMessagesScope:     {operation: "GetDomainReplicationMessages"},
 	},
 	// History Scope Names
 	History: {

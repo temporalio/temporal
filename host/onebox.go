@@ -74,37 +74,38 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		adminHandler        *frontend.AdminHandler
-		frontendHandler     *frontend.WorkflowHandler
-		matchingHandler     *matching.Handler
-		historyHandlers     []*history.Handler
-		logger              log.Logger
-		clusterMetadata     cluster.Metadata
-		persistenceConfig   config.Persistence
-		dispatcherProvider  client.DispatcherProvider
-		messagingClient     messaging.Client
-		metadataMgr         persistence.MetadataManager
-		metadataMgrV2       persistence.MetadataManager
-		shardMgr            persistence.ShardManager
-		historyMgr          persistence.HistoryManager
-		historyV2Mgr        persistence.HistoryV2Manager
-		taskMgr             persistence.TaskManager
-		visibilityMgr       persistence.VisibilityManager
-		executionMgrFactory persistence.ExecutionManagerFactory
-		shutdownCh          chan struct{}
-		shutdownWG          sync.WaitGroup
-		frontEndService     service.Service
-		clusterNo           int // cluster number
-		replicator          *replicator.Replicator
-		clientWorker        archiver.ClientWorker
-		indexer             *indexer.Indexer
-		enableEventsV2      bool
-		archiverMetadata    carchiver.ArchivalMetadata
-		archiverProvider    provider.ArchiverProvider
-		historyConfig       *HistoryConfig
-		esConfig            *elasticsearch.Config
-		esClient            elasticsearch.Client
-		workerConfig        *WorkerConfig
+		adminHandler           *frontend.AdminHandler
+		frontendHandler        *frontend.WorkflowHandler
+		matchingHandler        *matching.Handler
+		historyHandlers        []*history.Handler
+		logger                 log.Logger
+		clusterMetadata        cluster.Metadata
+		persistenceConfig      config.Persistence
+		dispatcherProvider     client.DispatcherProvider
+		messagingClient        messaging.Client
+		metadataMgr            persistence.MetadataManager
+		metadataMgrV2          persistence.MetadataManager
+		shardMgr               persistence.ShardManager
+		historyMgr             persistence.HistoryManager
+		historyV2Mgr           persistence.HistoryV2Manager
+		taskMgr                persistence.TaskManager
+		visibilityMgr          persistence.VisibilityManager
+		executionMgrFactory    persistence.ExecutionManagerFactory
+		domainReplicationQueue persistence.DomainReplicationQueue
+		shutdownCh             chan struct{}
+		shutdownWG             sync.WaitGroup
+		frontEndService        service.Service
+		clusterNo              int // cluster number
+		replicator             *replicator.Replicator
+		clientWorker           archiver.ClientWorker
+		indexer                *indexer.Indexer
+		enableEventsV2         bool
+		archiverMetadata       carchiver.ArchivalMetadata
+		archiverProvider       provider.ArchiverProvider
+		historyConfig          *HistoryConfig
+		esConfig               *elasticsearch.Config
+		esClient               elasticsearch.Client
+		workerConfig           *WorkerConfig
 	}
 
 	// HistoryConfig contains configs for history service
@@ -139,6 +140,7 @@ type (
 		ESConfig                      *elasticsearch.Config
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
+		DomainReplicationQueue        persistence.DomainReplicationQueue
 	}
 
 	membershipFactoryImpl struct {
@@ -150,28 +152,29 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		logger:              params.Logger,
-		clusterMetadata:     params.ClusterMetadata,
-		persistenceConfig:   params.PersistenceConfig,
-		dispatcherProvider:  params.DispatcherProvider,
-		messagingClient:     params.MessagingClient,
-		metadataMgr:         params.MetadataMgr,
-		metadataMgrV2:       params.MetadataMgrV2,
-		visibilityMgr:       params.VisibilityMgr,
-		shardMgr:            params.ShardMgr,
-		historyMgr:          params.HistoryMgr,
-		historyV2Mgr:        params.HistoryV2Mgr,
-		taskMgr:             params.TaskMgr,
-		executionMgrFactory: params.ExecutionMgrFactory,
-		shutdownCh:          make(chan struct{}),
-		clusterNo:           params.ClusterNo,
-		enableEventsV2:      params.EnableEventsV2,
-		esConfig:            params.ESConfig,
-		esClient:            params.ESClient,
-		archiverMetadata:    params.ArchiverMetadata,
-		archiverProvider:    params.ArchiverProvider,
-		historyConfig:       params.HistoryConfig,
-		workerConfig:        params.WorkerConfig,
+		logger:                 params.Logger,
+		clusterMetadata:        params.ClusterMetadata,
+		persistenceConfig:      params.PersistenceConfig,
+		dispatcherProvider:     params.DispatcherProvider,
+		messagingClient:        params.MessagingClient,
+		metadataMgr:            params.MetadataMgr,
+		metadataMgrV2:          params.MetadataMgrV2,
+		visibilityMgr:          params.VisibilityMgr,
+		shardMgr:               params.ShardMgr,
+		historyMgr:             params.HistoryMgr,
+		historyV2Mgr:           params.HistoryV2Mgr,
+		taskMgr:                params.TaskMgr,
+		executionMgrFactory:    params.ExecutionMgrFactory,
+		domainReplicationQueue: params.DomainReplicationQueue,
+		shutdownCh:             make(chan struct{}),
+		clusterNo:              params.ClusterNo,
+		enableEventsV2:         params.EnableEventsV2,
+		esConfig:               params.ESConfig,
+		esClient:               params.ESClient,
+		archiverMetadata:       params.ArchiverMetadata,
+		archiverProvider:       params.ArchiverProvider,
+		historyConfig:          params.HistoryConfig,
+		workerConfig:           params.WorkerConfig,
 	}
 }
 
@@ -405,17 +408,13 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	// TODO when cross DC is public, remove this temporary override
-	var kafkaProducer messaging.Producer
+	var replicationMessageSink messaging.Producer
 	var err error
 	if c.workerConfig.EnableReplicator {
-		kafkaProducer, err = c.messagingClient.NewProducerWithClusterName(c.clusterMetadata.GetCurrentClusterName())
-		if err != nil {
-			c.logger.Fatal("Failed to create kafka producer when start frontend", tag.Error(err))
-		}
+		replicationMessageSink = c.domainReplicationQueue
 	} else {
-		kafkaProducer = &mocks.KafkaProducer{}
-		kafkaProducer.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
+		replicationMessageSink = &mocks.KafkaProducer{}
+		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
 	c.frontEndService = service.New(params)
@@ -448,8 +447,15 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService, frontendConfig, c.metadataMgr, c.historyMgr, c.historyV2Mgr,
-		c.visibilityMgr, kafkaProducer, domainCache)
+		c.frontEndService,
+		frontendConfig,
+		c.metadataMgr,
+		c.historyMgr,
+		c.historyV2Mgr,
+		c.visibilityMgr,
+		replicationMessageSink,
+		c.domainReplicationQueue,
+		domainCache)
 	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 

@@ -3697,6 +3697,705 @@ func (v *WorkflowService_DescribeWorkflowExecution_Result) EnvelopeType() wire.E
 	return wire.Reply
 }
 
+// WorkflowService_GetDomainReplicationMessages_Args represents the arguments for the WorkflowService.GetDomainReplicationMessages function.
+//
+// The arguments for GetDomainReplicationMessages are sent and received over the wire as this struct.
+type WorkflowService_GetDomainReplicationMessages_Args struct {
+	Request *replicator.GetDomainReplicationMessagesRequest `json:"request,omitempty"`
+}
+
+// ToWire translates a WorkflowService_GetDomainReplicationMessages_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *WorkflowService_GetDomainReplicationMessages_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _GetDomainReplicationMessagesRequest_Read(w wire.Value) (*replicator.GetDomainReplicationMessagesRequest, error) {
+	var v replicator.GetDomainReplicationMessagesRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a WorkflowService_GetDomainReplicationMessages_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a WorkflowService_GetDomainReplicationMessages_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v WorkflowService_GetDomainReplicationMessages_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *WorkflowService_GetDomainReplicationMessages_Args) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.Request, err = _GetDomainReplicationMessagesRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a WorkflowService_GetDomainReplicationMessages_Args
+// struct.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
+		i++
+	}
+
+	return fmt.Sprintf("WorkflowService_GetDomainReplicationMessages_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this WorkflowService_GetDomainReplicationMessages_Args match the
+// provided WorkflowService_GetDomainReplicationMessages_Args.
+//
+// This function performs a deep comparison.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) Equals(rhs *WorkflowService_GetDomainReplicationMessages_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of WorkflowService_GetDomainReplicationMessages_Args.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Request != nil {
+		err = multierr.Append(err, enc.AddObject("request", v.Request))
+	}
+	return err
+}
+
+// GetRequest returns the value of Request if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) GetRequest() (o *replicator.GetDomainReplicationMessagesRequest) {
+	if v != nil && v.Request != nil {
+		return v.Request
+	}
+
+	return
+}
+
+// IsSetRequest returns true if Request is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) IsSetRequest() bool {
+	return v != nil && v.Request != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "GetDomainReplicationMessages" for this struct.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) MethodName() string {
+	return "GetDomainReplicationMessages"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *WorkflowService_GetDomainReplicationMessages_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// WorkflowService_GetDomainReplicationMessages_Helper provides functions that aid in handling the
+// parameters and return values of the WorkflowService.GetDomainReplicationMessages
+// function.
+var WorkflowService_GetDomainReplicationMessages_Helper = struct {
+	// Args accepts the parameters of GetDomainReplicationMessages in-order and returns
+	// the arguments struct for the function.
+	Args func(
+		request *replicator.GetDomainReplicationMessagesRequest,
+	) *WorkflowService_GetDomainReplicationMessages_Args
+
+	// IsException returns true if the given error can be thrown
+	// by GetDomainReplicationMessages.
+	//
+	// An error can be thrown by GetDomainReplicationMessages only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for GetDomainReplicationMessages
+	// given its return value and error.
+	//
+	// This allows mapping values and errors returned by
+	// GetDomainReplicationMessages into a serializable result struct.
+	// WrapResponse returns a non-nil error if the provided
+	// error cannot be thrown by GetDomainReplicationMessages
+	//
+	//   value, err := GetDomainReplicationMessages(args)
+	//   result, err := WorkflowService_GetDomainReplicationMessages_Helper.WrapResponse(value, err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from GetDomainReplicationMessages: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(*replicator.GetDomainReplicationMessagesResponse, error) (*WorkflowService_GetDomainReplicationMessages_Result, error)
+
+	// UnwrapResponse takes the result struct for GetDomainReplicationMessages
+	// and returns the value or error returned by it.
+	//
+	// The error is non-nil only if GetDomainReplicationMessages threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   value, err := WorkflowService_GetDomainReplicationMessages_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*WorkflowService_GetDomainReplicationMessages_Result) (*replicator.GetDomainReplicationMessagesResponse, error)
+}{}
+
+func init() {
+	WorkflowService_GetDomainReplicationMessages_Helper.Args = func(
+		request *replicator.GetDomainReplicationMessagesRequest,
+	) *WorkflowService_GetDomainReplicationMessages_Args {
+		return &WorkflowService_GetDomainReplicationMessages_Args{
+			Request: request,
+		}
+	}
+
+	WorkflowService_GetDomainReplicationMessages_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.BadRequestError:
+			return true
+		case *shared.InternalServiceError:
+			return true
+		case *shared.LimitExceededError:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		case *shared.ClientVersionNotSupportedError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	WorkflowService_GetDomainReplicationMessages_Helper.WrapResponse = func(success *replicator.GetDomainReplicationMessagesResponse, err error) (*WorkflowService_GetDomainReplicationMessages_Result, error) {
+		if err == nil {
+			return &WorkflowService_GetDomainReplicationMessages_Result{Success: success}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.BadRequestError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_GetDomainReplicationMessages_Result.BadRequestError")
+			}
+			return &WorkflowService_GetDomainReplicationMessages_Result{BadRequestError: e}, nil
+		case *shared.InternalServiceError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_GetDomainReplicationMessages_Result.InternalServiceError")
+			}
+			return &WorkflowService_GetDomainReplicationMessages_Result{InternalServiceError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_GetDomainReplicationMessages_Result.LimitExceededError")
+			}
+			return &WorkflowService_GetDomainReplicationMessages_Result{LimitExceededError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_GetDomainReplicationMessages_Result.ServiceBusyError")
+			}
+			return &WorkflowService_GetDomainReplicationMessages_Result{ServiceBusyError: e}, nil
+		case *shared.ClientVersionNotSupportedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_GetDomainReplicationMessages_Result.ClientVersionNotSupportedError")
+			}
+			return &WorkflowService_GetDomainReplicationMessages_Result{ClientVersionNotSupportedError: e}, nil
+		}
+
+		return nil, err
+	}
+	WorkflowService_GetDomainReplicationMessages_Helper.UnwrapResponse = func(result *WorkflowService_GetDomainReplicationMessages_Result) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
+		if result.BadRequestError != nil {
+			err = result.BadRequestError
+			return
+		}
+		if result.InternalServiceError != nil {
+			err = result.InternalServiceError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+		if result.ClientVersionNotSupportedError != nil {
+			err = result.ClientVersionNotSupportedError
+			return
+		}
+
+		if result.Success != nil {
+			success = result.Success
+			return
+		}
+
+		err = errors.New("expected a non-void result")
+		return
+	}
+
+}
+
+// WorkflowService_GetDomainReplicationMessages_Result represents the result of a WorkflowService.GetDomainReplicationMessages function call.
+//
+// The result of a GetDomainReplicationMessages execution is sent and received over the wire as this struct.
+//
+// Success is set only if the function did not throw an exception.
+type WorkflowService_GetDomainReplicationMessages_Result struct {
+	// Value returned by GetDomainReplicationMessages after a successful execution.
+	Success                        *replicator.GetDomainReplicationMessagesResponse `json:"success,omitempty"`
+	BadRequestError                *shared.BadRequestError                          `json:"badRequestError,omitempty"`
+	InternalServiceError           *shared.InternalServiceError                     `json:"internalServiceError,omitempty"`
+	LimitExceededError             *shared.LimitExceededError                       `json:"limitExceededError,omitempty"`
+	ServiceBusyError               *shared.ServiceBusyError                         `json:"serviceBusyError,omitempty"`
+	ClientVersionNotSupportedError *shared.ClientVersionNotSupportedError           `json:"clientVersionNotSupportedError,omitempty"`
+}
+
+// ToWire translates a WorkflowService_GetDomainReplicationMessages_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *WorkflowService_GetDomainReplicationMessages_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Success != nil {
+		w, err = v.Success.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 0, Value: w}
+		i++
+	}
+	if v.BadRequestError != nil {
+		w, err = v.BadRequestError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.InternalServiceError != nil {
+		w, err = v.InternalServiceError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		w, err = v.ClientVersionNotSupportedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+
+	if i != 1 {
+		return wire.Value{}, fmt.Errorf("WorkflowService_GetDomainReplicationMessages_Result should have exactly one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _GetDomainReplicationMessagesResponse_Read(w wire.Value) (*replicator.GetDomainReplicationMessagesResponse, error) {
+	var v replicator.GetDomainReplicationMessagesResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a WorkflowService_GetDomainReplicationMessages_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a WorkflowService_GetDomainReplicationMessages_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v WorkflowService_GetDomainReplicationMessages_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *WorkflowService_GetDomainReplicationMessages_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 0:
+			if field.Value.Type() == wire.TStruct {
+				v.Success, err = _GetDomainReplicationMessagesResponse_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.BadRequestError, err = _BadRequestError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.InternalServiceError, err = _InternalServiceError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.ClientVersionNotSupportedError, err = _ClientVersionNotSupportedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.Success != nil {
+		count++
+	}
+	if v.BadRequestError != nil {
+		count++
+	}
+	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.LimitExceededError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("WorkflowService_GetDomainReplicationMessages_Result should have exactly one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a WorkflowService_GetDomainReplicationMessages_Result
+// struct.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.Success != nil {
+		fields[i] = fmt.Sprintf("Success: %v", v.Success)
+		i++
+	}
+	if v.BadRequestError != nil {
+		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
+		i++
+	}
+	if v.InternalServiceError != nil {
+		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		fields[i] = fmt.Sprintf("ClientVersionNotSupportedError: %v", v.ClientVersionNotSupportedError)
+		i++
+	}
+
+	return fmt.Sprintf("WorkflowService_GetDomainReplicationMessages_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this WorkflowService_GetDomainReplicationMessages_Result match the
+// provided WorkflowService_GetDomainReplicationMessages_Result.
+//
+// This function performs a deep comparison.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) Equals(rhs *WorkflowService_GetDomainReplicationMessages_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
+		return false
+	}
+	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
+		return false
+	}
+	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.ClientVersionNotSupportedError == nil && rhs.ClientVersionNotSupportedError == nil) || (v.ClientVersionNotSupportedError != nil && rhs.ClientVersionNotSupportedError != nil && v.ClientVersionNotSupportedError.Equals(rhs.ClientVersionNotSupportedError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of WorkflowService_GetDomainReplicationMessages_Result.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Success != nil {
+		err = multierr.Append(err, enc.AddObject("success", v.Success))
+	}
+	if v.BadRequestError != nil {
+		err = multierr.Append(err, enc.AddObject("badRequestError", v.BadRequestError))
+	}
+	if v.InternalServiceError != nil {
+		err = multierr.Append(err, enc.AddObject("internalServiceError", v.InternalServiceError))
+	}
+	if v.LimitExceededError != nil {
+		err = multierr.Append(err, enc.AddObject("limitExceededError", v.LimitExceededError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	if v.ClientVersionNotSupportedError != nil {
+		err = multierr.Append(err, enc.AddObject("clientVersionNotSupportedError", v.ClientVersionNotSupportedError))
+	}
+	return err
+}
+
+// GetSuccess returns the value of Success if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) GetSuccess() (o *replicator.GetDomainReplicationMessagesResponse) {
+	if v != nil && v.Success != nil {
+		return v.Success
+	}
+
+	return
+}
+
+// IsSetSuccess returns true if Success is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) IsSetSuccess() bool {
+	return v != nil && v.Success != nil
+}
+
+// GetBadRequestError returns the value of BadRequestError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) GetBadRequestError() (o *shared.BadRequestError) {
+	if v != nil && v.BadRequestError != nil {
+		return v.BadRequestError
+	}
+
+	return
+}
+
+// IsSetBadRequestError returns true if BadRequestError is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) IsSetBadRequestError() bool {
+	return v != nil && v.BadRequestError != nil
+}
+
+// GetInternalServiceError returns the value of InternalServiceError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) GetInternalServiceError() (o *shared.InternalServiceError) {
+	if v != nil && v.InternalServiceError != nil {
+		return v.InternalServiceError
+	}
+
+	return
+}
+
+// IsSetInternalServiceError returns true if InternalServiceError is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) IsSetInternalServiceError() bool {
+	return v != nil && v.InternalServiceError != nil
+}
+
+// GetLimitExceededError returns the value of LimitExceededError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
+	if v != nil && v.LimitExceededError != nil {
+		return v.LimitExceededError
+	}
+
+	return
+}
+
+// IsSetLimitExceededError returns true if LimitExceededError is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) IsSetLimitExceededError() bool {
+	return v != nil && v.LimitExceededError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// GetClientVersionNotSupportedError returns the value of ClientVersionNotSupportedError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) GetClientVersionNotSupportedError() (o *shared.ClientVersionNotSupportedError) {
+	if v != nil && v.ClientVersionNotSupportedError != nil {
+		return v.ClientVersionNotSupportedError
+	}
+
+	return
+}
+
+// IsSetClientVersionNotSupportedError returns true if ClientVersionNotSupportedError is not nil.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) IsSetClientVersionNotSupportedError() bool {
+	return v != nil && v.ClientVersionNotSupportedError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "GetDomainReplicationMessages" for this struct.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) MethodName() string {
+	return "GetDomainReplicationMessages"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *WorkflowService_GetDomainReplicationMessages_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
+
 // WorkflowService_GetReplicationMessages_Args represents the arguments for the WorkflowService.GetReplicationMessages function.
 //
 // The arguments for GetReplicationMessages are sent and received over the wire as this struct.

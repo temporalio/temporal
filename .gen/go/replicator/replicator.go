@@ -661,6 +661,374 @@ func (v *DomainTaskAttributes) IsSetFailoverVersion() bool {
 	return v != nil && v.FailoverVersion != nil
 }
 
+type GetDomainReplicationMessagesRequest struct {
+	LastRetrivedMessageId  *int64  `json:"lastRetrivedMessageId,omitempty"`
+	LastProcessedMessageId *int64  `json:"lastProcessedMessageId,omitempty"`
+	ClusterName            *string `json:"clusterName,omitempty"`
+}
+
+// ToWire translates a GetDomainReplicationMessagesRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *GetDomainReplicationMessagesRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.LastRetrivedMessageId != nil {
+		w, err = wire.NewValueI64(*(v.LastRetrivedMessageId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.LastProcessedMessageId != nil {
+		w, err = wire.NewValueI64(*(v.LastProcessedMessageId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.ClusterName != nil {
+		w, err = wire.NewValueString(*(v.ClusterName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a GetDomainReplicationMessagesRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a GetDomainReplicationMessagesRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v GetDomainReplicationMessagesRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *GetDomainReplicationMessagesRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.LastRetrivedMessageId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.LastProcessedMessageId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClusterName = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a GetDomainReplicationMessagesRequest
+// struct.
+func (v *GetDomainReplicationMessagesRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.LastRetrivedMessageId != nil {
+		fields[i] = fmt.Sprintf("LastRetrivedMessageId: %v", *(v.LastRetrivedMessageId))
+		i++
+	}
+	if v.LastProcessedMessageId != nil {
+		fields[i] = fmt.Sprintf("LastProcessedMessageId: %v", *(v.LastProcessedMessageId))
+		i++
+	}
+	if v.ClusterName != nil {
+		fields[i] = fmt.Sprintf("ClusterName: %v", *(v.ClusterName))
+		i++
+	}
+
+	return fmt.Sprintf("GetDomainReplicationMessagesRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this GetDomainReplicationMessagesRequest match the
+// provided GetDomainReplicationMessagesRequest.
+//
+// This function performs a deep comparison.
+func (v *GetDomainReplicationMessagesRequest) Equals(rhs *GetDomainReplicationMessagesRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_I64_EqualsPtr(v.LastRetrivedMessageId, rhs.LastRetrivedMessageId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.LastProcessedMessageId, rhs.LastProcessedMessageId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClusterName, rhs.ClusterName) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of GetDomainReplicationMessagesRequest.
+func (v *GetDomainReplicationMessagesRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.LastRetrivedMessageId != nil {
+		enc.AddInt64("lastRetrivedMessageId", *v.LastRetrivedMessageId)
+	}
+	if v.LastProcessedMessageId != nil {
+		enc.AddInt64("lastProcessedMessageId", *v.LastProcessedMessageId)
+	}
+	if v.ClusterName != nil {
+		enc.AddString("clusterName", *v.ClusterName)
+	}
+	return err
+}
+
+// GetLastRetrivedMessageId returns the value of LastRetrivedMessageId if it is set or its
+// zero value if it is unset.
+func (v *GetDomainReplicationMessagesRequest) GetLastRetrivedMessageId() (o int64) {
+	if v != nil && v.LastRetrivedMessageId != nil {
+		return *v.LastRetrivedMessageId
+	}
+
+	return
+}
+
+// IsSetLastRetrivedMessageId returns true if LastRetrivedMessageId is not nil.
+func (v *GetDomainReplicationMessagesRequest) IsSetLastRetrivedMessageId() bool {
+	return v != nil && v.LastRetrivedMessageId != nil
+}
+
+// GetLastProcessedMessageId returns the value of LastProcessedMessageId if it is set or its
+// zero value if it is unset.
+func (v *GetDomainReplicationMessagesRequest) GetLastProcessedMessageId() (o int64) {
+	if v != nil && v.LastProcessedMessageId != nil {
+		return *v.LastProcessedMessageId
+	}
+
+	return
+}
+
+// IsSetLastProcessedMessageId returns true if LastProcessedMessageId is not nil.
+func (v *GetDomainReplicationMessagesRequest) IsSetLastProcessedMessageId() bool {
+	return v != nil && v.LastProcessedMessageId != nil
+}
+
+// GetClusterName returns the value of ClusterName if it is set or its
+// zero value if it is unset.
+func (v *GetDomainReplicationMessagesRequest) GetClusterName() (o string) {
+	if v != nil && v.ClusterName != nil {
+		return *v.ClusterName
+	}
+
+	return
+}
+
+// IsSetClusterName returns true if ClusterName is not nil.
+func (v *GetDomainReplicationMessagesRequest) IsSetClusterName() bool {
+	return v != nil && v.ClusterName != nil
+}
+
+type GetDomainReplicationMessagesResponse struct {
+	Messages *ReplicationMessages `json:"messages,omitempty"`
+}
+
+// ToWire translates a GetDomainReplicationMessagesResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *GetDomainReplicationMessagesResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Messages != nil {
+		w, err = v.Messages.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReplicationMessages_Read(w wire.Value) (*ReplicationMessages, error) {
+	var v ReplicationMessages
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a GetDomainReplicationMessagesResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a GetDomainReplicationMessagesResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v GetDomainReplicationMessagesResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *GetDomainReplicationMessagesResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.Messages, err = _ReplicationMessages_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a GetDomainReplicationMessagesResponse
+// struct.
+func (v *GetDomainReplicationMessagesResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Messages != nil {
+		fields[i] = fmt.Sprintf("Messages: %v", v.Messages)
+		i++
+	}
+
+	return fmt.Sprintf("GetDomainReplicationMessagesResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this GetDomainReplicationMessagesResponse match the
+// provided GetDomainReplicationMessagesResponse.
+//
+// This function performs a deep comparison.
+func (v *GetDomainReplicationMessagesResponse) Equals(rhs *GetDomainReplicationMessagesResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Messages == nil && rhs.Messages == nil) || (v.Messages != nil && rhs.Messages != nil && v.Messages.Equals(rhs.Messages))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of GetDomainReplicationMessagesResponse.
+func (v *GetDomainReplicationMessagesResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Messages != nil {
+		err = multierr.Append(err, enc.AddObject("messages", v.Messages))
+	}
+	return err
+}
+
+// GetMessages returns the value of Messages if it is set or its
+// zero value if it is unset.
+func (v *GetDomainReplicationMessagesResponse) GetMessages() (o *ReplicationMessages) {
+	if v != nil && v.Messages != nil {
+		return v.Messages
+	}
+
+	return
+}
+
+// IsSetMessages returns true if Messages is not nil.
+func (v *GetDomainReplicationMessagesResponse) IsSetMessages() bool {
+	return v != nil && v.Messages != nil
+}
+
 type GetReplicationMessagesRequest struct {
 	Tokens []*ReplicationToken `json:"tokens,omitempty"`
 }
@@ -951,12 +1319,6 @@ func (v *GetReplicationMessagesResponse) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _ReplicationMessages_Read(w wire.Value) (*ReplicationMessages, error) {
-	var v ReplicationMessages
-	err := v.FromWire(w)
-	return &v, err
 }
 
 func _Map_I32_ReplicationMessages_Read(m wire.MapItemList) (map[int32]*ReplicationMessages, error) {
@@ -4449,11 +4811,11 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "replicator",
 	Package:  "github.com/uber/cadence/.gen/go/replicator",
 	FilePath: "replicator.thrift",
-	SHA1:     "732995245402f75e0b3a67e75655eda9010ca0e4",
+	SHA1:     "bc0a2108443a972aac52ed1c14e1e1cb71e2c953",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActicvityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  30: optional bool hasMore // Hint for flow control\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActicvityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  30: optional bool hasMore // Hint for flow control\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrivedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}"

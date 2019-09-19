@@ -246,3 +246,10 @@ CREATE TABLE history_tree (
   data_encoding  VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, tree_id, branch_id)
 );
+
+CREATE TABLE queue (
+  queue_type INT NOT NULL,
+  message_id BIGINT NOT NULL,
+  message_payload BLOB NOT NULL,
+  PRIMARY KEY(queue_type, message_id)
+);

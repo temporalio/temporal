@@ -28,8 +28,10 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -59,24 +61,25 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr              p.ShardManager
-		ExecutionMgrFactory   pfactory.Factory
-		ExecutionManager      p.ExecutionManager
-		TaskMgr               p.TaskManager
-		HistoryMgr            p.HistoryManager
-		HistoryV2Mgr          p.HistoryV2Manager
-		MetadataManager       p.MetadataManager
-		MetadataManagerV2     p.MetadataManager
-		MetadataProxy         p.MetadataManager
-		VisibilityMgr         p.VisibilityManager
-		ShardInfo             *p.ShardInfo
-		TaskIDGenerator       TransferTaskIDGenerator
-		ClusterMetadata       cluster.Metadata
-		ReadLevel             int64
-		ReplicationReadLevel  int64
-		DefaultTestCluster    PersistenceTestCluster
-		VisibilityTestCluster PersistenceTestCluster
-		logger                log.Logger
+		ShardMgr               p.ShardManager
+		ExecutionMgrFactory    pfactory.Factory
+		ExecutionManager       p.ExecutionManager
+		TaskMgr                p.TaskManager
+		HistoryMgr             p.HistoryManager
+		HistoryV2Mgr           p.HistoryV2Manager
+		MetadataManager        p.MetadataManager
+		MetadataManagerV2      p.MetadataManager
+		MetadataProxy          p.MetadataManager
+		VisibilityMgr          p.VisibilityManager
+		DomainReplicationQueue p.DomainReplicationQueue
+		ShardInfo              *p.ShardInfo
+		TaskIDGenerator        TransferTaskIDGenerator
+		ClusterMetadata        cluster.Metadata
+		ReadLevel              int64
+		ReplicationReadLevel   int64
+		DefaultTestCluster     PersistenceTestCluster
+		VisibilityTestCluster  PersistenceTestCluster
+		logger                 log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -227,6 +230,10 @@ func (s *TestBase) Setup() {
 	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}
 	err = s.ShardMgr.CreateShard(&p.CreateShardRequest{ShardInfo: s.ShardInfo})
 	s.fatalOnError("CreateShard", err)
+
+	queue, err := factory.NewDomainReplicationQueue()
+	s.fatalOnError("Create DomainReplicationQueue", err)
+	s.DomainReplicationQueue = queue
 }
 
 func (s *TestBase) fatalOnError(msg string, err error) {
@@ -1338,6 +1345,32 @@ func (s *TestBase) validateTimeRange(t time.Time, expectedDuration time.Duration
 // GenerateTransferTaskID helper
 func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&g.seqNum, 1), nil
+}
+
+// Publish is a utility method to add messages to the queue
+func (s *TestBase) Publish(message interface{}) error {
+	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
+	retryPolicy.SetBackoffCoefficient(1.5)
+	retryPolicy.SetMaximumAttempts(5)
+
+	return backoff.Retry(
+		func() error {
+			return s.DomainReplicationQueue.Publish(message)
+		},
+		retryPolicy,
+		func(e error) bool {
+			return common.IsPersistenceTransientError(e) || isMessageIDConflictError(e)
+		})
+}
+
+func isMessageIDConflictError(err error) bool {
+	_, ok := err.(*p.ConditionFailedError)
+	return ok
+}
+
+// GetReplicationMessages is a utility method to get messages from the queue
+func (s *TestBase) GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error) {
+	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
 // GenerateTransferTaskIDs helper

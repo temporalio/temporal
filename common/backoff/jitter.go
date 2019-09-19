@@ -25,27 +25,16 @@ import (
 	"time"
 )
 
-type (
-	// Jitter which provides functionality to
-	// randomize input
-	Jitter struct{}
-)
-
-// NewJitter create a new jitter
-func NewJitter() *Jitter {
-	return &Jitter{}
-}
-
 // JitDuration return random duration from (1-coefficient)*duration to (1+coefficient)*duration, inclusive, exclusive
-func (j *Jitter) JitDuration(duration time.Duration, coefficient float64) time.Duration {
-	j.validateCoefficient(coefficient)
+func JitDuration(duration time.Duration, coefficient float64) time.Duration {
+	validateCoefficient(coefficient)
 
-	return time.Duration(j.JitInt64(duration.Nanoseconds(), coefficient))
+	return time.Duration(JitInt64(duration.Nanoseconds(), coefficient))
 }
 
 // JitInt64 return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func (j *Jitter) JitInt64(input int64, coefficient float64) int64 {
-	j.validateCoefficient(coefficient)
+func JitInt64(input int64, coefficient float64) int64 {
+	validateCoefficient(coefficient)
 
 	base := int64(float64(input) * (1 - coefficient))
 	addon := rand.Int63n(2 * (input - base))
@@ -53,15 +42,15 @@ func (j *Jitter) JitInt64(input int64, coefficient float64) int64 {
 }
 
 // JitFloat64 return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func (j *Jitter) JitFloat64(input float64, coefficient float64) float64 {
-	j.validateCoefficient(coefficient)
+func JitFloat64(input float64, coefficient float64) float64 {
+	validateCoefficient(coefficient)
 
 	base := input * (1 - coefficient)
 	addon := rand.Float64() * 2 * (input - base)
 	return base + addon
 }
 
-func (j *Jitter) validateCoefficient(coefficient float64) {
+func validateCoefficient(coefficient float64) {
 	if coefficient < 0 || coefficient > 1 {
 		panic("coefficient cannot be < 0 or > 1")
 	}

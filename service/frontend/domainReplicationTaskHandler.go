@@ -48,16 +48,16 @@ type (
 	}
 
 	domainReplicatorImpl struct {
-		kafka  messaging.Producer
-		logger log.Logger
+		replicationMessageSink messaging.Producer
+		logger                 log.Logger
 	}
 )
 
-// NewDomainReplicator create a new instance odf domain replicator
-func NewDomainReplicator(kafka messaging.Producer, logger log.Logger) DomainReplicator {
+// NewDomainReplicator create a new instance of domain replicator
+func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.Logger) DomainReplicator {
 	return &domainReplicatorImpl{
-		kafka:  kafka,
-		logger: logger,
+		replicationMessageSink: replicationMessageSink,
+		logger:                 logger,
 	}
 }
 
@@ -104,14 +104,16 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	return domainReplicator.kafka.Publish(&replicator.ReplicationTask{
-		TaskType:             &taskType,
-		DomainTaskAttributes: task,
-	})
+	return domainReplicator.replicationMessageSink.Publish(
+		&replicator.ReplicationTask{
+			TaskType:             &taskType,
+			DomainTaskAttributes: task,
+		})
 }
 
 func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToThrift(
-	input []*persistence.ClusterReplicationConfig) []*shared.ClusterReplicationConfiguration {
+	input []*persistence.ClusterReplicationConfig,
+) []*shared.ClusterReplicationConfiguration {
 	output := []*shared.ClusterReplicationConfiguration{}
 	for _, cluster := range input {
 		clusterName := common.StringPtr(cluster.ClusterName)

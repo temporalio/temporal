@@ -69,6 +69,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
+	GetDomainReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDomainReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetDomainReplicationMessagesResponse, error)
+
 	GetReplicationMessages(
 		ctx context.Context,
 		Request *replicator.GetReplicationMessagesRequest,
@@ -397,6 +403,29 @@ func (c client) DescribeWorkflowExecution(
 	}
 
 	success, err = cadence.WorkflowService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetDomainReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
+
+	args := cadence.WorkflowService_GetDomainReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_GetDomainReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_GetDomainReplicationMessages_Helper.UnwrapResponse(&result)
 	return
 }
 

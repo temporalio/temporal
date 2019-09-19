@@ -228,6 +228,39 @@ func (mr *_MockClientRecorder) DescribeWorkflowExecution(
 	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeWorkflowExecution", args...)
 }
 
+// GetDomainReplicationMessages responds to a GetDomainReplicationMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().GetDomainReplicationMessages(gomock.Any(), ...).Return(...)
+// 	... := client.GetDomainReplicationMessages(...)
+func (m *MockClient) GetDomainReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "GetDomainReplicationMessages", args...)
+	success, _ = ret[i].(*replicator.GetDomainReplicationMessagesResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) GetDomainReplicationMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "GetDomainReplicationMessages", args...)
+}
+
 // GetReplicationMessages responds to a GetReplicationMessages call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

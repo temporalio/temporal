@@ -119,6 +119,11 @@ const (
 	ArchivalPaused = "paused"
 )
 
+// Queue types used in queue table
+const (
+	DomainReplicationQueueType = 1
+)
+
 // enum for dynamic config AdvancedVisibilityWritingMode
 const (
 	// AdvancedVisibilityWritingModeOff means do not write to advanced visibility store
