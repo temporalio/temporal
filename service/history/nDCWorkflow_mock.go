@@ -28,9 +28,8 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MocknDCWorkflow is a mock of nDCWorkflow interface
@@ -141,4 +140,18 @@ func (m *MocknDCWorkflow) suppressWorkflowBy(incomingWorkflow nDCWorkflow) error
 func (mr *MocknDCWorkflowMockRecorder) suppressWorkflowBy(incomingWorkflow interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "suppressWorkflowBy", reflect.TypeOf((*MocknDCWorkflow)(nil).suppressWorkflowBy), incomingWorkflow)
+}
+
+// flushBufferedEvents mocks base method
+func (m *MocknDCWorkflow) flushBufferedEvents() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "flushBufferedEvents")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// flushBufferedEvents indicates an expected call of flushBufferedEvents
+func (mr *MocknDCWorkflowMockRecorder) flushBufferedEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "flushBufferedEvents", reflect.TypeOf((*MocknDCWorkflow)(nil).flushBufferedEvents))
 }

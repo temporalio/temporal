@@ -29,6 +29,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -46,8 +47,10 @@ type (
 
 	nDCBranchMgrImpl struct {
 		shard           ShardContext
+		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
+		transactionMgr  nDCTransactionMgr
 
 		context      workflowExecutionContext
 		mutableState mutableState
@@ -59,6 +62,7 @@ var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
 	shard ShardContext,
+	transactionMgr nDCTransactionMgr,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,
@@ -66,8 +70,10 @@ func newNDCBranchMgr(
 
 	return &nDCBranchMgrImpl{
 		shard:           shard,
+		domainCache:     shard.GetDomainCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
+		transactionMgr:  transactionMgr,
 
 		context:      context,
 		mutableState: mutableState,
@@ -81,14 +87,12 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	incomingFirstEventID int64,
 ) (bool, int, error) {
 
-	localVersionHistories := r.mutableState.GetVersionHistories()
-
-	versionHistoryIndex, lcaVersionHistoryItem, err := localVersionHistories.FindLCAVersionHistoryIndexAndItem(
-		incomingVersionHistory,
-	)
+	versionHistoryIndex, lcaVersionHistoryItem, err := r.flushBufferedEvents(ctx, incomingVersionHistory)
 	if err != nil {
 		return false, 0, err
 	}
+
+	localVersionHistories := r.mutableState.GetVersionHistories()
 	versionHistory, err := localVersionHistories.GetVersionHistory(versionHistoryIndex)
 	if err != nil {
 		return false, 0, err
@@ -125,6 +129,53 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	}
 
 	return true, newVersionHistoryIndex, nil
+}
+
+func (r *nDCBranchMgrImpl) flushBufferedEvents(
+	ctx ctx.Context,
+	incomingVersionHistory *persistence.VersionHistory,
+) (int, *persistence.VersionHistoryItem, error) {
+
+	localVersionHistories := r.mutableState.GetVersionHistories()
+
+	versionHistoryIndex, lcaVersionHistoryItem, err := localVersionHistories.FindLCAVersionHistoryIndexAndItem(
+		incomingVersionHistory,
+	)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// check whether there are buffered events, if so, flush it
+	// NOTE: buffered events does not show in version history or next event id
+	if !r.mutableState.HasBufferedEvents() {
+		return versionHistoryIndex, lcaVersionHistoryItem, nil
+	}
+
+	targetWorkflow := newNDCWorkflow(
+		ctx,
+		r.domainCache,
+		r.clusterMetadata,
+		r.context,
+		r.mutableState,
+		noopReleaseFn,
+	)
+	if err := targetWorkflow.flushBufferedEvents(); err != nil {
+		return 0, nil, err
+	}
+	if err := r.transactionMgr.updateWorkflow(
+		ctx,
+		r.shard.GetTimeSource().Now(),
+		false, // workflow is not rebuilt
+		targetWorkflow,
+		nil, // no new workflow
+	); err != nil {
+		return 0, nil, err
+	}
+	r.context = targetWorkflow.getContext()
+	r.mutableState = targetWorkflow.getMutableState()
+
+	localVersionHistories = r.mutableState.GetVersionHistories()
+	return localVersionHistories.FindLCAVersionHistoryIndexAndItem(incomingVersionHistory)
 }
 
 func (r *nDCBranchMgrImpl) verifyEventsOrder(

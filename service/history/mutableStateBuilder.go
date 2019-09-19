@@ -4003,7 +4003,9 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster != sourceCluster {
-		return emptyTasks, nil
+		return nil, &workflow.InternalServiceError{
+			Message: "mutableStateBuilder encounter contradicting version & transaction policy",
+		}
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()

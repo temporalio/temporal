@@ -41,6 +41,7 @@ type (
 		getVectorClock() (int64, int64, error)
 		happensAfter(that nDCWorkflow) (bool, error)
 		suppressWorkflowBy(incomingWorkflow nDCWorkflow) error
+		flushBufferedEvents() error
 	}
 
 	nDCWorkflowImpl struct {
@@ -169,33 +170,75 @@ func (r *nDCWorkflowImpl) suppressWorkflowBy(
 	return r.zombiefyWorkflow()
 }
 
+func (r *nDCWorkflowImpl) flushBufferedEvents() error {
+
+	if !r.mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	if !r.mutableState.HasBufferedEvents() {
+		return nil
+	}
+
+	lastWriteVersion, _, err := r.getVectorClock()
+	if err != nil {
+		return err
+	}
+
+	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
+	currentCluster := r.clusterMetadata.GetCurrentClusterName()
+
+	if lastWriteCluster != currentCluster {
+		return &shared.InternalServiceError{
+			Message: "nDCWorkflow encounter workflow with buffered events but last write not from current cluster",
+		}
+	}
+
+	return r.failDecision(lastWriteVersion)
+}
+
+func (r *nDCWorkflowImpl) failDecision(
+	lastWriteVersion int64,
+) error {
+	// do not persist the change right now, NDC requires transaction
+	r.mutableState.UpdateCurrentVersion(lastWriteVersion, true)
+
+	decision, ok := r.mutableState.GetInFlightDecision()
+	if !ok {
+		return nil
+	}
+
+	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
+		decision.ScheduleID,
+		decision.StartedID,
+		workflow.DecisionTaskFailedCauseFailoverCloseDecision,
+		nil,
+		identityHistoryService,
+		"",
+		"",
+		"",
+		0,
+	); err != nil {
+		return err
+	}
+
+	if err := r.mutableState.FlushBufferedEvents(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *nDCWorkflowImpl) terminateWorkflow(
 	lastWriteVersion int64,
 	incomingLastWriteVersion int64,
 ) error {
 
+	if err := r.failDecision(lastWriteVersion); err != nil {
+		return err
+	}
+
 	// do not persist the change right now, NDC requires transaction
 	r.mutableState.UpdateCurrentVersion(lastWriteVersion, true)
-
-	if decision, ok := r.mutableState.GetInFlightDecision(); ok {
-		if _, err := r.mutableState.AddDecisionTaskFailedEvent(
-			decision.ScheduleID,
-			decision.StartedID,
-			workflow.DecisionTaskFailedCauseFailoverCloseDecision,
-			nil,
-			identityHistoryService,
-			"",
-			"",
-			"",
-			0,
-		); err != nil {
-			return err
-		}
-
-		if err := r.mutableState.FlushBufferedEvents(); err != nil {
-			return err
-		}
-	}
 
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		workflowTerminationReason,

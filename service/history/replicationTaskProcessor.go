@@ -213,7 +213,11 @@ func (p *ReplicationTaskProcessor) processTask(replicationTask *r.ReplicationTas
 		if err != nil {
 			// TODO: insert into our own dlq in cadence persistence?
 			// p.nackMsg(msg, err, logger)
-			p.logger.Error("Failed to apply replication task after retry.", tag.TaskID(replicationTask.GetSourceTaskId()))
+			p.logger.Error(
+				"Failed to apply replication task after retry.",
+				tag.TaskID(replicationTask.GetSourceTaskId()),
+				tag.Error(err),
+			)
 		}
 	}
 }

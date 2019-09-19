@@ -111,7 +111,7 @@ func newNDCHistoryReplicator(
 			mutableState mutableState,
 			logger log.Logger,
 		) nDCBranchMgr {
-			return newNDCBranchMgr(shard, context, mutableState, logger)
+			return newNDCBranchMgr(shard, transactionMgr, context, mutableState, logger)
 		},
 		newConflictResolver: func(
 			context workflowExecutionContext,

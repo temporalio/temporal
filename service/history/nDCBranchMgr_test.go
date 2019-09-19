@@ -24,6 +24,7 @@ import (
 	ctx "context"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -47,6 +49,7 @@ type (
 
 		mockService         service.Service
 		mockShard           *shardContextImpl
+		mockDomainCache     *cache.DomainCacheMock
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockContext         *mockWorkflowExecutionContext
@@ -58,7 +61,9 @@ type (
 		workflowID  string
 		runID       string
 
-		nDCBranchMgr *nDCBranchMgrImpl
+		controller         *gomock.Controller
+		mockTransactionMgr *MocknDCTransactionMgr
+		nDCBranchMgr       *nDCBranchMgrImpl
 	}
 )
 
@@ -69,6 +74,7 @@ func TestNDCBranchMgrSuite(t *testing.T) {
 
 func (s *nDCBranchMgrSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -76,6 +82,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
+		domainCache:               s.mockDomainCache,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
@@ -88,6 +95,9 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
+	s.controller = gomock.NewController(s.T())
+	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
+
 	s.domainID = uuid.New()
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
@@ -95,7 +105,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.mockMutableState = &mockMutableState{}
 	s.branchIndex = 0
 	s.nDCBranchMgr = newNDCBranchMgr(
-		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
+		s.mockShard, s.mockTransactionMgr, s.mockContext, s.mockMutableState, s.logger,
 	)
 }
 
@@ -103,6 +113,7 @@ func (s *nDCBranchMgrSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockContext.AssertExpectations(s.T())
 	s.mockMutableState.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
@@ -125,7 +136,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   s.domainID,
 		WorkflowID: s.workflowID,
@@ -164,6 +175,59 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	s.True(compareVersionHistory.Equals(newVersionHistory))
 }
 
+func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
+
+	lastWriteVersion := int64(300)
+	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
+		persistence.NewVersionHistoryItem(10, 0),
+		persistence.NewVersionHistoryItem(50, 100),
+		persistence.NewVersionHistoryItem(100, 200),
+		persistence.NewVersionHistoryItem(150, 300),
+	})
+	versionHistories := persistence.NewVersionHistories(versionHistory)
+
+	incomingVersionHistory := versionHistory.Duplicate()
+	err := incomingVersionHistory.AddOrUpdateItem(
+		persistence.NewVersionHistoryItem(200, 300),
+	)
+	s.NoError(err)
+
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
+	s.mockMutableState.On("HasBufferedEvents").Return(true).Times(2)
+	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Times(1)
+	s.mockMutableState.On("UpdateCurrentVersion", lastWriteVersion, true).Times(1)
+	decisionInfo := &decisionInfo{
+		ScheduleID: 1234,
+		StartedID:  2345,
+	}
+	s.mockMutableState.On("GetInFlightDecision").Return(decisionInfo, true).Times(1)
+	// GetExecutionInfo's return value is not used by this test
+	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{}).Times(1)
+	s.mockMutableState.On("AddDecisionTaskFailedEvent",
+		decisionInfo.ScheduleID,
+		decisionInfo.StartedID,
+		shared.DecisionTaskFailedCauseFailoverCloseDecision,
+		[]byte(nil),
+		identityHistoryService,
+		"",
+		"",
+		"",
+		int64(0),
+	).Return(&shared.HistoryEvent{}, nil).Times(1)
+	s.mockMutableState.On("FlushBufferedEvents").Return(nil).Times(1)
+
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastWriteVersion).Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+
+	ctx := ctx.Background()
+
+	s.mockTransactionMgr.EXPECT().updateWorkflow(
+		ctx, gomock.Any(), false, gomock.Any(), nil,
+	).Return(nil).Times(1)
+
+	_, _, err = s.nDCBranchMgr.flushBufferedEvents(ctx, incomingVersionHistory)
+}
+
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEventInBetween() {
 
 	versionHistory := persistence.NewVersionHistory([]byte("some random base branch token"), []*persistence.VersionHistoryItem{
@@ -180,7 +244,8 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissing
 	)
 	s.NoError(err)
 
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
+	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, 150+1)
 	s.NoError(err)
@@ -205,24 +270,23 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 	)
 	s.NoError(err)
 
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
+	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
 
 	_, _, err = s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, 150+2)
 	s.IsType(&shared.RetryTaskV2Error{}, err)
 }
 
-func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEventInBetween() {
+func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissingEventInBetween() {
 	baseBranchToken := []byte("some random base branch token")
 	baseBranchLCAEventID := int64(85)
 	baseBranchLCAEventVersion := int64(200)
-	baseBranchLastEventID := int64(150)
-	baseBranchLastEventVersion := int64(300)
 
 	versionHistory := persistence.NewVersionHistory(baseBranchToken, []*persistence.VersionHistoryItem{
 		persistence.NewVersionHistoryItem(10, 0),
 		persistence.NewVersionHistoryItem(50, 100),
 		persistence.NewVersionHistoryItem(baseBranchLCAEventID+10, baseBranchLCAEventVersion),
-		persistence.NewVersionHistoryItem(baseBranchLastEventID, baseBranchLastEventVersion),
+		persistence.NewVersionHistoryItem(150, 300),
 	})
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 
@@ -235,7 +299,8 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 
 	newBranchToken := []byte("some random new branch token")
 
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Twice()
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
+	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   s.domainID,
 		WorkflowID: s.workflowID,
@@ -266,7 +331,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 	s.Equal(1, index)
 }
 
-func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissingEventInBetween() {
+func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEventInBetween() {
 	baseBranchToken := []byte("some random base branch token")
 	baseBranchLCAEventID := int64(85)
 	baseBranchLCAEventVersion := int64(200)
@@ -288,7 +353,8 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		persistence.NewVersionHistoryItem(200, 400),
 	})
 
-	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Once()
+	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
+	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
 
 	_, _, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, baseBranchLCAEventID+2)
 	s.IsType(&shared.RetryTaskV2Error{}, err)
