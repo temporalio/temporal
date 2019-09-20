@@ -361,9 +361,7 @@ func (e *historyEngineImpl) createMutableState(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry.GetFailoverVersion(),
-			domainEntry.GetReplicationPolicy(),
-			domainEntry.GetInfo().Name,
+			domainEntry,
 		)
 	} else if domainEntry.IsGlobalDomain() {
 		// 2DC XDC protocol
@@ -373,16 +371,14 @@ func (e *historyEngineImpl) createMutableState(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry.GetFailoverVersion(),
-			domainEntry.GetReplicationPolicy(),
-			domainEntry.GetInfo().Name,
+			domainEntry,
 		)
 	} else {
 		newMutableState = newMutableStateBuilder(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry.GetInfo().Name,
+			domainEntry,
 		)
 	}
 
@@ -453,7 +449,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	}
 
 	startEvent, err := msBuilder.AddWorkflowExecutionStartedEvent(
-		domainEntry,
 		execution,
 		startRequest,
 	)
@@ -1647,7 +1642,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 
 	// Add WF start event
 	startEvent, err := msBuilder.AddWorkflowExecutionStartedEvent(
-		domainEntry,
 		execution,
 		startRequest,
 	)

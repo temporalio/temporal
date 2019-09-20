@@ -119,8 +119,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	}
 	firstEventBatch := batch.(*shared.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
-		firstEventBatch[0].GetVersion(),
-		domainEntry.GetInfo().Name,
+		domainEntry,
 	)
 	if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, firstEventBatch, requestID); err != nil {
 		return nil, 0, err
@@ -161,18 +160,13 @@ func (r *nDCStateRebuilderImpl) rebuild(
 }
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
-	version int64,
-	domainName string,
+	domainEntry *cache.DomainCacheEntry,
 ) (mutableState, stateBuilder) {
 	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
-		version,
-		// if can see replication task, meaning that domain is
-		// global domain with > 1 target clusters
-		cache.ReplicationPolicyMultiCluster,
-		domainName,
+		domainEntry,
 	)
 	resetMutableStateBuilder.executionInfo.EventStoreVersion = nDCProtocolVersion
 	stateBuilder := newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
@@ -400,13 +401,13 @@ func (_m *mockMutableState) AddCompletedWorkflowEvent(_a0 int64, _a1 *shared.Com
 	return r0, r1
 }
 
-// AddContinueAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4, _a5
-func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 *cache.DomainCacheEntry, _a3 string, _a4 *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, _a5 int32) (*shared.HistoryEvent, mutableState, error) {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
+// AddContinueAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 string, _a3 *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, _a4 int32) (*shared.HistoryEvent, mutableState, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(int64, int64, *cache.DomainCacheEntry, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(0).(func(int64, int64, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -414,8 +415,8 @@ func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 *cac
 	}
 
 	var r1 mutableState
-	if rf, ok := ret.Get(1).(func(int64, int64, *cache.DomainCacheEntry, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) mutableState); ok {
-		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(1).(func(int64, int64, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) mutableState); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(mutableState)
@@ -423,8 +424,8 @@ func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 *cac
 	}
 
 	var r2 error
-	if rf, ok := ret.Get(2).(func(int64, int64, *cache.DomainCacheEntry, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) error); ok {
-		r2 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(2).(func(int64, int64, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -1095,12 +1096,12 @@ func (_m *mockMutableState) AddWorkflowExecutionSignaled(signalName string, inpu
 }
 
 // AddWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 *cache.DomainCacheEntry, _a1 shared.WorkflowExecution, _a2 *h.StartWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
-	ret := _m.Called(_a0, _a1, _a2)
+func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 shared.WorkflowExecution, _a1 *h.StartWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
+	ret := _m.Called(_a0, _a1)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry, shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1, _a2)
+	if rf, ok := ret.Get(0).(func(shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -1108,8 +1109,8 @@ func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 *cache.DomainCa
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*cache.DomainCacheEntry, shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) error); ok {
-		r1 = rf(_a0, _a1, _a2)
+	if rf, ok := ret.Get(1).(func(shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) error); ok {
+		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1527,14 +1528,16 @@ func (_m *mockMutableState) GetCurrentVersion() int64 {
 }
 
 // GetDomainName provides a mock function with given fields:
-func (_m *mockMutableState) GetDomainName() string {
+func (_m *mockMutableState) GetDomainEntry() *cache.DomainCacheEntry {
 	ret := _m.Called()
 
-	var r0 string
-	if rf, ok := ret.Get(0).(func() string); ok {
+	var r0 *cache.DomainCacheEntry
+	if rf, ok := ret.Get(0).(func() *cache.DomainCacheEntry); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(string)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*cache.DomainCacheEntry)
+		}
 	}
 
 	return r0
@@ -2746,13 +2749,13 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionSignaled(_a0 *shared.Histo
 	return r0
 }
 
-// ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
-func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 *cache.DomainCacheEntry, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.HistoryEvent) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+// ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 *string, _a1 shared.WorkflowExecution, _a2 string, _a3 *shared.HistoryEvent) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry, *string, shared.WorkflowExecution, string, *shared.HistoryEvent) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	if rf, ok := ret.Get(0).(func(*string, shared.WorkflowExecution, string, *shared.HistoryEvent) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -2859,11 +2862,6 @@ func (_m *mockMutableState) UpdateDecision(_a0 *decisionInfo) {
 	_m.Called(_a0)
 }
 
-// UpdateReplicationPolicy provides a mock function with given fields: _a0
-func (_m *mockMutableState) UpdateReplicationPolicy(_a0 cache.ReplicationPolicy) {
-	_m.Called(_a0)
-}
-
 // UpdateReplicationStateLastEventID provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) UpdateReplicationStateLastEventID(_a0 int64, _a1 int64) {
 	_m.Called(_a0, _a1)
@@ -2879,9 +2877,18 @@ func (_m *mockMutableState) UpdateUserTimer(_a0 string, _a1 *persistence.TimerIn
 	_m.Called(_a0, _a1)
 }
 
-// UpdateUserTimer provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) UpdateCurrentVersion(_a0 int64, _a1 bool) {
-	_m.Called(_a0, _a1)
+// UpdateCurrentVersion provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) UpdateCurrentVersion(_a0 int64, _a1 bool) error {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64, bool) error); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // UpdateWorkflowStateCloseStatus provides a mock function with given fields: _a0, _a1
@@ -2925,6 +2932,27 @@ func (_m *mockMutableState) GetUpdateCondition() int64 {
 	}
 
 	return r0
+}
+
+// CloseTransactionAsMutation provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) StartTransaction(_a0 *cache.DomainCacheEntry) (bool, error) {
+	ret := _m.Called(_a0)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry) bool); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*cache.DomainCacheEntry) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // CloseTransactionAsMutation provides a mock function with given fields: _a0, _a1

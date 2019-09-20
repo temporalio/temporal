@@ -76,6 +76,7 @@ type (
 			newMutableState mutableState,
 			currentContext workflowExecutionContext,
 			currentMutableState mutableState,
+			currentTransactionPolicy *transactionPolicy,
 			workflowCAS *persistence.CurrentWorkflowCAS,
 		) error
 		updateWorkflowExecutionAsActive(
@@ -228,72 +229,65 @@ func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistence.Execut
 }
 
 func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, error) {
-	err := c.loadWorkflowExecutionInternal()
+
+	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
 	if err != nil {
 		return nil, err
 	}
-	err = c.updateVersion()
-	if err != nil {
-		return nil, err
-	}
-	return c.msBuilder, nil
-}
 
-func (c *workflowExecutionContextImpl) loadWorkflowExecutionInternal() error {
-	if c.msBuilder != nil {
-		return nil
-	}
-
-	response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
-		DomainID:  c.domainID,
-		Execution: c.workflowExecution,
-	})
-	if err != nil {
-		return err
-	}
-
-	c.msBuilder = newMutableStateBuilder(
-		c.shard,
-		c.shard.GetEventsCache(),
-		c.logger,
-		c.getDomainName(),
-	)
-	c.msBuilder.Load(response.State)
-	c.stats = response.State.ExecutionStats
-	c.updateCondition = response.State.ExecutionInfo.NextEventID
-
-	// finally emit execution and session stats
-	emitWorkflowExecutionStats(
-		c.metricsClient,
-		c.getDomainName(),
-		response.MutableStateStats,
-		c.stats.HistorySize,
-	)
-	return nil
-}
-
-func (c *workflowExecutionContextImpl) updateVersion() error {
-	if c.msBuilder.GetReplicationState() != nil || c.msBuilder.GetVersionHistories() != nil {
-		if !c.msBuilder.IsWorkflowExecutionRunning() {
-			// we should not update the version on mutable state when the workflow is finished
-			return nil
-		}
-		// Support for global domains is enabled and we are performing an update for global domain
-		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+	if c.msBuilder == nil {
+		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
+			DomainID:  c.domainID,
+			Execution: c.workflowExecution,
+		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		if c.msBuilder.GetReplicationState() != nil {
-			c.msBuilder.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
-		} else if c.msBuilder.GetVersionHistories() != nil {
-			c.msBuilder.UpdateCurrentVersion(domainEntry.GetFailoverVersion(), false)
-		}
+		c.msBuilder = newMutableStateBuilder(
+			c.shard,
+			c.shard.GetEventsCache(),
+			c.logger,
+			domainEntry,
+		)
+		c.msBuilder.Load(response.State)
+		c.stats = response.State.ExecutionStats
+		c.updateCondition = response.State.ExecutionInfo.NextEventID
 
-		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
-		c.msBuilder.UpdateReplicationPolicy(domainEntry.GetReplicationPolicy())
+		// finally emit execution and session stats
+		emitWorkflowExecutionStats(
+			c.metricsClient,
+			c.getDomainName(),
+			response.MutableStateStats,
+			c.stats.HistorySize,
+		)
 	}
-	return nil
+
+	flushBeforeReady, err := c.msBuilder.StartTransaction(domainEntry)
+	if err != nil {
+		return nil, err
+	}
+	if !flushBeforeReady {
+		return c.msBuilder, nil
+	}
+
+	if err = c.updateWorkflowExecutionAsActive(
+		c.shard.GetTimeSource().Now(),
+	); err != nil {
+		return nil, err
+	}
+
+	flushBeforeReady, err = c.msBuilder.StartTransaction(domainEntry)
+	if err != nil {
+		return nil, err
+	}
+	if flushBeforeReady {
+		return nil, &workflow.InternalServiceError{
+			Message: "workflowExecutionContext counter flushBeforeReady status after loading mutable state from DB",
+		}
+	}
+
+	return c.msBuilder, nil
 }
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
@@ -339,6 +333,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	newMutableState mutableState,
 	currentContext workflowExecutionContext,
 	currentMutableState mutableState,
+	currentTransactionPolicy *transactionPolicy,
 	workflowCAS *persistence.CurrentWorkflowCAS,
 ) (retError error) {
 
@@ -397,7 +392,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	}
 
 	var currentWorkflow *persistence.WorkflowMutation
-	if currentContext != nil && currentMutableState != nil {
+	if currentContext != nil && currentMutableState != nil && currentTransactionPolicy != nil {
 
 		defer func() {
 			if retError != nil {
@@ -407,7 +402,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 		currentWorkflow, workflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
 			now,
-			transactionPolicyActive, // current workflow must be closed as active
+			*currentTransactionPolicy,
 		)
 		if err != nil {
 			return err

@@ -23,7 +23,6 @@ package history
 import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -83,12 +82,16 @@ func (r *conflictResolverImpl) reset(
 	branchToken := info.BranchToken // in 2DC world branch token is stored in execution info
 	replayNextEventID := replayEventID + 1
 
+	domainEntry, err := r.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return nil, err
+	}
+
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
 	var history []*shared.HistoryEvent
 	var totalSize int64
-	var err error
 
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
@@ -118,11 +121,7 @@ func (r *conflictResolverImpl) reset(
 				r.shard,
 				r.shard.GetEventsCache(),
 				r.logger,
-				firstEvent.GetVersion(),
-				// if can see replication task, meaning that domain is
-				// global domain with > 1 target clusters
-				cache.ReplicationPolicyMultiCluster,
-				r.context.getDomainName(),
+				domainEntry,
 			)
 
 			resetMutableStateBuilder.executionInfo.EventStoreVersion = eventStoreVersion
@@ -173,6 +172,7 @@ func (r *conflictResolverImpl) reset(
 		startTime,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		resetMutableStateBuilder,
+		nil,
 		nil,
 		nil,
 		nil,

@@ -24,7 +24,6 @@ import (
 	ctx "context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -61,9 +60,7 @@ type (
 		workflowID  string
 		runID       string
 
-		controller         *gomock.Controller
-		mockTransactionMgr *MocknDCTransactionMgr
-		nDCBranchMgr       *nDCBranchMgrImpl
+		nDCBranchMgr *nDCBranchMgrImpl
 	}
 )
 
@@ -95,9 +92,6 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
-	s.controller = gomock.NewController(s.T())
-	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
-
 	s.domainID = uuid.New()
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
@@ -105,7 +99,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.mockMutableState = &mockMutableState{}
 	s.branchIndex = 0
 	s.nDCBranchMgr = newNDCBranchMgr(
-		s.mockShard, s.mockTransactionMgr, s.mockContext, s.mockMutableState, s.logger,
+		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
 	)
 }
 
@@ -113,7 +107,6 @@ func (s *nDCBranchMgrSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockContext.AssertExpectations(s.T())
 	s.mockMutableState.AssertExpectations(s.T())
-	s.controller.Finish()
 }
 
 func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
@@ -195,7 +188,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
 	s.mockMutableState.On("HasBufferedEvents").Return(true).Times(2)
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Times(1)
-	s.mockMutableState.On("UpdateCurrentVersion", lastWriteVersion, true).Times(1)
+	s.mockMutableState.On("UpdateCurrentVersion", lastWriteVersion, true).Return(nil).Times(1)
 	decisionInfo := &decisionInfo{
 		ScheduleID: 1234,
 		StartedID:  2345,
@@ -219,11 +212,9 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastWriteVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
-	ctx := ctx.Background()
+	s.mockContext.On("updateWorkflowExecutionAsActive", mock.Anything).Return(nil).Times(1)
 
-	s.mockTransactionMgr.EXPECT().updateWorkflow(
-		ctx, gomock.Any(), false, gomock.Any(), nil,
-	).Return(nil).Times(1)
+	ctx := ctx.Background()
 
 	_, _, err = s.nDCBranchMgr.flushBufferedEvents(ctx, incomingVersionHistory)
 }

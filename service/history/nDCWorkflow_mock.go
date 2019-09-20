@@ -129,11 +129,12 @@ func (mr *MocknDCWorkflowMockRecorder) happensAfter(that interface{}) *gomock.Ca
 }
 
 // suppressWorkflowBy mocks base method
-func (m *MocknDCWorkflow) suppressWorkflowBy(incomingWorkflow nDCWorkflow) error {
+func (m *MocknDCWorkflow) suppressWorkflowBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "suppressWorkflowBy", incomingWorkflow)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(transactionPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // suppressWorkflowBy indicates an expected call of suppressWorkflowBy

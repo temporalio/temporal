@@ -23,6 +23,7 @@ package history
 import (
 	ctx "context"
 	"fmt"
+
 	"github.com/pborman/uuid"
 
 	h "github.com/uber/cadence/.gen/go/history"
@@ -473,7 +474,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := executionInfo.SearchAttributes
-	domainName := msBuilder.GetDomainName()
+	domainName := msBuilder.GetDomainEntry().GetInfo().Name
 	children := msBuilder.GetPendingChildExecutionInfos()
 
 	// release the context lock since we no longer need mutable state builder and

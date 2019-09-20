@@ -52,7 +52,7 @@ var (
 type (
 	conflictResolverProvider func(context workflowExecutionContext, logger log.Logger) conflictResolver
 	stateBuilderProvider     func(msBuilder mutableState, logger log.Logger) stateBuilder
-	mutableStateProvider     func(version int64, domainName string, logger log.Logger) mutableState
+	mutableStateProvider     func(domainEntry *cache.DomainCacheEntry, logger log.Logger) mutableState
 
 	historyReplicator struct {
 		shard             ShardContext
@@ -146,16 +146,12 @@ func newHistoryReplicator(
 		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
 		},
-		getNewMutableState: func(version int64, domainName string, logger log.Logger) mutableState {
+		getNewMutableState: func(domainEntry *cache.DomainCacheEntry, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithReplicationState(
 				shard,
 				shard.GetEventsCache(),
 				logger,
-				version,
-				// if can see replication task, meaning that domain is
-				// global domain with > 1 target clusters
-				cache.ReplicationPolicyMultiCluster,
-				domainName,
+				domainEntry,
 			)
 		},
 	}
@@ -440,9 +436,12 @@ func (r *historyReplicator) ApplyStartEvent(
 	logger log.Logger,
 ) error {
 
-	msBuilder := r.getNewMutableState(request.GetVersion(), context.getDomainName(), logger)
-	err := r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
-	return err
+	domainEntry, err := r.domainCache.GetDomainByID(context.getDomainID())
+	if err != nil {
+		return err
+	}
+	msBuilder := r.getNewMutableState(domainEntry, logger)
+	return r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(

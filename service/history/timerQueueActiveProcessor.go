@@ -763,7 +763,6 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	_, newMutableState, err := msBuilder.AddContinueAsNewEvent(
 		msBuilder.GetNextEventID(),
 		common.EmptyEventID,
-		domainEntry,
 		startAttributes.GetParentWorkflowDomain(),
 		continueAsnewAttributes,
 		eventStoreVersion,

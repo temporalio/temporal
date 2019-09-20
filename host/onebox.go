@@ -733,6 +733,7 @@ func (c *cadenceImpl) createSystemDomain() error {
 			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		FailoverVersion:   common.EmptyVersion,
 	})
 	if err != nil {
 		if _, ok := err.(*shared.DomainAlreadyExistsError); ok {

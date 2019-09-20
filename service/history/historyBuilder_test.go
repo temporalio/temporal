@@ -67,7 +67,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.domainID = validDomainID
+	s.domainID = testDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
 	s.mockShard = &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
@@ -81,7 +81,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger, "")
+		s.logger, testLocalDomainEntry)
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
 
 	s.mockDomainCache.On("GetDomain", mock.Anything).Return(s.domainEntry, nil).Maybe()
@@ -258,7 +258,6 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	s.Equal(common.EmptyEventID, s.getPreviousDecisionStartedEventID())
 
 	_, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
-		s.domainEntry,
 		we,
 		&history.StartWorkflowExecutionRequest{
 			DomainUUID: common.StringPtr(s.domainID),
@@ -712,8 +711,8 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.Workf
 	}
 
 	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
-		s.domainEntry,
-		we, &history.StartWorkflowExecutionRequest{
+		we,
+		&history.StartWorkflowExecutionRequest{
 			DomainUUID:   common.StringPtr(s.domainID),
 			StartRequest: request,
 		},

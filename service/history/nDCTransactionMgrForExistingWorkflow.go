@@ -248,20 +248,32 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	newWorkflow nDCWorkflow,
 ) error {
 
-	if err := targetWorkflow.suppressWorkflowBy(
+	targetPolicy, err := targetWorkflow.suppressWorkflowBy(
 		currentWorkflow,
-	); err != nil {
+	)
+	if err != nil {
 		return err
+	}
+	if targetPolicy != transactionPolicyPassive {
+		return &shared.InternalServiceError{
+			Message: "nDCTransactionMgrForExistingWorkflow updateAsZombie encounter target workflow policy not being passive",
+		}
 	}
 
 	var newContext workflowExecutionContext
 	var newMutableState mutableState
 	var newTransactionPolicy *transactionPolicy
 	if newWorkflow != nil {
-		if err := newWorkflow.suppressWorkflowBy(
+		newWorkflowPolicy, err := newWorkflow.suppressWorkflowBy(
 			currentWorkflow,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if newWorkflowPolicy != transactionPolicyPassive {
+			return &shared.InternalServiceError{
+				Message: "nDCTransactionMgrForExistingWorkflow updateAsZombie encounter new workflow policy not being passive",
+			}
 		}
 
 		newContext = newWorkflow.getContext()
@@ -287,10 +299,14 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 	newWorkflow nDCWorkflow,
 ) error {
 
+	var err error
+
+	currentWorkflowPolicy := transactionPolicyPassive
 	if currentWorkflow.getMutableState().IsWorkflowExecutionRunning() {
-		if err := currentWorkflow.suppressWorkflowBy(
+		currentWorkflowPolicy, err = currentWorkflow.suppressWorkflowBy(
 			targetWorkflow,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -310,6 +326,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		newMutableState,
 		currentWorkflow.getContext(),
 		currentWorkflow.getMutableState(),
+		currentWorkflowPolicy.ptr(),
 		nil,
 	)
 }
@@ -337,6 +354,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -348,19 +366,31 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	newWorkflow nDCWorkflow,
 ) error {
 
-	if err := targetWorkflow.suppressWorkflowBy(
+	targetWorkflowPolicy, err := targetWorkflow.suppressWorkflowBy(
 		currentWorkflow,
-	); err != nil {
+	)
+	if err != nil {
 		return err
+	}
+	if targetWorkflowPolicy != transactionPolicyPassive {
+		return &shared.InternalServiceError{
+			Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter target workflow policy not being passive",
+		}
 	}
 
 	var newContext workflowExecutionContext
 	var newMutableState mutableState
 	if newWorkflow != nil {
-		if err := newWorkflow.suppressWorkflowBy(
+		newWorkflowPolicy, err := newWorkflow.suppressWorkflowBy(
 			currentWorkflow,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if newWorkflowPolicy != transactionPolicyPassive {
+			return &shared.InternalServiceError{
+				Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter new workflow policy not being passive",
+			}
 		}
 		newContext = newWorkflow.getContext()
 		newMutableState = newWorkflow.getMutableState()
@@ -372,6 +402,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		targetWorkflow.getMutableState(),
 		newContext,
 		newMutableState,
+		nil,
 		nil,
 		nil,
 		nil,

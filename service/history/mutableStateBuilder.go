@@ -111,8 +111,9 @@ type (
 		stateInDB int
 		// indicates the next event ID in DB, for conditional update
 		nextEventIDInDB int64
-		// indicate whether can do replication
-		replicationPolicy cache.ReplicationPolicy
+		// domain entry contains a snapshot of domain
+		// NOTE: do not use the failover version inside, use currentVersion above
+		domainEntry *cache.DomainCacheEntry
 
 		insertTransferTasks    []persistence.Task
 		insertReplicationTasks []persistence.Task
@@ -127,7 +128,6 @@ type (
 		config          *Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
-		domainName      string
 	}
 )
 
@@ -137,7 +137,7 @@ func newMutableStateBuilder(
 	shard ShardContext,
 	eventsCache eventsCache,
 	logger log.Logger,
-	domainName string,
+	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:             make(map[*persistence.ActivityInfo]struct{}),
@@ -166,10 +166,11 @@ func newMutableStateBuilder(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedID:   "",
 
-		currentVersion:        common.EmptyVersion,
+		currentVersion:        domainEntry.GetFailoverVersion(),
 		hasBufferedEventsInDB: false,
 		stateInDB:             persistence.WorkflowStateVoid,
 		nextEventIDInDB:       0,
+		domainEntry:           domainEntry,
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
@@ -177,7 +178,6 @@ func newMutableStateBuilder(
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
-		domainName:      domainName,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		DecisionVersion:    common.EmptyVersion,
@@ -202,20 +202,16 @@ func newMutableStateBuilderWithReplicationState(
 	shard ShardContext,
 	eventsCache eventsCache,
 	logger log.Logger,
-	version int64,
-	replicationPolicy cache.ReplicationPolicy,
-	domainName string,
+	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
-	s := newMutableStateBuilder(shard, eventsCache, logger, domainName)
+	s := newMutableStateBuilder(shard, eventsCache, logger, domainEntry)
 	s.replicationState = &persistence.ReplicationState{
-		StartVersion:        version,
-		CurrentVersion:      version,
+		StartVersion:        s.currentVersion,
+		CurrentVersion:      s.currentVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
 	}
-	s.currentVersion = version
-	s.replicationPolicy = replicationPolicy
 	return s
 }
 
@@ -223,15 +219,11 @@ func newMutableStateBuilderWithVersionHistories(
 	shard ShardContext,
 	eventsCache eventsCache,
 	logger log.Logger,
-	version int64,
-	replicationPolicy cache.ReplicationPolicy,
-	domainName string,
+	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
 
-	s := newMutableStateBuilder(shard, eventsCache, logger, domainName)
+	s := newMutableStateBuilder(shard, eventsCache, logger, domainEntry)
 	s.versionHistories = persistence.NewVersionHistories(&persistence.VersionHistory{})
-	s.currentVersion = version
-	s.replicationPolicy = replicationPolicy
 	return s
 }
 
@@ -431,26 +423,47 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 func (e *mutableStateBuilder) UpdateCurrentVersion(
 	version int64,
 	forceUpdate bool,
-) {
+) error {
+
+	if !e.IsWorkflowExecutionRunning() {
+		return nil
+	}
 
 	if e.replicationState != nil {
 		e.UpdateReplicationStateVersion(version, forceUpdate)
-		return
+		return nil
 	}
 
 	if e.versionHistories != nil {
+		versionHistory, err := e.versionHistories.GetCurrentVersionHistory()
+		if err != nil {
+			return err
+		}
+
+		if !versionHistory.IsEmpty() {
+			// this make sure current version >= last write version
+			versionHistoryItem, err := versionHistory.GetLastItem()
+			if err != nil {
+				return err
+			}
+			e.currentVersion = versionHistoryItem.GetVersion()
+		}
 		if version > e.currentVersion || forceUpdate {
 			e.currentVersion = version
 		}
-		return
+
+		return nil
 	}
 
 	if version != common.EmptyVersion {
-		e.logger.Error(
-			"cannot update current version of local domain workflow to version other than empty version",
-		)
+		err := &workflow.InternalServiceError{
+			Message: "cannot update current version of local domain workflow to version other than empty version",
+		}
+		e.logger.Error(err.Error())
+		return err
 	}
 	e.currentVersion = common.EmptyVersion
+	return nil
 }
 
 func (e *mutableStateBuilder) GetCurrentVersion() int64 {
@@ -507,13 +520,6 @@ func (e *mutableStateBuilder) GetLastWriteVersion() (int64, error) {
 	}
 
 	return common.EmptyVersion, nil
-}
-
-func (e *mutableStateBuilder) UpdateReplicationPolicy(
-	replicationPolicy cache.ReplicationPolicy,
-) {
-
-	e.replicationPolicy = replicationPolicy
 }
 
 // TODO nDC deprecate once replication state is deprecated
@@ -765,15 +771,15 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 	}
 }
 
-func (e *mutableStateBuilder) GetDomainName() string {
-	return e.domainName
+func (e *mutableStateBuilder) GetDomainEntry() *cache.DomainCacheEntry {
+	return e.domainEntry
 }
 
 func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
 	if e.executionInfo.StickyTaskList == "" {
 		return false
 	}
-	ttl := e.config.StickyTTL(e.domainName)
+	ttl := e.config.StickyTTL(e.GetDomainEntry().GetInfo().Name)
 	if e.timeSource.Now().After(e.executionInfo.LastUpdatedTimestamp.Add(ttl)) {
 		return false
 	}
@@ -1447,7 +1453,6 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 }
 
 func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
-	domainEntry *cache.DomainCacheEntry,
 	parentExecutionInfo *h.ParentExecutionInfo,
 	execution workflow.WorkflowExecution,
 	previousExecutionState mutableState,
@@ -1478,7 +1483,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	createRequest := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(domainEntry.GetInfo().Name),
+		Domain:                              common.StringPtr(e.domainEntry.GetInfo().Name),
 		WorkflowId:                          execution.WorkflowId,
 		TaskList:                            tl,
 		WorkflowType:                        wType,
@@ -1493,7 +1498,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	req := &h.StartWorkflowExecutionRequest{
-		DomainUUID:                      common.StringPtr(domainEntry.GetInfo().ID),
+		DomainUUID:                      common.StringPtr(e.domainEntry.GetInfo().ID),
 		StartRequest:                    createRequest,
 		ParentExecutionInfo:             parentExecutionInfo,
 		LastCompletionResult:            attributes.LastCompletionResult,
@@ -1527,7 +1532,6 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, previousExecutionInfo, firstRunID, execution.GetRunId())
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
-		domainEntry,
 		parentDomainID,
 		execution,
 		createRequest.GetRequestId(),
@@ -1566,7 +1570,6 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
-	domainEntry *cache.DomainCacheEntry,
 	execution workflow.WorkflowExecution,
 	startRequest *h.StartWorkflowExecutionRequest,
 ) (*workflow.HistoryEvent, error) {
@@ -1592,7 +1595,6 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 		parentDomainID = startRequest.ParentExecutionInfo.DomainUUID
 	}
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
-		domainEntry,
 		parentDomainID,
 		execution,
 		request.GetRequestId(),
@@ -1616,7 +1618,6 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
-	domainEntry *cache.DomainCacheEntry,
 	parentDomainID *string,
 	execution workflow.WorkflowExecution,
 	requestID string,
@@ -1625,7 +1626,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	event := startEvent.WorkflowExecutionStartedEventAttributes
 	e.executionInfo.CreateRequestID = requestID
-	e.executionInfo.DomainID = domainEntry.GetInfo().ID
+	e.executionInfo.DomainID = e.domainEntry.GetInfo().ID
 	e.executionInfo.WorkflowID = execution.GetWorkflowId()
 	e.executionInfo.RunID = execution.GetRunId()
 	e.executionInfo.TaskList = event.TaskList.GetName()
@@ -1681,7 +1682,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
 		startEvent.GetTimestamp(),
-		domainEntry.GetRetentionDays(e.executionInfo.WorkflowID),
+		e.domainEntry.GetRetentionDays(e.executionInfo.WorkflowID),
 	)
 
 	if event.Memo != nil {
@@ -3058,7 +3059,6 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(
 func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	firstEventID int64,
 	decisionCompletedEventID int64,
-	domainEntry *cache.DomainCacheEntry,
 	parentDomainName string,
 	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
 	eventStoreVersion int32,
@@ -3097,19 +3097,18 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
-	domainName := domainEntry.GetInfo().Name
+	domainName := e.domainEntry.GetInfo().Name
+	domainID := e.domainEntry.GetInfo().ID
 	var newStateBuilder *mutableStateBuilder
 	if e.config.EnableEventsV2(domainName) && e.config.EnableNDC(domainName) {
 		newStateBuilder = newMutableStateBuilderWithVersionHistories(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry.GetFailoverVersion(),
-			domainEntry.GetReplicationPolicy(),
-			domainEntry.GetInfo().Name,
+			e.domainEntry,
 		)
 	} else {
-		if domainEntry.IsGlobalDomain() {
+		if e.domainEntry.IsGlobalDomain() {
 			// all workflows within a global domain should have replication state,
 			// no matter whether it will be replicated to multiple
 			// target clusters or not, for 2DC case
@@ -3117,18 +3116,14 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 				e.shard,
 				e.eventsCache,
 				e.logger,
-				e.GetCurrentVersion(),
-				e.replicationPolicy,
-				e.domainName,
+				e.domainEntry,
 			)
 		} else {
-			newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainName)
+			newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainEntry)
 		}
 	}
 
-	domainID := domainEntry.GetInfo().ID
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
-		domainEntry,
 		parentInfo,
 		newExecution,
 		e,
@@ -3676,12 +3671,29 @@ func (e *mutableStateBuilder) UpdateWorkflowStateCloseStatus(
 	return e.executionInfo.UpdateWorkflowStateCloseStatus(state, closeStatus)
 }
 
+func (e *mutableStateBuilder) StartTransaction(
+	domainEntry *cache.DomainCacheEntry,
+) (bool, error) {
+
+	e.domainEntry = domainEntry
+	if err := e.UpdateCurrentVersion(domainEntry.GetFailoverVersion(), false); err != nil {
+		return false, err
+	}
+
+	flushBeforeReady, err := e.startTransactionHandleDecisionFailover()
+	if err != nil {
+		return false, err
+	}
+
+	return flushBeforeReady, nil
+}
+
 func (e *mutableStateBuilder) CloseTransactionAsMutation(
 	now time.Time,
 	transactionPolicy transactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 
-	if err := e.prepareTransaction(
+	if err := e.prepareCloseTransaction(
 		now,
 		transactionPolicy,
 	); err != nil {
@@ -3747,7 +3759,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	transactionPolicy transactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 
-	if err := e.prepareTransaction(
+	if err := e.prepareCloseTransaction(
 		now,
 		transactionPolicy,
 	); err != nil {
@@ -3812,39 +3824,12 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	return workflowSnapshot, workflowEventsSeq, nil
 }
 
-func (e *mutableStateBuilder) closeTransactionHandleActivityUserTimerTasks(
-	now time.Time,
-	transactionPolicy transactionPolicy,
-) error {
-
-	if transactionPolicy == transactionPolicyPassive ||
-		!e.IsWorkflowExecutionRunning() {
-		return nil
-	}
-
-	if err := e.taskGenerator.generateActivityTimerTasks(
-		e.unixNanoToTime(now.UnixNano()),
-	); err != nil {
-		return err
-	}
-
-	return e.taskGenerator.generateUserTimerTasks(
-		e.unixNanoToTime(now.UnixNano()),
-	)
-}
-
-func (e *mutableStateBuilder) prepareTransaction(
+func (e *mutableStateBuilder) prepareCloseTransaction(
 	now time.Time,
 	transactionPolicy transactionPolicy,
 ) error {
 
 	if err := e.closeTransactionWithPolicyCheck(
-		transactionPolicy,
-	); err != nil {
-		return err
-	}
-
-	if err := e.closeTransactionHandleDecisionFailover(
 		transactionPolicy,
 	); err != nil {
 		return err
@@ -4085,7 +4070,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 
 func (e *mutableStateBuilder) canReplicateEvents() bool {
 	return (e.GetReplicationState() != nil || e.GetVersionHistories() != nil) &&
-		e.replicationPolicy == cache.ReplicationPolicyMultiCluster
+		e.domainEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch
@@ -4132,12 +4117,105 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 }
 
+func (e *mutableStateBuilder) startTransactionHandleDecisionFailover() (bool, error) {
+
+	if !e.IsWorkflowExecutionRunning() ||
+		!e.canReplicateEvents() {
+		return false, nil
+	}
+
+	// NOTE:
+	// the main idea here is to guarantee that once there is a decision task started
+	// all events ending in the buffer should have the same version
+
+	// Handling mutable state turn from standby to active, while having a decision on the fly
+	decision, ok := e.GetInFlightDecision()
+	if !ok || decision.Version >= e.GetCurrentVersion() {
+		// no pending decision, no buffered events
+		// or decision has higher / equal version
+		return false, nil
+	}
+
+	currentVersion := e.GetCurrentVersion()
+	lastWriteVersion, err := e.GetLastWriteVersion()
+	if err != nil {
+		return false, err
+	}
+	if lastWriteVersion != decision.Version {
+		return false, &workflow.InternalServiceError{Message: fmt.Sprintf(
+			"mutableStateBuilder encounter mismatch version, decision: %v, last write version %v",
+			decision.Version,
+			lastWriteVersion,
+		)}
+	}
+
+	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
+	currentVersionCluster := e.clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
+	currentCluster := e.clusterMetadata.GetCurrentClusterName()
+
+	// there are 4 cases for version changes (based on version from domain cache)
+	// NOTE: domain cache version change may occur after seeing events with higher version
+	//  meaning that the flush buffer logic in NDC branch manager should be kept.
+	//
+	// 1. active -> passive => fail decision & flush buffer using last write version
+	// 2. active -> active => fail decision & flush buffer using last write version
+	// 3. passive -> active => fail decision using current version, no buffered events
+	// 4. passive -> passive => no buffered events, since always passive, nothing to be done
+
+	// handle case 4
+	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
+		// do a sanity check on buffered events
+		if e.HasBufferedEvents() {
+			return false, &workflow.InternalServiceError{
+				Message: "mutableStateBuilder encounter previous passive workflow with buffered events",
+			}
+		}
+		return false, nil
+	}
+
+	// handle case 1 & 2
+	var flushBufferVersion = lastWriteVersion
+
+	// handle case 3
+	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
+		// do a sanity check on buffered events
+		if e.HasBufferedEvents() {
+			return false, &workflow.InternalServiceError{
+				Message: "mutableStateBuilder encounter previous passive workflow with buffered events",
+			}
+		}
+		flushBufferVersion = currentVersion
+	}
+
+	// this workflow was previous active (whether it has buffered events or not),
+	// the in flight decision must be failed to guarantee all events within same
+	// event batch shard the same version
+	if err := e.UpdateCurrentVersion(flushBufferVersion, true); err != nil {
+		return false, err
+	}
+
+	// we have a decision on the fly with a lower version, fail it
+	if err := failDecision(
+		e,
+		decision,
+		workflow.DecisionTaskFailedCauseFailoverCloseDecision,
+	); err != nil {
+		return false, err
+	}
+
+	err = scheduleDecision(e)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (e *mutableStateBuilder) closeTransactionWithPolicyCheck(
 	transactionPolicy transactionPolicy,
 ) error {
 
 	if transactionPolicy == transactionPolicyPassive ||
-		e.GetReplicationState() == nil {
+		!e.canReplicateEvents() {
 		return nil
 	}
 
@@ -4147,36 +4225,6 @@ func (e *mutableStateBuilder) closeTransactionWithPolicyCheck(
 	if activeCluster != currentCluster {
 		domainID := e.GetExecutionInfo().DomainID
 		return errors.NewDomainNotActiveError(domainID, currentCluster, activeCluster)
-	}
-	return nil
-}
-
-func (e *mutableStateBuilder) closeTransactionHandleDecisionFailover(
-	transactionPolicy transactionPolicy,
-) error {
-
-	if transactionPolicy == transactionPolicyPassive ||
-		!e.IsWorkflowExecutionRunning() ||
-		e.GetReplicationState() == nil {
-		return nil
-	}
-
-	// Handling mutable state turn from standby to active, while having a decision on the fly
-	decision, ok := e.GetInFlightDecision()
-	if ok && decision.Version < e.GetCurrentVersion() {
-		// we have a decision on the fly with a lower version, fail it
-		if err := failDecision(
-			e,
-			decision,
-			workflow.DecisionTaskFailedCauseFailoverCloseDecision,
-		); err != nil {
-			return err
-		}
-
-		err := scheduleDecision(e)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -4256,6 +4304,27 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 		)
 	}
 	return nil
+}
+
+func (e *mutableStateBuilder) closeTransactionHandleActivityUserTimerTasks(
+	now time.Time,
+	transactionPolicy transactionPolicy,
+) error {
+
+	if transactionPolicy == transactionPolicyPassive ||
+		!e.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	if err := e.taskGenerator.generateActivityTimerTasks(
+		e.unixNanoToTime(now.UnixNano()),
+	); err != nil {
+		return err
+	}
+
+	return e.taskGenerator.generateUserTimerTasks(
+		e.unixNanoToTime(now.UnixNano()),
+	)
 }
 
 func (e *mutableStateBuilder) checkMutability(

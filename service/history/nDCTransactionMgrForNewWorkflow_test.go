@@ -281,7 +281,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressWorkflowBy(currentWorkflow).Return(nil).Times(1)
+	targetWorkflow.EXPECT().suppressWorkflowBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
 
 	targetContext.On(
 		"persistFirstWorkflowEvents", targetWorkflowEventsSeq[0],
@@ -345,7 +345,8 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.On("IsWorkflowExecutionRunning").Return(true)
-	currentWorkflow.EXPECT().suppressWorkflowBy(targetWorkflow).Return(nil).Times(1)
+	currentWorkflowPolicy := transactionPolicyActive
+	currentWorkflow.EXPECT().suppressWorkflowBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
 
 	currentContext.On(
 		"updateWorkflowExecutionWithNew",
@@ -353,7 +354,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetContext,
 		targetMutableState,
-		transactionPolicyActive,
+		currentWorkflowPolicy,
 		transactionPolicyPassive.ptr(),
 	).Return(nil).Once()
 

@@ -319,6 +319,11 @@ func (v *VersionHistory) GetLastItem() (*VersionHistoryItem, error) {
 	return v.items[len(v.items)-1].Duplicate(), nil
 }
 
+// IsEmpty indicate whether version history is empty
+func (v *VersionHistory) IsEmpty() bool {
+	return len(v.items) == 0
+}
+
 // Equals test if this version history and input version history are the same
 func (v *VersionHistory) Equals(input *VersionHistory) bool {
 

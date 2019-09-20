@@ -40,7 +40,7 @@ type (
 		getReleaseFn() releaseWorkflowExecutionFunc
 		getVectorClock() (int64, int64, error)
 		happensAfter(that nDCWorkflow) (bool, error)
-		suppressWorkflowBy(incomingWorkflow nDCWorkflow) error
+		suppressWorkflowBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error)
 		flushBufferedEvents() error
 	}
 
@@ -128,7 +128,7 @@ func (r *nDCWorkflowImpl) happensAfter(
 
 func (r *nDCWorkflowImpl) suppressWorkflowBy(
 	incomingWorkflow nDCWorkflow,
-) error {
+) (transactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
@@ -139,11 +139,11 @@ func (r *nDCWorkflowImpl) suppressWorkflowBy(
 
 	lastWriteVersion, lastEventTaskID, err := r.getVectorClock()
 	if err != nil {
-		return err
+		return transactionPolicyActive, err
 	}
 	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.getVectorClock()
 	if err != nil {
-		return err
+		return transactionPolicyActive, err
 	}
 
 	if workflowHappensAfter(
@@ -151,23 +151,23 @@ func (r *nDCWorkflowImpl) suppressWorkflowBy(
 		lastEventTaskID,
 		incomingLastWriteVersion,
 		incomingLastEventTaskID) {
-		return &shared.InternalServiceError{
+		return transactionPolicyActive, &shared.InternalServiceError{
 			Message: "nDCWorkflow cannot suppress workflow by older workflow",
 		}
 	}
 
 	// if workflow is in zombie or finished state, keep as is
 	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		return transactionPolicyPassive, nil
 	}
 
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
+		return transactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
 	}
-	return r.zombiefyWorkflow()
+	return transactionPolicyPassive, r.zombiefyWorkflow()
 }
 
 func (r *nDCWorkflowImpl) flushBufferedEvents() error {
@@ -201,7 +201,9 @@ func (r *nDCWorkflowImpl) failDecision(
 	lastWriteVersion int64,
 ) error {
 	// do not persist the change right now, NDC requires transaction
-	r.mutableState.UpdateCurrentVersion(lastWriteVersion, true)
+	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
+		return err
+	}
 
 	decision, ok := r.mutableState.GetInFlightDecision()
 	if !ok {
@@ -238,7 +240,9 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 	}
 
 	// do not persist the change right now, NDC requires transaction
-	r.mutableState.UpdateCurrentVersion(lastWriteVersion, true)
+	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
+		return err
+	}
 
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		workflowTerminationReason,

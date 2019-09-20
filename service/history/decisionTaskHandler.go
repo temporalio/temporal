@@ -705,7 +705,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
 		handler.decisionTaskCompletedID,
 		handler.decisionTaskCompletedID,
-		handler.domainEntry,
 		parentDomainName,
 		attr,
 		handler.eventStoreVersion,
@@ -919,7 +918,6 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
 		handler.decisionTaskCompletedID,
 		handler.decisionTaskCompletedID,
-		handler.domainEntry,
 		attr.GetParentWorkflowDomain(),
 		continueAsNewAttributes,
 		handler.eventStoreVersion,

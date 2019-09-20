@@ -53,7 +53,7 @@ var (
 	testDomainEmitMetric         = true
 	testDomainActiveClusterName  = cluster.TestCurrentClusterName
 	testDomainStandbyClusterName = cluster.TestAlternativeClusterName
-	testDomainIsGlobalDomain     = true
+	testDomainIsGlobalDomain     = false
 	testDomainAllClusters        = []*persistence.ClusterReplicationConfig{
 		{ClusterName: testDomainActiveClusterName},
 		{ClusterName: testDomainStandbyClusterName},
@@ -575,6 +575,10 @@ func (s *TestBase) SetupWorkflowStore() {
 // SetupDomains setup the domains used for testing
 func (s *TestBase) SetupDomains() {
 	// create the domains which are active / standby
+	version := int64(0)
+	if !testDomainIsGlobalDomain {
+		version = common.EmptyVersion
+	}
 	createDomainRequest := &persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
 			ID:     testDomainActiveID,
@@ -589,7 +593,8 @@ func (s *TestBase) SetupDomains() {
 			ActiveClusterName: testDomainActiveClusterName,
 			Clusters:          testDomainAllClusters,
 		},
-		IsGlobalDomain: testDomainIsGlobalDomain,
+		IsGlobalDomain:  testDomainIsGlobalDomain,
+		FailoverVersion: version,
 	}
 	s.MetadataManager.CreateDomain(createDomainRequest)
 	createDomainRequest.Info.ID = testDomainStandbyID

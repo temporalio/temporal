@@ -203,15 +203,21 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	targetWorkflow nDCWorkflow,
 ) error {
 
-	if err := targetWorkflow.suppressWorkflowBy(
+	targetWorkflowPolicy, err := targetWorkflow.suppressWorkflowBy(
 		currentWorkflow,
-	); err != nil {
+	)
+	if err != nil {
 		return err
+	}
+	if targetWorkflowPolicy != transactionPolicyPassive {
+		return &shared.InternalServiceError{
+			Message: "nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive",
+		}
 	}
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
 		now,
-		transactionPolicyPassive,
+		targetWorkflowPolicy,
 	)
 	if err != nil {
 		return err
@@ -244,9 +250,10 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	targetWorkflow nDCWorkflow,
 ) error {
 
-	if err := currentWorkflow.suppressWorkflowBy(
+	currentWorkflowPolicy, err := currentWorkflow.suppressWorkflowBy(
 		targetWorkflow,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -255,7 +262,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.getContext(),
 		targetWorkflow.getMutableState(),
-		transactionPolicyActive,
+		currentWorkflowPolicy,
 		transactionPolicyPassive.ptr(),
 	)
 }

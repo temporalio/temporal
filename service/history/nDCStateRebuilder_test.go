@@ -102,8 +102,6 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
 
-	s.domainID = uuid.New()
-	s.domainName = "some random domain name"
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 	s.nDCStateRebuilder = newNDCStateRebuilder(
@@ -116,12 +114,11 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())
-	s.controller.Finish()
+	// s.controller.Finish()
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
-	version := int64(123)
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(version, s.domainName)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalDomainEntry)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetVersionHistories())

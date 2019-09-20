@@ -179,12 +179,12 @@ func (_m *mockWorkflowExecutionContext) loadExecutionStats() (*persistence.Execu
 	return r0, r1
 }
 
-func (_m *mockWorkflowExecutionContext) conflictResolveWorkflowExecution(_a0 time.Time, _a1 persistence.ConflictResolveWorkflowMode, _a2 mutableState, _a3 workflowExecutionContext, _a4 mutableState, _a5 workflowExecutionContext, _a6 mutableState, _a7 *persistence.CurrentWorkflowCAS) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+func (_m *mockWorkflowExecutionContext) conflictResolveWorkflowExecution(_a0 time.Time, _a1 persistence.ConflictResolveWorkflowMode, _a2 mutableState, _a3 workflowExecutionContext, _a4 mutableState, _a5 workflowExecutionContext, _a6 mutableState, _a7 *transactionPolicy, _a8 *persistence.CurrentWorkflowCAS) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(time.Time, persistence.ConflictResolveWorkflowMode, mutableState, workflowExecutionContext, mutableState, workflowExecutionContext, mutableState, *persistence.CurrentWorkflowCAS) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7)
+	if rf, ok := ret.Get(0).(func(time.Time, persistence.ConflictResolveWorkflowMode, mutableState, workflowExecutionContext, mutableState, workflowExecutionContext, mutableState, *transactionPolicy, *persistence.CurrentWorkflowCAS) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5, _a6, _a7, _a8)
 	} else {
 		r0 = ret.Error(0)
 	}

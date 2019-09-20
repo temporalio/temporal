@@ -259,7 +259,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 		LastEventTaskID: incomingLastEventTaskID,
 	})
 
-	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	_, err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.Error(err)
 }
 
@@ -324,7 +324,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastEventVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
-	s.mockMutableState.On("UpdateCurrentVersion", lastEventVersion, true)
+	s.mockMutableState.On("UpdateCurrentVersion", lastEventVersion, true).Return(nil)
 	inFlightDecision := &decisionInfo{
 		Version:    1234,
 		ScheduleID: 5678,
@@ -348,12 +348,14 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
-	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.NoError(err)
+	s.Equal(transactionPolicyPassive, policy)
 
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
-	err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.NoError(err)
+	s.Equal(transactionPolicyActive, policy)
 }
 
 func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
@@ -422,12 +424,14 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
-	err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.NoError(err)
+	s.Equal(transactionPolicyPassive, policy)
 
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
-	err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
 	s.NoError(err)
+	s.Equal(transactionPolicyPassive, policy)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
 	s.Equal(persistence.WorkflowCloseStatusNone, executionInfo.CloseStatus)
 }

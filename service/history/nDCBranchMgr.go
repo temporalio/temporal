@@ -50,7 +50,6 @@ type (
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
-		transactionMgr  nDCTransactionMgr
 
 		context      workflowExecutionContext
 		mutableState mutableState
@@ -62,7 +61,6 @@ var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
 	shard ShardContext,
-	transactionMgr nDCTransactionMgr,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,
@@ -73,7 +71,6 @@ func newNDCBranchMgr(
 		domainCache:     shard.GetDomainCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
-		transactionMgr:  transactionMgr,
 
 		context:      context,
 		mutableState: mutableState,
@@ -162,15 +159,13 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	if err := targetWorkflow.flushBufferedEvents(); err != nil {
 		return 0, nil, err
 	}
-	if err := r.transactionMgr.updateWorkflow(
-		ctx,
+	// the workflow must be updated as active, to send out replication tasks
+	if err := targetWorkflow.context.updateWorkflowExecutionAsActive(
 		r.shard.GetTimeSource().Now(),
-		false, // workflow is not rebuilt
-		targetWorkflow,
-		nil, // no new workflow
 	); err != nil {
 		return 0, nil, err
 	}
+
 	r.context = targetWorkflow.getContext()
 	r.mutableState = targetWorkflow.getMutableState()
 

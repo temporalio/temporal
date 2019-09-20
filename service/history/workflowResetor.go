@@ -294,7 +294,12 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	if newMutableState.GetReplicationState() != nil {
 		newMutableState.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
 	} else if newMutableState.GetVersionHistories() != nil {
-		newMutableState.UpdateCurrentVersion(domainEntry.GetFailoverVersion(), false)
+		if retError = newMutableState.UpdateCurrentVersion(
+			domainEntry.GetFailoverVersion(),
+			false,
+		); retError != nil {
+			return
+		}
 	}
 
 	// failed the in-flight decision(started).
@@ -683,21 +688,17 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 						w.eng.shard,
 						w.eng.shard.GetEventsCache(),
 						w.eng.logger,
-						firstEvent.GetVersion(),
-						domainEntry.GetReplicationPolicy(),
-						domainEntry.GetInfo().Name,
+						domainEntry,
 					)
 				} else if prevMutableState.GetVersionHistories() != nil {
 					resetMutableState = newMutableStateBuilderWithVersionHistories(
 						w.eng.shard,
 						w.eng.shard.GetEventsCache(),
 						w.eng.logger,
-						firstEvent.GetVersion(),
-						domainEntry.GetReplicationPolicy(),
-						domainEntry.GetInfo().Name,
+						domainEntry,
 					)
 				} else {
-					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry.GetInfo().Name)
+					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry)
 				}
 
 				resetMutableState.executionInfo.EventStoreVersion = persistence.EventStoreVersionV2
@@ -948,12 +949,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					w.eng.shard,
 					w.eng.shard.GetEventsCache(),
 					w.eng.logger,
-					firstEvent.GetVersion(),
-					// if can see replication task, meaning that domain is
-					// global domain with > 1 target clusters
-					cache.ReplicationPolicyMultiCluster,
-					domainEntry.GetInfo().Name,
+					domainEntry,
 				)
+				newMsBuilder.UpdateReplicationStateVersion(firstEvent.GetVersion(), true)
 				newMsBuilder.GetExecutionInfo().EventStoreVersion = persistence.EventStoreVersionV2
 				sBuilder = newStateBuilder(w.eng.shard, newMsBuilder, w.eng.logger)
 			}
