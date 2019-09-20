@@ -100,6 +100,7 @@ type (
 
 		taskGenerator       mutableStateTaskGenerator
 		decisionTaskManager mutableStateDecisionTaskManager
+		queryRegistry       queryRegistry
 
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
@@ -148,6 +149,8 @@ func newMutableStateBuilder(
 
 		hasBufferedEventsInPersistence: false,
 		condition:                      0,
+
+		queryRegistry: newQueryRegistry(),
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
@@ -707,6 +710,10 @@ func (e *mutableStateBuilder) GetWorkflowType() *workflow.WorkflowType {
 	wType.Name = common.StringPtr(e.executionInfo.WorkflowTypeName)
 
 	return wType
+}
+
+func (e *mutableStateBuilder) GetQueryRegistry() queryRegistry {
+	return e.queryRegistry
 }
 
 func (e *mutableStateBuilder) GetActivityScheduledEvent(

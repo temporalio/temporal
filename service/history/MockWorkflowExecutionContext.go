@@ -331,18 +331,3 @@ func (_m *mockWorkflowExecutionContext) persistNonFirstWorkflowEvents(_a0 *persi
 
 	return r0, r1
 }
-
-func (_m *mockWorkflowExecutionContext) getQueryRegistry() QueryRegistry {
-	ret := _m.Called()
-
-	var r0 QueryRegistry
-	if rf, ok := ret.Get(0).(func() QueryRegistry); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(QueryRegistry)
-		}
-	}
-
-	return r0
-}

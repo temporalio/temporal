@@ -590,21 +590,29 @@ func (e *historyEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	queryRegistry := context.getQueryRegistry()
+	ms, err := context.loadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	queryRegistry := ms.GetQueryRegistry()
 	release(nil)
-	query := queryRegistry.BufferQuery(request.GetQuery())
+	queryID, _, queryTermCh := queryRegistry.bufferQuery(request.GetQuery())
+	defer queryRegistry.removeQuery(queryID)
 	domainCache, err := e.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
 	if err != nil {
 		return nil, err
 	}
 	timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(domainCache.GetInfo().Name))
 	defer timer.Stop()
-
 	select {
-	case <-query.TerminationCh():
-		switch query.State() {
-		case QueryStateCompleted:
-			result := query.QueryResult()
+	case <-queryTermCh:
+		querySnapshot, err := queryRegistry.getQuerySnapshot(queryID)
+		if err != nil {
+			return nil, err
+		}
+		switch querySnapshot.state {
+		case queryStateCompleted:
+			result := querySnapshot.queryResult
 			switch result.GetResultType() {
 			case workflow.QueryResultTypeAnswered:
 				return &h.QueryWorkflowResponse{
@@ -613,7 +621,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 			case workflow.QueryResultTypeFailed:
 				return nil, &workflow.QueryFailedError{Message: fmt.Sprintf("%v: %v", result.GetErrorReason(), result.GetErrorDetails())}
 			}
-		case QueryStateExpired:
+		case queryStateExpired:
 			return nil, ErrQueryTimeout
 		}
 	case <-timer.C:

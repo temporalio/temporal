@@ -439,6 +439,15 @@ func (s *engineSuite) TestQueryWorkflow() {
 		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
 		RunId:      common.StringPtr(validRunID),
 	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID, Name: "testDomain"},
@@ -458,26 +467,30 @@ func (s *engineSuite) TestQueryWorkflow() {
 	waitGroup.Add(1)
 	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
 		<-time.After(delay)
-		context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
-		s.NoError(err)
-		queryRegistry := context.getQueryRegistry()
-		release(nil)
-		buffered := queryRegistry.GetBuffered()
-		for _, b := range buffered {
-			changed, err := b.RecordEvent(QueryEventStart, nil)
-			s.NoError(err)
+		builder := s.getBuilder(domainID, execution)
+		s.NotNil(builder)
+		queryRegistry := builder.GetQueryRegistry()
+		buffered := queryRegistry.getBufferedSnapshot()
+		for _, id := range buffered {
+			changed, err := queryRegistry.recordEvent(id, queryEventStart, nil)
 			s.True(changed)
-			changed, err = b.RecordEvent(QueryEventPersistenceConditionSatisfied, nil)
 			s.NoError(err)
+		}
+		started := queryRegistry.getStartedSnapshot()
+		for _, id := range started {
+			changed, err := queryRegistry.recordEvent(id, queryEventPersistenceConditionSatisfied, nil)
 			s.False(changed)
+			s.NoError(err)
 			resultType := workflow.QueryResultTypeAnswered
-			changed, err = b.RecordEvent(QueryEventRecordResult, &workflow.WorkflowQueryResult{
+			changed, err = queryRegistry.recordEvent(id, queryEventRecordResult, &workflow.WorkflowQueryResult{
 				ResultType: &resultType,
 				Answer:     answer,
 			})
-			s.NoError(err)
 			s.True(changed)
-			s.Equal(QueryStateCompleted, b.State())
+			s.NoError(err)
+			querySnapshot, err := queryRegistry.getQuerySnapshot(id)
+			s.NoError(err)
+			s.Equal(queryStateCompleted, querySnapshot.state)
 		}
 		waitGroup.Done()
 	}

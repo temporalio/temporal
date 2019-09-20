@@ -1943,6 +1943,22 @@ func (_m *mockMutableState) GetWorkflowType() *shared.WorkflowType {
 	return r0
 }
 
+// GetQueryRegistry provides a mock function with given fields:
+func (_m *mockMutableState) GetQueryRegistry() queryRegistry {
+	ret := _m.Called()
+
+	var r0 queryRegistry
+	if rf, ok := ret.Get(0).(func() queryRegistry); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(queryRegistry)
+		}
+	}
+
+	return r0
+}
+
 // HasBufferedEvents provides a mock function with given fields:
 func (_m *mockMutableState) HasBufferedEvents() bool {
 	ret := _m.Called()
