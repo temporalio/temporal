@@ -518,9 +518,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 
 	var event *workflow.HistoryEvent
 	// Only emit DecisionTaskFailedEvent for the very first time
-	if dt.Attempt == 0 || cause == workflow.DecisionTaskFailedCauseResetWorkflow {
-		// TODO does cause == workflow.DecisionTaskFailedCauseResetWorkflow do anything?
-		//  workflow reset should not encounter transient decision
+	if dt.Attempt == 0 {
 		event = m.msb.hBuilder.AddDecisionTaskFailedEvent(attr)
 	}
 
