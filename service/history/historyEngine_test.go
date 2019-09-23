@@ -1966,6 +1966,162 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 }
 
+func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAbandonPolicy() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	abandon := workflow.ParentClosePolicyAbandon
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
+		StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+			Domain:     common.StringPtr(domainID),
+			WorkflowId: common.StringPtr("child-workflow-id"),
+			WorkflowType: &workflow.WorkflowType{
+				Name: common.StringPtr("child-workflow-type"),
+			},
+			ParentClosePolicy: &abandon,
+		},
+	}}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: executionContext,
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err, s.printHistory(msBuilder))
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
+	s.Equal(int(1), len(executionBuilder.GetPendingChildExecutionInfos()))
+	var childID int64
+	for c := range executionBuilder.GetPendingChildExecutionInfos() {
+		childID = c
+		break
+	}
+	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
+	s.Equal(workflow.ParentClosePolicyAbandon, executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerminatePolicy() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	terminate := workflow.ParentClosePolicyTerminate
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
+		StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+			Domain:     common.StringPtr(domainID),
+			WorkflowId: common.StringPtr("child-workflow-id"),
+			WorkflowType: &workflow.WorkflowType{
+				Name: common.StringPtr("child-workflow-type"),
+			},
+			ParentClosePolicy: &terminate,
+		},
+	}}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: executionContext,
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err, s.printHistory(msBuilder))
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
+	s.Equal(int(1), len(executionBuilder.GetPendingChildExecutionInfos()))
+	var childID int64
+	for c := range executionBuilder.GetPendingChildExecutionInfos() {
+		childID = c
+		break
+	}
+	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
+	s.Equal(workflow.ParentClosePolicyTerminate, executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
+}
+
 func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed() {
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{

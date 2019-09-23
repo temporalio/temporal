@@ -179,7 +179,7 @@ var keys = map[Key]string{
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
-	UseTerminateAsDefaultParentClosePolicy:                "history.useTerminateAsDefaultParentClosePolicy",
+	EnableParentClosePolicy:                               "history.enableParentClosePolicy",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
 	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
@@ -490,8 +490,8 @@ const (
 
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2
-	// UseTerminateAsDefaultParentClosePolicy whether to use Terminate as default ParentClosePolicy, otherwise use Abandon for backward compatibility
-	UseTerminateAsDefaultParentClosePolicy
+	// EnableParentClosePolicy whether to  ParentClosePolicy
+	EnableParentClosePolicy
 	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if
 	// the number of children greater than or equal to this threshold
 	ParentClosePolicyThreshold

@@ -136,8 +136,8 @@ type Config struct {
 	EventEncodingType dynamicconfig.StringPropertyFnWithDomainFilter
 	// whether or not using eventsV2
 	EnableEventsV2 dynamicconfig.BoolPropertyFnWithDomainFilter
-	// whether or not using Terminate as default ParentClosePolicy, otherwise use Abandon for backward compatibility
-	UseTerminateAsDefaultParentClosePolicy dynamicconfig.BoolPropertyFnWithDomainFilter
+	// whether or not using ParentClosePolicy
+	EnableParentClosePolicy dynamicconfig.BoolPropertyFnWithDomainFilter
 	// whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	// parent close policy will be processed by sys workers(if enabled) if
@@ -247,13 +247,13 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ShardSyncMinInterval:                                  dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 
 		// history client: client/history/client.go set the client timeout 30s
-		LongPollExpirationInterval:             dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20),
-		EventEncodingType:                      dc.GetStringPropertyFnWithDomainFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeThriftRW)),
-		EnableEventsV2:                         dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, true),
-		UseTerminateAsDefaultParentClosePolicy: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.UseTerminateAsDefaultParentClosePolicy, false),
-		NumParentClosePolicySystemWorkflows:    dc.GetIntProperty(dynamicconfig.NumParentClosePolicySystemWorkflows, 10),
-		EnableParentClosePolicyWorker:          dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
-		ParentClosePolicyThreshold:             dc.GetIntPropertyFilteredByDomain(dynamicconfig.ParentClosePolicyThreshold, 10),
+		LongPollExpirationInterval:          dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20),
+		EventEncodingType:                   dc.GetStringPropertyFnWithDomainFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeThriftRW)),
+		EnableEventsV2:                      dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, true),
+		EnableParentClosePolicy:             dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableParentClosePolicy, true),
+		NumParentClosePolicySystemWorkflows: dc.GetIntProperty(dynamicconfig.NumParentClosePolicySystemWorkflows, 10),
+		EnableParentClosePolicyWorker:       dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
+		ParentClosePolicyThreshold:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.ParentClosePolicyThreshold, 10),
 
 		NumArchiveSystemWorkflows: dc.GetIntProperty(dynamicconfig.NumArchiveSystemWorkflows, 1000),
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
