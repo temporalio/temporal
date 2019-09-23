@@ -757,7 +757,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 	completeReqErr := &p.CompleteForkBranchRequest{
 		BranchToken: newBranchToken,
-		Success:     false,
+		Success:     true,
 		ShardID:     common.IntPtr(s.shardID),
 	}
 
@@ -2063,7 +2063,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	}
 	completeReqErr := &p.CompleteForkBranchRequest{
 		BranchToken: newBranchToken,
-		Success:     false,
+		Success:     true,
 		ShardID:     common.IntPtr(s.shardID),
 	}
 
@@ -2781,7 +2781,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	completeReqErr := &p.CompleteForkBranchRequest{
 		BranchToken: newBranchToken,
-		Success:     false,
+		Success:     true,
 		ShardID:     common.IntPtr(s.shardID),
 	}
 
@@ -3396,7 +3396,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	}
 	completeReqErr := &p.CompleteForkBranchRequest{
 		BranchToken: newBranchToken,
-		Success:     false,
+		Success:     true,
 		ShardID:     common.IntPtr(s.shardID),
 	}
 
@@ -4026,7 +4026,7 @@ func (s *resetorSuite) TestApplyReset() {
 	}
 	completeReqErr := &p.CompleteForkBranchRequest{
 		BranchToken: newBranchToken,
-		Success:     false,
+		Success:     true,
 		ShardID:     common.IntPtr(s.shardID),
 	}
 

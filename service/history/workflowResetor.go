@@ -111,7 +111,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 		if newMutableState != nil && len(newMutableState.GetExecutionInfo().GetCurrentBranch()) > 0 {
 			w.eng.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
 				BranchToken: newMutableState.GetExecutionInfo().GetCurrentBranch(),
-				Success:     retError == nil || persistence.IsTimeoutError(retError),
+				Success:     true,
 				ShardID:     common.IntPtr(w.eng.shard.GetShardID()),
 			})
 		}
@@ -778,7 +778,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	defer func() {
 		w.eng.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
 			BranchToken: newMsBuilder.GetExecutionInfo().GetCurrentBranch(),
-			Success:     retError == nil || persistence.IsTimeoutError(retError),
+			Success:     true,
 			ShardID:     shardID,
 		})
 	}()
