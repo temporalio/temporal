@@ -499,7 +499,9 @@ func (s *shardContextImpl) getDefaultEncoding(domainEntry *cache.DomainCacheEntr
 	return common.EncodingType(s.config.EventEncodingType(domainEntry.GetInfo().Name))
 }
 
-func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+func (s *shardContextImpl) UpdateWorkflowExecution(
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
 	domainID := request.UpdateWorkflowMutation.ExecutionInfo.DomainID
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowID
@@ -670,7 +672,9 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error {
+func (s *shardContextImpl) ConflictResolveWorkflowExecution(
+	request *persistence.ConflictResolveWorkflowExecutionRequest,
+) error {
 
 	domainID := request.ResetWorkflowSnapshot.ExecutionInfo.DomainID
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowID
@@ -707,6 +711,18 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(request *persistence
 		&transferMaxReadLevel,
 	); err != nil {
 		return err
+	}
+	if request.NewWorkflowSnapshot != nil {
+		if err := s.allocateTaskIDsLocked(
+			domainEntry,
+			workflowID,
+			request.NewWorkflowSnapshot.TransferTasks,
+			request.NewWorkflowSnapshot.ReplicationTasks,
+			request.NewWorkflowSnapshot.TimerTasks,
+			&transferMaxReadLevel,
+		); err != nil {
+			return err
+		}
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 

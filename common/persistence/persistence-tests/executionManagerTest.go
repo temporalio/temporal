@@ -2827,8 +2827,8 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	prevExecutionState, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err3)
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
-	s.Equal(p.WorkflowStateCreated, prevExecutionInfo.State)
-	s.Equal(p.WorkflowCloseStatusNone, prevExecutionInfo.CloseStatus)
+	s.Equal(p.WorkflowStateCompleted, prevExecutionInfo.State)
+	s.Equal(p.WorkflowCloseStatusContinuedAsNew, prevExecutionInfo.CloseStatus)
 	s.Equal(int64(5), prevExecutionInfo.NextEventID)
 	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
 	s.True(prevExecutionInfo.AutoResetPoints.Equals(&gen.ResetPoints{}))

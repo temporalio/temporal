@@ -26,6 +26,11 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
+// NOTE: when modifying this file, plz make each case clear,
+//  do not combine cases together.
+// The idea for this file is to test whether current record
+// points to a zombie record.
+
 // ValidateCreateWorkflowModeState validate workflow creation mode & workflow state
 func ValidateCreateWorkflowModeState(
 	mode CreateWorkflowMode,
@@ -33,37 +38,39 @@ func ValidateCreateWorkflowModeState(
 ) error {
 
 	workflowState := newWorkflowSnapshot.ExecutionInfo.State
+	if err := checkWorkflowState(workflowState); err != nil {
+		return err
+	}
 
 	switch mode {
-	case CreateWorkflowModeBrandNew, CreateWorkflowModeWorkflowIDReuse, CreateWorkflowModeContinueAsNew:
-		if workflowState == WorkflowStateZombie || workflowState == WorkflowStateCompleted {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow create mode %v, state: %v",
-					mode,
-					workflowState,
-				),
-			}
+	case CreateWorkflowModeBrandNew,
+		CreateWorkflowModeWorkflowIDReuse,
+		CreateWorkflowModeContinueAsNew:
+		if workflowState == WorkflowStateZombie ||
+			workflowState == WorkflowStateCompleted {
+			return newInvalidCreateWorkflowMode(
+				mode,
+				workflowState,
+			)
 		}
+		return nil
 
 	case CreateWorkflowModeZombie:
-		// noop
-		if workflowState != WorkflowStateZombie {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow create mode %v, state: %v",
-					mode,
-					workflowState,
-				),
-			}
+		if workflowState == WorkflowStateCreated ||
+			workflowState == WorkflowStateRunning ||
+			workflowState == WorkflowStateCompleted {
+			return newInvalidCreateWorkflowMode(
+				mode,
+				workflowState,
+			)
 		}
+		return nil
 
 	default:
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("unknown mode: %v", mode),
 		}
 	}
-	return nil
 }
 
 // ValidateUpdateWorkflowModeState validate workflow update mode & workflow state
@@ -74,44 +81,79 @@ func ValidateUpdateWorkflowModeState(
 ) error {
 
 	currentWorkflowState := currentWorkflowMutation.ExecutionInfo.State
+	if err := checkWorkflowState(currentWorkflowState); err != nil {
+		return err
+	}
 	var newWorkflowState *int
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
+		if err := checkWorkflowState(*newWorkflowState); err != nil {
+			return err
+		}
 	}
 
 	switch mode {
 	case UpdateWorkflowModeUpdateCurrent:
-		if (currentWorkflowState == WorkflowStateZombie && newWorkflowState == nil) ||
-			(currentWorkflowState == WorkflowStateZombie && newWorkflowState != nil && *newWorkflowState == WorkflowStateZombie) {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow update mode %v, state: %v",
-					mode,
-					currentWorkflowState,
-				),
+		// update current record
+		// 1. current workflow only ->
+		//  current workflow cannot be zombie
+		// 2. current workflow & new workflow ->
+		//  current workflow cannot be created / running,
+		//  new workflow cannot be zombie
+
+		// case 1
+		if newWorkflowState == nil {
+			if currentWorkflowState == WorkflowStateZombie {
+				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
+			return nil
 		}
 
-	case UpdateWorkflowModeBypassCurrent:
-		if currentWorkflowState == WorkflowStateCreated || currentWorkflowState == WorkflowStateRunning ||
-			(newWorkflowState != nil &&
-				(*newWorkflowState == WorkflowStateCreated || *newWorkflowState == WorkflowStateRunning)) {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow update mode %v, current state: %v, new state: %v",
-					mode,
-					currentWorkflowState,
-					newWorkflowState,
-				),
-			}
+		// case 2
+		if currentWorkflowState == WorkflowStateCreated ||
+			currentWorkflowState == WorkflowStateRunning ||
+			*newWorkflowState == WorkflowStateZombie ||
+			*newWorkflowState == WorkflowStateCompleted {
+			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
 		}
+		return nil
+
+	case UpdateWorkflowModeBypassCurrent:
+		// bypass current record
+		// 1. current workflow only ->
+		//  current workflow cannot be created / running
+		// 2. current workflow & new workflow ->
+		//  current workflow cannot be created / running,
+		//  new workflow cannot be created / running / completed
+
+		// case 1
+		if newWorkflowState == nil {
+			if currentWorkflowState == WorkflowStateCreated ||
+				currentWorkflowState == WorkflowStateRunning {
+				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
+			}
+			return nil
+		}
+
+		// case 2
+		if currentWorkflowState == WorkflowStateCreated ||
+			currentWorkflowState == WorkflowStateRunning ||
+			*newWorkflowState == WorkflowStateCreated ||
+			*newWorkflowState == WorkflowStateRunning ||
+			*newWorkflowState == WorkflowStateCompleted {
+			return newInvalidUpdateWorkflowWithNewMode(
+				mode,
+				currentWorkflowState,
+				*newWorkflowState,
+			)
+		}
+		return nil
 
 	default:
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("unknown mode: %v", mode),
 		}
 	}
-	return nil
 }
 
 // ValidateConflictResolveWorkflowModeState validate workflow conflict resolve mode & workflow state
@@ -123,44 +165,115 @@ func ValidateConflictResolveWorkflowModeState(
 ) error {
 
 	resetWorkflowState := resetWorkflowSnapshot.ExecutionInfo.State
+	if err := checkWorkflowState(resetWorkflowState); err != nil {
+		return err
+	}
 	var newWorkflowState *int
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
+		if err := checkWorkflowState(*newWorkflowState); err != nil {
+			return err
+		}
 	}
 	var currentWorkflowState *int
 	if currentWorkflowMutation != nil {
 		currentWorkflowState = &currentWorkflowMutation.ExecutionInfo.State
+		if err := checkWorkflowState(*currentWorkflowState); err != nil {
+			return err
+		}
 	}
 
 	switch mode {
 	case ConflictResolveWorkflowModeUpdateCurrent:
-		// it is ok that currentWorkflowMutation is null, for 2 DC
-		// Note: current workflow mutation can be in zombie state, for the update
-		if resetWorkflowState == WorkflowStateZombie ||
-			(newWorkflowState != nil && *newWorkflowState == WorkflowStateZombie) {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow conflict resolve mode %v, state: %v",
-					mode,
-					currentWorkflowState,
-				),
-			}
-		}
+		// update current record
+		// 1. reset workflow only ->
+		//  reset workflow cannot be zombie
+		// 2. reset workflow & new workflow ->
+		//  reset workflow cannot be created / running / zombie,
+		//  new workflow cannot be zombie / completed
+		// 3. current workflow & reset workflow ->
+		//  current workflow cannot be created / running,
+		//  reset workflow cannot be zombie
+		// 4. current workflow & reset workflow & new workflow ->
+		//  current workflow cannot be created / running,
+		//  reset workflow cannot be created / running / zombie,
+		//  new workflow cannot be zombie / completed
 
-	case ConflictResolveWorkflowModeBypassCurrent:
-		if resetWorkflowState == WorkflowStateCreated || resetWorkflowState == WorkflowStateRunning ||
-			(newWorkflowState != nil &&
-				(*newWorkflowState == WorkflowStateCreated || *newWorkflowState == WorkflowStateRunning)) {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
+		// TODO remove case 1 & 2 support once 2DC is deprecated
+		// it is ok that currentWorkflowMutation is null, only for 2 DC case
+		// NDC should always require current workflow for CAS
+		// Note: current workflow mutation can be in zombie state, for the update
+
+		// case 1 & 2
+		if currentWorkflowState == nil {
+			// case 1
+			if newWorkflowState == nil {
+				if resetWorkflowState == WorkflowStateZombie {
+					return newInvalidConflictResolveWorkflowMode(
+						mode,
+						resetWorkflowState,
+					)
+				}
+				return nil
+			}
+
+			// case 2
+			if resetWorkflowState == WorkflowStateCreated ||
+				resetWorkflowState == WorkflowStateRunning ||
+				resetWorkflowState == WorkflowStateZombie ||
+				*newWorkflowState == WorkflowStateZombie ||
+				*newWorkflowState == WorkflowStateCompleted {
+				return newInvalidConflictResolveWorkflowWithNewMode(
 					mode,
 					resetWorkflowState,
-					newWorkflowState,
-				),
+					*newWorkflowState,
+				)
 			}
+			return nil
 		}
 
+		// case 3 & 4
+		// case 3
+		if newWorkflowState == nil {
+			if *currentWorkflowState == WorkflowStateCreated ||
+				*currentWorkflowState == WorkflowStateRunning ||
+				resetWorkflowState == WorkflowStateZombie {
+				return newInvalidConflictResolveWorkflowWithCurrentMode(
+					mode,
+					resetWorkflowState,
+					*currentWorkflowState,
+				)
+			}
+			return nil
+		}
+
+		// case 4
+		if *currentWorkflowState == WorkflowStateCreated ||
+			*currentWorkflowState == WorkflowStateRunning ||
+			resetWorkflowState == WorkflowStateCreated ||
+			resetWorkflowState == WorkflowStateRunning ||
+			resetWorkflowState == WorkflowStateZombie ||
+			*newWorkflowState == WorkflowStateZombie ||
+			*newWorkflowState == WorkflowStateCompleted {
+			return newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
+				mode,
+				resetWorkflowState,
+				*newWorkflowState,
+				*currentWorkflowState,
+			)
+		}
+		return nil
+
+	case ConflictResolveWorkflowModeBypassCurrent:
+		// bypass current record
+		// * current workflow cannot be set
+		// 1. reset workflow only ->
+		//  reset workflow cannot be created / running
+		// 2. reset workflow & new workflow ->
+		//  reset workflow cannot be created / running / zombie,
+		//  new workflow cannot be created / running / completed
+
+		// precondition
 		if currentWorkflowMutation != nil {
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf(
@@ -170,10 +283,151 @@ func ValidateConflictResolveWorkflowModeState(
 			}
 		}
 
+		// case 1
+		if newWorkflowState == nil {
+			if resetWorkflowState == WorkflowStateCreated ||
+				resetWorkflowState == WorkflowStateRunning {
+				return newInvalidConflictResolveWorkflowMode(
+					mode,
+					resetWorkflowState,
+				)
+			}
+			return nil
+		}
+
+		// case 2
+		if resetWorkflowState == WorkflowStateCreated ||
+			resetWorkflowState == WorkflowStateRunning ||
+			resetWorkflowState == WorkflowStateZombie ||
+			*newWorkflowState == WorkflowStateCreated ||
+			*newWorkflowState == WorkflowStateRunning ||
+			*newWorkflowState == WorkflowStateCompleted {
+			return newInvalidConflictResolveWorkflowWithNewMode(
+				mode,
+				resetWorkflowState,
+				*newWorkflowState,
+			)
+		}
+		return nil
+
 	default:
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("unknown mode: %v", mode),
 		}
 	}
-	return nil
+}
+
+func checkWorkflowState(state int) error {
+	switch state {
+	case WorkflowStateCreated,
+		WorkflowStateRunning,
+		WorkflowStateZombie,
+		WorkflowStateCompleted:
+		return nil
+	default:
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("unknown workflow state: %v", state),
+		}
+	}
+}
+
+func newInvalidCreateWorkflowMode(
+	mode CreateWorkflowMode,
+	workflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow create mode %v, state: %v",
+			mode,
+			workflowState,
+		),
+	}
+}
+
+func newInvalidUpdateWorkflowMode(
+	mode UpdateWorkflowMode,
+	currentWorkflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow update mode %v, state: %v",
+			mode,
+			currentWorkflowState,
+		),
+	}
+}
+
+func newInvalidUpdateWorkflowWithNewMode(
+	mode UpdateWorkflowMode,
+	currentWorkflowState int,
+	newWorkflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow update mode %v, current state: %v, new state: %v",
+			mode,
+			currentWorkflowState,
+			newWorkflowState,
+		),
+	}
+}
+
+func newInvalidConflictResolveWorkflowMode(
+	mode ConflictResolveWorkflowMode,
+	resetWorkflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow conflict resolve mode %v, reset state: %v",
+			mode,
+			resetWorkflowState,
+		),
+	}
+}
+
+func newInvalidConflictResolveWorkflowWithNewMode(
+	mode ConflictResolveWorkflowMode,
+	resetWorkflowState int,
+	newWorkflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
+			mode,
+			resetWorkflowState,
+			newWorkflowState,
+		),
+	}
+}
+
+func newInvalidConflictResolveWorkflowWithCurrentMode(
+	mode ConflictResolveWorkflowMode,
+	resetWorkflowState int,
+	currentWorkflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
+			mode,
+			resetWorkflowState,
+			currentWorkflowState,
+		),
+	}
+}
+
+func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
+	mode ConflictResolveWorkflowMode,
+	resetWorkflowState int,
+	newWorkflowState int,
+	currentWorkflowState int,
+) error {
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf(
+			"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",
+			mode,
+			resetWorkflowState,
+			newWorkflowState,
+			currentWorkflowState,
+		),
+	}
 }

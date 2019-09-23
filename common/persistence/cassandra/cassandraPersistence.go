@@ -1392,12 +1392,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			); err != nil {
 				return err
 			}
-			if err := applyWorkflowSnapshotBatchAsNew(batch,
-				d.shardID,
-				newWorkflow,
-			); err != nil {
-				return err
-			}
+
 		} else {
 			startVersion := updateWorkflow.StartVersion
 			lastWriteVersion := updateWorkflow.LastWriteVersion
@@ -1430,6 +1425,14 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 
 	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
 		return err
+	}
+	if newWorkflow != nil {
+		if err := applyWorkflowSnapshotBatchAsNew(batch,
+			d.shardID,
+			newWorkflow,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Verifies that the RangeID has not changed

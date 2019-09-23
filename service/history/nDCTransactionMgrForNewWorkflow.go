@@ -276,7 +276,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 ) (retError error) {
 
 	defer func() {
-		r.cleanupTransaction(currentWorkflow, targetWorkflow, retError)
+		if rec := recover(); rec != nil {
+			r.cleanupTransaction(currentWorkflow, targetWorkflow, errPanic)
+			panic(rec)
+		} else {
+			r.cleanupTransaction(currentWorkflow, targetWorkflow, retError)
+		}
 	}()
 
 	switch transactionPolicy {

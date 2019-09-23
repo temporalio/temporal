@@ -460,6 +460,20 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetWorkflow.ReplicationTasks,
 		resetWorkflow.TimerTasks,
 	)
+	if newWorkflow != nil {
+		c.notifyTasks(
+			newWorkflow.TransferTasks,
+			newWorkflow.ReplicationTasks,
+			newWorkflow.TimerTasks,
+		)
+	}
+	if currentWorkflow != nil {
+		c.notifyTasks(
+			currentWorkflow.TransferTasks,
+			currentWorkflow.ReplicationTasks,
+			currentWorkflow.TimerTasks,
+		)
+	}
 
 	c.clear()
 	return nil
@@ -947,6 +961,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
 	}
 }
 
+// TODO deprecate this API in favor of create / update workflow execution
 // this reset is more complex than "resetMutableState", it involes currentMutableState and newMutableState:
 // 1. append history to new run
 // 2. append history to current run if current run is not closed

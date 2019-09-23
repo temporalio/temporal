@@ -193,6 +193,7 @@ func newTimerQueueFailoverProcessor(
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 			logger,
 		),
+		config: shard.GetConfig(),
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
 	return updateShardAckLevel, processor

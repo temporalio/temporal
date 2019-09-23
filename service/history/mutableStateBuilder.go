@@ -1900,7 +1900,17 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return e.decisionTaskManager.AddDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, details, identity, reason, baseRunID, newRunID, forkEventVersion)
+	return e.decisionTaskManager.AddDecisionTaskFailedEvent(
+		scheduleEventID,
+		startedEventID,
+		cause,
+		details,
+		identity,
+		reason,
+		baseRunID,
+		newRunID,
+		forkEventVersion,
+	)
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskFailedEvent() error {

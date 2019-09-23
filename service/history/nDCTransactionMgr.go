@@ -206,7 +206,14 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	targetWorkflowEvents *persistence.WorkflowEvents,
 ) (retError error) {
 
-	defer func() { targetWorkflow.getReleaseFn()(retError) }()
+	defer func() {
+		if rec := recover(); rec != nil {
+			targetWorkflow.getReleaseFn()(errPanic)
+			panic(rec)
+		} else {
+			targetWorkflow.getReleaseFn()(retError)
+		}
+	}()
 
 	if _, err := targetWorkflow.getContext().persistNonFirstWorkflowEvents(
 		targetWorkflowEvents,
