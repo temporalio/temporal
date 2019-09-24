@@ -136,6 +136,7 @@ type (
 		historyCache    *historyCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryV2Manager
+		serializer      persistence.PayloadSerializer
 		metricsClient   metrics.Client
 		logger          log.Logger
 
@@ -158,6 +159,7 @@ func newNDCTransactionMgr(
 		historyCache:    historyCache,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryV2Manager(),
+		serializer:      shard.GetService().GetPayloadSerializer(),
 		metricsClient:   shard.GetMetricsClient(),
 		logger:          logger.WithTags(tag.ComponentHistoryReplicator),
 

@@ -115,7 +115,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
 
 	config := NewDynamicConfigForTest()
 	shardContext := &shardContextImpl{

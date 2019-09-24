@@ -812,10 +812,10 @@ func (c *clientImpl) GetReplicationMessages(
 
 func (c *clientImpl) ReapplyEvents(
 	ctx context.Context,
-	request *workflow.ReapplyEventsRequest,
+	request *h.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
 ) error {
-	client, err := c.getClientForWorkflowID(request.GetWorkflowExecution().GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.GetRequest().GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return err
 	}

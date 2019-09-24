@@ -78,7 +78,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockProcessor = &MockTimerProcessor{}
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},

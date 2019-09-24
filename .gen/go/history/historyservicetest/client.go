@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -336,7 +336,7 @@ func (mr *_MockClientRecorder) QueryWorkflow(
 // 	... := client.ReapplyEvents(...)
 func (m *MockClient) ReapplyEvents(
 	ctx context.Context,
-	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	_ReapplyEventsRequest *history.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
 ) (err error) {
 

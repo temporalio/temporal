@@ -230,6 +230,15 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
+	if err := targetWorkflow.getContext().reapplyEvents(
+		ctx,
+		targetWorkflowSnapshot.ExecutionInfo.DomainID,
+		targetWorkflowSnapshot.ExecutionInfo.WorkflowID,
+		targetWorkflowEventsSeq[0].Events,
+	); err != nil {
+		return err
+	}
+
 	createMode := persistence.CreateWorkflowModeZombie
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)

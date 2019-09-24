@@ -93,7 +93,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil, nil)
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.mockVisibilityManager = &mocks.VisibilityManager{}
 	s.mockHistoryV2Manager = &mocks.HistoryV2Manager{}

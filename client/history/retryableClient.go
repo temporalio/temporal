@@ -498,7 +498,7 @@ func (c *retryableClient) QueryWorkflow(
 
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
+	request *h.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
 ) error {
 

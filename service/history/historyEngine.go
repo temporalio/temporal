@@ -29,6 +29,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	r "github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -48,7 +50,6 @@ import (
 	"github.com/uber/cadence/common/service/config"
 	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/replicator"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 )
 
 const (
@@ -86,6 +87,7 @@ type (
 		resetor                   workflowResetor
 		replicationTaskProcessors []*ReplicationTaskProcessor
 		publicClient              workflowserviceclient.Interface
+		eventsReapplier           nDCEventsReapplier
 	}
 )
 
@@ -209,7 +211,8 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
-	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
+	resetor := newWorkflowResetor(historyEngImpl)
+	historyEngImpl.resetor = resetor
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
 	var replicationTaskProcessors []*ReplicationTaskProcessor
@@ -220,7 +223,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
 
 	shard.SetEngine(historyEngImpl)
-
+	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 	return historyEngImpl
 }
 
@@ -2424,4 +2427,55 @@ func (e *historyEngineImpl) GetReplicationMessages(ctx ctx.Context, taskID int64
 
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil
+}
+
+func (e *historyEngineImpl) ReapplyEvents(
+	ctx ctx.Context,
+	domainUUID string,
+	workflowID string,
+	reapplyEvents []*workflow.HistoryEvent,
+) error {
+
+	domainEntry, err := e.getActiveDomainEntry(common.StringPtr(domainUUID))
+	if err != nil {
+		return err
+	}
+	domainID := domainEntry.GetInfo().ID
+	// remove run id from the execution so that reapply events to the current run
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+	}
+
+	return e.updateWorkflowExecutionWithAction(
+		ctx,
+		domainID,
+		execution,
+		func(msBuilder mutableState, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
+			createDecisionTask := true
+			// Do not create decision task when the workflow is cron and the cron has not been started yet
+			if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingDecision() {
+				createDecisionTask = false
+			}
+			// TODO when https://github.com/uber/cadence/issues/2420 is finished
+			//  reset to workflow finish event
+			//  ignore this case for now
+			if !msBuilder.IsWorkflowExecutionRunning() {
+				e.logger.Warn("failed to reapply event to a finished workflow", tag.WorkflowDomainID(domainID), tag.WorkflowID(workflowID))
+				e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+				return nil, nil
+			}
+			postActions := &updateWorkflowAction{
+				createDecision: createDecisionTask,
+			}
+			if err := e.eventsReapplier.reapplyEvents(
+				ctx,
+				msBuilder,
+				reapplyEvents,
+			); err != nil {
+				e.logger.Error("failed to re-apply stale events", tag.Error(err))
+				return nil, &workflow.InternalServiceError{Message: "unable to re-apply stale events"}
+			}
+
+			return postActions, nil
+		})
 }

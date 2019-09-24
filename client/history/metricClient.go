@@ -561,7 +561,7 @@ func (c *metricClient) QueryWorkflow(
 
 func (c *metricClient) ReapplyEvents(
 	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
+	request *h.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
 ) error {
 

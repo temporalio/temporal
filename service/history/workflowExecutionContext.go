@@ -36,6 +36,10 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
+const (
+	defaultRemoteCallTimeout = 30 * time.Second
+)
+
 type (
 	workflowExecutionContext interface {
 		getDomainName() string
@@ -120,6 +124,13 @@ type (
 		) (retError error)
 
 		getQueryRegistry() QueryRegistry
+
+		reapplyEvents(
+			ctx context.Context,
+			domainID string,
+			workflowID string,
+			events []*workflow.HistoryEvent,
+		) error
 	}
 )
 
@@ -351,12 +362,14 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		return err
 	}
 	resetHistorySize := c.getHistorySize()
+	reapplyEvent := []*workflow.HistoryEvent{}
 	for _, workflowEvents := range workflowEventsSeq {
 		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
 		resetHistorySize += eventsSize
+		reapplyEvent = append(reapplyEvent, workflowEvents.Events...)
 	}
 	c.setHistorySize(resetHistorySize)
 	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
@@ -380,7 +393,8 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		eventsSize, err := c.persistFirstWorkflowEvents(workflowEventsSeq[0])
+		startEvent := workflowEventsSeq[0]
+		eventsSize, err := c.persistFirstWorkflowEvents(startEvent)
 		if err != nil {
 			return err
 		}
@@ -389,6 +403,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
+		reapplyEvent = append(reapplyEvent, startEvent.Events...)
 	}
 
 	var currentWorkflow *persistence.WorkflowMutation
@@ -419,6 +434,15 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: currentWorkflowSize,
 		}
+	}
+
+	if err := c.conflictResolveEventReapply(
+		conflictResolveMode,
+		resetWorkflow.ExecutionInfo.DomainID,
+		resetWorkflow.ExecutionInfo.WorkflowID,
+		reapplyEvent,
+	); err != nil {
+		return err
 	}
 
 	if err := c.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
@@ -561,6 +585,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	if err != nil {
 		return err
 	}
+
+	reapplyEvent := []*workflow.HistoryEvent{}
 	currentWorkflowSize := c.getHistorySize()
 	for _, workflowEvents := range workflowEventsSeq {
 		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
@@ -568,6 +594,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			return err
 		}
 		currentWorkflowSize += eventsSize
+		reapplyEvent = append(reapplyEvent, workflowEvents.Events...)
 	}
 	c.setHistorySize(currentWorkflowSize)
 	currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
@@ -591,7 +618,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		eventsSize, err := c.persistFirstWorkflowEvents(workflowEventsSeq[0])
+		startEvent := workflowEventsSeq[0]
+		eventsSize, err := c.persistFirstWorkflowEvents(startEvent)
 		if err != nil {
 			return err
 		}
@@ -600,11 +628,21 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
+		reapplyEvent = append(reapplyEvent, startEvent.Events...)
 	}
 
 	if err := c.mergeContinueAsNewReplicationTasks(
 		currentWorkflow,
 		newWorkflow,
+	); err != nil {
+		return err
+	}
+
+	if err := c.updateWorkflowExecutionEventReapply(
+		updateMode,
+		currentWorkflow.ExecutionInfo.DomainID,
+		currentWorkflow.ExecutionInfo.WorkflowID,
+		reapplyEvent,
 	); err != nil {
 		return err
 	}
@@ -1141,4 +1179,99 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 
 func (c *workflowExecutionContextImpl) getQueryRegistry() QueryRegistry {
 	return c.queryRegistry
+}
+
+func (c *workflowExecutionContextImpl) updateWorkflowExecutionEventReapply(
+	updateMode persistence.UpdateWorkflowMode,
+	domainID string,
+	workflowID string,
+	events []*workflow.HistoryEvent,
+) error {
+	if updateMode == persistence.UpdateWorkflowModeBypassCurrent {
+		ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
+		err := c.reapplyEvents(ctx, domainID, workflowID, events)
+		defer cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *workflowExecutionContextImpl) conflictResolveEventReapply(
+	conflictResolveMode persistence.ConflictResolveWorkflowMode,
+	domainID string,
+	workflowID string,
+	events []*workflow.HistoryEvent,
+) error {
+	if conflictResolveMode == persistence.ConflictResolveWorkflowModeBypassCurrent {
+		ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
+		err := c.reapplyEvents(ctx, domainID, workflowID, events)
+		defer cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *workflowExecutionContextImpl) reapplyEvents(
+	ctx context.Context,
+	domainID string,
+	workflowID string,
+	events []*workflow.HistoryEvent,
+) error {
+
+	reapplyEvents := []*workflow.HistoryEvent{}
+	// TODO: need to implement Reapply policy
+	for _, event := range events {
+		switch event.GetEventType() {
+		case workflow.EventTypeWorkflowExecutionSignaled:
+			reapplyEvents = append(reapplyEvents, event)
+		}
+	}
+	// there is no event to reapply
+	if len(reapplyEvents) == 0 {
+		return nil
+	}
+	// Reapply events only reapply to the current run.
+	// Leave the run id empty will reapply events to the current run.
+	execution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+	}
+	domainCache := c.shard.GetDomainCache()
+	clientBean := c.shard.GetService().GetClientBean()
+	serializer := c.shard.GetService().GetPayloadSerializer()
+	domainEntry, err := domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return err
+	}
+
+	// TODO: handle event apply to self which will be a problem because there is a lock on workflow context
+	activeCluster := domainEntry.GetReplicationConfig().ActiveClusterName
+	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
+		return c.shard.GetEngine().ReapplyEvents(
+			ctx,
+			domainID,
+			workflowID,
+			reapplyEvents,
+		)
+	}
+
+	// The active cluster of the domain is the same as current cluster.
+	// Use the history from the same cluster to reapply events
+	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(reapplyEvents, common.EncodingTypeThriftRW)
+	if err != nil {
+		return err
+	}
+	// The active cluster of the domain is differ from the current cluster
+	// Use frontend client to route this request to the active cluster
+	// Reapplication only happens in active cluster
+	return clientBean.GetRemoteFrontendClient(activeCluster).ReapplyEvents(
+		ctx,
+		&workflow.ReapplyEventsRequest{
+			DomainName:        common.StringPtr(domainEntry.GetInfo().Name),
+			WorkflowExecution: execution,
+			Events:            reapplyEventsDataBlob.ToThrift(),
+		})
 }

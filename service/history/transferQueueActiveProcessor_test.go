@@ -146,6 +146,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		s.mockClientBean,
 		s.mockArchivalMetadata,
 		s.mockArchiverProvider,
+		nil,
 	)
 
 	shardContext := &shardContextImpl{

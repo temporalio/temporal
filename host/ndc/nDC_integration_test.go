@@ -29,9 +29,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
+	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/client/frontend"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -60,9 +64,10 @@ type (
 		serializer persistence.PayloadSerializer
 		logger     log.Logger
 
-		domainName string
-		domainID   string
-		version    int64
+		domainName         string
+		domainID           string
+		version            int64
+		mockFrontendClient map[string]frontend.Client
 	}
 )
 
@@ -103,6 +108,20 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
 	clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
 
+	s.mockFrontendClient = make(map[string]frontend.Client)
+	controller := gomock.NewController(s.T())
+	mockStandbyClient := workflowservicetest.NewMockClient(controller)
+	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(&replicator.GetReplicationMessagesResponse{
+		MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
+	}, nil).AnyTimes()
+	mockOtherClient := workflowservicetest.NewMockClient(controller)
+	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(&replicator.GetReplicationMessagesResponse{
+		MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
+	}, nil).AnyTimes()
+	s.mockFrontendClient["standby"] = mockStandbyClient
+	s.mockFrontendClient["other"] = mockOtherClient
+	clusterConfigs[0].MockFrontendClient = s.mockFrontendClient
+
 	cluster, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.active = cluster
@@ -128,6 +147,7 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 
 func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 
+	s.setupRemoteFrontendClients()
 	workflowID := "ndc-single-branch-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
@@ -141,7 +161,6 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 		runID := uuid.New()
 		historyBatch := []*shared.History{}
 		s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
-		s.generator.SetVersion(version)
 
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
@@ -199,6 +218,8 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 }
 
 func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
+
+	s.setupRemoteFrontendClients()
 	workflowID := "ndc-multiple-branches-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
@@ -283,6 +304,8 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 }
 
 func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
+
+	s.setupRemoteFrontendClients()
 	workflowID := "ndc-handcrafted-multiple-branches-test" + uuid.New()
 	runID := uuid.New()
 
@@ -294,7 +317,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	historyClient := s.active.GetHistoryClient()
 
 	eventsBatch1 := []*shared.History{
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(1),
 				Version:   common.Int64Ptr(21),
@@ -319,7 +342,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(3),
 				Version:   common.Int64Ptr(21),
@@ -331,7 +354,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(4),
 				Version:   common.Int64Ptr(21),
@@ -369,7 +392,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(7),
 				Version:   common.Int64Ptr(21),
@@ -382,7 +405,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(8),
 				Version:   common.Int64Ptr(21),
@@ -404,7 +427,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(10),
 				Version:   common.Int64Ptr(21),
@@ -416,7 +439,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(11),
 				Version:   common.Int64Ptr(21),
@@ -461,7 +484,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	}
 
 	eventsBatch2 := []*shared.History{
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(15),
 				Version:   common.Int64Ptr(31),
@@ -474,7 +497,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	}
 
 	eventsBatch3 := []*shared.History{
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(15),
 				Version:   common.Int64Ptr(30),
@@ -506,7 +529,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(18),
 				Version:   common.Int64Ptr(30),
@@ -518,7 +541,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				},
 			},
 		}},
-		&shared.History{Events: []*shared.HistoryEvent{
+		{Events: []*shared.HistoryEvent{
 			{
 				EventId:   common.Int64Ptr(19),
 				Version:   common.Int64Ptr(30),
@@ -581,6 +604,161 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		tasklist,
 		versionHistory2,
 		eventsBatch2,
+		historyClient,
+	)
+}
+
+func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
+
+	workflowID := "ndc-single-branch-test" + uuid.New()
+
+	workflowType := "event-generator-workflow-type"
+	tasklist := "event-generator-taskList"
+
+	// active has initial version 0
+	historyClient := s.active.GetHistoryClient()
+
+	version := int64(101)
+	runID := uuid.New()
+	historyBatch := []*shared.History{}
+	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+
+	for s.generator.HasNextVertex() {
+		events := s.generator.GetNextVertices()
+		historyEvents := &shared.History{}
+		for _, event := range events {
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+		}
+		historyBatch = append(historyBatch, historyEvents)
+	}
+
+	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory,
+		historyBatch,
+		historyClient,
+	)
+
+	version = int64(1)
+	runID = uuid.New()
+	historyBatch = []*shared.History{}
+	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+
+	// verify two batches of zombie workflow are call reapply API
+	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
+		events := s.generator.GetNextVertices()
+		historyEvents := &shared.History{}
+		for _, event := range events {
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+		}
+		historyBatch = append(historyBatch, historyEvents)
+	}
+
+	versionHistory = s.eventBatchesToVersionHistory(nil, historyBatch)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory,
+		historyBatch,
+		historyClient,
+	)
+}
+
+func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
+	workflowID := "ndc-single-branch-test" + uuid.New()
+	runID := uuid.New()
+	workflowType := "event-generator-workflow-type"
+	tasklist := "event-generator-taskList"
+	version := int64(101)
+
+	historyClient := s.active.GetHistoryClient()
+
+	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+	currentBranch := []*shared.History{}
+	var taskID int64
+	for i := 0; i < 10 && s.generator.HasNextVertex(); i++ {
+		events := s.generator.GetNextVertices()
+		historyEvents := &shared.History{}
+		for _, event := range events {
+			history := event.GetData().(*shared.HistoryEvent)
+			taskID = history.GetTaskId()
+			historyEvents.Events = append(historyEvents.Events, history)
+		}
+		currentBranch = append(currentBranch, historyEvents)
+	}
+	versionHistory := s.eventBatchesToVersionHistory(nil, currentBranch)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory,
+		currentBranch,
+		historyClient,
+	)
+
+	newGenerator := s.generator.DeepCopy()
+	newGenerator.SetVersion(int64(102))
+	newBranch := []*shared.History{}
+	newVersionHistory := versionHistory.Duplicate()
+	for i := 0; i < 10 && newGenerator.HasNextVertex(); i++ {
+		events := newGenerator.GetNextVertices()
+		historyEvents := &shared.History{}
+		for _, event := range events {
+			history := event.GetData().(*shared.HistoryEvent)
+			taskID = history.GetTaskId()
+			historyEvents.Events = append(historyEvents.Events, history)
+		}
+		newBranch = append(newBranch, historyEvents)
+	}
+	newVersionHistory = s.eventBatchesToVersionHistory(newVersionHistory, newBranch)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		newVersionHistory,
+		newBranch,
+		historyClient,
+	)
+
+	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	// Handcraft a stale signal event
+	currentEvents := currentBranch[len(currentBranch)-1].GetEvents()
+	staleEventID := currentEvents[len(currentEvents)-1].GetEventId() + 1
+	staleBranch := []*shared.History{
+		{
+			Events: []*shared.HistoryEvent{
+				{
+					EventId:   common.Int64Ptr(staleEventID),
+					EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
+					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+					Version:   common.Int64Ptr(101),
+					TaskId:    common.Int64Ptr(taskID),
+					WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+						SignalName: common.StringPtr("signal"),
+						Input:      []byte{},
+						Identity:   common.StringPtr("ndc_integration_test"),
+					},
+				},
+			},
+		},
+	}
+	staleVersionHistory := s.eventBatchesToVersionHistory(nil, staleBranch)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		staleVersionHistory,
+		staleBranch,
 		historyClient,
 	)
 }
@@ -769,4 +947,9 @@ func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(
 func (s *nDCIntegrationTestSuite) createContext() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
 	return ctx
+}
+
+func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
+	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockFrontendClient["other"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 }

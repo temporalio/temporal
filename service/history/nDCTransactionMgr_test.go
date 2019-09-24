@@ -30,6 +30,9 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -47,10 +50,13 @@ type (
 		mockCreateMgr *MocknDCTransactionMgrForNewWorkflow
 		mockUpdateMgr *MocknDCTransactionMgrForExistingWorkflow
 
-		mockService      service.Service
-		mockShard        *shardContextImpl
-		mockExecutionMgr *mocks.ExecutionManager
-		logger           log.Logger
+		mockService         service.Service
+		mockShard           *shardContextImpl
+		mockExecutionMgr    *mocks.ExecutionManager
+		mockClientBean      *client.MockClientBean
+		mockDomainCache     *cache.DomainCacheMock
+		mockClusterMetadata *mocks.ClusterMetadata
+		logger              log.Logger
 
 		transactionMgr *nDCTransactionMgrImpl
 	}
@@ -65,8 +71,10 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
-
+	s.mockClientBean = &client.MockClientBean{}
+	s.mockService = service.NewTestService(nil, nil, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockDomainCache = &cache.DomainCacheMock{}
+	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
@@ -78,6 +86,8 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
+		domainCache:               s.mockDomainCache,
+		clusterMetadata:           s.mockClusterMetadata,
 	}
 	s.transactionMgr = newNDCTransactionMgr(s.mockShard, newHistoryCache(s.mockShard), s.logger)
 
@@ -142,14 +152,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed() {
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
 	mutableState.On("IsCurrentWorkflowGuaranteed").Return(true)
-
 	context.On(
 		"persistNonFirstWorkflowEvents", workflowEvents,
 	).Return(int64(0), nil).Once()
 	context.On(
 		"updateWorkflowExecutionWithNew", now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Once()
-
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
@@ -173,7 +181,13 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent() {
 	defer mutableState.AssertExpectations(s.T())
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*shared.HistoryEvent{{
+			EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
+		}},
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}
 
 	workflow.EXPECT().getContext().Return(context).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
@@ -197,7 +211,6 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent() {
 	context.On(
 		"updateWorkflowExecutionWithNew", now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Once()
-
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)

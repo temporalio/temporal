@@ -710,6 +710,8 @@ const (
 	HistoryGetReplicationMessagesScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
+	// HistoryReapplyEventsScope is the scope used by event reapplication
+	HistoryReapplyEventsScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope
 	// TransferActiveQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1205,6 +1207,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryDescribeMutableStateScope:                       {operation: "DescribeMutableState"},
 		HistoryGetReplicationMessagesScope:                     {operation: "GetReplicationMessages"},
 		HistoryShardControllerScope:                            {operation: "ShardController"},
+		HistoryReapplyEventsScope:                              {operation: "EventReapplication"},
 		TransferQueueProcessorScope:                            {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
 		TransferStandbyQueueProcessorScope:                     {operation: "TransferStandbyQueueProcessor"},
@@ -1518,6 +1521,7 @@ const (
 	GetReplicationMessagesForShardLatency
 	ArchiveVisibilityAttemptCount
 	ArchiveVisibilityFailedCount
+	EventReapplySkippedCount
 
 	NumHistoryMetrics
 )
@@ -1813,6 +1817,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		GetReplicationMessagesForShardLatency:             {metricName: "get_replication_messages_for_shard", metricType: Timer},
 		ArchiveVisibilityAttemptCount:                     {metricName: "archive_visibility_attempt_count", metricType: Counter},
 		ArchiveVisibilityFailedCount:                      {metricName: "archive_visibility_failed_count", metricType: Counter},
+		EventReapplySkippedCount:                          {metricName: "event_reapply_skipped_count", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},

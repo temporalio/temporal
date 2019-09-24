@@ -32,7 +32,11 @@ import (
 
 type (
 	nDCEventsReapplier interface {
-		reapplyEvents(ctx ctx.Context, msBuilder mutableState, historyEvents []*shared.HistoryEvent) error
+		reapplyEvents(
+			ctx ctx.Context,
+			msBuilder mutableState,
+			historyEvents []*shared.HistoryEvent,
+		) error
 	}
 
 	nDCEventsReapplierImpl struct {
@@ -57,6 +61,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	msBuilder mutableState,
 	historyEvents []*shared.HistoryEvent,
 ) error {
+
 	reapplyEvents := []*shared.HistoryEvent{}
 	// TODO: need to implement Reapply policy
 	for _, event := range historyEvents {

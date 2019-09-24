@@ -1542,9 +1542,40 @@ func (h *Handler) GetReplicationMessages(
 // ReapplyEvents applies stale events to the current workflow and the current run
 func (h *Handler) ReapplyEvents(
 	ctx context.Context,
-	request *gen.ReapplyEventsRequest,
-) error {
-	return &gen.BadRequestError{Message: "This API is not implemented yet"}
+	request *hist.ReapplyEventsRequest,
+) (retError error) {
+
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryReapplyEventsScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
+	engine, err := h.controller.GetEngine(workflowID)
+	if err != nil {
+		return h.error(err, scope, domainID, workflowID)
+	}
+	// deserialize history event object
+	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&persistence.DataBlob{
+		Encoding: common.EncodingTypeThriftRW,
+		Data:     request.GetRequest().GetEvents().GetData(),
+	})
+	if err != nil {
+		return h.error(err, scope, domainID, workflowID)
+	}
+	if err := engine.ReapplyEvents(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+		historyEvents,
+	); err != nil {
+		return h.error(err, scope, domainID, workflowID)
+	}
+	return nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

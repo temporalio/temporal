@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
+	frontendclient "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/filestore"
@@ -76,6 +77,7 @@ type (
 		HistoryConfig         *HistoryConfig
 		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
+		MockFrontendClient    map[string]frontendclient.Client
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -171,6 +173,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ArchiverProvider:    archiverBase.provider,
 		HistoryConfig:       options.HistoryConfig,
 		WorkerConfig:        options.WorkerConfig,
+		MockFrontendClient:  options.MockFrontendClient,
 	}
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {

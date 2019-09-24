@@ -98,7 +98,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 	clientBean client.Bean, config *Config, logger log.Logger) *TestShardContext {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, metricsClient, logger)
-
+	serializer := persistence.NewPayloadSerializer()
 	// initialize the cluster current time to be the same as ack level
 	standbyClusterCurrentTime := make(map[string]time.Time)
 	timerMaxReadLevelMap := make(map[string]time.Time)
@@ -121,8 +121,15 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 	}
 
 	shardCtx := &TestShardContext{
-		shardID:                   0,
-		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, clientBean, nil, nil),
+		shardID: 0,
+		service: service.NewTestService(
+			clusterMetadata,
+			nil,
+			metricsClient,
+			clientBean,
+			nil,
+			nil,
+			serializer),
 		shardInfo:                 shardInfo,
 		transferSequenceNumber:    transferSequenceNumber,
 		historyMgr:                historyMgr,

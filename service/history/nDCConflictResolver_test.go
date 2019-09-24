@@ -68,8 +68,14 @@ func TestNDCConflictResolverSuite(t *testing.T) {
 func (s *nDCConflictResolverSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
-
+	s.mockService = service.NewTestService(
+		nil,
+		nil,
+		metricsClient,
+		nil,
+		nil,
+		nil,
+		nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},

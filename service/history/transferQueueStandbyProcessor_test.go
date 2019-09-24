@@ -139,6 +139,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		s.mockClientBean,
 		s.mockArchivalMetadata,
 		s.mockArchiverProvider,
+		nil,
 	)
 
 	config := NewDynamicConfigForTest()

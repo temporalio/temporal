@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -89,7 +89,7 @@ type Interface interface {
 
 	ReapplyEvents(
 		ctx context.Context,
-		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+		ReapplyEventsRequest *history.ReapplyEventsRequest,
 		opts ...yarpc.CallOption,
 	) error
 
@@ -448,7 +448,7 @@ func (c client) QueryWorkflow(
 
 func (c client) ReapplyEvents(
 	ctx context.Context,
-	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	_ReapplyEventsRequest *history.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
 ) (err error) {
 

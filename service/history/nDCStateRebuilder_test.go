@@ -79,7 +79,14 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil)
+	s.mockService = service.NewTestService(
+		s.mockClusterMetadata,
+		nil,
+		metricsClient,
+		nil,
+		nil,
+		nil,
+		nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockEventsCache = &MockEventsCache{}
 

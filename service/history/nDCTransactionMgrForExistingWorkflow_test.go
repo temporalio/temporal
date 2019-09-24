@@ -60,7 +60,7 @@ func TestNDCTransactionMgrForExistingWorkflowSuite(t *testing.T) {
 func (s *nDCTransactionMgrForExistingWorkflowSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,

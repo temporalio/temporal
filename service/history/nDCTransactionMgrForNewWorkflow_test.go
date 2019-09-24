@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -60,7 +61,7 @@ func TestNDCTransactionMgrForNewWorkflowSuite(t *testing.T) {
 func (s *nDCTransactionMgrForNewWorkflowSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil)
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -265,7 +266,12 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	var currentReleaseFn releaseWorkflowExecutionFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{}
+	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+		},
+	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
@@ -295,6 +301,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		"",
 		int64(0),
 	).Return(nil).Once()
+	targetContext.On("reapplyEvents", mock.Anything, domainID, workflowID, targetWorkflowEventsSeq[0].Events).
+		Return(nil).
+		Times(1)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)

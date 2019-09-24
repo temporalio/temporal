@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -79,7 +79,7 @@ type Interface interface {
 
 	ReapplyEvents(
 		ctx context.Context,
-		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+		ReapplyEventsRequest *history.ReapplyEventsRequest,
 	) error
 
 	RecordActivityTaskHeartbeat(
@@ -309,7 +309,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Type:  transport.Unary,
 					Unary: thrift.UnaryHandler(h.ReapplyEvents),
 				},
-				Signature:    "ReapplyEvents(ReapplyEventsRequest *shared.ReapplyEventsRequest)",
+				Signature:    "ReapplyEvents(ReapplyEventsRequest *history.ReapplyEventsRequest)",
 				ThriftModule: history.ThriftModule,
 			},
 

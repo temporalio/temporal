@@ -343,6 +343,11 @@ struct QueryWorkflowResponse {
   10: optional binary queryResult
 }
 
+struct ReapplyEventsRequest {
+  10: optional string domainUUID
+  20: optional shared.ReapplyEventsRequest request
+}
+
 /**
 * HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 * of workflow instances already created.
@@ -825,7 +830,7 @@ service HistoryService {
   /**
   * ReapplyEvents applies stale events to the current workflow and current run
   **/
-  void ReapplyEvents(1: shared.ReapplyEventsRequest reapplyEventsRequest)
+  void ReapplyEvents(1: ReapplyEventsRequest reapplyEventsRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
