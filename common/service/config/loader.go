@@ -81,6 +81,8 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	log.Printf("Loading configFiles=%v\n", files)
 
 	for _, f := range files {
+		// This is tagged nosec because the file names being read are for config files that are not user supplied
+		// #nosec
 		data, err := ioutil.ReadFile(f)
 		if err != nil {
 			return err

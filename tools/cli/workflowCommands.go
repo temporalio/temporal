@@ -1372,6 +1372,8 @@ func ResetInBatch(c *cli.Context) {
 	// read exclude
 	excludes := map[string]string{}
 	if len(excFileName) > 0 {
+		// This code is only used in the CLI. The input provided is from a trusted user.
+		// #nosec
 		excFile, err := os.Open(excFileName)
 		if err != nil {
 			ErrorAndExit("Open failed2", err)

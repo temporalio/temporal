@@ -101,6 +101,9 @@ func LoadCassandraSchema(
 	defer os.Remove(tmpFile.Name())
 
 	for _, file := range fileNames {
+		// Flagged for potential file inclusion via variable. No user supplied input is included here - this just reads
+		// schema files.
+		// #nosec
 		content, err := ioutil.ReadFile(dir + "/" + file)
 		if err != nil {
 			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())

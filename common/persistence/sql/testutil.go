@@ -77,6 +77,8 @@ func dropDatabase(db *sqlx.DB, dbName string) (err error) {
 func loadDatabaseSchema(dir string, fileNames []string, db *sqlx.DB, override bool) (err error) {
 
 	for _, file := range fileNames {
+		// This is only used in tests. Excluding it from security scanners
+		// #nosec
 		content, err := ioutil.ReadFile(dir + "/" + file)
 		if err != nil {
 			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())
