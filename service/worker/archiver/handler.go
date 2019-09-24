@@ -21,12 +21,8 @@
 package archiver
 
 import (
-	"time"
-
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/cadence"
 	"go.uber.org/cadence/workflow"
 )
 
@@ -38,12 +34,14 @@ type (
 	}
 
 	handler struct {
-		ctx           workflow.Context
-		logger        log.Logger
-		metricsClient metrics.Client
-		concurrency   int
-		requestCh     workflow.Channel
-		resultCh      workflow.Channel
+		ctx          workflow.Context
+		logger       log.Logger
+		metricsScope metrics.Scope
+		concurrency  int
+		requestCh    workflow.Channel
+		resultCh     workflow.Channel
+		receiver     RequestReceiver
+		processor    RequestProcessor
 	}
 )
 
@@ -51,37 +49,41 @@ type (
 func NewHandler(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsScope metrics.Scope,
 	concurrency int,
 	requestCh workflow.Channel,
+	receiver RequestReceiver,
+	processor RequestProcessor,
 ) Handler {
 	return &handler{
-		ctx:           ctx,
-		logger:        logger,
-		metricsClient: metricsClient,
-		concurrency:   concurrency,
-		requestCh:     requestCh,
-		resultCh:      workflow.NewChannel(ctx),
+		ctx:          ctx,
+		logger:       logger,
+		metricsScope: metricsScope,
+		concurrency:  concurrency,
+		requestCh:    requestCh,
+		resultCh:     workflow.NewChannel(ctx),
+		receiver:     receiver,
+		processor:    processor,
 	}
 }
 
 // Start spawns concurrency count of coroutine to handle archivals (does not block).
 func (h *handler) Start() {
-	h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStartedCount)
+	h.metricsScope.IncCounter(metrics.ArchiverStartedCount)
 	for i := 0; i < h.concurrency; i++ {
 		workflow.Go(h.ctx, func(ctx workflow.Context) {
-			h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStartedCount)
+			h.metricsScope.IncCounter(metrics.ArchiverCoroutineStartedCount)
 			var handledHashes []uint64
 			for {
-				var request ArchiveRequest
-				if more := h.requestCh.Receive(ctx, &request); !more {
+				request, more := h.receiver.Receive(ctx, h.requestCh)
+				if !more {
 					break
 				}
-				handleRequest(ctx, h.logger, h.metricsClient, request)
+				h.processor.Process(ctx, request)
 				handledHashes = append(handledHashes, hash(request))
 			}
 			h.resultCh.Send(ctx, handledHashes)
-			h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount)
+			h.metricsScope.IncCounter(metrics.ArchiverCoroutineStoppedCount)
 		})
 	}
 }
@@ -95,52 +97,6 @@ func (h *handler) Finished() []uint64 {
 		h.resultCh.Receive(h.ctx, &subResult)
 		handledHashes = append(handledHashes, subResult...)
 	}
-	h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStoppedCount)
+	h.metricsScope.IncCounter(metrics.ArchiverStoppedCount)
 	return handledHashes
-}
-
-func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metrics.Client, request ArchiveRequest) {
-	sw := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleRequestLatency)
-	logger = tagLoggerWithRequest(logger, request)
-	ao := workflow.ActivityOptions{
-		ScheduleToStartTimeout: 1 * time.Minute,
-		StartToCloseTimeout:    1 * time.Minute,
-		RetryPolicy: &cadence.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			ExpirationInterval:       5 * time.Minute,
-			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
-		},
-	}
-	actCtx := workflow.WithActivityOptions(ctx, ao)
-	uploadSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
-	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, nil)
-	if err != nil {
-		logger.Error("failed to archive history, will move on to deleting history without archiving", tag.Error(err))
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
-	} else {
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
-	}
-	uploadSW.Stop()
-
-	lao := workflow.LocalActivityOptions{
-		ScheduleToCloseTimeout: 1 * time.Minute,
-		RetryPolicy: &cadence.RetryPolicy{
-			InitialInterval:          time.Second,
-			BackoffCoefficient:       2.0,
-			ExpirationInterval:       5 * time.Minute,
-			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
-		},
-	}
-	deleteSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
-	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
-	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
-	if err != nil {
-		logger.Error("deleting history failed, this means zombie histories are left", tag.Error(err))
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
-	} else {
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
-	}
-	deleteSW.Stop()
-	sw.Stop()
 }

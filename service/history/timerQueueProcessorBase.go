@@ -481,8 +481,8 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 	attemptArchiveInline := executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorHistoryArchivalTimeLimit())
 	defer cancel()
-	req := &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
+	req := &archiver.ClientHistoryRequest{
+		ArchiveHistoryRequest: &archiver.ArchiveHistoryRequest{
 			ShardID:              t.shard.GetShardID(),
 			DomainID:             task.DomainID,
 			DomainName:           domainCacheEntry.GetInfo().Name,
@@ -497,7 +497,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 		CallerService:        common.HistoryServiceName,
 		AttemptArchiveInline: attemptArchiveInline,
 	}
-	resp, err := t.historyService.archivalClient.Archive(ctx, req)
+	resp, err := t.historyService.archivalClient.ArchiveHistory(ctx, req)
 	if err != nil {
 		return err
 	}

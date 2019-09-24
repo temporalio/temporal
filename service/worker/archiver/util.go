@@ -62,7 +62,7 @@ func hashesEqual(a []uint64, b []uint64) bool {
 	return true
 }
 
-func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger {
+func tagLoggerWithArchiveHistoryRequest(logger log.Logger, request ArchiveHistoryRequest) log.Logger {
 	return logger.WithTags(
 		tag.ShardID(request.ShardID),
 		tag.ArchivalRequestDomainID(request.DomainID),
@@ -100,4 +100,12 @@ func errorDetails(err error) string {
 	}
 	err.(*cadence.CustomError).Details(&details)
 	return details
+}
+
+func convertHistoryRequestSlice(requests []ArchiveHistoryRequest) []interface{} {
+	s := make([]interface{}, len(requests))
+	for i := range requests {
+		s[i] = requests[i]
+	}
+	return s
 }

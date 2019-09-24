@@ -882,12 +882,12 @@ const (
 	ArchiverDeleteHistoryActivityScope
 	// ArchiverUploadHistoryActivityScope is scope used by all metrics emitted by archiver.UploadHistoryActivity
 	ArchiverUploadHistoryActivityScope
-	// ArchiverScope is scope used by all metrics emitted by archiver.Archiver
-	ArchiverScope
-	// ArchiverPumpScope is scope used by all metrics emitted by archiver.Pump
-	ArchiverPumpScope
-	// ArchiverArchivalWorkflowScope is scope used by all metrics emitted by archiver.ArchivalWorkflow
-	ArchiverArchivalWorkflowScope
+	// HistoryArchivalHandlerScope is scope used by all metrics emitted by archiver.Handler when archiving history
+	HistoryArchivalHandlerScope
+	// HistoryArchivalPumpScope is scope used by all metrics emitted by archiver.Pump when archiving history
+	HistoryArchivalPumpScope
+	// HistoryArchivalWorkflowScope is scope used by all metrics emitted by archiver.ArchivalHistoryWorkflow
+	HistoryArchivalWorkflowScope
 	// TaskListScavengerScope is scope used by all metrics emitted by worker.tasklist.Scavenger module
 	TaskListScavengerScope
 	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
@@ -1282,9 +1282,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		IndexProcessorScope:                 {operation: "IndexProcessor"},
 		ArchiverDeleteHistoryActivityScope:  {operation: "ArchiverDeleteHistoryActivity"},
 		ArchiverUploadHistoryActivityScope:  {operation: "ArchiverUploadHistoryActivity"},
-		ArchiverScope:                       {operation: "Archiver"},
-		ArchiverPumpScope:                   {operation: "ArchiverPump"},
-		ArchiverArchivalWorkflowScope:       {operation: "ArchiverArchivalWorkflow"},
+		HistoryArchivalHandlerScope:         {operation: "HistoryArchivalHandler"},
+		HistoryArchivalPumpScope:            {operation: "HistoryArchivalPump"},
+		HistoryArchivalWorkflowScope:        {operation: "HistoryArchivalWorkflow"},
 		TaskListScavengerScope:              {operation: "tasklistscavenger"},
 		HistoryScavengerScope:               {operation: "historyscavenger"},
 		BatcherScope:                        {operation: "batcher"},

@@ -75,8 +75,8 @@ type (
 const (
 	workflowIDPrefix                = "cadence-archival"
 	decisionTaskList                = "cadence-archival-tl"
-	signalName                      = "cadence-archival-signal"
-	archivalWorkflowFnName          = "archivalWorkflow"
+	archiveHistorySignalName        = "cadence-archival-signal"
+	archiveHistoryWorkflowFnName    = "archivalWorkflow"
 	workflowStartToCloseTimeout     = time.Hour * 24 * 30
 	workflowTaskStartToCloseTimeout = time.Minute
 
@@ -91,7 +91,7 @@ var (
 )
 
 func init() {
-	workflow.RegisterWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
+	workflow.RegisterWithOptions(archiveHistoryWorkflow, workflow.RegisterOptions{Name: archiveHistoryWorkflowFnName})
 	activity.RegisterWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
 	activity.RegisterWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
 }

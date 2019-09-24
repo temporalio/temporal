@@ -68,7 +68,7 @@ ArchiverOptions is used to handle this. The following shows and example:
 func (a *Archiver) Archive(
 	ctx context.Context,
 	URI string,
-	request *ArchiveRequest,
+	request *ArchiveHistoryRequest,
 	opts ...ArchiveOption,
 ) error {
   featureCatalog := GetFeatureCatalog(opts...) // this function is defined in options.go
@@ -99,7 +99,7 @@ func (a *Archiver) Archive(
 func (a *Archiver) Archive(
 	ctx context.Context,
 	URI string,
-	request *ArchiveRequest,
+	request *ArchiveHistoryRequest,
 	opts ...ArchiveOption,
 ) error {
   featureCatalog := GetFeatureCatalog(opts...) // this function is defined in options.go
