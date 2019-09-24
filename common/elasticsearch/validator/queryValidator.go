@@ -71,15 +71,18 @@ func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *w
 // it also adds attr prefix for customized fields
 func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClause string) (string, error) {
 	if len(whereClause) != 0 {
-		var sqlQuery string
+		// Build a placeholder query that allows us to easily parse the contents of the where clause.
+		// IMPORTANT: This query is never executed, it is just used to parse and validate whereClause
+		var placeholderQuery string
 		whereClause := strings.TrimSpace(whereClause)
+		// #nosec
 		if common.IsJustOrderByClause(whereClause) { // just order by
-			sqlQuery = "SELECT * FROM dummy " + whereClause
+			placeholderQuery = "SELECT * FROM dummy " + whereClause
 		} else {
-			sqlQuery = "SELECT * FROM dummy WHERE " + whereClause
+			placeholderQuery = "SELECT * FROM dummy WHERE " + whereClause
 		}
 
-		stmt, err := sqlparser.Parse(sqlQuery)
+		stmt, err := sqlparser.Parse(placeholderQuery)
 		if err != nil {
 			return "", &workflow.BadRequestError{Message: "Invalid query."}
 		}
