@@ -39,7 +39,7 @@ import (
 )
 
 var (
-	handlerTestMetrics *mmocks.Scope
+	handlerTestMetrics *mmocks.Client
 	handlerTestLogger  *log.MockLogger
 )
 
@@ -53,13 +53,13 @@ func TestHandlerSuite(t *testing.T) {
 }
 
 func (s *handlerSuite) SetupSuite() {
-	workflow.Register(handleHistoryRequestWorkflow)
+	workflow.Register(handleRequestWorkflow)
 	workflow.Register(startAndFinishArchiverWorkflow)
 }
 
 func (s *handlerSuite) SetupTest() {
-	handlerTestMetrics = &mmocks.Scope{}
-	handlerTestMetrics.On("StartTimer", mock.Anything).Return(metrics.NewTestStopwatch())
+	handlerTestMetrics = &mmocks.Client{}
+	handlerTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NopStopwatch())
 	handlerTestLogger = &log.MockLogger{}
 	handlerTestLogger.On("WithTags", mock.Anything).Return(handlerTestLogger)
 }
@@ -69,98 +69,98 @@ func (s *handlerSuite) TearDownTest() {
 	handlerTestLogger.AssertExpectations(s.T())
 }
 
-func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_NonRetryableError() {
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverUploadFailedAllRetriesCount).Once()
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverDeleteSuccessCount).Once()
+func (s *handlerSuite) TestHandleRequest_UploadFails_NonRetryableError() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(errors.New("some random error"))
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveHistoryRequest{})
+	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout() {
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverUploadFailedAllRetriesCount).Once()
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverDeleteSuccessCount).Once()
+func (s *handlerSuite) TestHandleRequest_UploadFails_ExpireRetryTimeout() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	timeoutErr := workflow.NewTimeoutError(shared.TimeoutTypeStartToClose)
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveHistoryRequest{})
+	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleHistoryRequest_UploadSuccess() {
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverUploadSuccessCount).Once()
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverDeleteSuccessCount).Once()
+func (s *handlerSuite) TestHandleRequest_UploadSuccess() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveHistoryRequest{})
+	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() {
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverUploadSuccessCount).Once()
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverDeleteFailedAllRetriesCount).Once()
+func (s *handlerSuite) TestHandleRequest_DeleteFails_NonRetryableError() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveHistoryRequest) error {
+	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		return cadence.NewCustomError(errDeleteNonRetriable.Error())
 	})
-	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveHistoryRequest{})
+	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleHistoryRequest_DeleteFailsThenSucceeds() {
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverUploadSuccessCount).Once()
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverDeleteSuccessCount).Once()
+func (s *handlerSuite) TestHandleRequest_DeleteFailsThenSucceeds() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	firstRun := true
-	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveHistoryRequest) error {
+	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		if firstRun {
 			firstRun = false
 			return errors.New("some retryable error")
 		}
 		return nil
 	})
-	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveHistoryRequest{})
+	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestRunHistoryHandler() {
+func (s *handlerSuite) TestRunArchiver() {
 	numRequests := 1000
 	concurrency := 10
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverUploadSuccessCount).Times(numRequests)
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverDeleteSuccessCount).Times(numRequests)
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverStartedCount).Once()
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverCoroutineStartedCount).Times(concurrency)
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverCoroutineStoppedCount).Times(concurrency)
-	handlerTestMetrics.On("IncCounter", metrics.ArchiverStoppedCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Times(numRequests)
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Times(numRequests)
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverStartedCount).Once()
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverCoroutineStartedCount).Times(concurrency)
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount).Times(concurrency)
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverStoppedCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
@@ -172,23 +172,14 @@ func (s *handlerSuite) TestRunHistoryHandler() {
 	s.NoError(env.GetWorkflowError())
 }
 
-func handleHistoryRequestWorkflow(ctx workflow.Context, request ArchiveHistoryRequest) error {
-	processor := NewHistoryRequestProcessor(handlerTestLogger, handlerTestMetrics)
-	processor.Process(ctx, request)
+func handleRequestWorkflow(ctx workflow.Context, request ArchiveRequest) error {
+	handleRequest(ctx, handlerTestLogger, handlerTestMetrics, request)
 	return nil
 }
 
 func startAndFinishArchiverWorkflow(ctx workflow.Context, concurrency int, numRequests int) error {
 	requestCh := workflow.NewBufferedChannel(ctx, numRequests)
-	handler := NewHandler(
-		ctx,
-		handlerTestLogger,
-		handlerTestMetrics,
-		concurrency,
-		requestCh,
-		GetHistoryRequestReceiver(),
-		NewHistoryRequestProcessor(handlerTestLogger, handlerTestMetrics),
-	)
+	handler := NewHandler(ctx, handlerTestLogger, handlerTestMetrics, concurrency, requestCh)
 	handler.Start()
 	sentHashes := make([]uint64, numRequests, numRequests)
 	workflow.Go(ctx, func(ctx workflow.Context) {
@@ -206,8 +197,8 @@ func startAndFinishArchiverWorkflow(ctx workflow.Context, concurrency int, numRe
 	return nil
 }
 
-func randomArchiveRequest() (ArchiveHistoryRequest, uint64) {
-	ar := ArchiveHistoryRequest{
+func randomArchiveRequest() (ArchiveRequest, uint64) {
+	ar := ArchiveRequest{
 		DomainID:   fmt.Sprintf("%v", rand.Intn(1000)),
 		WorkflowID: fmt.Sprintf("%v", rand.Intn(1000)),
 		RunID:      fmt.Sprintf("%v", rand.Intn(1000)),

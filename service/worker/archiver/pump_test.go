@@ -35,7 +35,7 @@ import (
 )
 
 var (
-	pumpTestMetrics *mmocks.Scope
+	pumpTestMetrics *mmocks.Client
 	pumpTestLogger  *log.MockLogger
 )
 
@@ -56,8 +56,8 @@ func (s *pumpSuite) SetupSuite() {
 }
 
 func (s *pumpSuite) SetupTest() {
-	pumpTestMetrics = &mmocks.Scope{}
-	pumpTestMetrics.On("StartTimer", mock.Anything).Return(metrics.NewTestStopwatch()).Once()
+	pumpTestMetrics = &mmocks.Client{}
+	pumpTestMetrics.On("StartTimer", mock.Anything, mock.Anything).Return(metrics.NopStopwatch()).Once()
 	pumpTestLogger = &log.MockLogger{}
 }
 
@@ -67,7 +67,7 @@ func (s *pumpSuite) TearDownTest() {
 }
 
 func (s *pumpSuite) TestPumpRun_CarryoverLargerThanLimit() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(1)).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(1)).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(carryoverSatisfiesLimitWorkflow, 10, 11)
@@ -78,7 +78,7 @@ func (s *pumpSuite) TestPumpRun_CarryoverLargerThanLimit() {
 }
 
 func (s *pumpSuite) TestPumpRun_CarryoverExactlyMatchesLimit() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(carryoverSatisfiesLimitWorkflow, 10, 10)
@@ -89,9 +89,9 @@ func (s *pumpSuite) TestPumpRun_CarryoverExactlyMatchesLimit() {
 }
 
 func (s *pumpSuite) TestPumpRun_TimeoutWithoutSignals() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
-	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpTimeoutCount).Once()
-	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpTimeoutWithoutSignalsCount).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
+	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutCount).Once()
+	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutWithoutSignalsCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(pumpWorkflow, 10, 0)
@@ -102,8 +102,8 @@ func (s *pumpSuite) TestPumpRun_TimeoutWithoutSignals() {
 }
 
 func (s *pumpSuite) TestPumpRun_TimeoutWithSignals() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
-	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpTimeoutCount).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
+	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(pumpWorkflow, 10, 5)
@@ -114,8 +114,8 @@ func (s *pumpSuite) TestPumpRun_TimeoutWithSignals() {
 }
 
 func (s *pumpSuite) TestPumpRun_SignalsGottenSatisfyLimit() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
-	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpSignalThresholdCount).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
+	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalThresholdCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(pumpWorkflow, 10, 10)
@@ -126,8 +126,8 @@ func (s *pumpSuite) TestPumpRun_SignalsGottenSatisfyLimit() {
 }
 
 func (s *pumpSuite) TestPumpRun_SignalsAndCarryover() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
-	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpSignalThresholdCount).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
+	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalThresholdCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(signalAndCarryoverPumpWorkflow, 10, 5, 5)
@@ -138,8 +138,8 @@ func (s *pumpSuite) TestPumpRun_SignalsAndCarryover() {
 }
 
 func (s *pumpSuite) TestPumpRun_SignalChannelClosedUnexpectedly() {
-	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
-	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpSignalChannelClosedCount).Once()
+	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
+	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalChannelClosedCount).Once()
 	pumpTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
@@ -154,7 +154,7 @@ func carryoverSatisfiesLimitWorkflow(ctx workflow.Context, requestLimit int, car
 	unhandledCarryoverSize := carryoverSize - requestLimit
 	carryover, carryoverHashes := randomCarryover(carryoverSize)
 	requestCh := workflow.NewBufferedChannel(ctx, requestLimit)
-	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, carryover, time.Nanosecond, requestLimit, requestCh, nil, nil)
+	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, carryover, time.Nanosecond, requestLimit, requestCh, nil)
 	actual := pump.Run()
 	expected := PumpResult{
 		PumpedHashes:          carryoverHashes[:len(carryoverHashes)-unhandledCarryoverSize],
@@ -174,7 +174,7 @@ func pumpWorkflow(ctx workflow.Context, requestLimit int, numRequests int) error
 	signalCh := workflow.NewBufferedChannel(ctx, requestLimit)
 	signalsSent, signalHashes := sendRequestsToChannel(ctx, signalCh, numRequests)
 	requestCh := workflow.NewBufferedChannel(ctx, requestLimit)
-	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, nil, time.Nanosecond, requestLimit, requestCh, signalCh, GetHistoryRequestReceiver())
+	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, nil, time.Nanosecond, requestLimit, requestCh, signalCh)
 	actual := pump.Run()
 	expected := PumpResult{
 		PumpedHashes:          signalHashes,
@@ -195,7 +195,7 @@ func signalChClosePumpWorkflow(ctx workflow.Context, requestLimit int, numReques
 	signalsSent, signalHashes := sendRequestsToChannelBlocking(ctx, signalCh, numRequests)
 	signalCh.Close()
 	requestCh := workflow.NewBufferedChannel(ctx, requestLimit)
-	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, nil, time.Nanosecond, requestLimit, requestCh, signalCh, GetHistoryRequestReceiver())
+	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, nil, time.Nanosecond, requestLimit, requestCh, signalCh)
 	actual := pump.Run()
 	expected := PumpResult{
 		PumpedHashes:          signalHashes,
@@ -216,7 +216,7 @@ func signalAndCarryoverPumpWorkflow(ctx workflow.Context, requestLimit int, carr
 	signalsSent, signalHashes := sendRequestsToChannel(ctx, signalCh, numSignals)
 	carryover, carryoverHashes := randomCarryover(carryoverSize)
 	requestCh := workflow.NewBufferedChannel(ctx, requestLimit)
-	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, carryover, time.Nanosecond, requestLimit, requestCh, signalCh, GetHistoryRequestReceiver())
+	pump := NewPump(ctx, pumpTestLogger, pumpTestMetrics, carryover, time.Nanosecond, requestLimit, requestCh, signalCh)
 	actual := pump.Run()
 	expected := PumpResult{
 		PumpedHashes:          append(carryoverHashes, signalHashes...),
@@ -232,8 +232,8 @@ func signalAndCarryoverPumpWorkflow(ctx workflow.Context, requestLimit int, carr
 	return nil
 }
 
-func sendRequestsToChannel(ctx workflow.Context, ch workflow.Channel, numRequests int) ([]interface{}, []uint64) {
-	requests := make([]interface{}, numRequests, numRequests)
+func sendRequestsToChannel(ctx workflow.Context, ch workflow.Channel, numRequests int) ([]ArchiveRequest, []uint64) {
+	requests := make([]ArchiveRequest, numRequests, numRequests)
 	hashes := make([]uint64, numRequests, numRequests)
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		for i := 0; i < numRequests; i++ {
@@ -244,8 +244,8 @@ func sendRequestsToChannel(ctx workflow.Context, ch workflow.Channel, numRequest
 	return requests, hashes
 }
 
-func sendRequestsToChannelBlocking(ctx workflow.Context, ch workflow.Channel, numRequests int) ([]interface{}, []uint64) {
-	requests := make([]interface{}, numRequests, numRequests)
+func sendRequestsToChannelBlocking(ctx workflow.Context, ch workflow.Channel, numRequests int) ([]ArchiveRequest, []uint64) {
+	requests := make([]ArchiveRequest, numRequests, numRequests)
 	hashes := make([]uint64, numRequests, numRequests)
 	for i := 0; i < numRequests; i++ {
 		requests[i], hashes[i] = randomArchiveRequest()
@@ -254,9 +254,9 @@ func sendRequestsToChannelBlocking(ctx workflow.Context, ch workflow.Channel, nu
 	return requests, hashes
 }
 
-func channelContainsExpected(ctx workflow.Context, ch workflow.Channel, expected []interface{}) bool {
+func channelContainsExpected(ctx workflow.Context, ch workflow.Channel, expected []ArchiveRequest) bool {
 	for i := 0; i < len(expected); i++ {
-		var actual ArchiveHistoryRequest
+		var actual ArchiveRequest
 		if !ch.Receive(ctx, &actual) {
 			return false
 		}
@@ -270,8 +270,8 @@ func channelContainsExpected(ctx workflow.Context, ch workflow.Channel, expected
 	return true
 }
 
-func randomCarryover(count int) ([]interface{}, []uint64) {
-	carryover := make([]interface{}, count, count)
+func randomCarryover(count int) ([]ArchiveRequest, []uint64) {
+	carryover := make([]ArchiveRequest, count, count)
 	hashes := make([]uint64, count, count)
 	for i := 0; i < count; i++ {
 		carryover[i], hashes[i] = randomArchiveRequest()
@@ -285,7 +285,7 @@ func pumpResultsEqual(expected PumpResult, actual PumpResult) bool {
 		hashesEqual(expected.PumpedHashes, actual.PumpedHashes)
 }
 
-func requestsEqual(expected []interface{}, actual []interface{}) bool {
+func requestsEqual(expected []ArchiveRequest, actual []ArchiveRequest) bool {
 	if len(expected) != len(actual) {
 		return false
 	}

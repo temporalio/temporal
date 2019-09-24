@@ -104,7 +104,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -132,7 +132,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -161,7 +161,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -190,7 +190,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -218,7 +218,7 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -247,7 +247,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -276,7 +276,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryabl
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,
@@ -303,7 +303,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Success() {
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(getCanceledContext(), bootstrapContainerKey, container),
 	})
-	request := ArchiveHistoryRequest{
+	request := ArchiveRequest{
 		DomainID:             testDomainID,
 		DomainName:           testDomainName,
 		WorkflowID:           testWorkflowID,

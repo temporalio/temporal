@@ -47,7 +47,7 @@ var (
 	deleteHistoryActivityNonRetryableErrors = []string{"cadenceInternal:Panic", errDeleteNonRetriable.Error()}
 )
 
-func uploadHistoryActivity(ctx context.Context, request ArchiveHistoryRequest) (err error) {
+func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
 	scope := container.MetricsClient.Scope(metrics.ArchiverUploadHistoryActivityScope, metrics.DomainTag(request.DomainName))
 	sw := scope.StartTimer(metrics.CadenceLatency)
@@ -60,7 +60,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveHistoryRequest) (
 			err = cadence.NewCustomError(err.Error())
 		}
 	}()
-	logger := tagLoggerWithArchiveHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
+	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
 	URI, err := carchiver.NewURI(request.URI)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get archival uri"), tag.ArchivalURI(request.URI), tag.Error(err))
@@ -93,7 +93,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveHistoryRequest) (
 	return err
 }
 
-func deleteHistoryActivity(ctx context.Context, request ArchiveHistoryRequest) (err error) {
+func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
 	scope := container.MetricsClient.Scope(metrics.ArchiverDeleteHistoryActivityScope, metrics.DomainTag(request.DomainName))
 	sw := scope.StartTimer(metrics.CadenceLatency)
@@ -106,7 +106,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveHistoryRequest) (
 			err = cadence.NewCustomError(err.Error())
 		}
 	}()
-	logger := tagLoggerWithArchiveHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
+	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
 	if request.EventStoreVersion == persistence.EventStoreVersionV2 {
 		err = persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
 		if err == nil {

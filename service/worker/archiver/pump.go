@@ -37,20 +37,19 @@ type (
 	// PumpResult is the result of pumping requests into request channel
 	PumpResult struct {
 		PumpedHashes          []uint64
-		UnhandledCarryover    []interface{}
+		UnhandledCarryover    []ArchiveRequest
 		TimeoutWithoutSignals bool
 	}
 
 	pump struct {
-		ctx          workflow.Context
-		logger       log.Logger
-		metricsScope metrics.Scope
-		carryover    []interface{}
-		timeout      time.Duration
-		requestLimit int
-		requestCh    workflow.Channel
-		signalCh     workflow.Channel
-		receiver     RequestReceiver
+		ctx           workflow.Context
+		logger        log.Logger
+		metricsClient metrics.Client
+		carryover     []ArchiveRequest
+		timeout       time.Duration
+		requestLimit  int
+		requestCh     workflow.Channel
+		signalCh      workflow.Channel
 	}
 )
 
@@ -58,24 +57,22 @@ type (
 func NewPump(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsScope metrics.Scope,
-	carryover []interface{},
+	metricsClient metrics.Client,
+	carryover []ArchiveRequest,
 	timeout time.Duration,
 	requestLimit int,
 	requestCh workflow.Channel,
 	signalCh workflow.Channel,
-	receiver RequestReceiver,
 ) Pump {
 	return &pump{
-		ctx:          ctx,
-		logger:       logger,
-		metricsScope: metricsScope,
-		carryover:    carryover,
-		timeout:      timeout,
-		requestLimit: requestLimit,
-		requestCh:    requestCh,
-		signalCh:     signalCh,
-		receiver:     receiver,
+		ctx:           ctx,
+		logger:        logger,
+		metricsClient: metricsClient,
+		carryover:     carryover,
+		timeout:       timeout,
+		requestLimit:  requestLimit,
+		requestCh:     requestCh,
+		signalCh:      signalCh,
 	}
 }
 
@@ -84,17 +81,17 @@ func NewPump(
 // Returns a PumpResult which contains a summary of what was pumped.
 // Upon returning request channel is closed.
 func (p *pump) Run() PumpResult {
-	sw := p.metricsScope.StartTimer(metrics.CadenceLatency)
+	sw := p.metricsClient.StartTimer(metrics.ArchiverPumpScope, metrics.CadenceLatency)
 
 	carryoverBoundIndex := len(p.carryover)
 	if carryoverBoundIndex > p.requestLimit {
 		carryoverBoundIndex = p.requestLimit
 	}
-	var unhandledCarryover []interface{}
+	var unhandledCarryover []ArchiveRequest
 	for i := carryoverBoundIndex; i < len(p.carryover); i++ {
 		unhandledCarryover = append(unhandledCarryover, p.carryover[i])
 	}
-	p.metricsScope.UpdateGauge(metrics.ArchiverBacklogSizeGauge, float64(len(unhandledCarryover)))
+	p.metricsClient.UpdateGauge(metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(len(unhandledCarryover)))
 	pumpResult := PumpResult{
 		UnhandledCarryover: unhandledCarryover,
 	}
@@ -111,9 +108,9 @@ func (p *pump) Run() PumpResult {
 	selector := workflow.NewSelector(p.ctx)
 	finished := false
 	selector.AddFuture(workflow.NewTimer(p.ctx, p.timeout), func(_ workflow.Future) {
-		p.metricsScope.IncCounter(metrics.ArchiverPumpTimeoutCount)
+		p.metricsClient.IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutCount)
 		if len(p.carryover) == len(pumpResult.PumpedHashes) {
-			p.metricsScope.IncCounter(metrics.ArchiverPumpTimeoutWithoutSignalsCount)
+			p.metricsClient.IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutWithoutSignalsCount)
 			pumpResult.TimeoutWithoutSignals = true
 		}
 		finished = true
@@ -121,16 +118,17 @@ func (p *pump) Run() PumpResult {
 	selector.AddReceive(p.signalCh, func(ch workflow.Channel, more bool) {
 		if !more {
 			p.logger.Error("signal channel channel closed unexpectedly")
-			p.metricsScope.IncCounter(metrics.ArchiverPumpSignalChannelClosedCount)
+			p.metricsClient.IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalChannelClosedCount)
 			finished = true
 			return
 		}
-		request, _ := p.receiver.Receive(p.ctx, ch)
+		var request ArchiveRequest
+		ch.Receive(p.ctx, &request)
 		p.requestCh.Send(p.ctx, request)
 		pumpResult.PumpedHashes = append(pumpResult.PumpedHashes, hash(request))
 		finished = len(pumpResult.PumpedHashes) == p.requestLimit
 		if finished {
-			p.metricsScope.IncCounter(metrics.ArchiverPumpSignalThresholdCount)
+			p.metricsClient.IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalThresholdCount)
 		}
 	})
 	for !finished {

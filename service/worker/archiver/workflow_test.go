@@ -23,27 +23,23 @@ package archiver
 import (
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/testsuite"
-	"go.uber.org/cadence/worker"
 	"go.uber.org/cadence/workflow"
 	"go.uber.org/zap"
 )
 
 var (
-	workflowTestMetricsClient *mmocks.Client
-	workflowTestMetricsScope  *mmocks.Scope
-	workflowTestLogger        log.Logger
-	workflowTestHandler       *MockHandler
-	workflowTestPump          *PumpMock
-	workflowTestConfig        *Config
+	workflowTestMetrics *mmocks.Client
+	workflowTestLogger  log.Logger
+	workflowTestHandler *MockHandler
+	workflowTestPump    *PumpMock
+	workflowTestConfig  *Config
 )
 
 type workflowSuite struct {
@@ -52,7 +48,7 @@ type workflowSuite struct {
 }
 
 func (s *workflowSuite) SetupSuite() {
-	workflow.Register(archiveHistoryWorkflowTest)
+	workflow.Register(archivalWorkflowTest)
 }
 
 func TestWorkflowSuite(t *testing.T) {
@@ -60,8 +56,7 @@ func TestWorkflowSuite(t *testing.T) {
 }
 
 func (s *workflowSuite) SetupTest() {
-	workflowTestMetricsClient = &mmocks.Client{}
-	workflowTestMetricsScope = &mmocks.Scope{}
+	workflowTestMetrics = &mmocks.Client{}
 	workflowTestLogger = loggerimpl.NewLogger(zap.NewNop())
 	workflowTestHandler = &MockHandler{}
 	workflowTestPump = &PumpMock{}
@@ -72,21 +67,13 @@ func (s *workflowSuite) SetupTest() {
 	}
 }
 
-func (s *workflowSuite) TearDownTest() {
-	workflowTestMetricsClient.AssertExpectations(s.T())
-	workflowTestMetricsScope.AssertExpectations(s.T())
-	workflowTestHandler.AssertExpectations(s.T())
-	workflowTestPump.AssertExpectations(s.T())
-}
-
-func (s *workflowSuite) TestArchiveHistoryWorkflow_Fail_HashesDoNotEqual() {
-	workflowTestMetricsClient.On("Scope", metrics.HistoryArchivalWorkflowScope, mock.Anything).Return(workflowTestMetricsScope).Once()
-	workflowTestMetricsScope.On("IncCounter", metrics.ArchiverWorkflowStartedCount).Once()
-	workflowTestMetricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Once()
-	workflowTestMetricsScope.On("StartTimer", metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NewTestStopwatch()).Once()
-	workflowTestMetricsScope.On("AddCounter", metrics.ArchiverNumPumpedRequestsCount, int64(3)).Once()
-	workflowTestMetricsScope.On("AddCounter", metrics.ArchiverNumHandledRequestsCount, int64(3)).Once()
-	workflowTestMetricsScope.On("IncCounter", metrics.ArchiverPumpedNotEqualHandledCount).Once()
+func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
+	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount).Once()
+	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.CadenceLatency).Return(metrics.NopStopwatch()).Once()
+	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NopStopwatch()).Once()
+	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(3)).Once()
+	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(3)).Once()
+	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount).Once()
 	workflowTestHandler.On("Start").Once()
 	workflowTestHandler.On("Finished").Return([]uint64{9, 7, 0}).Once()
 	workflowTestPump.On("Run").Return(PumpResult{
@@ -94,7 +81,7 @@ func (s *workflowSuite) TestArchiveHistoryWorkflow_Fail_HashesDoNotEqual() {
 	}).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.ExecuteWorkflow(archiveHistoryWorkflowTest)
+	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
 	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
@@ -102,14 +89,13 @@ func (s *workflowSuite) TestArchiveHistoryWorkflow_Fail_HashesDoNotEqual() {
 	env.AssertExpectations(s.T())
 }
 
-func (s *workflowSuite) TestArchiveHistoryWorkflow_Exit_TimeoutWithoutSignals() {
-	workflowTestMetricsClient.On("Scope", metrics.HistoryArchivalWorkflowScope, mock.Anything).Return(workflowTestMetricsScope).Once()
-	workflowTestMetricsScope.On("IncCounter", metrics.ArchiverWorkflowStartedCount).Once()
-	workflowTestMetricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Once()
-	workflowTestMetricsScope.On("StartTimer", metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NewTestStopwatch()).Once()
-	workflowTestMetricsScope.On("AddCounter", metrics.ArchiverNumPumpedRequestsCount, int64(0)).Once()
-	workflowTestMetricsScope.On("AddCounter", metrics.ArchiverNumHandledRequestsCount, int64(0)).Once()
-	workflowTestMetricsScope.On("IncCounter", metrics.ArchiverWorkflowStoppingCount).Once()
+func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
+	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount).Once()
+	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.CadenceLatency).Return(metrics.NopStopwatch()).Once()
+	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NopStopwatch()).Once()
+	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(0)).Once()
+	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(0)).Once()
+	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount).Once()
 	workflowTestHandler.On("Start").Once()
 	workflowTestHandler.On("Finished").Return([]uint64{}).Once()
 	workflowTestPump.On("Run").Return(PumpResult{
@@ -118,20 +104,19 @@ func (s *workflowSuite) TestArchiveHistoryWorkflow_Exit_TimeoutWithoutSignals() 
 	}).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.ExecuteWorkflow(archiveHistoryWorkflowTest)
+	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 	env.AssertExpectations(s.T())
 }
 
-func (s *workflowSuite) TestArchiveHistoryWorkflow_Success() {
-	workflowTestMetricsClient.On("Scope", metrics.HistoryArchivalWorkflowScope, mock.Anything).Return(workflowTestMetricsScope).Once()
-	workflowTestMetricsScope.On("IncCounter", metrics.ArchiverWorkflowStartedCount).Once()
-	workflowTestMetricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Once()
-	workflowTestMetricsScope.On("StartTimer", metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NewTestStopwatch()).Once()
-	workflowTestMetricsScope.On("AddCounter", metrics.ArchiverNumPumpedRequestsCount, int64(5)).Once()
-	workflowTestMetricsScope.On("AddCounter", metrics.ArchiverNumHandledRequestsCount, int64(5)).Once()
+func (s *workflowSuite) TestArchivalWorkflow_Success() {
+	workflowTestMetrics.On("IncCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount).Once()
+	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.CadenceLatency).Return(metrics.NopStopwatch()).Once()
+	workflowTestMetrics.On("StartTimer", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NopStopwatch()).Once()
+	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(5)).Once()
+	workflowTestMetrics.On("AddCounter", metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(5)).Once()
 	workflowTestHandler.On("Start").Once()
 	workflowTestHandler.On("Finished").Return([]uint64{1, 2, 3, 4, 5}).Once()
 	workflowTestPump.On("Run").Return(PumpResult{
@@ -139,7 +124,7 @@ func (s *workflowSuite) TestArchiveHistoryWorkflow_Success() {
 	}).Once()
 
 	env := s.NewTestWorkflowEnvironment()
-	env.ExecuteWorkflow(archiveHistoryWorkflowTest)
+	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
 	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
@@ -147,29 +132,6 @@ func (s *workflowSuite) TestArchiveHistoryWorkflow_Success() {
 	env.AssertExpectations(s.T())
 }
 
-func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
-	logger, _ := zap.NewDevelopment()
-	globalLogger = workflowTestLogger
-	globalMetricsClient = metrics.NewClient(tally.NewTestScope("replay", nil), metrics.Worker)
-	globalConfig = &Config{
-		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(50),
-		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(1000),
-		TimeLimitPerArchivalIteration: dynamicconfig.GetDurationPropertyFn(MaxArchivalIterationTimeout()),
-	}
-	err := worker.ReplayWorkflowHistoryFromJSONFile(logger, "testdata/archive_history_workflow_history_v1.json")
-	s.NoError(err)
-}
-
-func archiveHistoryWorkflowTest(ctx workflow.Context) error {
-	return archivalWorkflowHelper(
-		ctx,
-		workflowTestLogger,
-		workflowTestMetricsClient,
-		workflowTestConfig,
-		workflowTestHandler,
-		workflowTestPump,
-		nil,
-		GetHistoryRequestReceiver(),
-		NewHistoryRequestProcessor(workflowTestLogger, workflowTestMetricsScope),
-	)
+func archivalWorkflowTest(ctx workflow.Context) error {
+	return archivalWorkflowHelper(ctx, workflowTestLogger, workflowTestMetrics, workflowTestConfig, workflowTestHandler, workflowTestPump, nil)
 }

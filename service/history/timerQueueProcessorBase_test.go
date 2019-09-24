@@ -188,7 +188,7 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveWorkflow_NoErr_InlineArchivalF
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockVisibilityManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
 
-	s.mockArchivalClient.On("ArchiveHistory", mock.Anything, mock.MatchedBy(func(req *archiver.ClientHistoryRequest) bool {
+	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
 		return req.CallerService == common.HistoryServiceName && req.AttemptArchiveInline
 	})).Return(&archiver.ClientResponse{
 		ArchivedInline: false,
@@ -211,7 +211,7 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveWorkflow_SendSignalErr() {
 	mockMutableState.On("GetLastWriteVersion").Return(int64(1234)).Once()
 	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
 
-	s.mockArchivalClient.On("ArchiveHistory", mock.Anything, mock.MatchedBy(func(req *archiver.ClientHistoryRequest) bool {
+	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
 		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline
 	})).Return(nil, errors.New("failed to send signal"))
 

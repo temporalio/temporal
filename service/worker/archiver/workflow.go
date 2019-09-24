@@ -30,29 +30,14 @@ import (
 	"go.uber.org/cadence/workflow"
 )
 
-type (
-	dynamicConfigResult struct {
-		ArchiverConcurrency   int
-		ArchivalsPerIteration int
-		TimelimitPerIteration time.Duration
-	}
-)
+type dynamicConfigResult struct {
+	ArchiverConcurrency   int
+	ArchivalsPerIteration int
+	TimelimitPerIteration time.Duration
+}
 
-func archiveHistoryWorkflow(ctx workflow.Context, carryover []ArchiveHistoryRequest) error {
-	return archivalWorkflowHelper(
-		ctx,
-		globalLogger,
-		globalMetricsClient,
-		globalConfig,
-		nil,
-		nil,
-		convertHistoryRequestSlice(carryover),
-		GetHistoryRequestReceiver(),
-		NewHistoryRequestProcessor(
-			globalLogger,
-			NewReplayMetricsScope(globalMetricsClient.Scope(metrics.HistoryArchivalHandlerScope), ctx),
-		),
-	)
+func archivalWorkflow(ctx workflow.Context, carryover []ArchiveRequest) error {
+	return archivalWorkflowHelper(ctx, globalLogger, globalMetricsClient, globalConfig, nil, nil, carryover)
 }
 
 func archivalWorkflowHelper(
@@ -62,14 +47,11 @@ func archivalWorkflowHelper(
 	config *Config,
 	handler Handler, // enables tests to inject mocks
 	pump Pump, // enables tests to inject mocks
-	carryover []interface{},
-	receiver RequestReceiver,
-	processor RequestProcessor,
+	carryover []ArchiveRequest,
 ) error {
 	metricsClient = NewReplayMetricsClient(metricsClient, ctx)
-	workflowScope := metricsClient.Scope(metrics.HistoryArchivalWorkflowScope)
-	workflowScope.IncCounter(metrics.ArchiverWorkflowStartedCount)
-	sw := workflowScope.StartTimer(metrics.CadenceLatency)
+	metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
+	sw := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.CadenceLatency)
 	workflowInfo := workflow.GetInfo(ctx)
 	logger = logger.WithTags(
 		tag.WorkflowID(workflowInfo.WorkflowExecution.ID),
@@ -79,48 +61,6 @@ func archivalWorkflowHelper(
 	logger = loggerimpl.NewReplayLogger(logger, ctx, false)
 
 	logger.Info("archival system workflow started")
-	dcResult := getDynamicConfig(ctx, config)
-	requestCh := workflow.NewBufferedChannel(ctx, dcResult.ArchivalsPerIteration)
-	if handler == nil {
-		handler = NewHandler(ctx, logger, metricsClient.Scope(metrics.HistoryArchivalHandlerScope), dcResult.ArchiverConcurrency, requestCh, receiver, processor)
-
-	}
-	handlerSW := workflowScope.StartTimer(metrics.ArchiverHandleAllRequestsLatency)
-	handler.Start()
-	signalCh := workflow.GetSignalChannel(ctx, archiveHistorySignalName)
-	if pump == nil {
-		pump = NewPump(ctx, logger, metricsClient.Scope(metrics.HistoryArchivalPumpScope), carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh, receiver)
-	}
-	pumpResult := pump.Run()
-	workflowScope.AddCounter(metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
-	handledHashes := handler.Finished()
-	handlerSW.Stop()
-	workflowScope.AddCounter(metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
-	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
-		logger.Error("handled archival requests do not match pumped archival requests")
-		workflowScope.IncCounter(metrics.ArchiverPumpedNotEqualHandledCount)
-	}
-	if pumpResult.TimeoutWithoutSignals {
-		logger.Info("workflow stopping because pump did not get any signals within timeout threshold")
-		workflowScope.IncCounter(metrics.ArchiverWorkflowStoppingCount)
-		sw.Stop()
-		return nil
-	}
-	for {
-		request, ok := receiver.ReceiveAsync(signalCh)
-		if !ok {
-			break
-		}
-		pumpResult.UnhandledCarryover = append(pumpResult.UnhandledCarryover, request)
-	}
-	logger.Info("archival system workflow continue as new")
-	ctx = workflow.WithExecutionStartToCloseTimeout(ctx, workflowStartToCloseTimeout)
-	ctx = workflow.WithWorkflowTaskStartToCloseTimeout(ctx, workflowTaskStartToCloseTimeout)
-	sw.Stop()
-	return workflow.NewContinueAsNewError(ctx, archiveHistoryWorkflowFnName, pumpResult.UnhandledCarryover)
-}
-
-func getDynamicConfig(ctx workflow.Context, config *Config) dynamicConfigResult {
 	var dcResult dynamicConfigResult
 	_ = workflow.SideEffect(
 		ctx,
@@ -136,5 +76,41 @@ func getDynamicConfig(ctx workflow.Context, config *Config) dynamicConfigResult 
 				TimelimitPerIteration: timeLimit,
 			}
 		}).Get(&dcResult)
-	return dcResult
+	requestCh := workflow.NewBufferedChannel(ctx, dcResult.ArchivalsPerIteration)
+	if handler == nil {
+		handler = NewHandler(ctx, logger, metricsClient, dcResult.ArchiverConcurrency, requestCh)
+	}
+	handlerSW := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
+	handler.Start()
+	signalCh := workflow.GetSignalChannel(ctx, signalName)
+	if pump == nil {
+		pump = NewPump(ctx, logger, metricsClient, carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh)
+	}
+	pumpResult := pump.Run()
+	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
+	handledHashes := handler.Finished()
+	handlerSW.Stop()
+	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
+	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
+		logger.Error("handled archival requests do not match pumped archival requests")
+		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount)
+	}
+	if pumpResult.TimeoutWithoutSignals {
+		logger.Info("workflow stopping because pump did not get any signals within timeout threshold")
+		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount)
+		sw.Stop()
+		return nil
+	}
+	for {
+		var request ArchiveRequest
+		if ok := signalCh.ReceiveAsync(&request); !ok {
+			break
+		}
+		pumpResult.UnhandledCarryover = append(pumpResult.UnhandledCarryover, request)
+	}
+	logger.Info("archival system workflow continue as new")
+	ctx = workflow.WithExecutionStartToCloseTimeout(ctx, workflowStartToCloseTimeout)
+	ctx = workflow.WithWorkflowTaskStartToCloseTimeout(ctx, workflowTaskStartToCloseTimeout)
+	sw.Stop()
+	return workflow.NewContinueAsNewError(ctx, archivalWorkflowFnName, pumpResult.UnhandledCarryover)
 }
