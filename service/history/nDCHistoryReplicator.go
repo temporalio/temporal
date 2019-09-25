@@ -75,6 +75,7 @@ type (
 		metricsClient     metrics.Client
 		domainCache       cache.DomainCache
 		historyCache      *historyCache
+		eventsReapplier   nDCEventsReapplier
 		transactionMgr    nDCTransactionMgr
 		logger            log.Logger
 
@@ -91,10 +92,11 @@ var errPanic = errors.NewInternalFailureError("encounter panic")
 func newNDCHistoryReplicator(
 	shard ShardContext,
 	historyCache *historyCache,
+	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
 ) *nDCHistoryReplicatorImpl {
 
-	transactionMgr := newNDCTransactionMgr(shard, historyCache, logger)
+	transactionMgr := newNDCTransactionMgr(shard, historyCache, eventsReapplier, logger)
 	replicator := &nDCHistoryReplicatorImpl{
 		shard:             shard,
 		clusterMetadata:   shard.GetService().GetClusterMetadata(),
@@ -104,6 +106,7 @@ func newNDCHistoryReplicator(
 		domainCache:       shard.GetDomainCache(),
 		historyCache:      historyCache,
 		transactionMgr:    transactionMgr,
+		eventsReapplier:   eventsReapplier,
 		logger:            logger.WithTags(tag.ComponentHistoryReplicator),
 
 		newBranchMgr: func(

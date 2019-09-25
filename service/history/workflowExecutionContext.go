@@ -57,6 +57,10 @@ type (
 		getHistorySize() int64
 		setHistorySize(size int64)
 
+		reapplyEvents(
+			eventBatches []*persistence.WorkflowEvents,
+		) error
+
 		persistFirstWorkflowEvents(
 			workflowEvents *persistence.WorkflowEvents,
 		) (int64, error)
@@ -124,13 +128,6 @@ type (
 		) (retError error)
 
 		getQueryRegistry() QueryRegistry
-
-		reapplyEvents(
-			ctx context.Context,
-			domainID string,
-			workflowID string,
-			events []*workflow.HistoryEvent,
-		) error
 	}
 )
 
@@ -354,7 +351,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		}
 	}()
 
-	resetWorkflow, workflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
+	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		now,
 		transactionPolicyPassive,
 	)
@@ -362,14 +359,12 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		return err
 	}
 	resetHistorySize := c.getHistorySize()
-	reapplyEvent := []*workflow.HistoryEvent{}
-	for _, workflowEvents := range workflowEventsSeq {
+	for _, workflowEvents := range resetWorkflowEventsSeq {
 		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
 		resetHistorySize += eventsSize
-		reapplyEvent = append(reapplyEvent, workflowEvents.Events...)
 	}
 	c.setHistorySize(resetHistorySize)
 	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
@@ -377,6 +372,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	}
 
 	var newWorkflow *persistence.WorkflowSnapshot
+	var newWorkflowEventsSeq []*persistence.WorkflowEvents
 	if newContext != nil && newMutableState != nil {
 
 		defer func() {
@@ -385,7 +381,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			}
 		}()
 
-		newWorkflow, workflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			now,
 			transactionPolicyPassive,
 		)
@@ -393,8 +389,8 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		startEvent := workflowEventsSeq[0]
-		eventsSize, err := c.persistFirstWorkflowEvents(startEvent)
+		startEvents := newWorkflowEventsSeq[0]
+		eventsSize, err := c.persistFirstWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
@@ -403,10 +399,10 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
-		reapplyEvent = append(reapplyEvent, startEvent.Events...)
 	}
 
 	var currentWorkflow *persistence.WorkflowMutation
+	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	if currentContext != nil && currentMutableState != nil && currentTransactionPolicy != nil {
 
 		defer func() {
@@ -415,7 +411,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			}
 		}()
 
-		currentWorkflow, workflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+		currentWorkflow, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
 			now,
 			*currentTransactionPolicy,
 		)
@@ -423,7 +419,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			return err
 		}
 		currentWorkflowSize := currentContext.getHistorySize()
-		for _, workflowEvents := range workflowEventsSeq {
+		for _, workflowEvents := range currentWorkflowEventsSeq {
 			eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
 			if err != nil {
 				return err
@@ -438,9 +434,9 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	if err := c.conflictResolveEventReapply(
 		conflictResolveMode,
-		resetWorkflow.ExecutionInfo.DomainID,
-		resetWorkflow.ExecutionInfo.WorkflowID,
-		reapplyEvent,
+		resetWorkflowEventsSeq,
+		newWorkflowEventsSeq,
+		// current workflow events will not participate in the events reapplication
 	); err != nil {
 		return err
 	}
@@ -578,7 +574,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		}
 	}()
 
-	currentWorkflow, workflowEventsSeq, err := c.msBuilder.CloseTransactionAsMutation(
+	currentWorkflow, currentWorkflowEventsSeq, err := c.msBuilder.CloseTransactionAsMutation(
 		now,
 		currentWorkflowTransactionPolicy,
 	)
@@ -586,15 +582,13 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 
-	reapplyEvent := []*workflow.HistoryEvent{}
 	currentWorkflowSize := c.getHistorySize()
-	for _, workflowEvents := range workflowEventsSeq {
+	for _, workflowEvents := range currentWorkflowEventsSeq {
 		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
 		currentWorkflowSize += eventsSize
-		reapplyEvent = append(reapplyEvent, workflowEvents.Events...)
 	}
 	c.setHistorySize(currentWorkflowSize)
 	currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
@@ -602,6 +596,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 
 	var newWorkflow *persistence.WorkflowSnapshot
+	var newWorkflowEventsSeq []*persistence.WorkflowEvents
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 
 		defer func() {
@@ -610,7 +605,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			}
 		}()
 
-		newWorkflow, workflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			now,
 			*newWorkflowTransactionPolicy,
 		)
@@ -618,8 +613,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		startEvent := workflowEventsSeq[0]
-		eventsSize, err := c.persistFirstWorkflowEvents(startEvent)
+		startEvents := newWorkflowEventsSeq[0]
+		eventsSize, err := c.persistFirstWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
@@ -628,7 +623,6 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
-		reapplyEvent = append(reapplyEvent, startEvent.Events...)
 	}
 
 	if err := c.mergeContinueAsNewReplicationTasks(
@@ -640,9 +634,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 	if err := c.updateWorkflowExecutionEventReapply(
 		updateMode,
-		currentWorkflow.ExecutionInfo.DomainID,
-		currentWorkflow.ExecutionInfo.WorkflowID,
-		reapplyEvent,
+		currentWorkflowEventsSeq,
+		newWorkflowEventsSeq,
 	); err != nil {
 		return err
 	}
@@ -1183,57 +1176,69 @@ func (c *workflowExecutionContextImpl) getQueryRegistry() QueryRegistry {
 
 func (c *workflowExecutionContextImpl) updateWorkflowExecutionEventReapply(
 	updateMode persistence.UpdateWorkflowMode,
-	domainID string,
-	workflowID string,
-	events []*workflow.HistoryEvent,
+	eventBatch1 []*persistence.WorkflowEvents,
+	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
-	if updateMode == persistence.UpdateWorkflowModeBypassCurrent {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
-		err := c.reapplyEvents(ctx, domainID, workflowID, events)
-		defer cancel()
-		if err != nil {
-			return err
-		}
+
+	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
+		return nil
 	}
-	return nil
+
+	var eventBatches []*persistence.WorkflowEvents
+	eventBatches = append(eventBatches, eventBatch1...)
+	eventBatches = append(eventBatches, eventBatch2...)
+	return c.reapplyEvents(eventBatches)
 }
 
 func (c *workflowExecutionContextImpl) conflictResolveEventReapply(
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
-	domainID string,
-	workflowID string,
-	events []*workflow.HistoryEvent,
+	eventBatch1 []*persistence.WorkflowEvents,
+	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
-	if conflictResolveMode == persistence.ConflictResolveWorkflowModeBypassCurrent {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
-		err := c.reapplyEvents(ctx, domainID, workflowID, events)
-		defer cancel()
-		if err != nil {
-			return err
-		}
+
+	if conflictResolveMode != persistence.ConflictResolveWorkflowModeBypassCurrent {
+		return nil
 	}
-	return nil
+
+	var eventBatches []*persistence.WorkflowEvents
+	eventBatches = append(eventBatches, eventBatch1...)
+	eventBatches = append(eventBatches, eventBatch2...)
+	return c.reapplyEvents(eventBatches)
 }
 
 func (c *workflowExecutionContextImpl) reapplyEvents(
-	ctx context.Context,
-	domainID string,
-	workflowID string,
-	events []*workflow.HistoryEvent,
+	eventBatches []*persistence.WorkflowEvents,
 ) error {
 
-	reapplyEvents := []*workflow.HistoryEvent{}
-	// TODO: need to implement Reapply policy
-	for _, event := range events {
-		switch event.GetEventType() {
-		case workflow.EventTypeWorkflowExecutionSignaled:
-			reapplyEvents = append(reapplyEvents, event)
+	// NOTE: this function should only be used to workflow which is
+	// not the caller, or otherwise deadlock will appear
+
+	if len(eventBatches) == 0 {
+		return nil
+	}
+
+	domainID := eventBatches[0].DomainID
+	workflowID := eventBatches[0].WorkflowID
+	var reapplyEvents []*workflow.HistoryEvent
+	for _, events := range eventBatches {
+		if events.DomainID != domainID ||
+			events.WorkflowID != workflowID {
+			return &workflow.InternalServiceError{
+				Message: "workflowExecutionContext encounter mismatch domainID / workflowID in events reapplication.",
+			}
+		}
+
+		for _, event := range events.Events {
+			switch event.GetEventType() {
+			case workflow.EventTypeWorkflowExecutionSignaled:
+				reapplyEvents = append(reapplyEvents, event)
+			}
 		}
 	}
-	// there is no event to reapply
 	if len(reapplyEvents) == 0 {
 		return nil
 	}
+
 	// Reapply events only reapply to the current run.
 	// Leave the run id empty will reapply events to the current run.
 	execution := &workflow.WorkflowExecution{
@@ -1247,7 +1252,9 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		return err
 	}
 
-	// TODO: handle event apply to self which will be a problem because there is a lock on workflow context
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
+	defer cancel()
+
 	activeCluster := domainEntry.GetReplicationConfig().ActiveClusterName
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
 		return c.shard.GetEngine().ReapplyEvents(
@@ -1260,7 +1267,10 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 
 	// The active cluster of the domain is the same as current cluster.
 	// Use the history from the same cluster to reapply events
-	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(reapplyEvents, common.EncodingTypeThriftRW)
+	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(
+		reapplyEvents,
+		common.EncodingTypeThriftRW,
+	)
 	if err != nil {
 		return err
 	}
@@ -1273,5 +1283,6 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 			DomainName:        common.StringPtr(domainEntry.GetInfo().Name),
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob.ToThrift(),
-		})
+		},
+	)
 }

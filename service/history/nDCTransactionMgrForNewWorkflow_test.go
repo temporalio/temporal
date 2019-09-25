@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -301,9 +300,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		"",
 		int64(0),
 	).Return(nil).Once()
-	targetContext.On("reapplyEvents", mock.Anything, domainID, workflowID, targetWorkflowEventsSeq[0].Events).
-		Return(nil).
-		Times(1)
+	targetContext.On("reapplyEvents", targetWorkflowEventsSeq).Return(nil).Times(1)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)

@@ -281,6 +281,11 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		newTransactionPolicy = transactionPolicyPassive.ptr()
 	}
 
+	// release lock on current workflow, since current cluster maybe the active cluster
+	//  and events maybe reapplied to current workflow
+	currentWorkflow.getReleaseFn()(nil)
+	currentWorkflow = nil
+
 	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeBypassCurrent,
@@ -395,6 +400,11 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		newContext = newWorkflow.getContext()
 		newMutableState = newWorkflow.getMutableState()
 	}
+
+	// release lock on current workflow, since current cluster maybe the active cluster
+	//  and events maybe reapplied to current workflow
+	currentWorkflow.getReleaseFn()(nil)
+	currentWorkflow = nil
 
 	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
 		now,

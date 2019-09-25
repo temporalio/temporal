@@ -25,7 +25,7 @@ package history
 import (
 	ctx "context"
 
-	"github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 )
@@ -35,7 +35,7 @@ type (
 		reapplyEvents(
 			ctx ctx.Context,
 			msBuilder mutableState,
-			historyEvents []*shared.HistoryEvent,
+			historyEvents []*workflow.HistoryEvent,
 		) error
 	}
 
@@ -48,7 +48,7 @@ type (
 func newNDCEventsReapplier(
 	metricsClient metrics.Client,
 	logger log.Logger,
-) nDCEventsReapplier {
+) *nDCEventsReapplierImpl {
 
 	return &nDCEventsReapplierImpl{
 		metricsClient: metricsClient,
@@ -59,14 +59,14 @@ func newNDCEventsReapplier(
 func (r *nDCEventsReapplierImpl) reapplyEvents(
 	ctx ctx.Context,
 	msBuilder mutableState,
-	historyEvents []*shared.HistoryEvent,
+	historyEvents []*workflow.HistoryEvent,
 ) error {
 
-	reapplyEvents := []*shared.HistoryEvent{}
+	var reapplyEvents []*workflow.HistoryEvent
 	// TODO: need to implement Reapply policy
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
-		case shared.EventTypeWorkflowExecutionSignaled:
+		case workflow.EventTypeWorkflowExecutionSignaled:
 			reapplyEvents = append(reapplyEvents, event)
 		}
 	}

@@ -184,6 +184,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
+	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
@@ -208,6 +209,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
 			shard,
 			historyCache,
+			historyEngImpl.eventsReapplier,
 			logger,
 		)
 	}
@@ -223,7 +225,6 @@ func NewEngineWithShardContext(
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
 
 	shard.SetEngine(historyEngImpl)
-	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 	return historyEngImpl
 }
 
@@ -2460,7 +2461,10 @@ func (e *historyEngineImpl) ReapplyEvents(
 			//  reset to workflow finish event
 			//  ignore this case for now
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				e.logger.Warn("failed to reapply event to a finished workflow", tag.WorkflowDomainID(domainID), tag.WorkflowID(workflowID))
+				e.logger.Warn("failed to reapply event to a finished workflow",
+					tag.WorkflowDomainID(domainID),
+					tag.WorkflowID(workflowID),
+				)
 				e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
 				return nil, nil
 			}
