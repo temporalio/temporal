@@ -192,7 +192,6 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		BranchID:  sqldb.MustParseUUID(request.BranchID),
 		MinNodeID: &minNodeID,
 		MaxNodeID: &maxNodeID,
-		MinTxnID:  &lastTxnID,
 		PageSize:  &request.PageSize,
 		ShardID:   request.ShardID,
 	}
@@ -220,6 +219,16 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 			// event batches with larger node ID
 			//  -> batch with lower transaction ID is invalid (happens before)
 			//  -> batch with higher transaction ID is valid
+			if row.NodeID < lastNodeID {
+				return nil, &shared.InternalServiceError{
+					Message: fmt.Sprintf("corrupted data, nodeID cannot decrease"),
+				}
+			} else if row.NodeID > lastNodeID {
+				// update lastNodeID so that our pagination can make progress in the corner case that
+				// the page are all rows with smaller txnID
+				// because next page we always have minNodeID = lastNodeID+1
+				lastNodeID = row.NodeID
+			}
 			continue
 		}
 

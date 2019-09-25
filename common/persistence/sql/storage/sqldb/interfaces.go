@@ -278,9 +278,7 @@ type (
 		MinNodeID *int64
 		// Exclusive
 		MaxNodeID *int64
-		// Exclusive
-		MinTxnID *int64
-		PageSize *int
+		PageSize  *int
 	}
 
 	// HistoryTreeRow represents a row in history_tree table
