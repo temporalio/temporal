@@ -534,6 +534,7 @@ func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, b
 		badBinaries := domainEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]
 		if ok {
+			wh.metricsClient.IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.CadenceErrBadBinaryCounter)
 			return &gen.BadRequestError{
 				Message: fmt.Sprintf("binary %v already marked as bad deployment", binaryChecksum),
 			}
