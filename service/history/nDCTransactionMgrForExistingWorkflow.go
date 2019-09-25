@@ -314,6 +314,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		if err != nil {
 			return err
 		}
+		if err := targetWorkflow.revive(); err != nil {
+			return err
+		}
 	}
 
 	var newContext workflowExecutionContext

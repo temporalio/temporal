@@ -40,6 +40,7 @@ type (
 		getReleaseFn() releaseWorkflowExecutionFunc
 		getVectorClock() (int64, int64, error)
 		happensAfter(that nDCWorkflow) (bool, error)
+		revive() error
 		suppressWorkflowBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error)
 		flushBufferedEvents() error
 	}
@@ -124,6 +125,27 @@ func (r *nDCWorkflowImpl) happensAfter(
 		thatLastWriteVersion,
 		thatLastEventTaskID,
 	), nil
+}
+
+func (r *nDCWorkflowImpl) revive() error {
+
+	state, _ := r.mutableState.GetWorkflowStateCloseStatus()
+	if state != persistence.WorkflowStateZombie {
+		return nil
+	} else if state == persistence.WorkflowStateCompleted {
+		// workflow already finished
+		return nil
+	}
+
+	// workflow is in zombie state, need to set the state correctly accordingly
+	state = persistence.WorkflowStateCreated
+	if r.mutableState.HasProcessedOrPendingDecision() {
+		state = persistence.WorkflowStateRunning
+	}
+	return r.mutableState.UpdateWorkflowStateCloseStatus(
+		state,
+		persistence.WorkflowCloseStatusNone,
+	)
 }
 
 func (r *nDCWorkflowImpl) suppressWorkflowBy(

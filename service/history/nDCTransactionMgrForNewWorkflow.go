@@ -262,6 +262,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	if err != nil {
 		return err
 	}
+	if err := targetWorkflow.revive(); err != nil {
+		return err
+	}
 
 	return currentWorkflow.getContext().updateWorkflowExecutionWithNew(
 		now,

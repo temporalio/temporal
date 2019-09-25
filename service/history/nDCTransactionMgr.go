@@ -227,6 +227,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	}
 
 	mode := persistence.UpdateWorkflowModeUpdateCurrent
+	transactionPolicy := transactionPolicyPassive
 	// since we are not rebuilding the mutable state then we
 	// can trust the result from IsCurrentWorkflowGuaranteed
 	if !targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
@@ -265,9 +266,9 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		// target workflow is active && target workflow is current workflow
 		// we need to reapply events here, rather than using reapplyEvents
 		// within workflow execution context, or otherwise deadlock will appear
-
 		if targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
 			// case 1
+			transactionPolicy = transactionPolicyActive
 			if err := r.eventsReapplier.reapplyEvents(
 				ctx,
 				targetWorkflow.getMutableState(),
@@ -277,11 +278,18 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 			}
 		} else if mode == persistence.UpdateWorkflowModeUpdateCurrent {
 			// case 2
-			r.logger.Warn("failed to reapply event to a finished workflow",
+			transactionPolicy = transactionPolicyActive
+			r.logger.Warn("cannot reapply event to a finished workflow",
 				tag.WorkflowDomainID(targetWorkflowEvents.DomainID),
 				tag.WorkflowID(targetWorkflowEvents.WorkflowID),
 			)
 			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+			// TODO when https://github.com/uber/cadence/issues/2420 is finished
+			//  reset to workflow finish event and reapply to new resetted workflow by using
+			//  transactionPolicyActive, ignore this case for now
+		} else {
+			// target workflow is active but not being pointed by current record
+			// do not need to handle events reapplication here
 		}
 	}
 
@@ -290,7 +298,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		mode,
 		nil,
 		nil,
-		transactionPolicyPassive,
+		transactionPolicy,
 		nil,
 	)
 }

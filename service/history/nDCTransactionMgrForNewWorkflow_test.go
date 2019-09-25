@@ -353,6 +353,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	currentMutableState.On("IsWorkflowExecutionRunning").Return(true)
 	currentWorkflowPolicy := transactionPolicyActive
 	currentWorkflow.EXPECT().suppressWorkflowBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
+	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
 
 	currentContext.On(
 		"updateWorkflowExecutionWithNew",

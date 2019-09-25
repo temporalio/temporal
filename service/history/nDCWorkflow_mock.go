@@ -128,6 +128,20 @@ func (mr *MocknDCWorkflowMockRecorder) happensAfter(that interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "happensAfter", reflect.TypeOf((*MocknDCWorkflow)(nil).happensAfter), that)
 }
 
+// revive mocks base method
+func (m *MocknDCWorkflow) revive() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "revive")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// revive indicates an expected call of revive
+func (mr *MocknDCWorkflowMockRecorder) revive() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "revive", reflect.TypeOf((*MocknDCWorkflow)(nil).revive))
+}
+
 // suppressWorkflowBy mocks base method
 func (m *MocknDCWorkflow) suppressWorkflowBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error) {
 	m.ctrl.T.Helper()

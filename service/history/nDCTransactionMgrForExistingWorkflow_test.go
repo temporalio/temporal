@@ -216,6 +216,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflowPolicy := transactionPolicyPassive
 	currentMutableState.On("IsWorkflowExecutionRunning").Return(true)
 	currentWorkflow.EXPECT().suppressWorkflowBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
+	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
 
 	targetContext.On(
 		"conflictResolveWorkflowExecution",
@@ -426,6 +427,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflowPolicy := transactionPolicyActive
 	currentMutableState.On("IsWorkflowExecutionRunning").Return(true)
 	currentWorkflow.EXPECT().suppressWorkflowBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
+	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
 
 	targetContext.On(
 		"conflictResolveWorkflowExecution",
