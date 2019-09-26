@@ -45,6 +45,7 @@
         },
         "Attr": {
           "properties": {
+            "CadenceChangeVersion":  { "type": "keyword" },
             "CustomStringField":  { "type": "text" },
             "CustomKeywordField": { "type": "keyword"},
             "CustomIntField": { "type": "long"},

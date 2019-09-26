@@ -1,33 +1,6 @@
 frontend.enableClientVersionCheck:
 - value: true
   constraints: {}
-frontend.validSearchAttributes:
-- value:
-    CloseStatus: 2
-    CloseTime: 2
-    CustomBoolField: 3
-    CustomDatetimeField: 5
-    CustomDoubleField: 4
-    CustomIntField: 2
-    CustomKeywordField: 1
-    CustomStringField: 0
-    DomainID: 1
-    ExecutionTime: 2
-    HistoryLength: 2
-    RunID: 1
-    StartTime: 2
-    WorkflowID: 1
-    WorkflowType: 1
-    project: 1
-    service: 1
-    environment: 1
-    addon: 1
-    addon-type: 1
-    user: 1
-    CustomDomain: 1
-    Operator: 1
-    RolloutID: 1
-  constraints: {}
 system.minRetentionDays:
 - value: 0
   constraints: {}
