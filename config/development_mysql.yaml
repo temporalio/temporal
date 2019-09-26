@@ -77,15 +77,15 @@ services:
     pprof:
       port: 7940
 
-clustersInfo:
+clusterMetadata:
   enableGlobalDomain: false
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
-  clusterInitialFailoverVersion:
-    active: 0
-  clusterAddress:
+  clusterInformation:
     active:
+      enabled: true
+      initialFailoverVersion: 0
       rpcName: "cadence-frontend"
       rpcAddress: "localhost:7933"
 
