@@ -22,6 +22,7 @@ package validator
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -77,9 +78,9 @@ func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClau
 		whereClause := strings.TrimSpace(whereClause)
 		// #nosec
 		if common.IsJustOrderByClause(whereClause) { // just order by
-			placeholderQuery = "SELECT * FROM dummy " + whereClause
+			placeholderQuery = fmt.Sprintf("SELECT * FROM dummy %s", whereClause)
 		} else {
-			placeholderQuery = "SELECT * FROM dummy WHERE " + whereClause
+			placeholderQuery = fmt.Sprintf("SELECT * FROM dummy WHERE %s", whereClause)
 		}
 
 		stmt, err := sqlparser.Parse(placeholderQuery)
@@ -87,7 +88,10 @@ func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClau
 			return "", &workflow.BadRequestError{Message: "Invalid query."}
 		}
 
-		sel := stmt.(*sqlparser.Select)
+		sel, ok := stmt.(*sqlparser.Select)
+		if !ok {
+			return "", &workflow.BadRequestError{Message: "Invalid select query."}
+		}
 		buf := sqlparser.NewTrackedBuffer(nil)
 		// validate where expr
 		if sel.Where != nil {

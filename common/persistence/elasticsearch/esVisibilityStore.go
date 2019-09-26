@@ -575,8 +575,10 @@ func getCustomizedDSLFromSQL(sql string, domainID string) (*fastjson.Value, erro
 	if err != nil {
 		return nil, err
 	}
-	dsl := fastjson.MustParse(dslStr) // dsl.String() will be a compact json without spaces
-
+	dsl, err := fastjson.Parse(dslStr) // dsl.String() will be a compact json without spaces
+	if err != nil {
+		return nil, err
+	}
 	dslStr = dsl.String()
 	if strings.Contains(dslStr, jsonMissingCloseTime) { // isOpen
 		dsl = replaceQueryForOpen(dsl)
