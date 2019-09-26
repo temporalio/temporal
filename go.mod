@@ -74,6 +74,7 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.uber.org/atomic v1.4.0
 	go.uber.org/cadence v0.9.1-0.20190819173509-c3cd9f8f9745
+	go.uber.org/config v1.3.1
 	go.uber.org/dig v1.7.0 // indirect
 	go.uber.org/fx v1.9.0 // indirect
 	go.uber.org/goleak v0.10.0 // indirect
