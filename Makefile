@@ -1,7 +1,15 @@
 .PHONY: test bins clean cover cover_ci
 PROJECT_ROOT = github.com/uber/cadence
 
-export PATH := $(GOPATH)/bin:$(PATH)
+export PATH := $(shell go env GOPATH)/bin:$(PATH)
+
+ifndef GOOS
+GOOS := $(shell go env GOOS)
+endif
+
+ifndef GOARCH
+GOARCH := $(shell go env GOARCH)
+endif
 
 THRIFT_GENDIR=.gen
 
@@ -52,7 +60,7 @@ THRIFTRW_GEN_SRC += $(THRIFT_GENDIR)/go/$1/$1.go
 
 $(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	@mkdir -p $(THRIFT_GENDIR)/go
-	$(GOPATH)/bin/thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
+	thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
 $(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
@@ -97,8 +105,8 @@ GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/
 
 yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
-	gobin -mod=readonly go.uber.org/thriftrw
-	gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
+	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
+	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
 
 clean_thrift:
 	rm -rf .gen
@@ -109,15 +117,19 @@ copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 cadence-cassandra-tool: $(TOOLS_SRC)
+	@echo "compiling cadence-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -i -o cadence-cassandra-tool cmd/tools/cassandra/main.go
 
 cadence-sql-tool: $(TOOLS_SRC)
+	@echo "compiling cadence-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -i -o cadence-sql-tool cmd/tools/sql/main.go
 
 cadence: $(TOOLS_SRC)
+	@echo "compiling cadence with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -i -o cadence cmd/tools/cli/main.go
 
 cadence-server: $(ALL_SRC)
+	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
 bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
