@@ -333,8 +333,11 @@ func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
 }
 
 func validateConfig(config *FileBasedClientConfig) error {
-	if _, err := os.Stat(config.Filepath); os.IsNotExist(err) {
-		return err
+	if config == nil {
+		return errors.New("no config found for file based dynamic config client")
+	}
+	if _, err := os.Stat(config.Filepath); err != nil {
+		return fmt.Errorf("error checking dynamic config file at path %s, error: %v", config.Filepath, err)
 	}
 	if config.PollInterval < minPollInterval {
 		return fmt.Errorf("poll interval should be at least %v", minPollInterval)
