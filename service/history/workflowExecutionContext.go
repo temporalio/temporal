@@ -1123,6 +1123,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 				HistorySize: c.stats.HistorySize,
 			},
 			ReplicationState: currMutableState.GetReplicationState(),
+			VersionHistories: currMutableState.GetVersionHistories(),
 
 			UpsertActivityInfos:       []*persistence.ActivityInfo{},
 			DeleteActivityInfos:       []int64{},
