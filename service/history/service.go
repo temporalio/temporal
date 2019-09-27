@@ -184,7 +184,7 @@ const (
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isAdvancedVisConfigExist bool) *Config {
 	cfg := &Config{
 		NumberOfShards:                               numberOfShards,
-		EnableNDC:                                    dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableNDC, true),
+		EnableNDC:                                    dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableNDC, false),
 		RPS:                                          dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                             dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                            dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
