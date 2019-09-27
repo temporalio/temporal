@@ -338,7 +338,7 @@ func convertToExecutionInfo(record *visibilityRecord) *shared.WorkflowExecutionI
 		HistoryLength: common.Int64Ptr(record.HistoryLength),
 		Memo:          record.Memo,
 		SearchAttributes: &shared.SearchAttributes{
-			IndexedFields: record.SearchAttributes,
+			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
 		},
 	}
 }

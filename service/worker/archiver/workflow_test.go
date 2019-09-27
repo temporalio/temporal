@@ -24,12 +24,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/testsuite"
+	"go.uber.org/cadence/worker"
 	"go.uber.org/cadence/workflow"
 	"go.uber.org/zap"
 )
@@ -130,6 +132,19 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	_, ok := env.GetWorkflowError().(*workflow.ContinueAsNewError)
 	s.True(ok, "Called ContinueAsNew")
 	env.AssertExpectations(s.T())
+}
+
+func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
+	logger, _ := zap.NewDevelopment()
+	globalLogger = workflowTestLogger
+	globalMetricsClient = metrics.NewClient(tally.NewTestScope("replay", nil), metrics.Worker)
+	globalConfig = &Config{
+		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(50),
+		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(1000),
+		TimeLimitPerArchivalIteration: dynamicconfig.GetDurationPropertyFn(MaxArchivalIterationTimeout()),
+	}
+	err := worker.ReplayWorkflowHistoryFromJSONFile(logger, "testdata/archival_workflow_history_v1.json")
+	s.NoError(err)
 }
 
 func archivalWorkflowTest(ctx workflow.Context) error {

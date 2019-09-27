@@ -53,7 +53,8 @@ func TestHandlerSuite(t *testing.T) {
 }
 
 func (s *handlerSuite) SetupSuite() {
-	workflow.Register(handleRequestWorkflow)
+	workflow.Register(handleHistoryRequestWorkflow)
+	workflow.Register(handleVisibilityRequestWorkflow)
 	workflow.Register(startAndFinishArchiverWorkflow)
 }
 
@@ -69,7 +70,7 @@ func (s *handlerSuite) TearDownTest() {
 	handlerTestLogger.AssertExpectations(s.T())
 }
 
-func (s *handlerSuite) TestHandleRequest_UploadFails_NonRetryableError() {
+func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_NonRetryableError() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
@@ -77,14 +78,14 @@ func (s *handlerSuite) TestHandleRequest_UploadFails_NonRetryableError() {
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(errors.New("some random error"))
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
+	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleRequest_UploadFails_ExpireRetryTimeout() {
+func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount).Once()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
@@ -93,28 +94,28 @@ func (s *handlerSuite) TestHandleRequest_UploadFails_ExpireRetryTimeout() {
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
+	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleRequest_UploadSuccess() {
+func (s *handlerSuite) TestHandleHistoryRequest_UploadSuccess() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
-	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
+	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleRequest_DeleteFails_NonRetryableError() {
+func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
@@ -124,14 +125,14 @@ func (s *handlerSuite) TestHandleRequest_DeleteFails_NonRetryableError() {
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		return cadence.NewCustomError(errDeleteNonRetriable.Error())
 	})
-	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
+	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
 }
 
-func (s *handlerSuite) TestHandleRequest_DeleteFailsThenSucceeds() {
+func (s *handlerSuite) TestHandleHistoryRequest_DeleteFailsThenSucceeds() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Once()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 
@@ -145,7 +146,32 @@ func (s *handlerSuite) TestHandleRequest_DeleteFailsThenSucceeds() {
 		}
 		return nil
 	})
-	env.ExecuteWorkflow(handleRequestWorkflow, ArchiveRequest{})
+	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
+
+	env.AssertExpectations(s.T())
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+}
+
+func (s *handlerSuite) TestHandleVisibilityRequest_Fail() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverHandleVisibilityFailedAllRetiresCount).Once()
+	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
+
+	env := s.NewTestWorkflowEnvironment()
+	env.OnActivity(archiveVisibilityActivityFnName, mock.Anything, mock.Anything).Return(errors.New("some random error"))
+	env.ExecuteWorkflow(handleVisibilityRequestWorkflow, ArchiveRequest{})
+
+	env.AssertExpectations(s.T())
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+}
+
+func (s *handlerSuite) TestHandleVisibilityRequest_Success() {
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverHandleVisibilitySuccessCount).Once()
+
+	env := s.NewTestWorkflowEnvironment()
+	env.OnActivity(archiveVisibilityActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.ExecuteWorkflow(handleVisibilityRequestWorkflow, ArchiveRequest{})
 
 	env.AssertExpectations(s.T())
 	s.True(env.IsWorkflowCompleted())
@@ -157,6 +183,7 @@ func (s *handlerSuite) TestRunArchiver() {
 	concurrency := 10
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount).Times(numRequests)
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Times(numRequests)
+	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverHandleVisibilitySuccessCount).Times(numRequests)
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverStartedCount).Once()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverCoroutineStartedCount).Times(concurrency)
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount).Times(concurrency)
@@ -165,6 +192,7 @@ func (s *handlerSuite) TestRunArchiver() {
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(archiveVisibilityActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(startAndFinishArchiverWorkflow, concurrency, numRequests)
 
 	env.AssertExpectations(s.T())
@@ -172,8 +200,15 @@ func (s *handlerSuite) TestRunArchiver() {
 	s.NoError(env.GetWorkflowError())
 }
 
-func handleRequestWorkflow(ctx workflow.Context, request ArchiveRequest) error {
-	handleRequest(ctx, handlerTestLogger, handlerTestMetrics, request)
+func handleHistoryRequestWorkflow(ctx workflow.Context, request ArchiveRequest) error {
+	handler := NewHandler(ctx, handlerTestLogger, handlerTestMetrics, 0, nil).(*handler)
+	handler.handleHistoryRequest(ctx, &request)
+	return nil
+}
+
+func handleVisibilityRequestWorkflow(ctx workflow.Context, request ArchiveRequest) error {
+	handler := NewHandler(ctx, handlerTestLogger, handlerTestMetrics, 0, nil).(*handler)
+	handler.handleVisibilityRequest(ctx, &request)
 	return nil
 }
 
@@ -202,6 +237,7 @@ func randomArchiveRequest() (ArchiveRequest, uint64) {
 		DomainID:   fmt.Sprintf("%v", rand.Intn(1000)),
 		WorkflowID: fmt.Sprintf("%v", rand.Intn(1000)),
 		RunID:      fmt.Sprintf("%v", rand.Intn(1000)),
+		Targets:    []archivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 	}
 	return ar, hash(ar)
 }

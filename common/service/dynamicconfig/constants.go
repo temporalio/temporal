@@ -146,7 +146,7 @@ var keys = map[Key]string{
 	TimerProcessorMaxPollIntervalJitterCoefficient:        "history.timerProcessorMaxPollIntervalJitterCoefficient",
 	TimerProcessorMaxTimeShift:                            "history.timerProcessorMaxTimeShift",
 	TimerProcessorHistoryArchivalSizeLimit:                "history.timerProcessorHistoryArchivalSizeLimit",
-	TimerProcessorHistoryArchivalTimeLimit:                "history.timerProcessorHistoryArchivalTimeLimit",
+	TimerProcessorArchivalTimeLimit:                       "history.TimerProcessorArchivalTimeLimit",
 	TransferTaskBatchSize:                                 "history.transferTaskBatchSize",
 	TransferProcessorFailoverMaxPollRPS:                   "history.transferProcessorFailoverMaxPollRPS",
 	TransferProcessorMaxPollRPS:                           "history.transferProcessorMaxPollRPS",
@@ -416,8 +416,8 @@ const (
 	TimerProcessorMaxTimeShift
 	// TimerProcessorHistoryArchivalSizeLimit is the max history size for inline archival
 	TimerProcessorHistoryArchivalSizeLimit
-	// TimerProcessorHistoryArchivalTimeLimit is the upper time limit for inline history archival
-	TimerProcessorHistoryArchivalTimeLimit
+	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
+	TimerProcessorArchivalTimeLimit
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor

@@ -138,3 +138,12 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 	}
 	return nil
 }
+
+// ConvertSearchAttrToBytes converts search attribute value from string back to byte array
+func ConvertSearchAttrToBytes(searchAttrStr map[string]string) map[string][]byte {
+	searchAttr := make(map[string][]byte)
+	for k, v := range searchAttrStr {
+		searchAttr[k] = []byte(v)
+	}
+	return searchAttr
+}
