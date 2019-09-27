@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/yarpc/yarpcerrors"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
@@ -46,6 +48,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -54,7 +57,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 const (
@@ -81,7 +83,7 @@ type (
 		rateLimiter               quotas.Policy
 		config                    *Config
 		versionChecker            *versionChecker
-		domainHandler             *domainHandlerImpl
+		domainHandler             domain.Handler
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
 		domainReplicationQueue    persistence.DomainReplicationQueue
@@ -128,11 +130,11 @@ var (
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
-	errInvalidRetentionPeriod                     = &gen.BadRequestError{Message: "A valid retention period is not set on request."}
-	errInvalidArchivalConfig                      = &gen.BadRequestError{Message: "Invalid to enable archival without specifying a uri."}
 
 	// err for archival
 	errHistoryHasPassedRetentionPeriod = &gen.BadRequestError{Message: "Requested workflow history has passed retention period."}
+	// the following errors represents bad user input
+	errURIUpdate = &shared.BadRequestError{Message: "Cannot update existing archival URI"}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -142,13 +144,6 @@ var (
 	errTaskListTooLong     = &gen.BadRequestError{Message: "TaskList length exceeds limit."}
 	errRequestIDTooLong    = &gen.BadRequestError{Message: "RequestID length exceeds limit."}
 	errIdentityTooLong     = &gen.BadRequestError{Message: "Identity length exceeds limit."}
-
-	// err indicating that this cluster is not the master, so cannot do domain registration or update
-	errNotMasterCluster                = &gen.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
-	errCannotAddClusterToLocalDomain   = &gen.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
-	errCannotModifyClustersFromDomain  = &gen.BadRequestError{Message: "Cannot modify existing replicated clusters from a domain."}
-	errActiveClusterNotInClusters      = &gen.BadRequestError{Message: "Active cluster is not contained in all clusters."}
-	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
 
 	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
@@ -184,12 +179,13 @@ func NewWorkflowHandler(
 			},
 		),
 		versionChecker: &versionChecker{checkVersion: config.EnableClientVersionCheck()},
-		domainHandler: newDomainHandler(
-			config,
+		domainHandler: domain.NewHandler(
+			config.MinRetentionDays(),
+			config.MaxBadBinaries,
 			sVice.GetLogger(),
 			metadataMgr,
 			sVice.GetClusterMetadata(),
-			NewDomainReplicator(replicationMessageSink, sVice.GetLogger()),
+			domain.NewDomainReplicator(replicationMessageSink, sVice.GetLogger()),
 			sVice.GetArchivalMetadata(),
 			sVice.GetArchiverProvider(),
 		),
@@ -262,7 +258,19 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(err, scope)
 	}
 
-	err := wh.domainHandler.registerDomain(ctx, registerRequest)
+	if registerRequest == nil {
+		return errRequestNotSet
+	}
+
+	if err := wh.checkPermission(registerRequest.SecurityToken); err != nil {
+		return err
+	}
+
+	if registerRequest.GetName() == "" {
+		return errDomainNotSet
+	}
+
+	err := wh.domainHandler.RegisterDomain(ctx, registerRequest)
 	if err != nil {
 		return wh.error(err, scope)
 	}
@@ -283,7 +291,11 @@ func (wh *WorkflowHandler) ListDomains(
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.domainHandler.listDomains(ctx, listRequest)
+	if listRequest == nil {
+		return nil, errRequestNotSet
+	}
+
+	resp, err := wh.domainHandler.ListDomains(ctx, listRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)
 	}
@@ -304,7 +316,15 @@ func (wh *WorkflowHandler) DescribeDomain(
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.domainHandler.describeDomain(ctx, describeRequest)
+	if describeRequest == nil {
+		return nil, errRequestNotSet
+	}
+
+	if describeRequest.GetName() == "" && describeRequest.GetUUID() == "" {
+		return nil, errDomainNotSet
+	}
+
+	resp, err := wh.domainHandler.DescribeDomain(ctx, describeRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)
 	}
@@ -325,7 +345,22 @@ func (wh *WorkflowHandler) UpdateDomain(
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.domainHandler.updateDomain(ctx, updateRequest)
+	if updateRequest == nil {
+		return nil, errRequestNotSet
+	}
+
+	// don't require permission for failover request
+	if !isFailoverRequest(updateRequest) {
+		if err := wh.checkPermission(updateRequest.SecurityToken); err != nil {
+			return nil, err
+		}
+	}
+
+	if updateRequest.GetName() == "" {
+		return nil, errDomainNotSet
+	}
+
+	resp, err := wh.domainHandler.UpdateDomain(ctx, updateRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)
 	}
@@ -345,7 +380,19 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return wh.error(err, scope)
 	}
 
-	err := wh.domainHandler.deprecateDomain(ctx, deprecateRequest)
+	if deprecateRequest == nil {
+		return errRequestNotSet
+	}
+
+	if err := wh.checkPermission(deprecateRequest.SecurityToken); err != nil {
+		return err
+	}
+
+	if deprecateRequest.GetName() == "" {
+		return errDomainNotSet
+	}
+
+	err := wh.domainHandler.DeprecateDomain(ctx, deprecateRequest)
 	if err != nil {
 		return wh.error(err, scope)
 	}
@@ -3218,22 +3265,6 @@ func validateExecution(w *gen.WorkflowExecution) error {
 	return nil
 }
 
-func getDomainStatus(info *persistence.DomainInfo) *gen.DomainStatus {
-	switch info.Status {
-	case persistence.DomainStatusRegistered:
-		v := gen.DomainStatusRegistered
-		return &v
-	case persistence.DomainStatusDeprecated:
-		v := gen.DomainStatusDeprecated
-		return &v
-	case persistence.DomainStatusDeleted:
-		v := gen.DomainStatusDeleted
-		return &v
-	}
-
-	return nil
-}
-
 func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	ctx context.Context,
 	scope metrics.Scope,
@@ -3466,14 +3497,6 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 	return resp, nil
 }
 
-type domainWrapper struct {
-	domain string
-}
-
-func (d domainWrapper) GetDomain() string {
-	return d.domain
-}
-
 // GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
 func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	ctx context.Context,
@@ -3514,4 +3537,28 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 			LastRetrivedMessageId: common.Int64Ptr(int64(lastMessageID)),
 		},
 	}, nil
+}
+
+func (wh *WorkflowHandler) checkPermission(
+	securityToken *string,
+) error {
+
+	if wh.config.EnableAdminProtection() {
+		if securityToken == nil {
+			return errNoPermission
+		}
+		requiredToken := wh.config.AdminOperationToken()
+		if *securityToken != requiredToken {
+			return errNoPermission
+		}
+	}
+	return nil
+}
+
+type domainWrapper struct {
+	domain string
+}
+
+func (d domainWrapper) GetDomain() string {
+	return d.domain
 }

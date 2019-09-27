@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package domain
 
 import (
 	"context"
@@ -50,16 +50,17 @@ type (
 		suite.Suite
 		persistencetests.TestBase
 
-		config               *Config
+		minRetentionDays     int
+		maxBadBinaryCount    int
 		logger               log.Logger
 		metadataMgr          persistence.MetadataManager
 		mockClusterMetadata  *mocks.ClusterMetadata
 		mockProducer         *mocks.KafkaProducer
-		mockDomainReplicator DomainReplicator
+		mockDomainReplicator Replicator
 		archivalMetadata     archiver.ArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
 
-		handler *domainHandlerImpl
+		handler *HandlerImpl
 	}
 )
 
@@ -88,15 +89,30 @@ func (s *domainHandlerCommonSuite) TearDownSuite() {
 func (s *domainHandlerCommonSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
-	s.config = NewConfig(dcCollection, numHistoryShards, false)
+	s.minRetentionDays = 1
+	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataProxy
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
-	s.archivalMetadata = archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalDomainDefaults{})
+	s.archivalMetadata = archiver.NewArchivalMetadata(
+		dcCollection,
+		"",
+		false,
+		"",
+		false,
+		&config.ArchivalDomainDefaults{},
+	)
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
-
-	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
-		s.mockDomainReplicator, s.archivalMetadata, s.mockArchiverProvider)
+	s.handler = NewHandler(
+		s.minRetentionDays,
+		dc.GetIntPropertyFilteredByDomain(s.maxBadBinaryCount),
+		logger,
+		s.metadataMgr,
+		s.ClusterMetadata,
+		s.mockDomainReplicator,
+		s.archivalMetadata,
+		s.mockArchiverProvider,
+	)
 }
 
 func (s *domainHandlerCommonSuite) TearDownTest() {
@@ -255,7 +271,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			ClusterName: common.StringPtr(replicationConfig.ClusterName),
 		})
 	}
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName1),
 		Description:                            common.StringPtr(description1),
 		OwnerEmail:                             common.StringPtr(email1),
@@ -284,7 +300,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 		})
 	}
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
-	err = s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err = s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName2),
 		Description:                            common.StringPtr(description2),
 		OwnerEmail:                             common.StringPtr(email2),
@@ -301,7 +317,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 	pagesize := int32(1)
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
-		resp, err := s.handler.listDomains(context.Background(), &shared.ListDomainsRequest{
+		resp, err := s.handler.ListDomains(context.Background(), &shared.ListDomainsRequest{
 			PageSize:      common.Int32Ptr(pagesize),
 			NextPageToken: token,
 		})
@@ -375,7 +391,7 @@ func (s *domainHandlerCommonSuite) TestRegisterDomain_InvalidRetentionPeriod() {
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(0)),
 		IsGlobalDomain:                         common.BoolPtr(false),
 	}
-	err := s.handler.registerDomain(context.Background(), registerRequest)
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
 }
 
@@ -387,7 +403,7 @@ func (s *domainHandlerCommonSuite) TestUpdateDomain_InvalidRetentionPeriod() {
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
 		IsGlobalDomain:                         common.BoolPtr(false),
 	}
-	err := s.handler.registerDomain(context.Background(), registerRequest)
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
 	s.NoError(err)
 
 	updateRequest := &workflow.UpdateDomainRequest{
@@ -396,7 +412,7 @@ func (s *domainHandlerCommonSuite) TestUpdateDomain_InvalidRetentionPeriod() {
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(-1)),
 		},
 	}
-	_, err = s.handler.updateDomain(context.Background(), updateRequest)
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
 }
 

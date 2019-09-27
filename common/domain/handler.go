@@ -18,7 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination handler_mock.go
+
+package domain
 
 import (
 	"context"
@@ -27,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -36,58 +39,77 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
-	domainHandlerImpl struct {
-		config              *Config
+	// Handler is the domain operation handler
+	Handler interface {
+		DeprecateDomain(
+			ctx context.Context,
+			deprecateRequest *shared.DeprecateDomainRequest,
+		) error
+		DescribeDomain(
+			ctx context.Context,
+			describeRequest *shared.DescribeDomainRequest,
+		) (*shared.DescribeDomainResponse, error)
+		ListDomains(
+			ctx context.Context,
+			listRequest *shared.ListDomainsRequest,
+		) (*shared.ListDomainsResponse, error)
+		RegisterDomain(
+			ctx context.Context,
+			registerRequest *shared.RegisterDomainRequest,
+		) error
+		UpdateDomain(
+			ctx context.Context,
+			updateRequest *shared.UpdateDomainRequest,
+		) (*shared.UpdateDomainResponse, error)
+	}
+
+	// HandlerImpl is the domain operation handler implementation
+	HandlerImpl struct {
+		maxBadBinaryCount   dynamicconfig.IntPropertyFnWithDomainFilter
 		logger              log.Logger
 		metadataMgr         persistence.MetadataManager
 		clusterMetadata     cluster.Metadata
-		domainReplicator    DomainReplicator
-		domainAttrValidator *domainAttrValidatorImpl
+		domainReplicator    Replicator
+		domainAttrValidator *AttrValidatorImpl
 		archivalMetadata    archiver.ArchivalMetadata
 		archiverProvider    provider.ArchiverProvider
 	}
 )
 
-// newDomainHandler create a new domain handler
-func newDomainHandler(config *Config,
+var _ Handler = (*HandlerImpl)(nil)
+
+// NewHandler create a new domain handler
+func NewHandler(
+	minRetentionDays int,
+	maxBadBinaryCount dynamicconfig.IntPropertyFnWithDomainFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
-	domainReplicator DomainReplicator,
+	domainReplicator Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
-) *domainHandlerImpl {
-	return &domainHandlerImpl{
-		config:              config,
+) *HandlerImpl {
+	return &HandlerImpl{
+		maxBadBinaryCount:   maxBadBinaryCount,
 		logger:              logger,
 		metadataMgr:         metadataMgr,
 		clusterMetadata:     clusterMetadata,
 		domainReplicator:    domainReplicator,
-		domainAttrValidator: newDomainAttrValidator(clusterMetadata, int32(config.MinRetentionDays())),
+		domainAttrValidator: newAttrValidator(clusterMetadata, int32(minRetentionDays)),
 		archivalMetadata:    archivalMetadata,
 		archiverProvider:    archiverProvider,
 	}
 }
 
-func (d *domainHandlerImpl) registerDomain(
+// RegisterDomain register a new domain
+func (d *HandlerImpl) RegisterDomain(
 	ctx context.Context,
 	registerRequest *shared.RegisterDomainRequest,
-) (retError error) {
-
-	if registerRequest == nil {
-		return errRequestNotSet
-	}
-
-	if err := d.checkPermission(registerRequest.SecurityToken); err != nil {
-		return err
-	}
-
-	if registerRequest.GetName() == "" {
-		return errDomainNotSet
-	}
+) error {
 
 	if !d.clusterMetadata.IsGlobalDomainEnabled() {
 		if registerRequest.GetIsGlobalDomain() {
@@ -181,9 +203,9 @@ func (d *domainHandlerImpl) registerDomain(
 	config := &persistence.DomainConfig{
 		Retention:                registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
-		HistoryArchivalStatus:    nextHistoryArchivalState.status,
+		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
-		VisibilityArchivalStatus: nextVisibilityArchivalState.status,
+		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
 		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
@@ -252,14 +274,11 @@ func (d *domainHandlerImpl) registerDomain(
 	return nil
 }
 
-func (d *domainHandlerImpl) listDomains(
+// ListDomains list all domains
+func (d *HandlerImpl) ListDomains(
 	ctx context.Context,
 	listRequest *shared.ListDomainsRequest,
-) (response *shared.ListDomainsResponse, retError error) {
-
-	if listRequest == nil {
-		return nil, errRequestNotSet
-	}
+) (*shared.ListDomainsResponse, error) {
 
 	pageSize := 100
 	if listRequest.GetPageSize() != 0 {
@@ -285,7 +304,7 @@ func (d *domainHandlerImpl) listDomains(
 		domains = append(domains, desc)
 	}
 
-	response = &shared.ListDomainsResponse{
+	response := &shared.ListDomainsResponse{
 		Domains:       domains,
 		NextPageToken: resp.NextPageToken,
 	}
@@ -293,18 +312,11 @@ func (d *domainHandlerImpl) listDomains(
 	return response, nil
 }
 
-func (d *domainHandlerImpl) describeDomain(
+// DescribeDomain describe the domain
+func (d *HandlerImpl) DescribeDomain(
 	ctx context.Context,
 	describeRequest *shared.DescribeDomainRequest,
-) (response *shared.DescribeDomainResponse, retError error) {
-
-	if describeRequest == nil {
-		return nil, errRequestNotSet
-	}
-
-	if describeRequest.GetName() == "" && describeRequest.GetUUID() == "" {
-		return nil, errDomainNotSet
-	}
+) (*shared.DescribeDomainResponse, error) {
 
 	// TODO, we should migrate the non global domain to new table, see #773
 	req := &persistence.GetDomainRequest{
@@ -316,7 +328,7 @@ func (d *domainHandlerImpl) describeDomain(
 		return nil, err
 	}
 
-	response = &shared.DescribeDomainResponse{
+	response := &shared.DescribeDomainResponse{
 		IsGlobalDomain:  common.BoolPtr(resp.IsGlobalDomain),
 		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
 	}
@@ -324,25 +336,11 @@ func (d *domainHandlerImpl) describeDomain(
 	return response, nil
 }
 
-func (d *domainHandlerImpl) updateDomain(
+// UpdateDomain update the domain
+func (d *HandlerImpl) UpdateDomain(
 	ctx context.Context,
 	updateRequest *shared.UpdateDomainRequest,
-) (resp *shared.UpdateDomainResponse, retError error) {
-
-	if updateRequest == nil {
-		return nil, errRequestNotSet
-	}
-
-	// don't require permission for failover request
-	if !isFailoverRequest(updateRequest) {
-		if err := d.checkPermission(updateRequest.SecurityToken); err != nil {
-			return nil, err
-		}
-	}
-
-	if updateRequest.GetName() == "" {
-		return nil, errDomainNotSet
-	}
+) (*shared.UpdateDomainResponse, error) {
 
 	// must get the metadata (notificationVersion) first
 	// this version can be regarded as the lock on the v2 domain table
@@ -366,8 +364,8 @@ func (d *domainHandlerImpl) updateDomain(
 	failoverNotificationVersion := getResponse.FailoverNotificationVersion
 	isGlobalDomain := getResponse.IsGlobalDomain
 
-	currentHistoryArchivalState := &archivalState{
-		status: config.HistoryArchivalStatus,
+	currentHistoryArchivalState := &ArchivalState{
+		Status: config.HistoryArchivalStatus,
 		URI:    config.HistoryArchivalURI,
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
@@ -385,8 +383,8 @@ func (d *domainHandlerImpl) updateDomain(
 		}
 	}
 
-	currentVisibilityArchivalState := &archivalState{
-		status: config.VisibilityArchivalStatus,
+	currentVisibilityArchivalState := &ArchivalState{
+		Status: config.VisibilityArchivalStatus,
 		URI:    config.VisibilityArchivalURI,
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
@@ -437,16 +435,16 @@ func (d *domainHandlerImpl) updateDomain(
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
-			config.HistoryArchivalStatus = nextHistoryArchivalState.status
+			config.HistoryArchivalStatus = nextHistoryArchivalState.Status
 			config.HistoryArchivalURI = nextHistoryArchivalState.URI
 		}
 		if visibilityArchivalConfigChanged {
 			configurationChanged = true
-			config.VisibilityArchivalStatus = nextVisibilityArchivalState.status
+			config.VisibilityArchivalStatus = nextVisibilityArchivalState.Status
 			config.VisibilityArchivalURI = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
-			maxLength := d.config.MaxBadBinaries(updateRequest.GetName())
+			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
 			// only do merging
 			config.BadBinaries = d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
 			if len(config.BadBinaries.Binaries) > maxLength {
@@ -581,27 +579,16 @@ func (d *domainHandlerImpl) updateDomain(
 	return response, nil
 }
 
-func (d *domainHandlerImpl) deprecateDomain(
+// DeprecateDomain deprecates a domain
+func (d *HandlerImpl) DeprecateDomain(
 	ctx context.Context,
 	deprecateRequest *shared.DeprecateDomainRequest,
-) (retError error) {
-
-	if deprecateRequest == nil {
-		return errRequestNotSet
-	}
-
-	if err := d.checkPermission(deprecateRequest.SecurityToken); err != nil {
-		return err
-	}
+) error {
 
 	clusterMetadata := d.clusterMetadata
 	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
 	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
 		return errNotMasterCluster
-	}
-
-	if deprecateRequest.GetName() == "" {
-		return errDomainNotSet
 	}
 
 	// must get the metadata (notificationVersion) first
@@ -643,14 +630,10 @@ func (d *domainHandlerImpl) deprecateDomain(
 	if err != nil {
 		return err
 	}
-
-	if err != nil {
-		return errDomainNotSet
-	}
 	return nil
 }
 
-func (d *domainHandlerImpl) createResponse(
+func (d *HandlerImpl) createResponse(
 	ctx context.Context,
 	info *persistence.DomainInfo,
 	config *persistence.DomainConfig,
@@ -691,7 +674,7 @@ func (d *domainHandlerImpl) createResponse(
 	return infoResult, configResult, replicationConfigResult
 }
 
-func (d *domainHandlerImpl) mergeBadBinaries(
+func (d *HandlerImpl) mergeBadBinaries(
 	old map[string]*shared.BadBinaryInfo,
 	new map[string]*shared.BadBinaryInfo,
 	createTimeNano int64,
@@ -709,7 +692,7 @@ func (d *domainHandlerImpl) mergeBadBinaries(
 	}
 }
 
-func (d *domainHandlerImpl) mergeDomainData(
+func (d *HandlerImpl) mergeDomainData(
 	old map[string]string,
 	new map[string]string,
 ) map[string]string {
@@ -723,30 +706,14 @@ func (d *domainHandlerImpl) mergeDomainData(
 	return old
 }
 
-func (d *domainHandlerImpl) checkPermission(
-	securityToken *string,
-) error {
-
-	if d.config.EnableAdminProtection() {
-		if securityToken == nil {
-			return errNoPermission
-		}
-		requiredToken := d.config.AdminOperationToken()
-		if *securityToken != requiredToken {
-			return errNoPermission
-		}
-	}
-	return nil
-}
-
-func (d *domainHandlerImpl) toArchivalRegisterEvent(
+func (d *HandlerImpl) toArchivalRegisterEvent(
 	status *shared.ArchivalStatus,
 	URI string,
 	defaultStatus shared.ArchivalStatus,
 	defaultURI string,
-) (*archivalEvent, error) {
+) (*ArchivalEvent, error) {
 
-	event := &archivalEvent{
+	event := &ArchivalEvent{
 		status:     status,
 		URI:        URI,
 		defaultURI: defaultURI,
@@ -760,13 +727,13 @@ func (d *domainHandlerImpl) toArchivalRegisterEvent(
 	return event, nil
 }
 
-func (d *domainHandlerImpl) toArchivalUpdateEvent(
+func (d *HandlerImpl) toArchivalUpdateEvent(
 	status *shared.ArchivalStatus,
 	URI string,
 	defaultURI string,
-) (*archivalEvent, error) {
+) (*ArchivalEvent, error) {
 
-	event := &archivalEvent{
+	event := &ArchivalEvent{
 		status:     status,
 		URI:        URI,
 		defaultURI: defaultURI,
@@ -777,7 +744,7 @@ func (d *domainHandlerImpl) toArchivalUpdateEvent(
 	return event, nil
 }
 
-func (d *domainHandlerImpl) validateHistoryArchivalURI(URIString string) error {
+func (d *HandlerImpl) validateHistoryArchivalURI(URIString string) error {
 	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
@@ -791,7 +758,7 @@ func (d *domainHandlerImpl) validateHistoryArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-func (d *domainHandlerImpl) validateVisibilityArchivalURI(URIString string) error {
+func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
@@ -803,4 +770,20 @@ func (d *domainHandlerImpl) validateVisibilityArchivalURI(URIString string) erro
 	}
 
 	return archiver.ValidateURI(URI)
+}
+
+func getDomainStatus(info *persistence.DomainInfo) *shared.DomainStatus {
+	switch info.Status {
+	case persistence.DomainStatusRegistered:
+		v := shared.DomainStatusRegistered
+		return &v
+	case persistence.DomainStatusDeprecated:
+		v := shared.DomainStatusDeprecated
+		return &v
+	case persistence.DomainStatusDeleted:
+		v := shared.DomainStatusDeleted
+		return &v
+	}
+
+	return nil
 }

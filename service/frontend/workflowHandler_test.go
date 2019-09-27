@@ -43,6 +43,7 @@ import (
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
@@ -654,8 +655,8 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mService := cs.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean, s.mockArchivalMetadata, s.mockArchiverProvider)
@@ -681,8 +682,8 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mService := cs.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.mockClientBean, s.mockArchivalMetadata, s.mockArchiverProvider)
@@ -711,8 +712,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingArchivalUR
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -737,7 +738,6 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingArchivalUR
 	)
 	_, err := wh.UpdateDomain(context.Background(), updateReq)
 	assert.Error(s.T(), err)
-	assert.Equal(s.T(), errURIUpdate, err)
 }
 
 func (s *workflowHandlerSuite) TestUpdateDomain_Failure_InvalidArchivalURI() {
@@ -747,8 +747,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_InvalidArchivalURI() {
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -780,8 +780,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
@@ -824,8 +824,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForA
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: "some random history URI"},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: "some random visibility URI"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: "some random history URI"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: "some random visibility URI"},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
@@ -857,8 +857,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
@@ -901,8 +901,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
@@ -945,8 +945,8 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 		NotificationVersion: int64(0),
 	}, nil)
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	mMetadataManager.On("UpdateDomain", mock.Anything).Return(nil)
@@ -1046,8 +1046,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -1066,8 +1066,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -1086,8 +1086,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: ""},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: ""},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -1207,8 +1207,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainNotConfi
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
-		&archivalState{status: shared.ArchivalStatusDisabled, URI: "uri without scheme"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusDisabled, URI: "uri without scheme"},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -1229,8 +1229,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: "uri without scheme"},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -1250,8 +1250,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 	config := s.newConfig()
 	mMetadataManager := &mocks.MetadataManager{}
 	getDomainResp := persistenceGetDomainResponse(
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&archivalState{status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&domain.ArchivalState{Status: shared.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
 	mMetadataManager.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
@@ -1428,7 +1428,7 @@ func updateRequest(
 	}
 }
 
-func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState *archivalState) *persistence.GetDomainResponse {
+func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState *domain.ArchivalState) *persistence.GetDomainResponse {
 	return &persistence.GetDomainResponse{
 		Info: &persistence.DomainInfo{
 			ID:          "test-id",
@@ -1441,9 +1441,9 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 		Config: &persistence.DomainConfig{
 			Retention:                1,
 			EmitMetric:               true,
-			HistoryArchivalStatus:    historyArchivalState.status,
+			HistoryArchivalStatus:    historyArchivalState.Status,
 			HistoryArchivalURI:       historyArchivalState.URI,
-			VisibilityArchivalStatus: visibilityArchivalState.status,
+			VisibilityArchivalStatus: visibilityArchivalState.Status,
 			VisibilityArchivalURI:    visibilityArchivalState.URI,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{

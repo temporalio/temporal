@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package domain
 
 import (
 	"context"
@@ -47,15 +47,16 @@ type (
 		suite.Suite
 		persistencetests.TestBase
 
-		config               *Config
+		minRetentionDays     int
+		maxBadBinaryCount    int
 		logger               log.Logger
 		metadataMgr          persistence.MetadataManager
 		mockProducer         *mocks.KafkaProducer
-		mockDomainReplicator DomainReplicator
+		mockDomainReplicator Replicator
 		archivalMetadata     archiver.ArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
 
-		handler *domainHandlerImpl
+		handler *HandlerImpl
 	}
 )
 
@@ -82,15 +83,30 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TearDownSuite() 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
-	s.config = NewConfig(dcCollection, numHistoryShards, false)
+	s.minRetentionDays = 1
+	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataProxy
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
-	s.archivalMetadata = archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalDomainDefaults{})
+	s.archivalMetadata = archiver.NewArchivalMetadata(
+		dcCollection,
+		"",
+		false,
+		"",
+		false,
+		&config.ArchivalDomainDefaults{},
+	)
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
-
-	s.handler = newDomainHandler(s.config, logger, s.metadataMgr, s.ClusterMetadata,
-		s.mockDomainReplicator, s.archivalMetadata, s.mockArchiverProvider)
+	s.handler = NewHandler(
+		s.minRetentionDays,
+		dc.GetIntPropertyFilteredByDomain(s.maxBadBinaryCount),
+		logger,
+		s.metadataMgr,
+		s.ClusterMetadata,
+		s.mockDomainReplicator,
+		s.archivalMetadata,
+		s.mockArchiverProvider,
+	)
 }
 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TearDownTest() {
@@ -109,14 +125,14 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	}
 
 	retention := int32(1)
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 	})
 	s.Nil(err)
 
-	resp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	resp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.Nil(err)
@@ -170,7 +186,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		})
 	}
 
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Description:                            common.StringPtr(description),
 		OwnerEmail:                             common.StringPtr(email),
@@ -183,7 +199,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	})
 	s.Nil(err)
 
-	resp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	resp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.Nil(err)
@@ -230,7 +246,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 	}
 	isGlobalDomain := false
 
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Description:                            common.StringPtr(description),
 		OwnerEmail:                             common.StringPtr(email),
@@ -272,23 +288,35 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		s.Equal(isGlobalDomain, isGlobalDomain)
 	}
 
-	updateResp, err := s.handler.updateDomain(context.Background(), &shared.UpdateDomainRequest{
+	updateResp, err := s.handler.UpdateDomain(context.Background(), &shared.UpdateDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.Nil(err)
-	fnTest(updateResp.DomainInfo, updateResp.Configuration, updateResp.ReplicationConfiguration, updateResp.GetIsGlobalDomain(), updateResp.GetFailoverVersion())
+	fnTest(
+		updateResp.DomainInfo,
+		updateResp.Configuration,
+		updateResp.ReplicationConfiguration,
+		updateResp.GetIsGlobalDomain(),
+		updateResp.GetFailoverVersion(),
+	)
 
-	getResp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	getResp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.Nil(err)
-	fnTest(getResp.DomainInfo, getResp.Configuration, getResp.ReplicationConfiguration, getResp.GetIsGlobalDomain(), getResp.GetFailoverVersion())
+	fnTest(
+		getResp.DomainInfo,
+		getResp.Configuration,
+		getResp.ReplicationConfiguration,
+		getResp.GetIsGlobalDomain(),
+		getResp.GetFailoverVersion(),
+	)
 }
 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDomain_LocalDomain_AllAttrSet() {
 	domainName := s.getRandomDomainName()
 	isGlobalDomain := false
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
@@ -336,7 +364,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		s.Equal(isGlobalDomain, isGlobalDomain)
 	}
 
-	updateResp, err := s.handler.updateDomain(context.Background(), &shared.UpdateDomainRequest{
+	updateResp, err := s.handler.UpdateDomain(context.Background(), &shared.UpdateDomainRequest{
 		Name: common.StringPtr(domainName),
 		UpdatedInfo: &shared.UpdateDomainInfo{
 			Description: common.StringPtr(description),
@@ -358,13 +386,25 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		},
 	})
 	s.Nil(err)
-	fnTest(updateResp.DomainInfo, updateResp.Configuration, updateResp.ReplicationConfiguration, updateResp.GetIsGlobalDomain(), updateResp.GetFailoverVersion())
+	fnTest(
+		updateResp.DomainInfo,
+		updateResp.Configuration,
+		updateResp.ReplicationConfiguration,
+		updateResp.GetIsGlobalDomain(),
+		updateResp.GetFailoverVersion(),
+	)
 
-	getResp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	getResp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.Nil(err)
-	fnTest(getResp.DomainInfo, getResp.Configuration, getResp.ReplicationConfiguration, getResp.GetIsGlobalDomain(), getResp.GetFailoverVersion())
+	fnTest(
+		getResp.DomainInfo,
+		getResp.Configuration,
+		getResp.ReplicationConfiguration,
+		getResp.GetIsGlobalDomain(),
+		getResp.GetFailoverVersion(),
+	)
 }
 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetDomain_GlobalDomain_AllDefault() {
@@ -377,13 +417,13 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		})
 	}
 
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:           common.StringPtr(domainName),
 		IsGlobalDomain: common.BoolPtr(isGlobalDomain),
 	})
 	s.IsType(&shared.BadRequestError{}, err)
 
-	resp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	resp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.IsType(&shared.EntityNotExistsError{}, err)
@@ -411,7 +451,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalDomain := true
 
-	err := s.handler.registerDomain(context.Background(), &shared.RegisterDomainRequest{
+	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domainName),
 		Description:                            common.StringPtr(description),
 		OwnerEmail:                             common.StringPtr(email),
@@ -424,7 +464,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	})
 	s.IsType(&shared.BadRequestError{}, err)
 
-	resp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	resp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.IsType(&shared.EntityNotExistsError{}, err)
@@ -479,7 +519,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 	})
 	s.Nil(err)
 
-	resp, err := s.handler.updateDomain(context.Background(), &shared.UpdateDomainRequest{
+	resp, err := s.handler.UpdateDomain(context.Background(), &shared.UpdateDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.IsType(&shared.BadRequestError{}, err)
@@ -539,7 +579,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 	})
 	s.Nil(err)
 
-	updateResp, err := s.handler.updateDomain(context.Background(), &shared.UpdateDomainRequest{
+	updateResp, err := s.handler.UpdateDomain(context.Background(), &shared.UpdateDomainRequest{
 		Name: common.StringPtr(domainName),
 		UpdatedInfo: &shared.UpdateDomainInfo{
 			Description: common.StringPtr(description),
@@ -652,20 +692,32 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
-	updateResp, err := s.handler.updateDomain(context.Background(), &shared.UpdateDomainRequest{
+	updateResp, err := s.handler.UpdateDomain(context.Background(), &shared.UpdateDomainRequest{
 		Name: common.StringPtr(domainName),
 		ReplicationConfiguration: &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
 		},
 	})
 	s.Nil(err)
-	fnTest(updateResp.DomainInfo, updateResp.Configuration, updateResp.ReplicationConfiguration, updateResp.GetIsGlobalDomain(), updateResp.GetFailoverVersion())
+	fnTest(
+		updateResp.DomainInfo,
+		updateResp.Configuration,
+		updateResp.ReplicationConfiguration,
+		updateResp.GetIsGlobalDomain(),
+		updateResp.GetFailoverVersion(),
+	)
 
-	getResp, err := s.handler.describeDomain(context.Background(), &shared.DescribeDomainRequest{
+	getResp, err := s.handler.DescribeDomain(context.Background(), &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 	})
 	s.Nil(err)
-	fnTest(getResp.DomainInfo, getResp.Configuration, getResp.ReplicationConfiguration, getResp.GetIsGlobalDomain(), getResp.GetFailoverVersion())
+	fnTest(
+		getResp.DomainInfo,
+		getResp.Configuration,
+		getResp.ReplicationConfiguration,
+		getResp.GetIsGlobalDomain(),
+		getResp.GetFailoverVersion(),
+	)
 }
 
 func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) getRandomDomainName() string {

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package domain
 
 import (
 	"errors"
@@ -40,8 +40,8 @@ var (
 // NOTE: the counterpart of domain replication receiving logic is in service/worker package
 
 type (
-	// DomainReplicator is the interface which can replicate the domain
-	DomainReplicator interface {
+	// Replicator is the interface which can replicate the domain
+	Replicator interface {
 		HandleTransmissionTask(domainOperation replicator.DomainOperation, info *persistence.DomainInfo,
 			config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error
@@ -54,7 +54,7 @@ type (
 )
 
 // NewDomainReplicator create a new instance of domain replicator
-func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.Logger) DomainReplicator {
+func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.Logger) Replicator {
 	return &domainReplicatorImpl{
 		replicationMessageSink: replicationMessageSink,
 		logger:                 logger,
