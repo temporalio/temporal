@@ -759,6 +759,11 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
 	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}],"search_after":[1,"t"]}`, dsl)
+
+	// invalid union injection
+	request.Query = `WorkflowID = 'wid' union select * from dummy`
+	_, err = v.getESQueryDSL(request, token)
+	s.NotNil(err)
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {

@@ -62,7 +62,7 @@ func hashesEqual(a []uint64, b []uint64) bool {
 	return true
 }
 
-func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger {
+func tagLoggerWithHistoryRequest(logger log.Logger, request *ArchiveRequest) log.Logger {
 	return logger.WithTags(
 		tag.ShardID(request.ShardID),
 		tag.ArchivalRequestDomainID(request.DomainID),
@@ -77,11 +77,29 @@ func tagLoggerWithRequest(logger log.Logger, request ArchiveRequest) log.Logger 
 	)
 }
 
+func tagLoggerWithVisibilityRequest(logger log.Logger, request *ArchiveRequest) log.Logger {
+	return logger.WithTags(
+		tag.ArchivalRequestDomainID(request.DomainID),
+		tag.ArchivalRequestDomainName(request.DomainName),
+		tag.ArchivalRequestWorkflowID(request.WorkflowID),
+		tag.ArchivalRequestRunID(request.RunID),
+		tag.ArchivalURI(request.URI),
+	)
+}
+
 func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) log.Logger {
 	return logger.WithTags(
 		tag.WorkflowID(activityInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
 		tag.Attempt(activityInfo.Attempt))
+}
+
+func convertSearchAttributesToString(searchAttr map[string][]byte) map[string]string {
+	searchAttrStr := make(map[string]string)
+	for k, v := range searchAttr {
+		searchAttrStr[k] = string(v)
+	}
+	return searchAttrStr
 }
 
 func contextExpired(ctx context.Context) bool {

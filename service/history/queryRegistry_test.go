@@ -44,47 +44,86 @@ func (s *QueryRegistrySuite) SetupTest() {
 }
 
 func (s *QueryRegistrySuite) TestQueryRegistry() {
-	qr := NewQueryRegistry()
-	var queries []Query
+	qr := newQueryRegistry()
+	var ids []string
 	for i := 0; i < 10; i++ {
-		queries = append(queries, qr.BufferQuery(&shared.WorkflowQuery{}))
+		id, _, _ := qr.bufferQuery(&shared.WorkflowQuery{})
+		ids = append(ids, id)
 	}
-	s.Len(qr.GetBuffered(), 10)
-	s.Len(qr.GetStarted(), 0)
+	s.assertHasQueries(qr, true, false, false)
+	s.assertQuerySizes(qr, 10, 0, 0)
+
+	found, err := qr.getQuerySnapshot(ids[0])
+	s.NoError(err)
+	s.NotNil(found)
+	notFound, err := qr.getQuerySnapshot("not_exists")
+	s.Error(err)
+	s.Nil(notFound)
+
 	for i := 0; i < 5; i++ {
-		changed, err := queries[i].RecordEvent(QueryEventStart, nil)
+		changed, err := qr.recordEvent(ids[i], queryEventStart, nil)
 		s.True(changed)
 		s.NoError(err)
 	}
-	s.Len(qr.GetBuffered(), 5)
-	s.Len(qr.GetStarted(), 5)
+	s.assertHasQueries(qr, true, true, false)
+	s.assertQuerySizes(qr, 5, 5, 0)
 
-	completeQuery := func(q Query) {
-		if q.State() == QueryStateBuffered {
-			changed, err := q.RecordEvent(QueryEventStart, nil)
+	completeQuery := func(id string) {
+		querySnapshot, err := qr.getQuerySnapshot(id)
+		s.NoError(err)
+		if querySnapshot.state == queryStateBuffered {
+			changed, err := qr.recordEvent(id, queryEventStart, nil)
 			s.True(changed)
 			s.NoError(err)
 		}
-		changed, err := q.RecordEvent(QueryEventPersistenceConditionSatisfied, nil)
+		changed, err := qr.recordEvent(id, queryEventPersistenceConditionSatisfied, nil)
 		s.False(changed)
 		s.NoError(err)
-		changed, err = q.RecordEvent(QueryEventRecordResult, &shared.WorkflowQueryResult{})
-		s.True(changed)
-		s.NoError(err)
-		s.Equal(QueryStateCompleted, q.State())
-	}
-
-	expireQuery := func(q Query) {
-		changed, err := q.RecordEvent(QueryEventExpire, nil)
+		changed, err = qr.recordEvent(id, queryEventRecordResult, &shared.WorkflowQueryResult{})
 		s.True(changed)
 		s.NoError(err)
 	}
 
-	completeQuery(queries[0])
-	expireQuery(queries[1])
-	completeQuery(queries[8])
-	expireQuery(queries[9])
+	q0, err := qr.getQuerySnapshot(ids[0])
+	s.NoError(err)
+	s.NotNil(q0)
+	s.Equal(queryStateStarted, q0.state)
+	completeQuery(q0.id)
+	q0, err = qr.getQuerySnapshot(q0.id)
+	s.NotNil(q0)
+	s.NoError(err)
+	s.Equal(queryStateCompleted, q0.state)
+	s.assertHasQueries(qr, true, true, true)
+	s.assertQuerySizes(qr, 5, 4, 1)
 
-	s.Len(qr.GetBuffered(), 3)
-	s.Len(qr.GetStarted(), 3)
+	q9, err := qr.getQuerySnapshot(ids[9])
+	s.NoError(err)
+	s.NotNil(q9)
+	s.Equal(queryStateBuffered, q9.state)
+	completeQuery(q9.id)
+	q9, err = qr.getQuerySnapshot(q9.id)
+	s.NotNil(q9)
+	s.NoError(err)
+	s.Equal(queryStateCompleted, q9.state)
+	s.assertHasQueries(qr, true, true, true)
+	s.assertQuerySizes(qr, 4, 4, 2)
+
+	qr.removeQuery(ids[0])
+	qr.removeQuery(ids[1])
+	qr.removeQuery(ids[2])
+	qr.removeQuery(ids[5])
+	s.assertHasQueries(qr, true, true, true)
+	s.assertQuerySizes(qr, 3, 2, 1)
+}
+
+func (s *QueryRegistrySuite) assertHasQueries(qr queryRegistry, buffered, started, completed bool) {
+	s.Equal(buffered, qr.hasBuffered())
+	s.Equal(started, qr.hasStarted())
+	s.Equal(completed, qr.hasCompleted())
+}
+
+func (s *QueryRegistrySuite) assertQuerySizes(qr queryRegistry, buffered, started, completed int) {
+	s.Len(qr.getBufferedSnapshot(), buffered)
+	s.Len(qr.getStartedSnapshot(), started)
+	s.Len(qr.getCompletedSnapshot(), completed)
 }

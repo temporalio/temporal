@@ -22,6 +22,7 @@ package provider
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/filestore"
@@ -53,6 +54,8 @@ type (
 	}
 
 	archiverProvider struct {
+		sync.RWMutex
+
 		historyArchiverConfigs    *config.HistoryArchiverProvider
 		visibilityArchiverConfigs *config.VisibilityArchiverProvider
 
@@ -109,9 +112,12 @@ func (p *archiverProvider) RegisterBootstrapContainer(
 
 func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (archiver.HistoryArchiver, error) {
 	archiverKey := p.getArchiverKey(scheme, serviceName)
+	p.RLock()
 	if historyArchiver, ok := p.historyArchivers[archiverKey]; ok {
+		p.RUnlock()
 		return historyArchiver, nil
 	}
+	p.RUnlock()
 
 	container, ok := p.historyContainers[serviceName]
 	if !ok {
@@ -127,6 +133,12 @@ func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (archi
 		if err != nil {
 			return nil, err
 		}
+
+		p.Lock()
+		defer p.Unlock()
+		if existingHistoryArchiver, ok := p.historyArchivers[archiverKey]; ok {
+			return existingHistoryArchiver, nil
+		}
 		p.historyArchivers[archiverKey] = historyArchiver
 		return historyArchiver, nil
 	}
@@ -135,9 +147,12 @@ func (p *archiverProvider) GetHistoryArchiver(scheme, serviceName string) (archi
 
 func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (archiver.VisibilityArchiver, error) {
 	archiverKey := p.getArchiverKey(scheme, serviceName)
+	p.RLock()
 	if visibilityArchiver, ok := p.visibilityArchivers[archiverKey]; ok {
+		p.RUnlock()
 		return visibilityArchiver, nil
 	}
+	p.RUnlock()
 
 	container, ok := p.visibilityContainers[serviceName]
 	if !ok {
@@ -152,6 +167,12 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (ar
 		visibilityArchiver, err := filestore.NewVisibilityArchiver(container, p.visibilityArchiverConfigs.Filestore)
 		if err != nil {
 			return nil, err
+		}
+
+		p.Lock()
+		defer p.Unlock()
+		if existingVisibilityArchiver, ok := p.visibilityArchivers[archiverKey]; ok {
+			return existingVisibilityArchiver, nil
 		}
 		p.visibilityArchivers[archiverKey] = visibilityArchiver
 		return visibilityArchiver, nil

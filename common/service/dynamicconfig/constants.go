@@ -147,7 +147,7 @@ var keys = map[Key]string{
 	TimerProcessorMaxPollIntervalJitterCoefficient:        "history.timerProcessorMaxPollIntervalJitterCoefficient",
 	TimerProcessorMaxTimeShift:                            "history.timerProcessorMaxTimeShift",
 	TimerProcessorHistoryArchivalSizeLimit:                "history.timerProcessorHistoryArchivalSizeLimit",
-	TimerProcessorHistoryArchivalTimeLimit:                "history.timerProcessorHistoryArchivalTimeLimit",
+	TimerProcessorArchivalTimeLimit:                       "history.TimerProcessorArchivalTimeLimit",
 	TransferTaskBatchSize:                                 "history.transferTaskBatchSize",
 	TransferProcessorFailoverMaxPollRPS:                   "history.transferProcessorFailoverMaxPollRPS",
 	TransferProcessorMaxPollRPS:                           "history.transferProcessorMaxPollRPS",
@@ -180,7 +180,7 @@ var keys = map[Key]string{
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
-	UseTerminateAsDefaultParentClosePolicy:                "history.useTerminateAsDefaultParentClosePolicy",
+	EnableParentClosePolicy:                               "history.enableParentClosePolicy",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
 	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
@@ -419,8 +419,8 @@ const (
 	TimerProcessorMaxTimeShift
 	// TimerProcessorHistoryArchivalSizeLimit is the max history size for inline archival
 	TimerProcessorHistoryArchivalSizeLimit
-	// TimerProcessorHistoryArchivalTimeLimit is the upper time limit for inline history archival
-	TimerProcessorHistoryArchivalTimeLimit
+	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
+	TimerProcessorArchivalTimeLimit
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -493,8 +493,8 @@ const (
 
 	// EnableEventsV2 is whether to use eventsV2
 	EnableEventsV2
-	// UseTerminateAsDefaultParentClosePolicy whether to use Terminate as default ParentClosePolicy, otherwise use Abandon for backward compatibility
-	UseTerminateAsDefaultParentClosePolicy
+	// EnableParentClosePolicy whether to  ParentClosePolicy
+	EnableParentClosePolicy
 	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if
 	// the number of children greater than or equal to this threshold
 	ParentClosePolicyThreshold

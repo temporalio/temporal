@@ -174,6 +174,8 @@ func getInputFile(inputFile string) *os.File {
 		}
 		return os.Stdin
 	}
+	// This code is executed from the CLI. All user input is from a CLI user.
+	// #nosec
 	f, err := os.Open(inputFile)
 	if err != nil {
 		ErrorAndExit(fmt.Sprintf("Failed to open input file for reading: %v", inputFile), err)
@@ -582,7 +584,9 @@ func AdminRereplicate(c *cli.Context) {
 
 	if c.IsSet(FlagInputFile) {
 		inFile := c.String(FlagInputFile)
+		// This code is executed from the CLI. All user input is from a CLI user.
 		// parse domainID,workflowID,runID,minEventID,maxEventID
+		// #nosec
 		file, err := os.Open(inFile)
 		if err != nil {
 			ErrorAndExit("Open failed", err)
@@ -821,6 +825,8 @@ func createConsumerAndWaitForReady(brokers []string, tlsConfig *tls.Config, grou
 }
 
 func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err error) {
+	// This code is executed from the CLI. All user input is from a CLI user.
+	// #nosec
 	file, err := os.Open(in)
 	if err != nil {
 		return nil, err
@@ -853,6 +859,8 @@ func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err e
 }
 
 func loadBrokerConfig(hostFile string, cluster string) ([]string, *tls.Config, error) {
+	// This code is executed from the CLI and is only used to load config files
+	// #nosec
 	contents, err := ioutil.ReadFile(hostFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load kafka cluster info from %v., error: %v", hostFile, err)

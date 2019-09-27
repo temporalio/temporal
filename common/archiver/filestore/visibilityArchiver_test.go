@@ -175,8 +175,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 				"testFields": []byte{1, 2, 3},
 			},
 		},
-		SearchAttributes: map[string][]byte{
-			"testAttribute": []byte{4, 5, 6},
+		SearchAttributes: map[string]string{
+			"testAttribute": "456",
 		},
 	}
 	URI, err := archiver.NewURI("file://" + dir)

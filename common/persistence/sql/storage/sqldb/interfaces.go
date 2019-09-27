@@ -280,9 +280,7 @@ type (
 		MinNodeID *int64
 		// Exclusive
 		MaxNodeID *int64
-		// Exclusive
-		MinTxnID *int64
-		PageSize *int
+		PageSize  *int
 	}
 
 	// HistoryTreeRow represents a row in history_tree table
@@ -456,6 +454,13 @@ type (
 		MinStartTime     *time.Time
 		MaxStartTime     *time.Time
 		PageSize         *int
+	}
+
+	// QueueRow represents a row in queue table
+	QueueRow struct {
+		QueueType      int
+		MessageID      int
+		MessagePayload []byte
 	}
 
 	// tableCRUD defines the API for interacting with the database tables
@@ -647,6 +652,10 @@ type (
 		//     - workflowID, workflowTypeName, closeStatus (along with closed=true)
 		SelectFromVisibility(filter *VisibilityFilter) ([]VisibilityRow, error)
 		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
+
+		InsertIntoQueue(row *QueueRow) (sql.Result, error)
+		GetLastEnqueuedMessageIDForUpdate(queueType int) (int, error)
+		GetMessagesFromQueue(queueType, lastMessageID, maxRows int) ([]QueueRow, error)
 	}
 
 	// Tx defines the API for a SQL transaction

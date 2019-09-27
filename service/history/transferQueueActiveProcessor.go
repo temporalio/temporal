@@ -25,7 +25,6 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
@@ -480,9 +479,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 	err = t.recordWorkflowClosed(
-		scope,
 		domainID,
 		execution,
 		workflowTypeName,

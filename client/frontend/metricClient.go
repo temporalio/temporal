@@ -708,6 +708,23 @@ func (c *metricClient) GetReplicationMessages(
 	return resp, err
 }
 
+func (c *metricClient) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDomainReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetDomainReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) ReapplyEvents(
 	ctx context.Context,
 	request *shared.ReapplyEventsRequest,

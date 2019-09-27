@@ -41,6 +41,8 @@ func CreateESClient(s suite.Suite, url string) *elastic.Client {
 
 // PutIndexTemplate put index template for test
 func PutIndexTemplate(s suite.Suite, esClient *elastic.Client, templateConfigFile, templateName string) {
+	// This function is used exclusively in tests. Excluding it from security checks.
+	// #nosec
 	template, err := ioutil.ReadFile(templateConfigFile)
 	s.Require().NoError(err)
 	putTemplate, err := esClient.IndexPutTemplate(templateName).BodyString(string(template)).Do(createContext())

@@ -32,7 +32,6 @@ import (
 type (
 	jitterSuite struct {
 		suite.Suite
-		jitter *Jitter
 	}
 )
 
@@ -45,19 +44,6 @@ func (s *jitterSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
-
-}
-
-func (s *jitterSuite) TearDownSuite() {
-
-}
-
-func (s *jitterSuite) SetupTest() {
-	s.jitter = NewJitter()
-}
-
-func (s *jitterSuite) TearDownTest() {
-
 }
 
 func (s *jitterSuite) TestJitInt64() {
@@ -67,7 +53,7 @@ func (s *jitterSuite) TestJitInt64() {
 	upperBound := int64(float64(input) * (1 + coefficient))
 
 	for i := 0; i < 1048576; i++ {
-		result := s.jitter.JitInt64(input, coefficient)
+		result := JitInt64(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}
@@ -80,7 +66,7 @@ func (s *jitterSuite) TestJitFloat64() {
 	upperBound := float64(input) * (1 + coefficient)
 
 	for i := 0; i < 1048576; i++ {
-		result := s.jitter.JitFloat64(input, coefficient)
+		result := JitFloat64(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}
@@ -93,7 +79,7 @@ func (s *jitterSuite) TestJitDuration() {
 	upperBound := time.Duration(int64(float64(input.Nanoseconds()) * (1 + coefficient)))
 
 	for i := 0; i < 1048576; i++ {
-		result := s.jitter.JitDuration(input, coefficient)
+		result := JitDuration(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}

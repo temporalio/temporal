@@ -160,14 +160,13 @@ func (p *queueProcessorBase) notifyNewTask() {
 func (p *queueProcessorBase) processorPump() {
 	defer p.shutdownWG.Done()
 
-	jitter := backoff.NewJitter()
-	pollTimer := time.NewTimer(jitter.JitDuration(
+	pollTimer := time.NewTimer(backoff.JitDuration(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))
 	defer pollTimer.Stop()
 
-	updateAckTimer := time.NewTimer(jitter.JitDuration(
+	updateAckTimer := time.NewTimer(backoff.JitDuration(
 		p.options.UpdateAckInterval(),
 		p.options.UpdateAckIntervalJitterCoefficient(),
 	))
@@ -184,7 +183,7 @@ processorPumpLoop:
 		case <-p.notifyCh:
 			p.processBatch()
 		case <-pollTimer.C:
-			pollTimer.Reset(jitter.JitDuration(
+			pollTimer.Reset(backoff.JitDuration(
 				p.options.MaxPollInterval(),
 				p.options.MaxPollIntervalJitterCoefficient(),
 			))
@@ -192,7 +191,7 @@ processorPumpLoop:
 				p.processBatch()
 			}
 		case <-updateAckTimer.C:
-			updateAckTimer.Reset(jitter.JitDuration(
+			updateAckTimer.Reset(backoff.JitDuration(
 				p.options.UpdateAckInterval(),
 				p.options.UpdateAckIntervalJitterCoefficient(),
 			))

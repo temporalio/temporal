@@ -133,6 +133,21 @@ func (mr *MockWorkflowHandlerMockRecorder) DescribeWorkflowExecution(ctx, Descri
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockWorkflowHandler)(nil).DescribeWorkflowExecution), ctx, DescribeRequest)
 }
 
+// GetDomainReplicationMessages mocks base method
+func (m *MockWorkflowHandler) GetDomainReplicationMessages(ctx context.Context, Request *replicator.GetDomainReplicationMessagesRequest) (*replicator.GetDomainReplicationMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDomainReplicationMessages", ctx, Request)
+	ret0, _ := ret[0].(*replicator.GetDomainReplicationMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDomainReplicationMessages indicates an expected call of GetDomainReplicationMessages
+func (mr *MockWorkflowHandlerMockRecorder) GetDomainReplicationMessages(ctx, Request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainReplicationMessages", reflect.TypeOf((*MockWorkflowHandler)(nil).GetDomainReplicationMessages), ctx, Request)
+}
+
 // GetReplicationMessages mocks base method
 func (m *MockWorkflowHandler) GetReplicationMessages(ctx context.Context, Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()

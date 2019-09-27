@@ -125,6 +125,8 @@ func (task *addLicenseHeaderTask) handleFile(path string, fileInfo os.FileInfo, 
 		return nil
 	}
 
+	// Used as part of the cli to write licence headers on files, does not use user supplied input so marked as nosec
+	// #nosec
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -152,6 +154,8 @@ func (task *addLicenseHeaderTask) handleFile(path string, fileInfo os.FileInfo, 
 		}
 	}
 
+	// Used as part of the cli to write licence headers on files, does not use user supplied input so marked as nosec
+	// #nosec
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err

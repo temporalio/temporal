@@ -33,6 +33,7 @@ const newLineDelim = '\n'
 // and returns an array of cql / sql statements on
 // success.
 func ParseFile(filePath string) ([]string, error) {
+	// #nosec
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err

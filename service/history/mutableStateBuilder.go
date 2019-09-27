@@ -121,6 +121,7 @@ type (
 
 		taskGenerator       mutableStateTaskGenerator
 		decisionTaskManager mutableStateDecisionTaskManager
+		queryRegistry       queryRegistry
 
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
@@ -171,6 +172,8 @@ func newMutableStateBuilder(
 		stateInDB:             persistence.WorkflowStateVoid,
 		nextEventIDInDB:       0,
 		domainEntry:           domainEntry,
+
+		queryRegistry: newQueryRegistry(),
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
@@ -225,6 +228,30 @@ func newMutableStateBuilderWithVersionHistories(
 	s := newMutableStateBuilder(shard, eventsCache, logger, domainEntry)
 	s.versionHistories = persistence.NewVersionHistories(&persistence.VersionHistory{})
 	return s
+}
+
+func (e *mutableStateBuilder) AddInMemoryDecisionTaskScheduled(ttl time.Duration) error {
+	return e.decisionTaskManager.AddInMemoryDecisionTaskScheduled(ttl)
+}
+
+func (e *mutableStateBuilder) AddInMemoryDecisionTaskStarted() error {
+	return e.decisionTaskManager.AddInMemoryDecisionTaskStarted()
+}
+
+func (e *mutableStateBuilder) DeleteInMemoryDecisionTask() {
+	e.decisionTaskManager.DeleteInMemoryDecisionTask()
+}
+
+func (e *mutableStateBuilder) HasScheduledInMemoryDecisionTask() bool {
+	return e.decisionTaskManager.HasScheduledInMemoryDecisionTask()
+}
+
+func (e *mutableStateBuilder) HasStartedInMemoryDecisionTask() bool {
+	return e.decisionTaskManager.HasStartedInMemoryDecisionTask()
+}
+
+func (e *mutableStateBuilder) HasInMemoryDecisionTask() bool {
+	return e.decisionTaskManager.HasInMemoryDecisionTask()
 }
 
 func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableState {
@@ -876,6 +903,10 @@ func (e *mutableStateBuilder) GetWorkflowType() *workflow.WorkflowType {
 	wType.Name = common.StringPtr(e.executionInfo.WorkflowTypeName)
 
 	return wType
+}
+
+func (e *mutableStateBuilder) GetQueryRegistry() queryRegistry {
+	return e.queryRegistry
 }
 
 func (e *mutableStateBuilder) GetActivityScheduledEvent(
@@ -1699,12 +1730,20 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 func (e *mutableStateBuilder) AddFirstDecisionTaskScheduled(
 	startEvent *workflow.HistoryEvent,
 ) error {
+	opTag := tag.WorkflowActionDecisionTaskScheduled
+	if err := e.checkMutability(opTag); err != nil {
+		return err
+	}
 	return e.decisionTaskManager.AddFirstDecisionTaskScheduled(startEvent)
 }
 
 func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent(
 	bypassTaskGeneration bool,
 ) (*decisionInfo, error) {
+	opTag := tag.WorkflowActionDecisionTaskScheduled
+	if err := e.checkMutability(opTag); err != nil {
+		return nil, err
+	}
 	return e.decisionTaskManager.AddDecisionTaskScheduledEvent(bypassTaskGeneration)
 }
 

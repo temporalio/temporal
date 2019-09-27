@@ -116,4 +116,17 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	query = "order by 123"
 	listRequest.Query = common.StringPtr(query)
 	s.Equal("BadRequestError{Message: invalid order by expression}", qv.ValidateListRequestForQuery(listRequest).Error())
+
+	// security SQL injection
+	query = "WorkflowID = 'wid'; SELECT * FROM important_table;"
+	listRequest.Query = common.StringPtr(query)
+	s.Equal("BadRequestError{Message: Invalid query.}", qv.ValidateListRequestForQuery(listRequest).Error())
+
+	query = "WorkflowID = 'wid' and (RunID = 'rid' or 1 = 1)"
+	listRequest.Query = common.StringPtr(query)
+	s.NotNil(qv.ValidateListRequestForQuery(listRequest))
+
+	query = "WorkflowID = 'wid' union select * from dummy"
+	listRequest.Query = common.StringPtr(query)
+	s.NotNil(qv.ValidateListRequestForQuery(listRequest))
 }

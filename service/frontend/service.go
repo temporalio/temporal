@@ -193,17 +193,6 @@ func (s *Service) Start() {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}
 
-	// TODO when global domain is enabled, uncomment the line below and remove the line after
-	var kafkaProducer messaging.Producer
-	if base.GetClusterMetadata().IsGlobalDomainEnabled() {
-		kafkaProducer, err = base.GetMessagingClient().NewProducerWithClusterName(base.GetClusterMetadata().GetCurrentClusterName())
-		if err != nil {
-			log.Fatal("Creating kafka producer failed", tag.Error(err))
-		}
-	} else {
-		kafkaProducer = &mocks.KafkaProducer{}
-	}
-
 	domainCache := cache.NewDomainCache(metadata, base.GetClusterMetadata(), base.GetMetricsClient(), base.GetLogger())
 
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
@@ -225,7 +214,38 @@ func (s *Service) Start() {
 		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
 	}
 
-	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, domainCache)
+	var replicationMessageSink messaging.Producer
+	var domainReplicationQueue persistence.DomainReplicationQueue
+	clusterMetadata := base.GetClusterMetadata()
+	if clusterMetadata.IsGlobalDomainEnabled() {
+		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
+		if consumerConfig != nil && consumerConfig.Type == config.ReplicationConsumerTypeRPC {
+			domainReplicationQueue, err = pFactory.NewDomainReplicationQueue()
+			if err != nil {
+				log.Fatal("Failed to create domain replication queue", tag.Error(err))
+			}
+			replicationMessageSink = domainReplicationQueue
+		} else {
+			replicationMessageSink, err = base.GetMessagingClient().NewProducerWithClusterName(
+				base.GetClusterMetadata().GetCurrentClusterName())
+			if err != nil {
+				log.Fatal("Creating replicationMessageSink producer failed", tag.Error(err))
+			}
+		}
+	} else {
+		replicationMessageSink = &mocks.KafkaProducer{}
+	}
+
+	wfHandler := NewWorkflowHandler(
+		base,
+		s.config,
+		metadata,
+		history,
+		historyV2,
+		visibility,
+		replicationMessageSink,
+		domainReplicationQueue,
+		domainCache)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 

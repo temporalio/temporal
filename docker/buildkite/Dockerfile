@@ -1,4 +1,4 @@
-FROM golang:1.12.1
+FROM golang:1.13.0
 
 # Tried to set Python to ignore warnings due to the instructions at this link:
 # https://github.com/yaml/pyyaml/wiki/PyYAML-yaml.load(input)-Deprecation
@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       gettext-base \
       libyaml-dev \
-      openjdk-8-jre \
       python \
       python-dev \
       python-pip \

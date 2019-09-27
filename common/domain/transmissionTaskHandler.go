@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package domain
 
 import (
 	"errors"
@@ -40,24 +40,24 @@ var (
 // NOTE: the counterpart of domain replication receiving logic is in service/worker package
 
 type (
-	// DomainReplicator is the interface which can replicate the domain
-	DomainReplicator interface {
+	// Replicator is the interface which can replicate the domain
+	Replicator interface {
 		HandleTransmissionTask(domainOperation replicator.DomainOperation, info *persistence.DomainInfo,
 			config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error
 	}
 
 	domainReplicatorImpl struct {
-		kafka  messaging.Producer
-		logger log.Logger
+		replicationMessageSink messaging.Producer
+		logger                 log.Logger
 	}
 )
 
-// NewDomainReplicator create a new instance odf domain replicator
-func NewDomainReplicator(kafka messaging.Producer, logger log.Logger) DomainReplicator {
+// NewDomainReplicator create a new instance of domain replicator
+func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.Logger) Replicator {
 	return &domainReplicatorImpl{
-		kafka:  kafka,
-		logger: logger,
+		replicationMessageSink: replicationMessageSink,
+		logger:                 logger,
 	}
 }
 
@@ -104,14 +104,16 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	return domainReplicator.kafka.Publish(&replicator.ReplicationTask{
-		TaskType:             &taskType,
-		DomainTaskAttributes: task,
-	})
+	return domainReplicator.replicationMessageSink.Publish(
+		&replicator.ReplicationTask{
+			TaskType:             &taskType,
+			DomainTaskAttributes: task,
+		})
 }
 
 func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToThrift(
-	input []*persistence.ClusterReplicationConfig) []*shared.ClusterReplicationConfiguration {
+	input []*persistence.ClusterReplicationConfig,
+) []*shared.ClusterReplicationConfiguration {
 	output := []*shared.ClusterReplicationConfiguration{}
 	for _, cluster := range input {
 		clusterName := common.StringPtr(cluster.ClusterName)

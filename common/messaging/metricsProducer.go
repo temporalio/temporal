@@ -40,19 +40,6 @@ func NewMetricProducer(producer Producer,
 	}
 }
 
-func (p *metricsProducer) PublishBatch(msgs []interface{}) error {
-	p.metricsClient.IncCounter(metrics.MessagingClientPublishBatchScope, metrics.CadenceClientRequests)
-
-	sw := p.metricsClient.StartTimer(metrics.MessagingClientPublishBatchScope, metrics.CadenceClientLatency)
-	err := p.producer.PublishBatch(msgs)
-	sw.Stop()
-
-	if err != nil {
-		p.metricsClient.IncCounter(metrics.MessagingClientPublishBatchScope, metrics.CadenceClientFailures)
-	}
-	return err
-}
-
 func (p *metricsProducer) Publish(msg interface{}) error {
 	p.metricsClient.IncCounter(metrics.MessagingClientPublishScope, metrics.CadenceClientRequests)
 
@@ -67,5 +54,9 @@ func (p *metricsProducer) Publish(msg interface{}) error {
 }
 
 func (p *metricsProducer) Close() error {
-	return p.producer.Close()
+	if closeableProducer, ok := p.producer.(CloseableProducer); ok {
+		return closeableProducer.Close()
+	}
+
+	return nil
 }

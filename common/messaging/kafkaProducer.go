@@ -27,7 +27,6 @@ import (
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common/codec"
-	"github.com/uber/cadence/common/codec/gob"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 )
@@ -37,7 +36,6 @@ type (
 		topic      string
 		producer   sarama.SyncProducer
 		msgEncoder codec.BinaryEncoder
-		gobEncoder *gob.Encoder
 		logger     log.Logger
 	}
 )
@@ -50,7 +48,6 @@ func NewKafkaProducer(topic string, producer sarama.SyncProducer, logger log.Log
 		topic:      topic,
 		producer:   producer,
 		msgEncoder: codec.NewThriftRWEncoder(),
-		gobEncoder: gob.NewGobEncoder(),
 		logger:     logger.WithTags(tag.KafkaTopicName(topic)),
 	}
 }
@@ -69,26 +66,6 @@ func (p *kafkaProducer) Publish(msg interface{}) error {
 			tag.KafkaPartitionKey(message.Key),
 			tag.KafkaOffset(offset),
 			tag.Error(err))
-		return p.convertErr(err)
-	}
-
-	return nil
-}
-
-// PublishBatch is used to send messages to other clusters through Kafka topic
-func (p *kafkaProducer) PublishBatch(msgs []interface{}) error {
-	var producerMsgs []*sarama.ProducerMessage
-	for _, msg := range msgs {
-		message, err := p.getProducerMessage(msg)
-		if err != nil {
-			return err
-		}
-		producerMsgs = append(producerMsgs, message)
-	}
-
-	err := p.producer.SendMessages(producerMsgs)
-	if err != nil {
-		p.logger.Warn("Failed to publish batch of messages to kafka", tag.Error(err))
 		return p.convertErr(err)
 	}
 

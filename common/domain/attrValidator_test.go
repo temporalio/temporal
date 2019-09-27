@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package domain
 
 import (
 	"testing"
@@ -34,36 +34,36 @@ import (
 )
 
 type (
-	domainAttrValidatorSuite struct {
+	attrValidatorSuite struct {
 		suite.Suite
 
 		minRetentionDays    int
 		mockClusterMetadata *mocks.ClusterMetadata
-		validator           *domainAttrValidatorImpl
+		validator           *AttrValidatorImpl
 	}
 )
 
-func TestDomainAttrValidatorSuite(t *testing.T) {
-	s := new(domainAttrValidatorSuite)
+func TestAttrValidatorSuite(t *testing.T) {
+	s := new(attrValidatorSuite)
 	suite.Run(t, s)
 }
 
-func (s *domainAttrValidatorSuite) SetupSuite() {
+func (s *attrValidatorSuite) SetupSuite() {
 }
 
-func (s *domainAttrValidatorSuite) TearDownSuite() {
+func (s *attrValidatorSuite) TearDownSuite() {
 }
 
-func (s *domainAttrValidatorSuite) SetupTest() {
+func (s *attrValidatorSuite) SetupTest() {
 	s.minRetentionDays = 1
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.validator = newDomainAttrValidator(s.mockClusterMetadata, int32(s.minRetentionDays))
+	s.validator = newAttrValidator(s.mockClusterMetadata, int32(s.minRetentionDays))
 }
 
-func (s *domainAttrValidatorSuite) TearDownTest() {
+func (s *attrValidatorSuite) TearDownTest() {
 }
 
-func (s *domainAttrValidatorSuite) TestValidateConfigRetentionPeriod() {
+func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
 	testCases := []struct {
 		retentionPeriod int32
 		expectedErr     error
@@ -89,7 +89,7 @@ func (s *domainAttrValidatorSuite) TestValidateConfigRetentionPeriod() {
 	}
 }
 
-func (s *domainAttrValidatorSuite) TestClusterName() {
+func (s *attrValidatorSuite) TestClusterName() {
 	s.mockClusterMetadata.On("GetAllClusterInfo").Return(
 		cluster.TestAllClusterInfo,
 	)
@@ -104,7 +104,7 @@ func (s *domainAttrValidatorSuite) TestClusterName() {
 	s.NoError(err)
 }
 
-func (s *domainAttrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain() {
+func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(
 		cluster.TestCurrentClusterName,
 	)
@@ -155,7 +155,7 @@ func (s *domainAttrValidatorSuite) TestValidateDomainReplicationConfigForLocalDo
 	s.NoError(err)
 }
 
-func (s *domainAttrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain() {
+func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(
 		cluster.TestCurrentClusterName,
 	)
@@ -206,7 +206,7 @@ func (s *domainAttrValidatorSuite) TestValidateDomainReplicationConfigForGlobalD
 	s.NoError(err)
 }
 
-func (s *domainAttrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotChange() {
+func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotChange() {
 	err := s.validator.validateDomainReplicationConfigClustersDoesNotChange(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},

@@ -88,3 +88,10 @@ func TestCassandraExecutionManagerWithEventsV2(t *testing.T) {
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
+
+func TestQueuePersistence(t *testing.T) {
+	s := new(QueuePersistenceSuite)
+	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}

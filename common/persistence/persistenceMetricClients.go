@@ -69,6 +69,12 @@ type (
 		persistence  VisibilityManager
 		logger       log.Logger
 	}
+
+	queuePersistenceClient struct {
+		metricClient metrics.Client
+		persistence  Queue
+		logger       log.Logger
+	}
 )
 
 var _ ShardManager = (*shardPersistenceClient)(nil)
@@ -78,6 +84,7 @@ var _ HistoryManager = (*historyPersistenceClient)(nil)
 var _ HistoryV2Manager = (*historyV2PersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityPersistenceClient)(nil)
+var _ Queue = (*queuePersistenceClient)(nil)
 
 // NewShardPersistenceMetricsClient creates a client to manage shards
 func NewShardPersistenceMetricsClient(persistence ShardManager, metricClient metrics.Client, logger log.Logger) ShardManager {
@@ -136,6 +143,15 @@ func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricClie
 // NewVisibilityPersistenceMetricsClient creates a client to manage visibility
 func NewVisibilityPersistenceMetricsClient(persistence VisibilityManager, metricClient metrics.Client, logger log.Logger) VisibilityManager {
 	return &visibilityPersistenceClient{
+		persistence:  persistence,
+		metricClient: metricClient,
+		logger:       logger,
+	}
+}
+
+// NewQueuePersistenceMetricsClient creates a client to manage queue
+func NewQueuePersistenceMetricsClient(persistence Queue, metricClient metrics.Client, logger log.Logger) Queue {
+	return &queuePersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
 		logger:       logger,
@@ -1191,4 +1207,32 @@ func (p *historyV2PersistenceClient) updateErrorMetric(scope int, err error) {
 			tag.Error(err), tag.MetricScope(scope))
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
+}
+
+func (p *queuePersistenceClient) EnqueueMessage(message []byte) error {
+	p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceLatency)
+	err := p.persistence.EnqueueMessage(message)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (p *queuePersistenceClient) DequeueMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error) {
+	p.metricClient.IncCounter(metrics.PersistenceDequeueMessagesScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceDequeueMessagesScope, metrics.PersistenceLatency)
+	result, err := p.persistence.DequeueMessages(lastMessageID, maxCount)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceDequeueMessagesScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
 }

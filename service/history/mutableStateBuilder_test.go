@@ -127,6 +127,109 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
 }
 
+func (s *mutableStateSuite) TestInMemDecisionTask() {
+	version := int64(12)
+	runID := uuid.New()
+	s.msBuilder = newMutableStateBuilderWithReplicationStateWithEventV2(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		runID,
+	)
+	eventTimeSource := clock.NewEventTimeSource()
+	s.msBuilder.timeSource = eventTimeSource
+
+	s.assertMemDecisionTaskState(false, false, false, false, false)
+
+	// error on start mem decision task before schedule
+	s.Error(s.msBuilder.AddInMemoryDecisionTaskStarted())
+	s.assertMemDecisionTaskState(false, false, false, false, false)
+
+	// no error on schedule in mem decision task
+	s.NoError(s.msBuilder.AddInMemoryDecisionTaskScheduled(time.Second))
+	s.assertMemDecisionTaskState(true, true, false, false, false)
+
+	// attempt to schedule mem decision task again is an error
+	s.Error(s.msBuilder.AddInMemoryDecisionTaskScheduled(time.Second))
+	s.assertMemDecisionTaskState(true, true, false, false, false)
+
+	// no error on start decision task
+	s.NoError(s.msBuilder.AddInMemoryDecisionTaskStarted())
+	s.assertMemDecisionTaskState(true, false, true, false, false)
+
+	// attempting to schedule decision task with started mem decision task is an error
+	di, err := s.msBuilder.AddDecisionTaskScheduledEvent(false)
+	s.Nil(di)
+	s.Error(err)
+	s.assertMemDecisionTaskState(true, false, true, false, false)
+
+	// expire started mem decision task results in no mem decision task
+	eventTimeSource.Update(eventTimeSource.Now().Add(500 * time.Millisecond))
+	s.assertMemDecisionTaskState(true, false, true, false, false)
+	eventTimeSource.Update(eventTimeSource.Now().Add(500 * time.Millisecond))
+	s.assertMemDecisionTaskState(false, false, false, false, false)
+
+	// no error on schedule decision task
+	di, err = s.msBuilder.AddDecisionTaskScheduledEvent(false)
+	s.NotNil(di)
+	s.NoError(err)
+	s.assertMemDecisionTaskState(false, false, false, true, false)
+
+	// it is an error to try to schedule a mem decision task while there is a scheduled decision task
+	s.Error(s.msBuilder.AddInMemoryDecisionTaskScheduled(time.Second))
+	s.assertMemDecisionTaskState(false, false, false, true, false)
+
+	// start the decision task
+	he, di, err := s.msBuilder.AddDecisionTaskStartedEvent(di.ScheduleID, di.RequestID, &workflow.PollForDecisionTaskRequest{
+		Domain: common.StringPtr("test-domain"),
+		TaskList: &workflow.TaskList{
+			Name: common.StringPtr("test-task-list-name"),
+			Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+		},
+		Identity:       common.StringPtr("test-identity"),
+		BinaryChecksum: common.StringPtr("binary-checksum"),
+	})
+	s.NotNil(he)
+	s.NotNil(di)
+	s.NoError(err)
+	s.assertMemDecisionTaskState(false, false, false, true, true)
+
+	// error to schedule mem decision task while there is started decision task
+	s.Error(s.msBuilder.AddInMemoryDecisionTaskScheduled(time.Second))
+	s.assertMemDecisionTaskState(false, false, false, true, true)
+
+	// delete decision task
+	s.msBuilder.DeleteDecision()
+	s.assertMemDecisionTaskState(false, false, false, false, false)
+
+	// no error on schedule mem decision task
+	s.NoError(s.msBuilder.AddInMemoryDecisionTaskScheduled(time.Second))
+	s.assertMemDecisionTaskState(true, true, false, false, false)
+
+	// delete mem decision task
+	s.msBuilder.DeleteInMemoryDecisionTask()
+	s.assertMemDecisionTaskState(false, false, false, false, false)
+
+	// no error on schedule mem decision task
+	s.NoError(s.msBuilder.AddInMemoryDecisionTaskScheduled(time.Second))
+	s.assertMemDecisionTaskState(true, true, false, false, false)
+
+	// schedule decision task to overwrite mem decision task
+	di, err = s.msBuilder.AddDecisionTaskScheduledEvent(false)
+	s.NoError(err)
+	s.NotNil(di)
+	s.assertMemDecisionTaskState(false, false, false, true, false)
+}
+
+func (s *mutableStateSuite) assertMemDecisionTaskState(hasMemDecisionTask, hasMemScheduledDecisionTask, hasMemStartedDecisionTask, hasPending, hasInflight bool) {
+	s.Equal(hasMemDecisionTask, s.msBuilder.HasInMemoryDecisionTask())
+	s.Equal(hasMemScheduledDecisionTask, s.msBuilder.HasScheduledInMemoryDecisionTask())
+	s.Equal(hasMemStartedDecisionTask, s.msBuilder.HasStartedInMemoryDecisionTask())
+	s.Equal(hasPending, s.msBuilder.HasPendingDecision())
+	s.Equal(hasInflight, s.msBuilder.HasInFlightDecision())
+}
+
 func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_FailoverDecisionFailed() {
 	version := int64(12)
 	runID := uuid.New()

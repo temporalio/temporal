@@ -116,7 +116,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 			if err == nil && len(newBranchToken) > 0 {
 				w.eng.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
 					BranchToken: newBranchToken,
-					Success:     retError == nil || persistence.IsTimeoutError(retError),
+					Success:     true,
 					ShardID:     common.IntPtr(w.eng.shard.GetShardID()),
 				})
 			}
@@ -858,7 +858,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		if err == nil {
 			w.eng.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
 				BranchToken: newBranchToken,
-				Success:     retError == nil || persistence.IsTimeoutError(retError),
+				Success:     true,
 				ShardID:     shardID,
 			})
 		}

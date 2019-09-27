@@ -33,7 +33,7 @@ const (
 		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :txn_id, :data, :data_encoding) `
 
 	getHistoryNodesQry = `SELECT node_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? and node_id < ? and txn_id < ? ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? and node_id < ? ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
 
 	deleteHistoryNodesQry = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
 
@@ -62,7 +62,7 @@ func (mdb *DB) InsertIntoHistoryNode(row *sqldb.HistoryNodeRow) (sql.Result, err
 func (mdb *DB) SelectFromHistoryNode(filter *sqldb.HistoryNodeFilter) ([]sqldb.HistoryNodeRow, error) {
 	var rows []sqldb.HistoryNodeRow
 	err := mdb.conn.Select(&rows, getHistoryNodesQry,
-		filter.ShardID, filter.TreeID, filter.BranchID, *filter.MinNodeID, *filter.MaxNodeID, -*filter.MinTxnID, *filter.PageSize)
+		filter.ShardID, filter.TreeID, filter.BranchID, *filter.MinNodeID, *filter.MaxNodeID, *filter.PageSize)
 	// NOTE: since we let txn_id multiple by -1 when inserting, we have to revert it back here
 	for _, row := range rows {
 		*row.TxnID *= -1

@@ -23,13 +23,13 @@ package persistence
 import (
 	"sync"
 
-	"github.com/uber/cadence/common/quotas"
-
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/persistence/sql"
+	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -55,6 +55,8 @@ type (
 		NewExecutionManager(shardID int) (p.ExecutionManager, error)
 		// NewVisibilityManager returns a new visibility manager
 		NewVisibilityManager() (p.VisibilityManager, error)
+		// NewDomainReplicationQueue returns a new queue for domain replication
+		NewDomainReplicationQueue() (p.DomainReplicationQueue, error)
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
 	// Examples of datastores are cassandra, mysql etc
@@ -79,6 +81,7 @@ type (
 		NewExecutionStore(shardID int) (p.ExecutionStore, error)
 		// NewVisibilityStore returns a new visibility store
 		NewVisibilityStore() (p.VisibilityStore, error)
+		NewQueue(queueType int) (p.Queue, error)
 	}
 	// Datastore represents a datastore
 	Datastore struct {
@@ -106,6 +109,7 @@ const (
 	storeTypeMetadata
 	storeTypeExecution
 	storeTypeVisibility
+	storeTypeQueue
 )
 
 const (
@@ -118,7 +122,14 @@ const (
 )
 
 var storeTypes = []storeType{
-	storeTypeHistory, storeTypeTask, storeTypeShard, storeTypeMetadata, storeTypeExecution, storeTypeVisibility}
+	storeTypeHistory,
+	storeTypeTask,
+	storeTypeShard,
+	storeTypeMetadata,
+	storeTypeExecution,
+	storeTypeVisibility,
+	storeTypeQueue,
+}
 
 // New returns an implementation of factory that vends persistence objects based on
 // specified configuration. This factory takes as input a config.Persistence object
@@ -131,7 +142,8 @@ func New(
 	cfg *config.Persistence,
 	clusterName string,
 	metricsClient metrics.Client,
-	logger log.Logger) Factory {
+	logger log.Logger,
+) Factory {
 	factory := &factoryImpl{
 		config:        cfg,
 		metricsClient: metricsClient,
@@ -172,7 +184,6 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 		result = p.NewShardPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 	return result, nil
-
 }
 
 // NewHistoryManager returns a new history manager
@@ -278,6 +289,22 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	}
 
 	return result, nil
+}
+
+func (f *factoryImpl) NewDomainReplicationQueue() (p.DomainReplicationQueue, error) {
+	ds := f.datastores[storeTypeQueue]
+	result, err := ds.factory.NewQueue(common.DomainReplicationQueueType)
+	if err != nil {
+		return nil, err
+	}
+	if ds.ratelimit != nil {
+		result = p.NewQueuePersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+	}
+	if f.metricsClient != nil {
+		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
+	}
+
+	return p.NewDomainReplicationQueue(result), nil
 }
 
 // Close closes this factory

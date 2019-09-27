@@ -25,11 +25,14 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/yarpc/yarpcerrors"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
@@ -45,6 +48,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -53,7 +57,11 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"go.uber.org/yarpc/yarpcerrors"
+)
+
+const (
+	getDomainReplicationMessageBatchSize = 100
+	defaultLastMessageID                 = -1
 )
 
 var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
@@ -75,9 +83,10 @@ type (
 		rateLimiter               quotas.Policy
 		config                    *Config
 		versionChecker            *versionChecker
-		domainHandler             *domainHandlerImpl
+		domainHandler             domain.Handler
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
+		domainReplicationQueue    persistence.DomainReplicationQueue
 		service.Service
 	}
 
@@ -121,11 +130,11 @@ var (
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
-	errInvalidRetentionPeriod                     = &gen.BadRequestError{Message: "A valid retention period is not set on request."}
-	errInvalidArchivalConfig                      = &gen.BadRequestError{Message: "Invalid to enable archival without specifying a uri."}
 
 	// err for archival
 	errHistoryHasPassedRetentionPeriod = &gen.BadRequestError{Message: "Requested workflow history has passed retention period."}
+	// the following errors represents bad user input
+	errURIUpdate = &shared.BadRequestError{Message: "Cannot update existing archival URI"}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -135,13 +144,6 @@ var (
 	errTaskListTooLong     = &gen.BadRequestError{Message: "TaskList length exceeds limit."}
 	errRequestIDTooLong    = &gen.BadRequestError{Message: "RequestID length exceeds limit."}
 	errIdentityTooLong     = &gen.BadRequestError{Message: "Identity length exceeds limit."}
-
-	// err indicating that this cluster is not the master, so cannot do domain registration or update
-	errNotMasterCluster                = &gen.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
-	errCannotAddClusterToLocalDomain   = &gen.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
-	errCannotModifyClustersFromDomain  = &gen.BadRequestError{Message: "Cannot modify existing replicated clusters from a domain."}
-	errActiveClusterNotInClusters      = &gen.BadRequestError{Message: "Active cluster is not contained in all clusters."}
-	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
 
 	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
@@ -154,7 +156,8 @@ func NewWorkflowHandler(
 	historyMgr persistence.HistoryManager,
 	historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager,
-	kafkaProducer messaging.Producer,
+	replicationMessageSink messaging.Producer,
+	domainReplicationQueue persistence.DomainReplicationQueue,
 	domainCache cache.DomainCache,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
@@ -176,18 +179,25 @@ func NewWorkflowHandler(
 			},
 		),
 		versionChecker: &versionChecker{checkVersion: config.EnableClientVersionCheck()},
-		domainHandler: newDomainHandler(
-			config,
+		domainHandler: domain.NewHandler(
+			config.MinRetentionDays(),
+			config.MaxBadBinaries,
 			sVice.GetLogger(),
 			metadataMgr,
 			sVice.GetClusterMetadata(),
-			NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
+			domain.NewDomainReplicator(replicationMessageSink, sVice.GetLogger()),
 			sVice.GetArchivalMetadata(),
 			sVice.GetArchiverProvider(),
 		),
 		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
-		searchAttributesValidator: validator.NewSearchAttributesValidator(sVice.GetLogger(), config.ValidSearchAttributes,
-			config.SearchAttributesNumberOfKeysLimit, config.SearchAttributesSizeOfValueLimit, config.SearchAttributesTotalSizeLimit),
+		searchAttributesValidator: validator.NewSearchAttributesValidator(
+			sVice.GetLogger(),
+			config.ValidSearchAttributes,
+			config.SearchAttributesNumberOfKeysLimit,
+			config.SearchAttributesSizeOfValueLimit,
+			config.SearchAttributesTotalSizeLimit,
+		),
+		domainReplicationQueue: domainReplicationQueue,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -248,7 +258,19 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(err, scope)
 	}
 
-	err := wh.domainHandler.registerDomain(ctx, registerRequest)
+	if registerRequest == nil {
+		return errRequestNotSet
+	}
+
+	if err := wh.checkPermission(registerRequest.SecurityToken); err != nil {
+		return err
+	}
+
+	if registerRequest.GetName() == "" {
+		return errDomainNotSet
+	}
+
+	err := wh.domainHandler.RegisterDomain(ctx, registerRequest)
 	if err != nil {
 		return wh.error(err, scope)
 	}
@@ -269,7 +291,11 @@ func (wh *WorkflowHandler) ListDomains(
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.domainHandler.listDomains(ctx, listRequest)
+	if listRequest == nil {
+		return nil, errRequestNotSet
+	}
+
+	resp, err := wh.domainHandler.ListDomains(ctx, listRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)
 	}
@@ -290,7 +316,15 @@ func (wh *WorkflowHandler) DescribeDomain(
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.domainHandler.describeDomain(ctx, describeRequest)
+	if describeRequest == nil {
+		return nil, errRequestNotSet
+	}
+
+	if describeRequest.GetName() == "" && describeRequest.GetUUID() == "" {
+		return nil, errDomainNotSet
+	}
+
+	resp, err := wh.domainHandler.DescribeDomain(ctx, describeRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)
 	}
@@ -311,7 +345,22 @@ func (wh *WorkflowHandler) UpdateDomain(
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.domainHandler.updateDomain(ctx, updateRequest)
+	if updateRequest == nil {
+		return nil, errRequestNotSet
+	}
+
+	// don't require permission for failover request
+	if !isFailoverRequest(updateRequest) {
+		if err := wh.checkPermission(updateRequest.SecurityToken); err != nil {
+			return nil, err
+		}
+	}
+
+	if updateRequest.GetName() == "" {
+		return nil, errDomainNotSet
+	}
+
+	resp, err := wh.domainHandler.UpdateDomain(ctx, updateRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)
 	}
@@ -331,7 +380,19 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return wh.error(err, scope)
 	}
 
-	err := wh.domainHandler.deprecateDomain(ctx, deprecateRequest)
+	if deprecateRequest == nil {
+		return errRequestNotSet
+	}
+
+	if err := wh.checkPermission(deprecateRequest.SecurityToken); err != nil {
+		return err
+	}
+
+	if deprecateRequest.GetName() == "" {
+		return errDomainNotSet
+	}
+
+	err := wh.domainHandler.DeprecateDomain(ctx, deprecateRequest)
 	if err != nil {
 		return wh.error(err, scope)
 	}
@@ -520,6 +581,7 @@ func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, b
 		badBinaries := domainEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]
 		if ok {
+			wh.metricsClient.IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.CadenceErrBadBinaryCounter)
 			return &gen.BadRequestError{
 				Message: fmt.Sprintf("binary %v already marked as bad deployment", binaryChecksum),
 			}
@@ -3221,22 +3283,6 @@ func validateExecution(w *gen.WorkflowExecution) error {
 	return nil
 }
 
-func getDomainStatus(info *persistence.DomainInfo) *gen.DomainStatus {
-	switch info.Status {
-	case persistence.DomainStatusRegistered:
-		v := gen.DomainStatusRegistered
-		return &v
-	case persistence.DomainStatusDeprecated:
-		v := gen.DomainStatusDeprecated
-		return &v
-	case persistence.DomainStatusDeleted:
-		v := gen.DomainStatusDeleted
-		return &v
-	}
-
-	return nil
-}
-
 func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	ctx context.Context,
 	scope metrics.Scope,
@@ -3452,7 +3498,7 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 ) (resp *replicator.GetReplicationMessagesResponse, err error) {
 	defer log.CapturePanic(wh.GetLogger(), &err)
 
-	scope, sw := wh.startRequestProfile(metrics.FrontendGetReplicationTasksScope)
+	scope, sw := wh.startRequestProfile(metrics.FrontendGetReplicationMessagesScope)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
@@ -3468,6 +3514,48 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 		return nil, wh.error(err, scope)
 	}
 	return resp, nil
+}
+
+// GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
+func (wh *WorkflowHandler) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDomainReplicationMessagesRequest,
+) (resp *replicator.GetDomainReplicationMessagesResponse, err error) {
+	defer log.CapturePanic(wh.GetLogger(), &err)
+
+	scope, sw := wh.startRequestProfile(metrics.FrontendGetDomainReplicationMessagesScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if wh.domainReplicationQueue == nil {
+		return nil, wh.error(errors.New("domain replication queue not enabled for cluster"), scope)
+	}
+
+	// TODO: Set it to last ack level for the cluster.
+	lastMessageID := defaultLastMessageID
+	if request.IsSetLastRetrivedMessageId() {
+		lastMessageID = int(request.GetLastRetrivedMessageId())
+	}
+
+	replicationTasks, lastMessageID, err := wh.domainReplicationQueue.GetReplicationMessages(
+		lastMessageID, getDomainReplicationMessageBatchSize)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return &replicator.GetDomainReplicationMessagesResponse{
+		Messages: &replicator.ReplicationMessages{
+			ReplicationTasks:      replicationTasks,
+			LastRetrivedMessageId: common.Int64Ptr(int64(lastMessageID)),
+		},
+	}, nil
 }
 
 // ReapplyEvents applies stale events to the current workflow and the current run
@@ -3510,6 +3598,22 @@ func (wh *WorkflowHandler) ReapplyEvents(
 	})
 	if err != nil {
 		return wh.error(err, scope)
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) checkPermission(
+	securityToken *string,
+) error {
+
+	if wh.config.EnableAdminProtection() {
+		if securityToken == nil {
+			return errNoPermission
+		}
+		requiredToken := wh.config.AdminOperationToken()
+		if *securityToken != requiredToken {
+			return errNoPermission
+		}
 	}
 	return nil
 }

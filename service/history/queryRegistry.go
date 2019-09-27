@@ -29,92 +29,175 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 )
 
-var (
-	errQueryNotFound       = errors.New("callback function could not be applied because query was not found")
-	errQueryAlreadyInState = errors.New("could not invoke callback because query is already in target state")
-)
-
 type (
-	// QueryRegistry keeps track of all outstanding queries for a single workflow execution
-	QueryRegistry interface {
-		BufferQuery(*shared.WorkflowQuery) Query
-		GetBuffered() map[string]Query
-		GetStarted() map[string]Query
+	queryRegistry interface {
+		hasBuffered() bool
+		getBufferedSnapshot() []string
+
+		hasStarted() bool
+		getStartedSnapshot() []string
+
+		hasCompleted() bool
+		getCompletedSnapshot() []string
+
+		getQuerySnapshot(string) (*querySnapshot, error)
+		getQueryTermCh(string) (<-chan struct{}, error)
+
+		bufferQuery(*shared.WorkflowQuery) (string, *querySnapshot, <-chan struct{})
+		recordEvent(string, queryEvent, *shared.WorkflowQueryResult) (bool, error)
+		removeQuery(string)
 	}
 
-	queryRegistry struct {
+	queryRegistryImpl struct {
 		sync.RWMutex
 
-		buffered map[string]Query
-		started  map[string]Query
+		buffered  map[string]queryStateMachine
+		started   map[string]queryStateMachine
+		completed map[string]queryStateMachine
 	}
 )
 
-// NewQueryRegistry constructs a new QueryRegistry.
-// One QueryRegistry exists per workflowExecutionContext, and it should be accessed through the workflowExecutionContext.
-func NewQueryRegistry() QueryRegistry {
-	return &queryRegistry{
-		buffered: make(map[string]Query),
-		started:  make(map[string]Query),
+func newQueryRegistry() queryRegistry {
+	return &queryRegistryImpl{
+		buffered:  make(map[string]queryStateMachine),
+		started:   make(map[string]queryStateMachine),
+		completed: make(map[string]queryStateMachine),
 	}
 }
 
-// BufferQuery is used to buffer a new query.
-func (r *queryRegistry) BufferQuery(queryInput *shared.WorkflowQuery) Query {
+func (r *queryRegistryImpl) hasBuffered() bool {
+	r.RLock()
+	defer r.RUnlock()
+
+	return len(r.buffered) > 0
+}
+
+func (r *queryRegistryImpl) getBufferedSnapshot() []string {
+	r.RLock()
+	defer r.RUnlock()
+
+	return getIDs(r.buffered)
+}
+
+func (r *queryRegistryImpl) hasStarted() bool {
+	r.RLock()
+	defer r.RUnlock()
+
+	return len(r.started) > 0
+}
+
+func (r *queryRegistryImpl) getStartedSnapshot() []string {
+	r.RLock()
+	defer r.RUnlock()
+
+	return getIDs(r.started)
+}
+
+func (r *queryRegistryImpl) hasCompleted() bool {
+	r.RLock()
+	defer r.RUnlock()
+
+	return len(r.completed) > 0
+}
+
+func (r *queryRegistryImpl) getCompletedSnapshot() []string {
+	r.RLock()
+	defer r.RUnlock()
+
+	return getIDs(r.completed)
+}
+
+func (r *queryRegistryImpl) getQuerySnapshot(id string) (*querySnapshot, error) {
+	r.RLock()
+	defer r.RUnlock()
+
+	qsm, err := r.getQueryStateMachine(id)
+	if err != nil {
+		return nil, err
+	}
+	return qsm.getQuerySnapshot(), nil
+}
+
+func (r *queryRegistryImpl) getQueryTermCh(id string) (<-chan struct{}, error) {
+	r.RLock()
+	defer r.RUnlock()
+
+	qsm, err := r.getQueryStateMachine(id)
+	if err != nil {
+		return nil, err
+	}
+	return qsm.getQueryTermCh(), nil
+}
+
+func (r *queryRegistryImpl) bufferQuery(queryInput *shared.WorkflowQuery) (string, *querySnapshot, <-chan struct{}) {
 	r.Lock()
 	defer r.Unlock()
 
-	query := newQuery(queryInput, r.bufferedToStartedCallback, r.startedToBufferedCallback, r.terminalStateCallback)
-	r.buffered[query.ID()] = query
-	return query
+	qsm := newQueryStateMachine(queryInput)
+	id := qsm.getQuerySnapshot().id
+	r.buffered[id] = qsm
+	return id, qsm.getQuerySnapshot(), qsm.getQueryTermCh()
 }
 
-// GetBuffered returns all buffered queries.
-func (r *queryRegistry) GetBuffered() map[string]Query {
-	r.RLock()
-	defer r.RUnlock()
+func (r *queryRegistryImpl) recordEvent(id string, event queryEvent, queryResult *shared.WorkflowQueryResult) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
 
-	return r.buffered
+	qsm, err := r.getQueryStateMachine(id)
+	if err != nil {
+		return false, err
+	}
+	changed, err := qsm.recordEvent(event, queryResult)
+	if err != nil {
+		return false, err
+	}
+	if !changed {
+		return false, nil
+	}
+	delete(r.buffered, id)
+	delete(r.started, id)
+	delete(r.completed, id)
+	switch qsm.getQuerySnapshot().state {
+	case queryStateBuffered:
+		r.buffered[id] = qsm
+	case queryStateStarted:
+		r.started[id] = qsm
+	case queryStateCompleted:
+		r.completed[id] = qsm
+	default:
+		panic("unknown query state")
+	}
+	return true, nil
 }
 
-// GetStarted returns all started queries.
-func (r *queryRegistry) GetStarted() map[string]Query {
-	r.RLock()
-	defer r.RUnlock()
-
-	return r.started
-}
-
-func (r *queryRegistry) terminalStateCallback(id string) {
+func (r *queryRegistryImpl) removeQuery(id string) {
 	r.Lock()
 	defer r.Unlock()
 
 	delete(r.buffered, id)
 	delete(r.started, id)
+	delete(r.completed, id)
 }
 
-func (r *queryRegistry) bufferedToStartedCallback(id string) error {
-	r.Lock()
-	defer r.Unlock()
-
-	return move(r.buffered, r.started, id)
-}
-
-func (r *queryRegistry) startedToBufferedCallback(id string) error {
-	r.Lock()
-	defer r.Unlock()
-
-	return move(r.started, r.buffered, id)
-}
-
-func move(source map[string]Query, target map[string]Query, key string) error {
-	if _, ok := source[key]; !ok {
-		return errQueryNotFound
+func (r *queryRegistryImpl) getQueryStateMachine(id string) (queryStateMachine, error) {
+	if qsm, ok := r.buffered[id]; ok {
+		return qsm, nil
 	}
-	if _, ok := target[key]; ok {
-		return errQueryAlreadyInState
+	if qsm, ok := r.started[id]; ok {
+		return qsm, nil
 	}
-	target[key] = source[key]
-	delete(source, key)
-	return nil
+	if qsm, ok := r.completed[id]; ok {
+		return qsm, nil
+	}
+	return nil, errors.New("query does not exist")
+}
+
+func getIDs(m map[string]queryStateMachine) []string {
+	result := make([]string, len(m), len(m))
+	index := 0
+	for id := range m {
+		result[index] = id
+		index++
+	}
+	return result
 }

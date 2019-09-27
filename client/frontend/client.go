@@ -675,6 +675,21 @@ func (c *clientImpl) GetReplicationMessages(
 	return client.GetReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDomainReplicationMessagesResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetDomainReplicationMessages(ctx, request, opts...)
+}
+
 func (c *clientImpl) ReapplyEvents(
 	ctx context.Context,
 	request *shared.ReapplyEventsRequest,

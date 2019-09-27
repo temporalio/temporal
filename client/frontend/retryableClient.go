@@ -584,6 +584,21 @@ func (c *retryableClient) GetReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDomainReplicationMessagesResponse, error) {
+	var resp *replicator.GetDomainReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetDomainReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
 	request *shared.ReapplyEventsRequest,

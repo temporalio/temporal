@@ -64,11 +64,12 @@ type activitiesSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 
-	logger           log.Logger
-	metricsClient    *mmocks.Client
-	metricsScope     *mmocks.Scope
-	archiverProvider *provider.MockArchiverProvider
-	historyArchiver  *carchiver.HistoryArchiverMock
+	logger             log.Logger
+	metricsClient      *mmocks.Client
+	metricsScope       *mmocks.Scope
+	archiverProvider   *provider.MockArchiverProvider
+	historyArchiver    *carchiver.HistoryArchiverMock
+	visibilityArchiver *carchiver.VisibilityArchiverMock
 }
 
 func TestActivitiesSuite(t *testing.T) {
@@ -82,6 +83,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.metricsScope = &mmocks.Scope{}
 	s.archiverProvider = &provider.MockArchiverProvider{}
 	s.historyArchiver = &carchiver.HistoryArchiverMock{}
+	s.visibilityArchiver = &carchiver.VisibilityArchiverMock{}
 	s.metricsScope.On("StartTimer", metrics.CadenceLatency).Return(metrics.NewTestStopwatch()).Maybe()
 	s.metricsScope.On("RecordTimer", mock.Anything, mock.Anything).Maybe()
 }
@@ -91,6 +93,7 @@ func (s *activitiesSuite) TearDownTest() {
 	s.metricsScope.AssertExpectations(s.T())
 	s.archiverProvider.AssertExpectations(s.T())
 	s.historyArchiver.AssertExpectations(s.T())
+	s.visibilityArchiver.AssertExpectations(s.T())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
@@ -178,7 +181,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
-	testArchiveErr := errors.New("some random error")
+	testArchiveErr := errors.New("some transient error")
 	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
@@ -314,6 +317,126 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Success() {
 		URI:                  testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
+	s.NoError(err)
+}
+
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
+	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	container := &BootstrapContainer{
+		Logger:        s.logger,
+		MetricsClient: s.metricsClient,
+	}
+	env := s.NewTestActivityEnvironment()
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+	request := ArchiveRequest{
+		DomainID:      testDomainID,
+		DomainName:    testDomainName,
+		WorkflowID:    testWorkflowID,
+		RunID:         testRunID,
+		VisibilityURI: "some invalid URI without scheme",
+	}
+	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
+	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+}
+
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() {
+	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.archiverProvider.On("GetVisibilityArchiver", mock.Anything, common.WorkerServiceName).Return(nil, errors.New("failed to get archiver"))
+	container := &BootstrapContainer{
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		ArchiverProvider: s.archiverProvider,
+	}
+	env := s.NewTestActivityEnvironment()
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+	request := ArchiveRequest{
+		DomainID:      testDomainID,
+		DomainName:    testDomainName,
+		WorkflowID:    testWorkflowID,
+		RunID:         testRunID,
+		VisibilityURI: testArchivalURI,
+	}
+	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
+	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+}
+
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriableError() {
+	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
+	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errArchiveVisibilityNonRetriable)
+	s.archiverProvider.On("GetVisibilityArchiver", mock.Anything, common.WorkerServiceName).Return(s.visibilityArchiver, nil)
+	container := &BootstrapContainer{
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		ArchiverProvider: s.archiverProvider,
+	}
+	env := s.NewTestActivityEnvironment()
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+	request := ArchiveRequest{
+		DomainID:      testDomainID,
+		DomainName:    testDomainName,
+		WorkflowID:    testWorkflowID,
+		RunID:         testRunID,
+		VisibilityURI: testArchivalURI,
+	}
+	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
+	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+}
+
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetriableError() {
+	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	testArchiveErr := errors.New("some transient error")
+	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testArchiveErr)
+	s.archiverProvider.On("GetVisibilityArchiver", mock.Anything, common.WorkerServiceName).Return(s.visibilityArchiver, nil)
+	container := &BootstrapContainer{
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		ArchiverProvider: s.archiverProvider,
+	}
+	env := s.NewTestActivityEnvironment()
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+	request := ArchiveRequest{
+		DomainID:      testDomainID,
+		DomainName:    testDomainName,
+		WorkflowID:    testWorkflowID,
+		RunID:         testRunID,
+		VisibilityURI: testArchivalURI,
+	}
+	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
+	s.Equal(testArchiveErr.Error(), err.Error())
+}
+
+func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
+	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
+	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	s.archiverProvider.On("GetVisibilityArchiver", mock.Anything, common.WorkerServiceName).Return(s.visibilityArchiver, nil)
+	container := &BootstrapContainer{
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		ArchiverProvider: s.archiverProvider,
+	}
+	env := s.NewTestActivityEnvironment()
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+	request := ArchiveRequest{
+		DomainID:      testDomainID,
+		DomainName:    testDomainName,
+		WorkflowID:    testWorkflowID,
+		RunID:         testRunID,
+		VisibilityURI: testArchivalURI,
+	}
+	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
 	s.NoError(err)
 }
 

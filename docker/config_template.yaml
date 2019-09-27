@@ -32,6 +32,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ default .Env.MYSQL_USER "" }}
                 password: {{ default .Env.MYSQL_PWD "" }}
+                {{- if .Env.MYSQL_TX_ISOLATION_COMPAT }}
+                connectAttributes:
+                    tx_isolation: 'READ-COMMITTED'
+                {{- end }}
         visibility:
             sql:
                 driverName: "mysql"
@@ -40,6 +44,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ default .Env.MYSQL_USER "" }}
                 password: {{ default .Env.MYSQL_PWD "" }}
+                {{- if .Env.MYSQL_TX_ISOLATION_COMPAT }}
+                connectAttributes:
+                    tx_isolation: 'READ-COMMITTED'
+                {{- end }}
         {{- end }}
         {{- if eq $es "true" }}
         es-visibility:
@@ -53,7 +61,7 @@ persistence:
 
 ringpop:
     name: cadence
-    bootstrapMode: hosts
+    bootstrapMode: {{ default .Env.RINGPOP_BOOTSTRAP_MODE "hosts" }}
     {{- if .Env.RINGPOP_SEEDS }}
     bootstrapHosts:
     {{- range $seed := (split .Env.RINGPOP_SEEDS ",") }}

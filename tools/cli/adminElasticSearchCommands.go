@@ -214,6 +214,8 @@ func AdminDelete(c *cli.Context) {
 	rps := c.Int(FlagRPS)
 	ratelimiter := tokenbucket.New(rps, clock.NewRealTimeSource())
 
+	// This is only executed from the CLI by an admin user
+	// #nosec
 	file, err := os.Open(inputFileName)
 	if err != nil {
 		ErrorAndExit("Cannot open input file", nil)
@@ -260,6 +262,8 @@ func AdminDelete(c *cli.Context) {
 }
 
 func parseIndexerMessage(fileName string) (messages []*indexer.Message, err error) {
+	// Executed from the CLI to parse existing elastiseach files
+	// #nosec
 	file, err := os.Open(fileName)
 	if err != nil {
 		return nil, err

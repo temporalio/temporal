@@ -77,7 +77,7 @@ func (h *handler) Start() {
 				if more := h.requestCh.Receive(ctx, &request); !more {
 					break
 				}
-				handleRequest(ctx, h.logger, h.metricsClient, request)
+				h.handleRequest(ctx, &request)
 				handledHashes = append(handledHashes, hash(request))
 			}
 			h.resultCh.Send(ctx, handledHashes)
@@ -99,9 +99,40 @@ func (h *handler) Finished() []uint64 {
 	return handledHashes
 }
 
-func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metrics.Client, request ArchiveRequest) {
-	sw := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleRequestLatency)
-	logger = tagLoggerWithRequest(logger, request)
+func (h *handler) handleRequest(ctx workflow.Context, request *ArchiveRequest) {
+	// For backward compatibility
+	targets := request.Targets
+	if len(targets) == 0 {
+		targets = append(targets, ArchiveTargetHistory)
+	}
+	pendingRequests := []workflow.Channel{}
+	for _, target := range targets {
+		doneCh := workflow.NewChannel(ctx)
+		pendingRequests = append(pendingRequests, doneCh)
+		switch target {
+		case ArchiveTargetHistory:
+			workflow.Go(ctx, func(ctx workflow.Context) {
+				h.handleHistoryRequest(ctx, request)
+				doneCh.Close()
+			})
+		case ArchiveTargetVisibility:
+			workflow.Go(ctx, func(ctx workflow.Context) {
+				h.handleVisibilityRequest(ctx, request)
+				doneCh.Close()
+			})
+		default:
+			doneCh.Close()
+		}
+	}
+
+	for _, doneCh := range pendingRequests {
+		doneCh.Receive(ctx, nil)
+	}
+}
+
+func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveRequest) {
+	sw := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleHistoryRequestLatency)
+	logger := tagLoggerWithHistoryRequest(h.logger, request)
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: 1 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
@@ -113,13 +144,13 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 		},
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)
-	uploadSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
-	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, request).Get(actCtx, nil)
+	uploadSW := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
+	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, *request).Get(actCtx, nil)
 	if err != nil {
 		logger.Error("failed to archive history, will move on to deleting history without archiving", tag.Error(err))
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
+		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
 	} else {
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
+		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
 	}
 	uploadSW.Stop()
 
@@ -132,15 +163,39 @@ func handleRequest(ctx workflow.Context, logger log.Logger, metricsClient metric
 			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
 		},
 	}
-	deleteSW := metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
+	deleteSW := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
-	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, request).Get(localActCtx, nil)
+	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, *request).Get(localActCtx, nil)
 	if err != nil {
 		logger.Error("deleting history failed, this means zombie histories are left", tag.Error(err))
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
+		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
 	} else {
-		metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
+		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
 	}
 	deleteSW.Stop()
+	sw.Stop()
+}
+
+func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *ArchiveRequest) {
+	sw := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleVisibilityRequestLatency)
+	logger := tagLoggerWithVisibilityRequest(h.logger, request)
+	ao := workflow.ActivityOptions{
+		ScheduleToStartTimeout: 1 * time.Minute,
+		StartToCloseTimeout:    1 * time.Minute,
+		RetryPolicy: &cadence.RetryPolicy{
+			InitialInterval:          time.Second,
+			BackoffCoefficient:       2.0,
+			ExpirationInterval:       5 * time.Minute,
+			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
+		},
+	}
+	actCtx := workflow.WithActivityOptions(ctx, ao)
+	err := workflow.ExecuteActivity(actCtx, archiveVisibilityActivityFnName, *request).Get(actCtx, nil)
+	if err != nil {
+		logger.Error("failed to archive workflow visibility record", tag.Error(err))
+		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverHandleVisibilityFailedAllRetiresCount)
+	} else {
+		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverHandleVisibilitySuccessCount)
+	}
 	sw.Stop()
 }

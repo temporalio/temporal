@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package domain
 
 import (
 	"fmt"
@@ -29,24 +29,25 @@ import (
 )
 
 type (
-	domainAttrValidatorImpl struct {
+	// AttrValidatorImpl is domain attr validator
+	AttrValidatorImpl struct {
 		clusterMetadata  cluster.Metadata
 		minRetentionDays int32
 	}
 )
 
-func newDomainAttrValidator(
+func newAttrValidator(
 	clusterMetadata cluster.Metadata,
 	minRetentionDays int32,
-) *domainAttrValidatorImpl {
+) *AttrValidatorImpl {
 
-	return &domainAttrValidatorImpl{
+	return &AttrValidatorImpl{
 		clusterMetadata:  clusterMetadata,
 		minRetentionDays: minRetentionDays,
 	}
 }
 
-func (d *domainAttrValidatorImpl) validateDomainConfig(config *persistence.DomainConfig) error {
+func (d *AttrValidatorImpl) validateDomainConfig(config *persistence.DomainConfig) error {
 	if config.Retention < int32(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
@@ -59,7 +60,7 @@ func (d *domainAttrValidatorImpl) validateDomainConfig(config *persistence.Domai
 	return nil
 }
 
-func (d *domainAttrValidatorImpl) validateDomainReplicationConfigForLocalDomain(
+func (d *AttrValidatorImpl) validateDomainReplicationConfigForLocalDomain(
 	replicationConfig *persistence.DomainReplicationConfig,
 ) error {
 
@@ -86,7 +87,7 @@ func (d *domainAttrValidatorImpl) validateDomainReplicationConfigForLocalDomain(
 	return nil
 }
 
-func (d *domainAttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain(
+func (d *AttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain(
 	replicationConfig *persistence.DomainReplicationConfig,
 ) error {
 
@@ -116,7 +117,7 @@ func (d *domainAttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain
 	return nil
 }
 
-func (d *domainAttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotChange(
+func (d *AttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotChange(
 	clustersOld []*persistence.ClusterReplicationConfig,
 	clustersNew []*persistence.ClusterReplicationConfig,
 ) error {
@@ -142,7 +143,7 @@ func (d *domainAttrValidatorImpl) validateDomainReplicationConfigClustersDoesNot
 	return nil
 }
 
-func (d *domainAttrValidatorImpl) validateClusterName(
+func (d *AttrValidatorImpl) validateClusterName(
 	clusterName string,
 ) error {
 

@@ -4,7 +4,7 @@ ARG TARGET=server
 ARG GOPROXY
 
 # Build tcheck binary
-FROM golang:1.12.7-alpine AS tcheck
+FROM golang:1.13.0-alpine AS tcheck
 
 RUN apk add --update --no-cache ca-certificates git curl
 
@@ -25,7 +25,7 @@ RUN go install
 
 
 # Build Cadence binaries
-FROM golang:1.12.7-alpine AS builder
+FROM golang:1.13.0-alpine AS builder
 
 RUN apk add --update --no-cache ca-certificates make git curl mercurial bzr
 

@@ -344,9 +344,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
-		scope := t.metricsClient.Scope(metrics.TransferStandbyTaskCloseExecutionScope)
 		return t.recordWorkflowClosed(
-			scope,
 			transferTask.DomainID,
 			execution,
 			workflowTypeName,

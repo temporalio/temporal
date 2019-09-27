@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -68,6 +68,12 @@ type Interface interface {
 		DescribeRequest *shared.DescribeWorkflowExecutionRequest,
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
+
+	GetDomainReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDomainReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetDomainReplicationMessagesResponse, error)
 
 	GetReplicationMessages(
 		ctx context.Context,
@@ -403,6 +409,29 @@ func (c client) DescribeWorkflowExecution(
 	}
 
 	success, err = cadence.WorkflowService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetDomainReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
+
+	args := cadence.WorkflowService_GetDomainReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_GetDomainReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_GetDomainReplicationMessages_Helper.UnwrapResponse(&result)
 	return
 }
 
