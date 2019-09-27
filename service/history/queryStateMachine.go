@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	errAlreadyTerminal       = errors.New("query has already reached terminal state cannot post any new events")
+	errAlreadyCompleted      = errors.New("query has already been completed, cannot post any new events")
 	errInvalidEvent          = errors.New("event cannot be applied to query in state")
 	errResultAlreadyRecorded = errors.New("result already recorded cannot make state transition")
 )
@@ -40,7 +40,6 @@ const (
 	queryStateBuffered queryState = iota
 	queryStateStarted
 	queryStateCompleted
-	queryStateExpired
 )
 
 const (
@@ -48,7 +47,6 @@ const (
 	queryEventStart
 	queryEventRecordResult
 	queryEventPersistenceConditionSatisfied
-	queryEventExpire
 )
 
 type (
@@ -114,8 +112,8 @@ func (q *queryStateMachineImpl) recordEvent(event queryEvent, queryResult *share
 	q.Lock()
 	defer q.Unlock()
 
-	if q.state == queryStateCompleted || q.state == queryStateExpired {
-		return false, errAlreadyTerminal
+	if q.state == queryStateCompleted {
+		return false, errAlreadyCompleted
 	}
 
 	if event != queryEventRecordResult && queryResult != nil {
@@ -153,10 +151,6 @@ func (q *queryStateMachineImpl) recordEvent(event queryEvent, queryResult *share
 	case queryEventPersistenceConditionSatisfied:
 		q.persistenceConditionSatisfied = true
 		return q.handleComplete(), nil
-	case queryEventExpire:
-		q.state = queryStateExpired
-		close(q.termCh)
-		return true, nil
 	default:
 		panic("invalid event")
 	}

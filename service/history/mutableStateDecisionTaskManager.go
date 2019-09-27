@@ -36,6 +36,13 @@ import (
 
 type (
 	mutableStateDecisionTaskManager interface {
+		AddInMemoryDecisionTaskScheduled(time.Duration) error
+		AddInMemoryDecisionTaskStarted() error
+		DeleteInMemoryDecisionTask()
+		HasScheduledInMemoryDecisionTask() bool
+		HasStartedInMemoryDecisionTask() bool
+		HasInMemoryDecisionTask() bool
+
 		ReplicateDecisionTaskScheduledEvent(
 			version int64,
 			scheduleID int64,
@@ -104,13 +111,32 @@ type (
 	}
 
 	mutableStateDecisionTaskManagerImpl struct {
-		msb *mutableStateBuilder
+		msb             *mutableStateBuilder
+		memDecisionTask *memDecisionTask
 	}
+
+	memDecisionTaskState int
+
+	// memDecisionTask represents a decisionTask which only ever exists in memory.
+	// This decisionTask will never be persisted and does not contain a *decisionInfo.
+	// Currently the only use case for memDecisionTask is query, but other potential use cases exist.
+	// While memDecisionTask will not be persisted it does impact the logic of decision state machine.
+	memDecisionTask struct {
+		state  memDecisionTaskState
+		expiry time.Time
+	}
+)
+
+const (
+	memDecisionTaskStateNone memDecisionTaskState = iota
+	memDecisionTaskStateScheduled
+	memDecisionTaskStateStarted
 )
 
 func newMutableStateDecisionTaskManager(msb *mutableStateBuilder) mutableStateDecisionTaskManager {
 	return &mutableStateDecisionTaskManagerImpl{
-		msb: msb,
+		msb:             msb,
+		memDecisionTask: &memDecisionTask{},
 	}
 }
 
@@ -220,6 +246,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskCompletedEvent(
 	event *workflow.HistoryEvent,
 ) error {
+	defer m.ensureMemDecisionTaskValid()
 	m.beforeAddDecisionTaskCompletedEvent()
 	m.afterAddDecisionTaskCompletedEvent(event, math.MaxInt32)
 	return nil
@@ -233,7 +260,6 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskFailedEvent()
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent(
 	timeoutType workflow.TimeoutType,
 ) error {
-
 	incrementAttempt := true
 	// Do not increment decision attempt in the case of sticky timeout to prevent creating next decision as transient
 	if timeoutType == workflow.TimeoutTypeScheduleToStart {
@@ -246,6 +272,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTimeoutEvent(
 	scheduleEventID int64,
 ) (*workflow.HistoryEvent, error) {
+	defer m.ensureMemDecisionTaskValid()
 	opTag := tag.WorkflowActionDecisionTaskTimedOut
 	if m.msb.executionInfo.DecisionScheduleID != scheduleEventID || m.msb.executionInfo.DecisionStartedID > 0 {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
@@ -272,8 +299,9 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp int64,
 ) (*decisionInfo, error) {
+	defer m.ensureMemDecisionTaskValid()
 	opTag := tag.WorkflowActionDecisionTaskScheduled
-	if m.HasPendingDecision() {
+	if m.HasPendingDecision() || m.HasStartedInMemoryDecisionTask() {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -356,7 +384,6 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEvent(
 func (m *mutableStateDecisionTaskManagerImpl) AddFirstDecisionTaskScheduled(
 	startEvent *workflow.HistoryEvent,
 ) error {
-
 	// handle first decision case, i.e. possible delayed decision
 	//
 	// below handles the following cases:
@@ -397,9 +424,10 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 	requestID string,
 	request *workflow.PollForDecisionTaskRequest,
 ) (*workflow.HistoryEvent, *decisionInfo, error) {
+	defer m.ensureMemDecisionTaskValid()
 	opTag := tag.WorkflowActionDecisionTaskStarted
 	decision, ok := m.GetDecisionInfo(scheduleEventID)
-	if !ok || decision.StartedID != common.EmptyEventID {
+	if !ok || decision.StartedID != common.EmptyEventID || m.HasStartedInMemoryDecisionTask() {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.msb.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -445,6 +473,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskCompletedEvent(
 	request *workflow.RespondDecisionTaskCompletedRequest,
 	maxResetPoints int,
 ) (*workflow.HistoryEvent, error) {
+	defer m.ensureMemDecisionTaskValid()
 	opTag := tag.WorkflowActionDecisionTaskCompleted
 	decision, ok := m.GetDecisionInfo(scheduleEventID)
 	if !ok || decision.StartedID != startedEventID {
@@ -484,6 +513,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	newRunID string,
 	forkEventVersion int64,
 ) (*workflow.HistoryEvent, error) {
+	defer m.ensureMemDecisionTaskValid()
 	opTag := tag.WorkflowActionDecisionTaskFailed
 	attr := workflow.DecisionTaskFailedEventAttributes{
 		ScheduledEventId: common.Int64Ptr(scheduleEventID),
@@ -528,6 +558,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 ) (*workflow.HistoryEvent, error) {
+	defer m.ensureMemDecisionTaskValid()
 	opTag := tag.WorkflowActionDecisionTaskTimedOut
 	dt, ok := m.GetDecisionInfo(scheduleEventID)
 	if !ok || dt.StartedID != startedEventID {
@@ -549,6 +580,46 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 		return nil, err
 	}
 	return event, nil
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) AddInMemoryDecisionTaskScheduled(ttl time.Duration) error {
+	defer m.ensureMemDecisionTaskValid()
+	opTag := tag.WorkflowActionInMemoryDecisionTaskScheduled
+	if m.HasPendingDecision() || m.HasInMemoryDecisionTask() {
+		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag, tag.ErrorTypeInvalidMemDecisionTaskAction)
+		return m.msb.createInternalServerError(opTag)
+	}
+	m.memDecisionTask.state = memDecisionTaskStateScheduled
+	m.memDecisionTask.expiry = m.msb.timeSource.Now().Add(ttl)
+	return nil
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) AddInMemoryDecisionTaskStarted() error {
+	defer m.ensureMemDecisionTaskValid()
+	opTag := tag.WorkflowActionInMemoryDecisionTaskStarted
+	if m.HasPendingDecision() || !m.HasScheduledInMemoryDecisionTask() {
+		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag, tag.ErrorTypeInvalidMemDecisionTaskAction)
+		return m.msb.createInternalServerError(opTag)
+	}
+	m.memDecisionTask.state = memDecisionTaskStateStarted
+	return nil
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) DeleteInMemoryDecisionTask() {
+	m.memDecisionTask.state = memDecisionTaskStateNone
+	m.memDecisionTask.expiry = time.Time{}
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) HasScheduledInMemoryDecisionTask() bool {
+	return m.memDecisionTask.state == memDecisionTaskStateScheduled && m.memDecisionTask.expiry.After(m.msb.timeSource.Now())
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) HasStartedInMemoryDecisionTask() bool {
+	return m.memDecisionTask.state == memDecisionTaskStateStarted && m.memDecisionTask.expiry.After(m.msb.timeSource.Now())
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) HasInMemoryDecisionTask() bool {
+	return m.memDecisionTask.state != memDecisionTaskStateNone && m.memDecisionTask.expiry.After(m.msb.timeSource.Now())
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) FailDecision(
@@ -596,7 +667,7 @@ func (m *mutableStateDecisionTaskManagerImpl) DeleteDecision() {
 func (m *mutableStateDecisionTaskManagerImpl) UpdateDecision(
 	decision *decisionInfo,
 ) {
-
+	defer m.ensureMemDecisionTaskValid()
 	m.msb.executionInfo.DecisionVersion = decision.Version
 	m.msb.executionInfo.DecisionScheduleID = decision.ScheduleID
 	m.msb.executionInfo.DecisionStartedID = decision.StartedID
@@ -716,4 +787,13 @@ func (m *mutableStateDecisionTaskManagerImpl) afterAddDecisionTaskCompletedEvent
 ) {
 	m.msb.executionInfo.LastProcessedEvent = event.GetDecisionTaskCompletedEventAttributes().GetStartedEventId()
 	m.msb.addBinaryCheckSumIfNotExists(event, maxResetPoints)
+}
+
+func (m *mutableStateDecisionTaskManagerImpl) ensureMemDecisionTaskValid() {
+	// it is invalid to ever ever have both memDecisionTask and realDecisionTask
+	// if this state arises it either indicates a bug or it indicates a scheduled memDecisionTask
+	// is being converted to a real decisionTask in either case the correct thing to do is delete the memDecisionTask
+	if m.HasInMemoryDecisionTask() && m.HasPendingDecision() {
+		m.DeleteInMemoryDecisionTask()
+	}
 }

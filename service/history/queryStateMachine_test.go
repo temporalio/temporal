@@ -43,19 +43,6 @@ func (s *QuerySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *QuerySuite) TestExpiredTerminalState() {
-	qsm := newQueryStateMachine(&shared.WorkflowQuery{})
-	s.False(s.chanClosed(qsm.getQueryTermCh()))
-	changed, err := qsm.recordEvent(queryEventExpire, nil)
-	s.NoError(err)
-	s.True(changed)
-	s.True(s.chanClosed(qsm.getQueryTermCh()))
-	s.Equal(queryStateExpired, qsm.getQuerySnapshot().state)
-	changed, err = qsm.recordEvent(queryEventStart, nil)
-	s.Equal(errAlreadyTerminal, err)
-	s.False(changed)
-}
-
 func (s *QuerySuite) TestCompletedTerminalState() {
 	testCases := []struct {
 		event  queryEvent
@@ -182,7 +169,7 @@ func (s *QuerySuite) TestCompletedTerminalState() {
 			result: nil,
 
 			expectChanged:        false,
-			expectErr:            errAlreadyTerminal,
+			expectErr:            errAlreadyCompleted,
 			expectState:          queryStateCompleted,
 			expectTermChClosed:   true,
 			expectResultRecorded: true,

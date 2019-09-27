@@ -38,10 +38,7 @@ type (
 		getStartedSnapshot() []string
 
 		hasCompleted() bool
-		getCompleted() []string
-
-		hasExpired() bool
-		getExpired() []string
+		getCompletedSnapshot() []string
 
 		getQuerySnapshot(string) (*querySnapshot, error)
 		getQueryTermCh(string) (<-chan struct{}, error)
@@ -57,7 +54,6 @@ type (
 		buffered  map[string]queryStateMachine
 		started   map[string]queryStateMachine
 		completed map[string]queryStateMachine
-		expired   map[string]queryStateMachine
 	}
 )
 
@@ -66,7 +62,6 @@ func newQueryRegistry() queryRegistry {
 		buffered:  make(map[string]queryStateMachine),
 		started:   make(map[string]queryStateMachine),
 		completed: make(map[string]queryStateMachine),
-		expired:   make(map[string]queryStateMachine),
 	}
 }
 
@@ -105,25 +100,11 @@ func (r *queryRegistryImpl) hasCompleted() bool {
 	return len(r.completed) > 0
 }
 
-func (r *queryRegistryImpl) getCompleted() []string {
+func (r *queryRegistryImpl) getCompletedSnapshot() []string {
 	r.RLock()
 	defer r.RUnlock()
 
 	return getIDs(r.completed)
-}
-
-func (r *queryRegistryImpl) hasExpired() bool {
-	r.RLock()
-	defer r.RUnlock()
-
-	return len(r.expired) > 0
-}
-
-func (r *queryRegistryImpl) getExpired() []string {
-	r.RLock()
-	defer r.RUnlock()
-
-	return getIDs(r.expired)
 }
 
 func (r *queryRegistryImpl) getQuerySnapshot(id string) (*querySnapshot, error) {
@@ -176,7 +157,6 @@ func (r *queryRegistryImpl) recordEvent(id string, event queryEvent, queryResult
 	delete(r.buffered, id)
 	delete(r.started, id)
 	delete(r.completed, id)
-	delete(r.expired, id)
 	switch qsm.getQuerySnapshot().state {
 	case queryStateBuffered:
 		r.buffered[id] = qsm
@@ -184,8 +164,6 @@ func (r *queryRegistryImpl) recordEvent(id string, event queryEvent, queryResult
 		r.started[id] = qsm
 	case queryStateCompleted:
 		r.completed[id] = qsm
-	case queryStateExpired:
-		r.expired[id] = qsm
 	default:
 		panic("unknown query state")
 	}
@@ -199,7 +177,6 @@ func (r *queryRegistryImpl) removeQuery(id string) {
 	delete(r.buffered, id)
 	delete(r.started, id)
 	delete(r.completed, id)
-	delete(r.expired, id)
 }
 
 func (r *queryRegistryImpl) getQueryStateMachine(id string) (queryStateMachine, error) {
@@ -210,9 +187,6 @@ func (r *queryRegistryImpl) getQueryStateMachine(id string) (queryStateMachine, 
 		return qsm, nil
 	}
 	if qsm, ok := r.completed[id]; ok {
-		return qsm, nil
-	}
-	if qsm, ok := r.expired[id]; ok {
 		return qsm, nil
 	}
 	return nil, errors.New("query does not exist")

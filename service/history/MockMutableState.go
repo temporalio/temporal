@@ -2889,3 +2889,88 @@ func (_m *mockMutableState) CloseTransactionAsSnapshot(_a0 time.Time, _a1 transa
 
 	return r0, r1, r2
 }
+
+// AddInMemoryDecisionTaskScheduled provides a mock function with given fields: _a0
+func (_m *mockMutableState) AddInMemoryDecisionTaskScheduled(_a0 time.Duration) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(time.Duration) error); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(error)
+		}
+	}
+
+	return r0
+}
+
+// AddInMemoryDecisionTaskStarted provides a mock function with given fields:
+func (_m *mockMutableState) AddInMemoryDecisionTaskStarted() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(error)
+		}
+	}
+
+	return r0
+}
+
+// DeleteInMemoryDecisionTask provides a mock function with given fields:
+func (_m *mockMutableState) DeleteInMemoryDecisionTask() {
+	_m.Called()
+}
+
+// HasScheduledInMemoryDecisionTask provides a mock function with given fields:
+func (_m *mockMutableState) HasScheduledInMemoryDecisionTask() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(bool)
+		}
+	}
+
+	return r0
+}
+
+// HasStartedInMemoryDecisionTask provides a mock function with given fields:
+func (_m *mockMutableState) HasStartedInMemoryDecisionTask() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(bool)
+		}
+	}
+
+	return r0
+}
+
+// HasInMemoryDecisionTask provides a mock function with given fields:
+func (_m *mockMutableState) HasInMemoryDecisionTask() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(bool)
+		}
+	}
+
+	return r0
+}
