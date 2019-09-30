@@ -114,10 +114,7 @@ func (p *queryParser) convertAndExpr(andExpr *sqlparser.AndExpr, parsedQuery *pa
 	if err := p.convertWhereExpr(andExpr.Left, parsedQuery); err != nil {
 		return err
 	}
-	if err := p.convertWhereExpr(andExpr.Right, parsedQuery); err != nil {
-		return err
-	}
-	return nil
+	return p.convertWhereExpr(andExpr.Right, parsedQuery)
 }
 
 func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, parsedQuery *parsedQuery) error {
