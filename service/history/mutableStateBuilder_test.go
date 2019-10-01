@@ -26,10 +26,10 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -72,7 +72,7 @@ func (s *mutableStateSuite) SetupTest() {
 	}
 	s.mockEventsCache = &MockEventsCache{}
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger, "")
+		s.logger, testLocalDomainEntry)
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -333,10 +333,10 @@ OtherEventsLoop:
 }
 
 func (s *mutableStateSuite) TestReorderEvents() {
-	domainID := validDomainID
+	domainID := testDomainID
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
-		RunId:      common.StringPtr(validRunID),
+		RunId:      common.StringPtr(testRunID),
 	}
 	tl := "testTaskList"
 	activityID := "activity_id"
@@ -491,7 +491,7 @@ func (s *mutableStateSuite) TestMergeMapOfByteArray() {
 }
 
 func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*shared.HistoryEvent, *shared.HistoryEvent) {
-	domainID := validDomainID
+	domainID := testDomainID
 	execution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(runID),
@@ -560,7 +560,6 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	s.mockEventsCache.On("putEvent", domainID, execution.GetWorkflowId(), execution.GetRunId(),
 		workflowStartEvent.GetEventId(), workflowStartEvent).Return(nil).Once()
 	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(
-		cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil),
 		nil,
 		execution,
 		uuid.New(),

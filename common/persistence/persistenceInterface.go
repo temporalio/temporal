@@ -171,7 +171,7 @@ type (
 	InternalCreateWorkflowExecutionRequest struct {
 		RangeID int64
 
-		CreateWorkflowMode int
+		Mode CreateWorkflowMode
 
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
@@ -245,14 +245,16 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ActivitInfos        map[int64]*InternalActivityInfo
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		ReplicationState *ReplicationState
+		VersionHistories *DataBlob
+		ActivityInfos    map[int64]*InternalActivityInfo
+
 		TimerInfos          map[string]*TimerInfo
 		ChildExecutionInfos map[int64]*InternalChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
 		SignalInfos         map[int64]*SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		ExecutionInfo       *InternalWorkflowExecutionInfo
-		ReplicationState    *ReplicationState
 		BufferedEvents      []*DataBlob
 	}
 
@@ -316,6 +318,8 @@ type (
 	InternalUpdateWorkflowExecutionRequest struct {
 		RangeID int64
 
+		Mode UpdateWorkflowMode
+
 		UpdateWorkflowMutation InternalWorkflowMutation
 
 		NewWorkflowSnapshot *InternalWorkflowSnapshot
@@ -325,16 +329,20 @@ type (
 	InternalConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
 
-		// previous workflow information
-		PrevRunID            string
-		PrevLastWriteVersion int64
-		PrevState            int
+		Mode ConflictResolveWorkflowMode
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot InternalWorkflowSnapshot
 
+		// maybe new workflow
+		NewWorkflowSnapshot *InternalWorkflowSnapshot
+
 		// current workflow
 		CurrentWorkflowMutation *InternalWorkflowMutation
+
+		// TODO deprecate this once nDC migration is completed
+		//  basically should use CurrentWorkflowMutation instead
+		CurrentWorkflowCAS *CurrentWorkflowCAS
 	}
 
 	// InternalResetWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
@@ -360,10 +368,13 @@ type (
 	InternalWorkflowMutation struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
+		VersionHistories *DataBlob
+		StartVersion     int64
+		LastWriteVersion int64
 
 		UpsertActivityInfos       []*InternalActivityInfo
 		DeleteActivityInfos       []int64
-		UpserTimerInfos           []*TimerInfo
+		UpsertTimerInfos          []*TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*InternalChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
@@ -387,6 +398,9 @@ type (
 	InternalWorkflowSnapshot struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
+		VersionHistories *DataBlob
+		StartVersion     int64
+		LastWriteVersion int64
 
 		ActivityInfos       []*InternalActivityInfo
 		TimerInfos          []*TimerInfo
@@ -701,5 +715,41 @@ func (d *DataBlob) GetEncoding() common.EncodingType {
 		return common.EncodingTypeEmpty
 	default:
 		return common.EncodingTypeUnknown
+	}
+}
+
+// ToThrift convert data blob to thrift representation
+func (d *DataBlob) ToThrift() *workflow.DataBlob {
+	switch d.Encoding {
+	case common.EncodingTypeJSON:
+		return &workflow.DataBlob{
+			EncodingType: workflow.EncodingTypeJSON.Ptr(),
+			Data:         d.Data,
+		}
+	case common.EncodingTypeThriftRW:
+		return &workflow.DataBlob{
+			EncodingType: workflow.EncodingTypeThriftRW.Ptr(),
+			Data:         d.Data,
+		}
+	default:
+		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
+	}
+}
+
+// NewDataBlobFromThrift convert data blob from thrift representation
+func NewDataBlobFromThrift(blob *workflow.DataBlob) *DataBlob {
+	switch blob.GetEncodingType() {
+	case workflow.EncodingTypeJSON:
+		return &DataBlob{
+			Encoding: common.EncodingTypeJSON,
+			Data:     blob.Data,
+		}
+	case workflow.EncodingTypeThriftRW:
+		return &DataBlob{
+			Encoding: common.EncodingTypeThriftRW,
+			Data:     blob.Data,
+		}
+	default:
+		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}
 }

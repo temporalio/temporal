@@ -414,7 +414,7 @@ service WorkflowService {
       6: shared.LimitExceededError limitExceededError,
       7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
     )
-    
+
   /**
   * TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
   * in the history and immediately terminating the execution instance.
@@ -606,5 +606,18 @@ service WorkflowService {
       3: shared.LimitExceededError limitExceededError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+    )
+
+  /**
+  * ReapplyEvents applies stale events to the current workflow and current run
+  **/
+  void ReapplyEvents(1: shared.ReapplyEventsRequest reapplyEventsRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.DomainNotActiveError domainNotActiveError,
+      4: shared.LimitExceededError limitExceededError,
+      5: shared.ServiceBusyError serviceBusyError,
+      6: shared.EntityNotExistsError entityNotExistError,
     )
 }

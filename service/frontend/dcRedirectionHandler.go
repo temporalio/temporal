@@ -1157,6 +1157,14 @@ func (handler *DCRedirectionHandlerImpl) GetDomainReplicationMessages(
 	return handler.frontendHandler.GetDomainReplicationMessages(ctx, request)
 }
 
+// ReapplyEvents API call
+func (handler *DCRedirectionHandlerImpl) ReapplyEvents(
+	ctx context.Context,
+	request *shared.ReapplyEventsRequest,
+) error {
+	return handler.frontendHandler.ReapplyEvents(ctx, request)
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {

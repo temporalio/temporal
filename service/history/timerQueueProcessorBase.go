@@ -407,7 +407,11 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
 	} else if msBuilder == nil || msBuilder.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetLastWriteVersion(), task.Version, task)
+	lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, lastWriteVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -490,22 +494,28 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 		req.ArchiveRequest.ShardID = t.shard.GetShardID()
 		req.ArchiveRequest.DomainName = domainCacheEntry.GetInfo().Name
 		req.ArchiveRequest.EventStoreVersion = msBuilder.GetEventStoreVersion()
-		req.ArchiveRequest.BranchToken = msBuilder.GetCurrentBranch()
+		req.ArchiveRequest.BranchToken, err = msBuilder.GetCurrentBranchToken()
+		if err != nil {
+			return err
+		}
 		req.ArchiveRequest.NextEventID = msBuilder.GetNextEventID()
-		req.ArchiveRequest.CloseFailoverVersion = msBuilder.GetLastWriteVersion()
+		req.ArchiveRequest.CloseFailoverVersion, err = msBuilder.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
 		req.ArchiveRequest.URI = domainCacheEntry.GetConfig().HistoryArchivalURI
 		req.ArchiveRequest.Targets = append(req.ArchiveRequest.Targets, archiver.ArchiveTargetHistory)
 	}
 
 	if archiveVisibility {
 		executionInfo := msBuilder.GetExecutionInfo()
-		startEvent, ok := msBuilder.GetStartEvent()
-		if !ok {
-			return &workflow.InternalServiceError{Message: "Unable to get workflow start event."}
+		startEvent, err := msBuilder.GetStartEvent()
+		if err != nil {
+			return err
 		}
-		completionEvent, ok := msBuilder.GetCompletionEvent()
-		if !ok {
-			return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
+		completionEvent, err := msBuilder.GetCompletionEvent()
+		if err != nil {
+			return err
 		}
 		req.ArchiveRequest.WorkflowTypeName = executionInfo.WorkflowTypeName
 		req.ArchiveRequest.StartTimestamp = executionInfo.StartTimestamp.UnixNano()
@@ -588,6 +598,11 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op := func() error {
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
+			branchToken, err := msBuilder.GetCurrentBranchToken()
+			if err != nil {
+				return err
+			}
+
 			logger := t.logger.WithTags(tag.WorkflowID(task.WorkflowID),
 				tag.WorkflowRunID(task.RunID),
 				tag.WorkflowDomainID(task.DomainID),
@@ -595,7 +610,7 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(
 				tag.TaskID(task.GetTaskID()),
 				tag.FailoverVersion(task.GetVersion()),
 				tag.TaskType(task.GetTaskType()))
-			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, msBuilder.GetCurrentBranch(), common.IntPtr(t.shard.GetShardID()), logger)
+			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, branchToken, common.IntPtr(t.shard.GetShardID()), logger)
 		}
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{

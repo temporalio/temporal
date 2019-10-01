@@ -210,9 +210,9 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(
 	var activityScheduleToStartTimeout *int32
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
-		activityInfo, isPending := msBuilder.GetActivityInfo(transferTask.ScheduleID)
+		activityInfo, ok := msBuilder.GetActivityInfo(transferTask.ScheduleID)
 
-		if !isPending {
+		if !ok {
 			return nil
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, activityInfo.Version, transferTask.Version, transferTask)
@@ -311,9 +311,9 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 			return nil
 		}
 
-		completionEvent, ok := msBuilder.GetCompletionEvent()
-		if !ok {
-			return &workflow.InternalServiceError{Message: "Unable to get workflow completion event."}
+		completionEvent, err := msBuilder.GetCompletionEvent()
+		if err != nil {
+			return err
 		}
 		wfCloseTime := completionEvent.GetTimestamp()
 
@@ -323,15 +323,19 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		workflowCloseTimestamp := wfCloseTime
 		workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := msBuilder.GetNextEventID() - 1
-		startEvent, found := msBuilder.GetStartEvent()
-		if !found {
-			return &workflow.InternalServiceError{Message: "Failed to load start event."}
+		startEvent, err := msBuilder.GetStartEvent()
+		if err != nil {
+			return err
 		}
 		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := executionInfo.SearchAttributes
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
+		lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, lastWriteVersion, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -373,9 +377,9 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
-		requestCancelInfo, isPending := msBuilder.GetRequestCancelInfo(transferTask.ScheduleID)
+		requestCancelInfo, ok := msBuilder.GetRequestCancelInfo(transferTask.ScheduleID)
 
-		if !isPending {
+		if !ok {
 			return nil
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, requestCancelInfo.Version, transferTask.Version, transferTask)
@@ -412,9 +416,9 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
-		signalInfo, isPending := msBuilder.GetSignalInfo(transferTask.ScheduleID)
+		signalInfo, ok := msBuilder.GetSignalInfo(transferTask.ScheduleID)
 
-		if !isPending {
+		if !ok {
 			return nil
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, signalInfo.Version, transferTask.Version, transferTask)
@@ -451,9 +455,9 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
-		childWorkflowInfo, isPending := msBuilder.GetChildExecutionInfo(transferTask.ScheduleID)
+		childWorkflowInfo, ok := msBuilder.GetChildExecutionInfo(transferTask.ScheduleID)
 
-		if !isPending {
+		if !ok {
 			return nil
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, childWorkflowInfo.Version, transferTask.Version, transferTask)
@@ -508,7 +512,11 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 	// verify task version for RecordWorkflowStarted.
 	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
 	if isRecordStart {
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetStartVersion(), transferTask.Version, transferTask)
+		startVersion, err := msBuilder.GetStartVersion()
+		if err != nil {
+			return err
+		}
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, startVersion, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -524,9 +532,9 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 	workflowTimeout := executionInfo.WorkflowTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp.UnixNano()
-	startEvent, found := msBuilder.GetStartEvent()
-	if !found {
-		return &workflow.InternalServiceError{Message: "Failed to load start event."}
+	startEvent, err := msBuilder.GetStartEvent()
+	if err != nil {
+		return err
 	}
 	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)

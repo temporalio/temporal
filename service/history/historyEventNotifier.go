@@ -66,9 +66,11 @@ func newHistoryEventNotification(
 	lastFirstEventID int64,
 	nextEventID int64,
 	previousStartedEventID int64,
-	isWorkflowRunning bool,
-	closeStatus int,
+	currentBranchToken []byte,
+	workflowState int,
+	workflowCloseState int,
 ) *historyEventNotification {
+
 	return &historyEventNotification{
 		id: definition.NewWorkflowIdentifier(
 			domainID,
@@ -78,12 +80,18 @@ func newHistoryEventNotification(
 		lastFirstEventID:       lastFirstEventID,
 		nextEventID:            nextEventID,
 		previousStartedEventID: previousStartedEventID,
-		isWorkflowRunning:      isWorkflowRunning,
-		closeStatus:            closeStatus,
+		currentBranchToken:     currentBranchToken,
+		workflowState:          workflowState,
+		workflowCloseState:     workflowCloseState,
 	}
 }
 
-func newHistoryEventNotifier(timeSource clock.TimeSource, metrics metrics.Client, workflowIDToShardID func(string) int) *historyEventNotifierImpl {
+func newHistoryEventNotifier(
+	timeSource clock.TimeSource,
+	metrics metrics.Client,
+	workflowIDToShardID func(string) int,
+) *historyEventNotifierImpl {
+
 	hashFn := func(key interface{}) uint32 {
 		notification, ok := key.(historyEventNotification)
 		if !ok {

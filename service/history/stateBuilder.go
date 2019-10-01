@@ -44,6 +44,7 @@ type (
 			newRunHistory []*shared.HistoryEvent,
 			eventStoreVersion int32,
 			newRunEventStoreVersion int32,
+			newRunNDC bool,
 		) (*shared.HistoryEvent, *decisionInfo, mutableState, error)
 		getTransferTasks() []persistence.Task
 		getTimerTasks() []persistence.Task
@@ -118,6 +119,7 @@ func (b *stateBuilderImpl) applyEvents(
 	newRunHistory []*shared.HistoryEvent,
 	eventStoreVersion int32,
 	newRunEventStoreVersion int32,
+	newRunNDC bool,
 ) (*shared.HistoryEvent, *decisionInfo, mutableState, error) {
 
 	if len(history) == 0 {
@@ -138,16 +140,27 @@ func (b *stateBuilderImpl) applyEvents(
 			// history event version changed during for loop
 			b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
 			b.msBuilder.UpdateReplicationStateLastEventID(lastEvent.GetVersion(), lastEvent.GetEventId())
+		} else if b.msBuilder.GetVersionHistories() != nil {
+			if err := b.msBuilder.UpdateCurrentVersion(event.GetVersion(), true); err != nil {
+				return nil, nil, nil, err
+			}
+			versionHistories := b.msBuilder.GetVersionHistories()
+			versionHistory, err := versionHistories.GetCurrentVersionHistory()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if err := versionHistory.AddOrUpdateItem(persistence.NewVersionHistoryItem(
+				event.GetEventId(),
+				event.GetVersion(),
+			)); err != nil {
+				return nil, nil, nil, err
+			}
 		}
 		b.msBuilder.GetExecutionInfo().LastEventTaskID = event.GetTaskId()
 
 		switch event.GetEventType() {
 		case shared.EventTypeWorkflowExecutionStarted:
 			attributes := event.WorkflowExecutionStartedEventAttributes
-			domainEntry, err := b.domainCache.GetDomainByID(domainID)
-			if err != nil {
-				return nil, nil, nil, err
-			}
 			var parentDomainID *string
 			if attributes.ParentWorkflowDomain != nil {
 				parentDomainEntry, err := b.domainCache.GetDomain(attributes.GetParentWorkflowDomain())
@@ -156,21 +169,23 @@ func (b *stateBuilderImpl) applyEvents(
 				}
 				parentDomainID = &parentDomainEntry.GetInfo().ID
 			}
-			err = b.msBuilder.ReplicateWorkflowExecutionStartedEvent(domainEntry, parentDomainID, execution, requestID, event)
+			err := b.msBuilder.ReplicateWorkflowExecutionStartedEvent(parentDomainID, execution, requestID, event)
 			if err != nil {
 				return nil, nil, nil, err
 			}
 
 			b.timerTasks = append(b.timerTasks, b.scheduleWorkflowTimerTask(event, b.msBuilder)...)
-			// TODO this record workflow start task does not seem correct for child workflow (2 phase commit)
-			//  child workflow & not continue as new should generate this task at decision "schedule", i.e.
-			//  1. cron -> first decision timer schedule; 2. not cron -> first decision event
 			b.transferTasks = append(b.transferTasks, b.scheduleWorkflowStartTransferTask())
 			if eventStoreVersion == persistence.EventStoreVersionV2 {
 				err := b.msBuilder.SetHistoryTree(execution.GetRunId())
 				if err != nil {
 					return nil, nil, nil, err
 				}
+			}
+
+			// TODO remove after NDC is fully migrated
+			if b.msBuilder.GetReplicationState() != nil {
+				b.msBuilder.GetReplicationState().StartVersion = event.GetVersion()
 			}
 
 		case shared.EventTypeDecisionTaskScheduled:
@@ -528,20 +543,22 @@ func (b *stateBuilderImpl) applyEvents(
 			if len(newRunHistory) == 0 {
 				return nil, nil, nil, errors.NewInternalFailureError(ErrMessageNewRunHistorySizeZero)
 			}
-			newRunStartedEvent := newRunHistory[0]
-			// Create mutable state updates for the new run
-			domainEntry, err := b.domainCache.GetDomainByID(domainID)
-			if err != nil {
-				return nil, nil, nil, err
+
+			if newRunNDC {
+				newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
+					b.shard,
+					b.shard.GetEventsCache(),
+					b.logger,
+					b.msBuilder.GetDomainEntry(),
+				)
+			} else {
+				newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
+					b.shard,
+					b.shard.GetEventsCache(),
+					b.logger,
+					b.msBuilder.GetDomainEntry(),
+				)
 			}
-			newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-				b.shard,
-				b.shard.GetEventsCache(),
-				b.logger,
-				newRunStartedEvent.GetVersion(),
-				domainEntry.GetReplicationPolicy(),
-				domainEntry.GetInfo().Name,
-			)
 			newRunStateBuilder := newStateBuilder(b.shard, newRunMutableStateBuilder, b.logger)
 
 			newRunID := event.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
@@ -549,7 +566,7 @@ func (b *stateBuilderImpl) applyEvents(
 				WorkflowId: execution.WorkflowId,
 				RunId:      common.StringPtr(newRunID),
 			}
-			_, _, _, err = newRunStateBuilder.applyEvents(
+			_, _, _, err := newRunStateBuilder.applyEvents(
 				domainID,
 				uuid.New(),
 				newExecution,
@@ -557,6 +574,7 @@ func (b *stateBuilderImpl) applyEvents(
 				nil,
 				newRunEventStoreVersion,
 				0,
+				false,
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -790,5 +808,5 @@ func (b *stateBuilderImpl) getTimerBuilder(
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)
 
-	return newTimerBuilder(b.logger, timeSource)
+	return newTimerBuilder(timeSource)
 }

@@ -30,7 +30,8 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/sqlblobs.thrift \
 
 PROGS = cadence
-TEST_ARG ?= -race -v -timeout 40m
+TEST_TIMEOUT = 15m
+TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
 INTEG_TEST_ROOT=./host
@@ -140,7 +141,7 @@ test: bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
-		go test -timeout 20m -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
+		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 
 test_eventsV2: bins
@@ -148,7 +149,7 @@ test_eventsV2: bins
 	@rm -f test_eventsV2.log
 	@echo Running integration test
 	@for dir in $(INTEG_TEST_ROOT); do \
-    		go test -timeout 20m -coverprofile=$@ "$$dir" -v $(TEST_TAG) -eventsV2=true | tee -a test_eventsV2.log; \
+    		go test -timeout $(TEST_TIMEOUT) -coverprofile=$@ "$$dir" -v $(TEST_TAG) -eventsV2=true | tee -a test_eventsV2.log; \
     done;
 
 test_eventsV2_xdc: bins
@@ -156,7 +157,7 @@ test_eventsV2_xdc: bins
 	@rm -f test_eventsV2_xdc.log
 	@echo Running integration test for cross dc:
 	@for dir in $(INTEG_TEST_XDC_ROOT); do \
-		go test -timeout 20m -coverprofile=$@ "$$dir" -v $(TEST_TAG) -eventsV2xdc=true | tee -a test_eventsV2_xdc.log; \
+		go test -timeout $(TEST_TIMEOUT) -coverprofile=$@ "$$dir" -v $(TEST_TAG) -eventsV2xdc=true | tee -a test_eventsV2_xdc.log; \
 	done;
 
 # need to run xdc tests with race detector off because of ringpop bug causing data race issue
@@ -164,7 +165,7 @@ test_xdc: bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(INTEG_TEST_XDC_ROOT); do \
-		go test -timeout 20m -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
+		go test -timeout $(TEST_TIMEOUT) -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 
 cover_profile: clean bins_nothrift
@@ -196,7 +197,7 @@ cover_xdc_profile: clean bins_nothrift
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
 	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_DIR)
-	@time go test $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
+	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
 $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_CASS_EV2_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_SQL_EV2_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)

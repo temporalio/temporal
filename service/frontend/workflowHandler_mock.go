@@ -615,3 +615,11 @@ func (mr *MockWorkflowHandlerMockRecorder) UpdateDomain(ctx, UpdateRequest inter
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDomain", reflect.TypeOf((*MockWorkflowHandler)(nil).UpdateDomain), ctx, UpdateRequest)
 }
+
+// UpdateDomain mocks base method
+func (m *MockWorkflowHandler) ReapplyEvents(ctx context.Context, ReapplyEventsRequest *shared.ReapplyEventsRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ReapplyEventsRequest)
+	ret0, _ := ret[0].(error)
+	return ret0
+}

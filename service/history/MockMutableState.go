@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
@@ -400,13 +401,13 @@ func (_m *mockMutableState) AddCompletedWorkflowEvent(_a0 int64, _a1 *shared.Com
 	return r0, r1
 }
 
-// AddContinueAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4, _a5
-func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 *cache.DomainCacheEntry, _a3 string, _a4 *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, _a5 int32) (*shared.HistoryEvent, mutableState, error) {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4, _a5)
+// AddContinueAsNewEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 string, _a3 *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, _a4 int32) (*shared.HistoryEvent, mutableState, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(int64, int64, *cache.DomainCacheEntry, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(0).(func(int64, int64, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -414,8 +415,8 @@ func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 *cac
 	}
 
 	var r1 mutableState
-	if rf, ok := ret.Get(1).(func(int64, int64, *cache.DomainCacheEntry, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) mutableState); ok {
-		r1 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(1).(func(int64, int64, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) mutableState); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(mutableState)
@@ -423,8 +424,8 @@ func (_m *mockMutableState) AddContinueAsNewEvent(_a0 int64, _a1 int64, _a2 *cac
 	}
 
 	var r2 error
-	if rf, ok := ret.Get(2).(func(int64, int64, *cache.DomainCacheEntry, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) error); ok {
-		r2 = rf(_a0, _a1, _a2, _a3, _a4, _a5)
+	if rf, ok := ret.Get(2).(func(int64, int64, string, *shared.ContinueAsNewWorkflowExecutionDecisionAttributes, int32) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -1095,12 +1096,12 @@ func (_m *mockMutableState) AddWorkflowExecutionSignaled(signalName string, inpu
 }
 
 // AddWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 *cache.DomainCacheEntry, _a1 shared.WorkflowExecution, _a2 *h.StartWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
-	ret := _m.Called(_a0, _a1, _a2)
+func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 shared.WorkflowExecution, _a1 *h.StartWorkflowExecutionRequest) (*shared.HistoryEvent, error) {
+	ret := _m.Called(_a0, _a1)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry, shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1, _a2)
+	if rf, ok := ret.Get(0).(func(shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -1108,8 +1109,8 @@ func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 *cache.DomainCa
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*cache.DomainCacheEntry, shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) error); ok {
-		r1 = rf(_a0, _a1, _a2)
+	if rf, ok := ret.Get(1).(func(shared.WorkflowExecution, *h.StartWorkflowExecutionRequest) error); ok {
+		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1363,7 +1364,7 @@ func (_m *mockMutableState) GetActivityInfo(_a0 int64) (*persistence.ActivityInf
 }
 
 // GetActivityScheduledEvent provides a mock function with given fields: _a0
-func (_m *mockMutableState) GetActivityScheduledEvent(_a0 int64) (*shared.HistoryEvent, bool) {
+func (_m *mockMutableState) GetActivityScheduledEvent(_a0 int64) (*shared.HistoryEvent, error) {
 	ret := _m.Called(_a0)
 
 	var r0 *shared.HistoryEvent
@@ -1375,14 +1376,28 @@ func (_m *mockMutableState) GetActivityScheduledEvent(_a0 int64) (*shared.Histor
 		}
 	}
 
-	var r1 bool
-	if rf, ok := ret.Get(1).(func(int64) bool); ok {
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(_a0)
 	} else {
-		r1 = ret.Get(1).(bool)
+		r1 = ret.Error(1)
 	}
 
 	return r0, r1
+}
+
+// GetVersionHistories provide mocks
+func (_m *mockMutableState) GetVersionHistories() *persistence.VersionHistories {
+	ret := _m.Called()
+
+	var r0 *persistence.VersionHistories
+	if rf, ok := ret.Get(0).(func() *persistence.VersionHistories); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(*persistence.VersionHistories)
+	}
+
+	return r0
 }
 
 // GetChildExecutionInfo provides a mock function with given fields: _a0
@@ -1409,7 +1424,7 @@ func (_m *mockMutableState) GetChildExecutionInfo(_a0 int64) (*persistence.Child
 }
 
 // GetChildExecutionInitiatedEvent provides a mock function with given fields: _a0
-func (_m *mockMutableState) GetChildExecutionInitiatedEvent(_a0 int64) (*shared.HistoryEvent, bool) {
+func (_m *mockMutableState) GetChildExecutionInitiatedEvent(_a0 int64) (*shared.HistoryEvent, error) {
 	ret := _m.Called(_a0)
 
 	var r0 *shared.HistoryEvent
@@ -1421,18 +1436,18 @@ func (_m *mockMutableState) GetChildExecutionInitiatedEvent(_a0 int64) (*shared.
 		}
 	}
 
-	var r1 bool
-	if rf, ok := ret.Get(1).(func(int64) bool); ok {
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(_a0)
 	} else {
-		r1 = ret.Get(1).(bool)
+		r1 = ret.Error(1)
 	}
 
 	return r0, r1
 }
 
 // GetCompletionEvent provides a mock function with given fields:
-func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, bool) {
+func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, error) {
 	ret := _m.Called()
 
 	var r0 *shared.HistoryEvent
@@ -1444,11 +1459,11 @@ func (_m *mockMutableState) GetCompletionEvent() (*shared.HistoryEvent, bool) {
 		}
 	}
 
-	var r1 bool
-	if rf, ok := ret.Get(1).(func() bool); ok {
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
 	} else {
-		r1 = ret.Get(1).(bool)
+		r1 = ret.Error(1)
 	}
 
 	return r0, r1
@@ -1476,7 +1491,7 @@ func (_m *mockMutableState) GetCronBackoffDuration() (time.Duration, error) {
 }
 
 // GetCurrentBranch provides a mock function with given fields:
-func (_m *mockMutableState) GetCurrentBranch() []byte {
+func (_m *mockMutableState) GetCurrentBranchToken() ([]byte, error) {
 	ret := _m.Called()
 
 	var r0 []byte
@@ -1488,7 +1503,14 @@ func (_m *mockMutableState) GetCurrentBranch() []byte {
 		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetCurrentVersion provides a mock function with given fields:
@@ -1506,14 +1528,16 @@ func (_m *mockMutableState) GetCurrentVersion() int64 {
 }
 
 // GetDomainName provides a mock function with given fields:
-func (_m *mockMutableState) GetDomainName() string {
+func (_m *mockMutableState) GetDomainEntry() *cache.DomainCacheEntry {
 	ret := _m.Called()
 
-	var r0 string
-	if rf, ok := ret.Get(0).(func() string); ok {
+	var r0 *cache.DomainCacheEntry
+	if rf, ok := ret.Get(0).(func() *cache.DomainCacheEntry); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(string)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*cache.DomainCacheEntry)
+		}
 	}
 
 	return r0
@@ -1626,7 +1650,7 @@ func (_m *mockMutableState) GetLastFirstEventID() int64 {
 }
 
 // GetLastWriteVersion provides a mock function with given fields:
-func (_m *mockMutableState) GetLastWriteVersion() int64 {
+func (_m *mockMutableState) GetLastWriteVersion() (int64, error) {
 	ret := _m.Called()
 
 	var r0 int64
@@ -1636,7 +1660,14 @@ func (_m *mockMutableState) GetLastWriteVersion() int64 {
 		r0 = ret.Get(0).(int64)
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetNextEventID provides a mock function with given fields:
@@ -1824,7 +1855,7 @@ func (_m *mockMutableState) GetRetryBackoffDuration(errReason string) time.Durat
 }
 
 // GetScheduleIDByActivityID provides a mock function with given fields: _a0
-func (_m *mockMutableState) GetScheduleIDByActivityID(_a0 string) (int64, bool) {
+func (_m *mockMutableState) GetScheduleIDByActivityID(_a0 string) (int64, error) {
 	ret := _m.Called(_a0)
 
 	var r0 int64
@@ -1834,11 +1865,11 @@ func (_m *mockMutableState) GetScheduleIDByActivityID(_a0 string) (int64, bool) 
 		r0 = ret.Get(0).(int64)
 	}
 
-	var r1 bool
-	if rf, ok := ret.Get(1).(func(string) bool); ok {
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
 		r1 = rf(_a0)
 	} else {
-		r1 = ret.Get(1).(bool)
+		r1 = ret.Error(1)
 	}
 
 	return r0, r1
@@ -1868,7 +1899,7 @@ func (_m *mockMutableState) GetSignalInfo(_a0 int64) (*persistence.SignalInfo, b
 }
 
 // GetStartEvent provides a mock function with given fields:
-func (_m *mockMutableState) GetStartEvent() (*shared.HistoryEvent, bool) {
+func (_m *mockMutableState) GetStartEvent() (*shared.HistoryEvent, error) {
 	ret := _m.Called()
 
 	var r0 *shared.HistoryEvent
@@ -1880,18 +1911,18 @@ func (_m *mockMutableState) GetStartEvent() (*shared.HistoryEvent, bool) {
 		}
 	}
 
-	var r1 bool
-	if rf, ok := ret.Get(1).(func() bool); ok {
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
 	} else {
-		r1 = ret.Get(1).(bool)
+		r1 = ret.Error(1)
 	}
 
 	return r0, r1
 }
 
 // GetStartVersion provides a mock function with given fields:
-func (_m *mockMutableState) GetStartVersion() int64 {
+func (_m *mockMutableState) GetStartVersion() (int64, error) {
 	ret := _m.Called()
 
 	var r0 int64
@@ -1901,27 +1932,34 @@ func (_m *mockMutableState) GetStartVersion() int64 {
 		r0 = ret.Get(0).(int64)
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetUserTimer provides a mock function with given fields: _a0
-func (_m *mockMutableState) GetUserTimer(_a0 string) (bool, *persistence.TimerInfo) {
+func (_m *mockMutableState) GetUserTimer(_a0 string) (*persistence.TimerInfo, bool) {
 	ret := _m.Called(_a0)
 
-	var r0 bool
-	if rf, ok := ret.Get(0).(func(string) bool); ok {
+	var r0 *persistence.TimerInfo
+	if rf, ok := ret.Get(1).(func(string) *persistence.TimerInfo); ok {
 		r0 = rf(_a0)
 	} else {
-		r0 = ret.Get(0).(bool)
+		if ret.Get(1) != nil {
+			r0 = ret.Get(1).(*persistence.TimerInfo)
+		}
 	}
 
-	var r1 *persistence.TimerInfo
-	if rf, ok := ret.Get(1).(func(string) *persistence.TimerInfo); ok {
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(string) bool); ok {
 		r1 = rf(_a0)
 	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*persistence.TimerInfo)
-		}
+		r1 = ret.Get(1).(bool)
 	}
 
 	return r0, r1
@@ -1941,6 +1979,27 @@ func (_m *mockMutableState) GetWorkflowType() *shared.WorkflowType {
 	}
 
 	return r0
+}
+
+// GetWorkflowStateCloseStatus provides a mock function with given fields:
+func (_m *mockMutableState) GetWorkflowStateCloseStatus() (int, int) {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	var r1 int
+	if rf, ok := ret.Get(1).(func() int); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	return r0, r1
 }
 
 // GetQueryRegistry provides a mock function with given fields:
@@ -2048,6 +2107,20 @@ func (_m *mockMutableState) IsCancelRequested() (bool, string) {
 	}
 
 	return r0, r1
+}
+
+// IsCurrentWorkflow provides a mock function with given fields:
+func (_m *mockMutableState) IsCurrentWorkflowGuaranteed() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
 }
 
 // IsSignalRequested provides a mock function with given fields: requestID
@@ -2692,13 +2765,13 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionSignaled(_a0 *shared.Histo
 	return r0
 }
 
-// ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
-func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 *cache.DomainCacheEntry, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.HistoryEvent) error {
-	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+// ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 *string, _a1 shared.WorkflowExecution, _a2 string, _a3 *shared.HistoryEvent) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry, *string, shared.WorkflowExecution, string, *shared.HistoryEvent) error); ok {
-		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	if rf, ok := ret.Get(0).(func(*string, shared.WorkflowExecution, string, *shared.HistoryEvent) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -2734,6 +2807,20 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionTimedoutEvent(_a0 int64, _
 	return r0
 }
 
+// SetCurrentBranchToken provides a mock function with given fields: _a0
+func (_m *mockMutableState) SetCurrentBranchToken(_a0 []byte) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]byte) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetHistoryBuilder provides a mock function with given fields: hBuilder
 func (_m *mockMutableState) SetHistoryBuilder(hBuilder *historyBuilder) {
 	_m.Called(hBuilder)
@@ -2746,6 +2833,20 @@ func (_m *mockMutableState) SetHistoryTree(treeID string) error {
 	var r0 error
 	if rf, ok := ret.Get(0).(func(string) error); ok {
 		r0 = rf(treeID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// SetVersionHistories provides a mock function with given fields: _a0
+func (_m *mockMutableState) SetVersionHistories(_a0 *persistence.VersionHistories) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.VersionHistories) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -2777,11 +2878,6 @@ func (_m *mockMutableState) UpdateDecision(_a0 *decisionInfo) {
 	_m.Called(_a0)
 }
 
-// UpdateReplicationPolicy provides a mock function with given fields: _a0
-func (_m *mockMutableState) UpdateReplicationPolicy(_a0 cache.ReplicationPolicy) {
-	_m.Called(_a0)
-}
-
 // UpdateReplicationStateLastEventID provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) UpdateReplicationStateLastEventID(_a0 int64, _a1 int64) {
 	_m.Called(_a0, _a1)
@@ -2795,6 +2891,34 @@ func (_m *mockMutableState) UpdateReplicationStateVersion(_a0 int64, _a1 bool) {
 // UpdateUserTimer provides a mock function with given fields: _a0, _a1
 func (_m *mockMutableState) UpdateUserTimer(_a0 string, _a1 *persistence.TimerInfo) {
 	_m.Called(_a0, _a1)
+}
+
+// UpdateCurrentVersion provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) UpdateCurrentVersion(_a0 int64, _a1 bool) error {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64, bool) error); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateWorkflowStateCloseStatus provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) UpdateWorkflowStateCloseStatus(_a0 int, _a1 int) error {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, int) error); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // AddTransferTasks provides a mock function with given fields: _a0
@@ -2824,6 +2948,27 @@ func (_m *mockMutableState) GetUpdateCondition() int64 {
 	}
 
 	return r0
+}
+
+// CloseTransactionAsMutation provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) StartTransaction(_a0 *cache.DomainCacheEntry) (bool, error) {
+	ret := _m.Called(_a0)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(*cache.DomainCacheEntry) bool); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*cache.DomainCacheEntry) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // CloseTransactionAsMutation provides a mock function with given fields: _a0, _a1

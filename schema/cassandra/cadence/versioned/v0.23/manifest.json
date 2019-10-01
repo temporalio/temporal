@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.23",
   "MinCompatibleVersion": "0.23",
-  "Description": "Add queue table",
+  "Description": "Add queue table and version history",
   "SchemaUpdateCqlFiles": [
+    "version_histories.cql",
     "queue.cql"
   ]
 }

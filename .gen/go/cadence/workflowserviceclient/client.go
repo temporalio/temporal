@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -139,6 +139,12 @@ type Interface interface {
 		QueryRequest *shared.QueryWorkflowRequest,
 		opts ...yarpc.CallOption,
 	) (*shared.QueryWorkflowResponse, error)
+
+	ReapplyEvents(
+		ctx context.Context,
+		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+		opts ...yarpc.CallOption,
+	) error
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -678,6 +684,29 @@ func (c client) QueryWorkflow(
 	}
 
 	success, err = cadence.WorkflowService_QueryWorkflow_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReapplyEvents(
+	ctx context.Context,
+	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := cadence.WorkflowService_ReapplyEvents_Helper.Args(_ReapplyEventsRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_ReapplyEvents_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = cadence.WorkflowService_ReapplyEvents_Helper.UnwrapResponse(&result)
 	return
 }
 

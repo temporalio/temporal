@@ -39,6 +39,7 @@ import (
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
@@ -113,6 +114,7 @@ type (
 		dispatcherProvider     client.DispatcherProvider
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
+		serializer             persistence.PayloadSerializer
 	}
 )
 
@@ -139,6 +141,7 @@ func New(params *BootstrapParams) Service {
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		archivalMetadata:      params.ArchivalMetadata,
 		archiverProvider:      params.ArchiverProvider,
+		serializer:            persistence.NewPayloadSerializer(),
 	}
 
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)
@@ -282,6 +285,10 @@ func (h *serviceImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 
 func (h *serviceImpl) GetArchiverProvider() provider.ArchiverProvider {
 	return h.archiverProvider
+}
+
+func (h *serviceImpl) GetPayloadSerializer() persistence.PayloadSerializer {
+	return h.serializer
 }
 
 // GetMetricsServiceIdx returns the metrics name

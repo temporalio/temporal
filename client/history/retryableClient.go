@@ -140,6 +140,22 @@ func (c *retryableClient) GetMutableState(
 	return resp, err
 }
 
+func (c *retryableClient) PollMutableState(
+	ctx context.Context,
+	request *h.PollMutableStateRequest,
+	opts ...yarpc.CallOption) (*h.PollMutableStateResponse, error) {
+
+	var resp *h.PollMutableStateResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.PollMutableState(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ResetStickyTaskList(
 	ctx context.Context,
 	request *h.ResetStickyTaskListRequest,
@@ -412,6 +428,18 @@ func (c *retryableClient) ReplicateRawEvents(
 	return backoff.Retry(op, c.policy, c.isRetryable)
 }
 
+func (c *retryableClient) ReplicateEventsV2(
+	ctx context.Context,
+	request *h.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption) error {
+
+	op := func() error {
+		return c.client.ReplicateEventsV2(ctx, request, opts...)
+	}
+
+	return backoff.Retry(op, c.policy, c.isRetryable)
+}
+
 func (c *retryableClient) SyncShardStatus(
 	ctx context.Context,
 	request *h.SyncShardStatusRequest,
@@ -466,4 +494,17 @@ func (c *retryableClient) QueryWorkflow(
 
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
+}
+
+func (c *retryableClient) ReapplyEvents(
+	ctx context.Context,
+	request *h.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		return c.client.ReapplyEvents(ctx, request, opts...)
+	}
+
+	return backoff.Retry(op, c.policy, c.isRetryable)
 }

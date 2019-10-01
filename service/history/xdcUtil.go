@@ -76,7 +76,7 @@ func verifyTaskVersion(shard ShardContext, logger log.Logger, domainID string, v
 	// the first return value is whether this task is valid for further processing
 	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Cannot find domainID: %v, err: %v.", domainID, task))
+		logger.Debug(fmt.Sprintf("Cannot find domainID: %v, err: %v.", domainID, err))
 		return false, err
 	}
 	if !domainEntry.IsGlobalDomain() {

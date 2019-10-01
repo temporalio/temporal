@@ -50,17 +50,49 @@ const (
 	DomainStatusDeleted
 )
 
+// CreateWorkflowMode workflow creation mode
+type CreateWorkflowMode int
+
 // Create Workflow Execution Mode
 const (
 	// Fail if current record exists
 	// Only applicable for CreateWorkflowExecution
-	CreateWorkflowModeBrandNew = iota
+	CreateWorkflowModeBrandNew CreateWorkflowMode = iota
 	// Update current record only if workflow is closed
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeWorkflowIDReuse
 	// Update current record only if workflow is open
 	// Only applicable for UpdateWorkflowExecution
 	CreateWorkflowModeContinueAsNew
+	// Do not update current record since workflow to
+	// applicable for CreateWorkflowExecution, UpdateWorkflowExecution
+	CreateWorkflowModeZombie
+)
+
+// UpdateWorkflowMode update mode
+type UpdateWorkflowMode int
+
+// Update Workflow Execution Mode
+const (
+	// Update workflow, including current record
+	// NOTE: update on current record is a condition update
+	UpdateWorkflowModeUpdateCurrent UpdateWorkflowMode = iota
+	// Update workflow, without current record
+	// NOTE: current record CANNOT point to the workflow to be updated
+	UpdateWorkflowModeBypassCurrent
+)
+
+// ConflictResolveWorkflowMode conflict resolve mode
+type ConflictResolveWorkflowMode int
+
+// Conflict Resolve Workflow Mode
+const (
+	// Conflict resolve workflow, including current record
+	// NOTE: update on current record is a condition update
+	ConflictResolveWorkflowModeUpdateCurrent ConflictResolveWorkflowMode = iota
+	// Conflict resolve workflow, without current record
+	// NOTE: current record CANNOT point to the workflow to be updated
+	ConflictResolveWorkflowModeBypassCurrent
 )
 
 // Workflow execution states
@@ -68,6 +100,8 @@ const (
 	WorkflowStateCreated = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
+	WorkflowStateZombie
+	WorkflowStateVoid
 )
 
 // Workflow execution close status
@@ -142,6 +176,9 @@ const (
 	// TransferTaskTransferTargetRunID is the the dummy run ID for transfer tasks of types
 	// that do not have a target workflow
 	TransferTaskTransferTargetRunID = "30000000-0000-f000-f000-000000000002"
+
+	// indicate invalid workflow state transition
+	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, close status %v"
 )
 
 const numItemsInGarbageInfo = 3
@@ -326,21 +363,23 @@ type (
 
 	// ReplicationTaskInfo describes the replication task created for replication of history events
 	ReplicationTaskInfo struct {
-		DomainID                string
-		WorkflowID              string
-		RunID                   string
-		TaskID                  int64
-		TaskType                int
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		LastReplicationInfo     map[string]*ReplicationInfo
-		ScheduledID             int64
+		DomainID          string
+		WorkflowID        string
+		RunID             string
+		TaskID            int64
+		TaskType          int
+		FirstEventID      int64
+		NextEventID       int64
+		Version           int64
+		ScheduledID       int64
+		BranchToken       []byte
+		NewRunBranchToken []byte
+		ResetWorkflow     bool
+
+		// TODO deprecate when NDC is fully released && migrated
 		EventStoreVersion       int32
-		BranchToken             []byte
 		NewRunEventStoreVersion int32
-		NewRunBranchToken       []byte
-		ResetWorkflow           bool
+		LastReplicationInfo     map[string]*ReplicationInfo
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -566,6 +605,24 @@ type (
 		LastEventID int64
 	}
 
+	// VersionHistoryItem contains the event id and the associated version
+	VersionHistoryItem struct {
+		eventID int64
+		version int64
+	}
+
+	// VersionHistory provides operations on version history
+	VersionHistory struct {
+		branchToken []byte
+		items       []*VersionHistoryItem
+	}
+
+	// VersionHistories contains a set of VersionHistory
+	VersionHistories struct {
+		currentVersionHistoryIndex int
+		histories                  []*VersionHistory
+	}
+
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
 		ActivityInfos       map[int64]*ActivityInfo
@@ -578,6 +635,7 @@ type (
 		ExecutionStats      *ExecutionStats
 		ReplicationState    *ReplicationState
 		BufferedEvents      []*workflow.HistoryEvent
+		VersionHistories    *VersionHistories
 	}
 
 	// ActivityInfo details.
@@ -689,7 +747,7 @@ type (
 	CreateWorkflowExecutionRequest struct {
 		RangeID int64
 
-		CreateWorkflowMode int
+		Mode CreateWorkflowMode
 
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
@@ -732,6 +790,8 @@ type (
 	UpdateWorkflowExecutionRequest struct {
 		RangeID int64
 
+		Mode UpdateWorkflowMode
+
 		UpdateWorkflowMutation WorkflowMutation
 
 		NewWorkflowSnapshot *WorkflowSnapshot
@@ -743,18 +803,30 @@ type (
 	ConflictResolveWorkflowExecutionRequest struct {
 		RangeID int64
 
-		// previous workflow information
-		PrevRunID            string
-		PrevLastWriteVersion int64
-		PrevState            int
+		Mode ConflictResolveWorkflowMode
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot WorkflowSnapshot
 
+		// maybe new workflow
+		NewWorkflowSnapshot *WorkflowSnapshot
+
 		// current workflow
 		CurrentWorkflowMutation *WorkflowMutation
 
+		// TODO deprecate this once nDC migration is completed
+		//  basically should use CurrentWorkflowMutation instead
+		CurrentWorkflowCAS *CurrentWorkflowCAS
+
 		Encoding common.EncodingType // optional binary encoding type
+	}
+
+	// CurrentWorkflowCAS represent a compare and swap on current record
+	// TODO deprecate this once nDC migration is completed
+	CurrentWorkflowCAS struct {
+		PrevRunID            string
+		PrevLastWriteVersion int64
+		PrevState            int
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
@@ -792,10 +864,11 @@ type (
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *ExecutionStats
 		ReplicationState *ReplicationState
+		VersionHistories *VersionHistories
 
 		UpsertActivityInfos       []*ActivityInfo
 		DeleteActivityInfos       []int64
-		UpserTimerInfos           []*TimerInfo
+		UpsertTimerInfos          []*TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
@@ -820,6 +893,7 @@ type (
 		ExecutionInfo    *WorkflowExecutionInfo
 		ExecutionStats   *ExecutionStats
 		ReplicationState *ReplicationState
+		VersionHistories *VersionHistories
 
 		ActivityInfos       []*ActivityInfo
 		TimerInfos          []*TimerInfo
@@ -2379,26 +2453,6 @@ func DBTimestampToUnixNano(milliseconds int64) int64 {
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
 	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
-}
-
-// SetNextEventID sets the nextEventID
-func (e *WorkflowExecutionInfo) SetNextEventID(id int64) {
-	e.NextEventID = id
-}
-
-// IncreaseNextEventID increase the nextEventID by 1
-func (e *WorkflowExecutionInfo) IncreaseNextEventID() {
-	e.NextEventID++
-}
-
-// SetLastFirstEventID set the LastFirstEventID
-func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
-	e.LastFirstEventID = id
-}
-
-// GetCurrentBranch return the current branch token
-func (e *WorkflowExecutionInfo) GetCurrentBranch() []byte {
-	return e.BranchToken
 }
 
 var internalThriftEncoder = codec.NewThriftRWEncoder()

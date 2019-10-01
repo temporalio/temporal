@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -75,11 +75,23 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*replicator.GetReplicationMessagesResponse, error)
 
+	PollMutableState(
+		ctx context.Context,
+		PollRequest *history.PollMutableStateRequest,
+		opts ...yarpc.CallOption,
+	) (*history.PollMutableStateResponse, error)
+
 	QueryWorkflow(
 		ctx context.Context,
 		QueryRequest *history.QueryWorkflowRequest,
 		opts ...yarpc.CallOption,
 	) (*history.QueryWorkflowResponse, error)
+
+	ReapplyEvents(
+		ctx context.Context,
+		ReapplyEventsRequest *history.ReapplyEventsRequest,
+		opts ...yarpc.CallOption,
+	) error
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -120,6 +132,12 @@ type Interface interface {
 	ReplicateEvents(
 		ctx context.Context,
 		ReplicateRequest *history.ReplicateEventsRequest,
+		opts ...yarpc.CallOption,
+	) error
+
+	ReplicateEventsV2(
+		ctx context.Context,
+		ReplicateV2Request *history.ReplicateEventsV2Request,
 		opts ...yarpc.CallOption,
 	) error
 
@@ -382,6 +400,29 @@ func (c client) GetReplicationMessages(
 	return
 }
 
+func (c client) PollMutableState(
+	ctx context.Context,
+	_PollRequest *history.PollMutableStateRequest,
+	opts ...yarpc.CallOption,
+) (success *history.PollMutableStateResponse, err error) {
+
+	args := history.HistoryService_PollMutableState_Helper.Args(_PollRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_PollMutableState_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_PollMutableState_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) QueryWorkflow(
 	ctx context.Context,
 	_QueryRequest *history.QueryWorkflowRequest,
@@ -402,6 +443,29 @@ func (c client) QueryWorkflow(
 	}
 
 	success, err = history.HistoryService_QueryWorkflow_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReapplyEvents(
+	ctx context.Context,
+	_ReapplyEventsRequest *history.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_ReapplyEvents_Helper.Args(_ReapplyEventsRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ReapplyEvents_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_ReapplyEvents_Helper.UnwrapResponse(&result)
 	return
 }
 
@@ -563,6 +627,29 @@ func (c client) ReplicateEvents(
 	}
 
 	err = history.HistoryService_ReplicateEvents_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReplicateEventsV2(
+	ctx context.Context,
+	_ReplicateV2Request *history.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_ReplicateEventsV2_Helper.Args(_ReplicateV2Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ReplicateEventsV2_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_ReplicateEventsV2_Helper.UnwrapResponse(&result)
 	return
 }
 

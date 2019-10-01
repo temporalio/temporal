@@ -29,10 +29,13 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
+	frontendclient "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
@@ -70,6 +73,7 @@ type Cadence interface {
 	GetFrontendClient() workflowserviceclient.Interface
 	FrontendAddress() string
 	GetFrontendService() service.Service
+	GetHistoryClient() historyserviceclient.Interface
 }
 
 type (
@@ -95,6 +99,7 @@ type (
 		shutdownCh             chan struct{}
 		shutdownWG             sync.WaitGroup
 		frontEndService        service.Service
+		historyService         service.Service
 		clusterNo              int // cluster number
 		replicator             *replicator.Replicator
 		clientWorker           archiver.ClientWorker
@@ -106,6 +111,7 @@ type (
 		esConfig               *elasticsearch.Config
 		esClient               elasticsearch.Client
 		workerConfig           *WorkerConfig
+		mockFrontendClient     map[string]frontendclient.Client
 	}
 
 	// HistoryConfig contains configs for history service
@@ -140,6 +146,7 @@ type (
 		ESConfig                      *elasticsearch.Config
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
+		MockFrontendClient            map[string]frontendclient.Client
 		DomainReplicationQueue        persistence.DomainReplicationQueue
 	}
 
@@ -175,6 +182,7 @@ func NewCadence(params *CadenceParams) Cadence {
 		archiverProvider:       params.ArchiverProvider,
 		historyConfig:          params.HistoryConfig,
 		workerConfig:           params.WorkerConfig,
+		mockFrontendClient:     params.MockFrontendClient,
 	}
 }
 
@@ -389,6 +397,10 @@ func (c *cadenceImpl) GetFrontendService() service.Service {
 	return c.frontEndService
 }
 
+func (c *cadenceImpl) GetHistoryClient() historyserviceclient.Interface {
+	return NewHistoryClient(c.historyService.GetDispatcher())
+}
+
 func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := new(service.BootstrapParams)
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
@@ -461,6 +473,15 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 
 	// must start base service first
 	c.frontEndService.Start()
+	if c.mockFrontendClient != nil {
+		clientBean := c.frontEndService.GetClientBean()
+		if clientBean != nil {
+			for serviceName, client := range c.mockFrontendClient {
+				clientBean.SetRemoteFrontendClient(serviceName, client)
+			}
+		}
+	}
+
 	err = c.adminHandler.Start()
 	if err != nil {
 		c.logger.Fatal("Failed to start admin", tag.Error(err))
@@ -502,6 +523,7 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		params.ArchiverProvider = c.archiverProvider
 
 		service := service.New(params)
+		c.historyService = service
 		hConfig := c.historyConfig
 		historyConfig := history.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, c.logger),
 			hConfig.NumHistoryShards, config.StoreTypeCassandra, params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
@@ -545,6 +567,15 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		handler.RegisterHandler()
 
 		service.Start()
+		if c.mockFrontendClient != nil {
+			clientBean := service.GetClientBean()
+			if clientBean != nil {
+				for serviceName, client := range c.mockFrontendClient {
+					clientBean.SetRemoteFrontendClient(serviceName, client)
+				}
+			}
+		}
+
 		err = handler.Start()
 		if err != nil {
 			c.logger.Fatal("Failed to start history", tag.Error(err))
@@ -580,6 +611,15 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	c.matchingHandler.RegisterHandler()
 
 	service.Start()
+	if c.mockFrontendClient != nil {
+		clientBean := service.GetClientBean()
+		if clientBean != nil {
+			for serviceName, client := range c.mockFrontendClient {
+				clientBean.SetRemoteFrontendClient(serviceName, client)
+			}
+		}
+	}
+
 	err := c.matchingHandler.Start()
 	if err != nil {
 		c.logger.Fatal("Failed to start history", tag.Error(err))
@@ -731,6 +771,7 @@ func (c *cadenceImpl) createSystemDomain() error {
 			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		FailoverVersion:   common.EmptyVersion,
 	})
 	if err != nil {
 		if _, ok := err.(*shared.DomainAlreadyExistsError); ok {

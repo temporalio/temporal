@@ -79,7 +79,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		},
 	}
 
-	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivitInfos)
+	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivityInfos)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +95,13 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-
+	versionHistories, err := m.DeserializeVersionHistories(response.State.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	newResponse.State.VersionHistories = versionHistories
 	newResponse.MutableStateStats = m.statsComputer.computeMutableStateStats(response)
+
 	return newResponse, nil
 }
 
@@ -312,7 +317,10 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
-		RangeID:                request.RangeID,
+		RangeID: request.RangeID,
+
+		Mode: request.Mode,
+
 		UpdateWorkflowMutation: *serializedWorkflowMutation,
 		NewWorkflowSnapshot:    serializedNewWorkflowSnapshot,
 	}
@@ -508,17 +516,34 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 			return err
 		}
 	}
+	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
+	if request.NewWorkflowSnapshot != nil {
+		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot, request.Encoding)
+		if err != nil {
+			return err
+		}
+	}
+
+	if request.CurrentWorkflowMutation != nil && request.CurrentWorkflowCAS != nil {
+		return &workflow.InternalServiceError{
+			Message: "ConflictResolveWorkflowExecution: current workflow & current workflow CAS both set",
+		}
+	}
 
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		RangeID: request.RangeID,
 
-		PrevRunID:            request.PrevRunID,
-		PrevLastWriteVersion: request.PrevLastWriteVersion,
-		PrevState:            request.PrevState,
+		Mode: request.Mode,
 
 		ResetWorkflowSnapshot: *serializedResetWorkflowSnapshot,
 
+		NewWorkflowSnapshot: serializedNewWorkflowMutation,
+
 		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
+
+		// TODO deprecate this once nDC migration is completed
+		//  basically should use CurrentWorkflowMutation instead
+		CurrentWorkflowCAS: request.CurrentWorkflowCAS,
 	}
 	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
 }
@@ -567,8 +592,9 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}
 
 	newRequest := &InternalCreateWorkflowExecutionRequest{
-		RangeID:            request.RangeID,
-		CreateWorkflowMode: request.CreateWorkflowMode,
+		RangeID: request.RangeID,
+
+		Mode: request.Mode,
 
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
@@ -592,6 +618,10 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	if err != nil {
 		return nil, err
 	}
+	serializedVersionHistories, err := m.SerializeVersionHistories(input.VersionHistories, encoding)
+	if err != nil {
+		return nil, err
+	}
 	serializedUpsertActivityInfos, err := m.SerializeUpsertActivityInfos(input.UpsertActivityInfos, encoding)
 	if err != nil {
 		return nil, err
@@ -608,13 +638,25 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		}
 	}
 
+	startVersion, err := getStartVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+	lastWriteVersion, err := getLastWriteVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+
 	return &InternalWorkflowMutation{
 		ExecutionInfo:    serializedExecutionInfo,
 		ReplicationState: input.ReplicationState,
+		VersionHistories: serializedVersionHistories,
+		StartVersion:     startVersion,
+		LastWriteVersion: lastWriteVersion,
 
 		UpsertActivityInfos:       serializedUpsertActivityInfos,
 		DeleteActivityInfos:       input.DeleteActivityInfos,
-		UpserTimerInfos:           input.UpserTimerInfos,
+		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
 		UpsertChildExecutionInfos: serializedUpsertChildExecutionInfos,
 		DeleteChildExecutionInfo:  input.DeleteChildExecutionInfo,
@@ -648,6 +690,10 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	if err != nil {
 		return nil, err
 	}
+	serializedVersionHistories, err := m.SerializeVersionHistories(input.VersionHistories, encoding)
+	if err != nil {
+		return nil, err
+	}
 	serializedActivityInfos, err := m.SerializeUpsertActivityInfos(input.ActivityInfos, encoding)
 	if err != nil {
 		return nil, err
@@ -657,9 +703,21 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		return nil, err
 	}
 
+	startVersion, err := getStartVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+	lastWriteVersion, err := getLastWriteVersion(input.VersionHistories, input.ReplicationState)
+	if err != nil {
+		return nil, err
+	}
+
 	return &InternalWorkflowSnapshot{
 		ExecutionInfo:    serializedExecutionInfo,
 		ReplicationState: input.ReplicationState,
+		VersionHistories: serializedVersionHistories,
+		StartVersion:     startVersion,
+		LastWriteVersion: lastWriteVersion,
 
 		ActivityInfos:       serializedActivityInfos,
 		TimerInfos:          input.TimerInfos,
@@ -674,6 +732,31 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 		Condition: input.Condition,
 	}, nil
+}
+
+func (m *executionManagerImpl) SerializeVersionHistories(
+	versionHistories *VersionHistories,
+	encoding common.EncodingType,
+) (*DataBlob, error) {
+
+	if versionHistories == nil {
+		return nil, nil
+	}
+	return m.serializer.SerializeVersionHistories(versionHistories.ToThrift(), encoding)
+}
+
+func (m *executionManagerImpl) DeserializeVersionHistories(
+	blob *DataBlob,
+) (*VersionHistories, error) {
+
+	if blob == nil {
+		return nil, nil
+	}
+	versionHistories, err := m.serializer.DeserializeVersionHistories(blob)
+	if err != nil {
+		return nil, err
+	}
+	return NewVersionHistoriesFromThrift(versionHistories), nil
 }
 
 func (m *executionManagerImpl) DeleteTask(
@@ -753,4 +836,52 @@ func (m *executionManagerImpl) RangeCompleteTimerTask(
 
 func (m *executionManagerImpl) Close() {
 	m.persistence.Close()
+}
+
+func getStartVersion(
+	versionHistories *VersionHistories,
+	replicationState *ReplicationState,
+) (int64, error) {
+
+	if replicationState == nil && versionHistories == nil {
+		return common.EmptyVersion, nil
+	}
+
+	if replicationState != nil {
+		return replicationState.StartVersion, nil
+	}
+
+	versionHistory, err := versionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return 0, err
+	}
+	versionHistoryItem, err := versionHistory.GetFirstItem()
+	if err != nil {
+		return 0, err
+	}
+	return versionHistoryItem.GetVersion(), nil
+}
+
+func getLastWriteVersion(
+	versionHistories *VersionHistories,
+	replicationState *ReplicationState,
+) (int64, error) {
+
+	if replicationState == nil && versionHistories == nil {
+		return common.EmptyVersion, nil
+	}
+
+	if replicationState != nil {
+		return replicationState.LastWriteVersion, nil
+	}
+
+	versionHistory, err := versionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return 0, err
+	}
+	versionHistoryItem, err := versionHistory.GetLastItem()
+	if err != nil {
+		return 0, err
+	}
+	return versionHistoryItem.GetVersion(), nil
 }

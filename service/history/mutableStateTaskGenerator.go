@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutableStateTaskGenerator_mock.go
+
 package history
 
 import (
@@ -35,13 +37,14 @@ type (
 	mutableStateTaskGenerator interface {
 		generateWorkflowStartTasks(
 			now time.Time,
-			event *shared.HistoryEvent,
+			startEvent *shared.HistoryEvent,
 		) error
 		generateWorkflowCloseTasks(
 			now time.Time,
 		) error
 		generateRecordWorkflowStartedTasks(
 			now time.Time,
+			startEvent *shared.HistoryEvent,
 		) error
 		generateDelayedDecisionTasks(
 			now time.Time,
@@ -118,14 +121,14 @@ func newMutableStateTaskGenerator(
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	now time.Time,
-	event *shared.HistoryEvent,
+	startEvent *shared.HistoryEvent,
 ) error {
 
-	attr := event.WorkflowExecutionStartedEventAttributes
+	attr := startEvent.WorkflowExecutionStartedEventAttributes
 	firstDecisionDelayDuration := time.Duration(attr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	startVersion := r.mutableState.GetStartVersion()
+	startVersion := startEvent.GetVersion()
 
 	workflowTimeoutDuration := time.Duration(executionInfo.WorkflowTimeout) * time.Second
 	workflowTimeoutDuration = workflowTimeoutDuration + firstDecisionDelayDuration
@@ -181,7 +184,8 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	startEvent *shared.HistoryEvent,
 ) error {
 
-	startVersion := r.mutableState.GetStartVersion()
+	startVersion := startEvent.GetVersion()
+
 	startAttr := startEvent.WorkflowExecutionStartedEventAttributes
 	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 	executionTimestamp := now.Add(decisionBackoffDuration)
@@ -219,9 +223,10 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	now time.Time,
+	startEvent *shared.HistoryEvent,
 ) error {
 
-	startVersion := r.mutableState.GetStartVersion()
+	startVersion := startEvent.GetVersion()
 
 	r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
 		// TaskID is set by shard
@@ -520,7 +525,7 @@ func (r *mutableStateTaskGeneratorImpl) generateUserTimerTasks(
 func (r *mutableStateTaskGeneratorImpl) getTimerBuilder(now time.Time) *timerBuilder {
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
-	return newTimerBuilder(r.logger, timeSource)
+	return newTimerBuilder(timeSource)
 }
 
 func (r *mutableStateTaskGeneratorImpl) getTargetDomainID(

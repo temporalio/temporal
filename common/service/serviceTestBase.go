@@ -31,6 +31,8 @@ import (
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
+
 	"go.uber.org/yarpc"
 	"go.uber.org/zap"
 )
@@ -47,6 +49,7 @@ type (
 		membershipMonitor membership.Monitor
 		archivalMetadata  archiver.ArchivalMetadata
 		archiverProvider  provider.ArchiverProvider
+		serializer        persistence.PayloadSerializer
 
 		metrics metrics.Client
 		logger  log.Logger
@@ -71,6 +74,7 @@ func NewTestService(
 	clientBean client.Bean,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	serializer persistence.PayloadSerializer,
 ) Service {
 
 	zapLogger, err := zap.NewDevelopment()
@@ -89,6 +93,7 @@ func NewTestService(
 		logger:           logger,
 		archivalMetadata: archivalMetadata,
 		archiverProvider: archiverProvider,
+		serializer:       serializer,
 	}
 }
 
@@ -161,4 +166,9 @@ func (s *serviceTestBase) GetArchivalMetadata() archiver.ArchivalMetadata {
 // GetArchivalProvider returns the archiver provider used by the service
 func (s *serviceTestBase) GetArchiverProvider() provider.ArchiverProvider {
 	return s.archiverProvider
+}
+
+// GetPayloadSerializer returns the payload serializer used by the service
+func (s *serviceTestBase) GetPayloadSerializer() persistence.PayloadSerializer {
+	return s.serializer
 }

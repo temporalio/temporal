@@ -25,13 +25,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
 )
 
 type (
@@ -106,6 +106,37 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 				CreatedTimeNano: common.Int64Ptr(456),
 				Operator:        common.StringPtr("test-operattor"),
 				Reason:          common.StringPtr("test-reason"),
+			},
+		},
+	}
+
+	histories := &workflow.VersionHistories{
+		Histories: []*workflow.VersionHistory{
+			{
+				BranchToken: []byte{1},
+				Items: []*workflow.VersionHistoryItem{
+					{
+						EventID: common.Int64Ptr(1),
+						Version: common.Int64Ptr(0),
+					},
+					{
+						EventID: common.Int64Ptr(2),
+						Version: common.Int64Ptr(1),
+					},
+				},
+			},
+			{
+				BranchToken: []byte{2},
+				Items: []*workflow.VersionHistoryItem{
+					{
+						EventID: common.Int64Ptr(2),
+						Version: common.Int64Ptr(0),
+					},
+					{
+						EventID: common.Int64Ptr(3),
+						Version: common.Int64Ptr(1),
+					},
+				},
 			},
 		},
 	}
@@ -185,6 +216,24 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			mEmpty, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingType(""))
 			s.Nil(err)
 			s.NotNil(mEmpty)
+
+			// serialize version histories
+
+			nilHistories, err := serializer.SerializeVersionHistories(nil, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.Nil(nilHistories)
+
+			historiesJSON, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeJSON)
+			s.Nil(err)
+			s.NotNil(historiesJSON)
+
+			historiesThrift, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(historiesThrift)
+
+			historiesEmpty, err := serializer.SerializeVersionHistories(histories, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(historiesEmpty)
 
 			// deserialize event
 
@@ -331,6 +380,28 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			badBinaries3, err := serializer.DeserializeBadBinaries(badBinariesEmpty)
 			s.Nil(err)
 			s.True(badBinaries3.Equals(badBinaries0))
+
+			// serialize version histories
+
+			dNilHistories, err := serializer.DeserializeVersionHistories(nil)
+			s.Nil(err)
+			s.Equal(&workflow.VersionHistories{}, dNilHistories)
+
+			dNilHistories2, err := serializer.DeserializeVersionHistories(nilHistories)
+			s.Nil(err)
+			s.Equal(&workflow.VersionHistories{}, dNilHistories2)
+
+			dHistoriesJSON, err := serializer.DeserializeVersionHistories(historiesJSON)
+			s.Nil(err)
+			s.True(dHistoriesJSON.Equals(histories))
+
+			dHistoriesThrift, err := serializer.DeserializeVersionHistories(historiesThrift)
+			s.Nil(err)
+			s.True(dHistoriesThrift.Equals(histories))
+
+			dHistoriesEmpty, err := serializer.DeserializeVersionHistories(historiesEmpty)
+			s.Nil(err)
+			s.True(dHistoriesEmpty.Equals(histories))
 		}()
 	}
 

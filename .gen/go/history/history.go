@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -741,6 +741,7 @@ type GetMutableStateRequest struct {
 	DomainUUID          *string                   `json:"domainUUID,omitempty"`
 	Execution           *shared.WorkflowExecution `json:"execution,omitempty"`
 	ExpectedNextEventId *int64                    `json:"expectedNextEventId,omitempty"`
+	CurrentBranchToken  []byte                    `json:"currentBranchToken,omitempty"`
 }
 
 // ToWire translates a GetMutableStateRequest struct into a Thrift-level intermediate
@@ -760,7 +761,7 @@ type GetMutableStateRequest struct {
 //   }
 func (v *GetMutableStateRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -788,6 +789,14 @@ func (v *GetMutableStateRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.CurrentBranchToken != nil {
+		w, err = wire.NewValueBinary(v.CurrentBranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -844,6 +853,14 @@ func (v *GetMutableStateRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				v.CurrentBranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -857,7 +874,7 @@ func (v *GetMutableStateRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -869,6 +886,10 @@ func (v *GetMutableStateRequest) String() string {
 	}
 	if v.ExpectedNextEventId != nil {
 		fields[i] = fmt.Sprintf("ExpectedNextEventId: %v", *(v.ExpectedNextEventId))
+		i++
+	}
+	if v.CurrentBranchToken != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchToken: %v", v.CurrentBranchToken)
 		i++
 	}
 
@@ -904,6 +925,9 @@ func (v *GetMutableStateRequest) Equals(rhs *GetMutableStateRequest) bool {
 	if !_I64_EqualsPtr(v.ExpectedNextEventId, rhs.ExpectedNextEventId) {
 		return false
 	}
+	if !((v.CurrentBranchToken == nil && rhs.CurrentBranchToken == nil) || (v.CurrentBranchToken != nil && rhs.CurrentBranchToken != nil && bytes.Equal(v.CurrentBranchToken, rhs.CurrentBranchToken))) {
+		return false
+	}
 
 	return true
 }
@@ -922,6 +946,9 @@ func (v *GetMutableStateRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (er
 	}
 	if v.ExpectedNextEventId != nil {
 		enc.AddInt64("expectedNextEventId", *v.ExpectedNextEventId)
+	}
+	if v.CurrentBranchToken != nil {
+		enc.AddString("currentBranchToken", base64.StdEncoding.EncodeToString(v.CurrentBranchToken))
 	}
 	return err
 }
@@ -971,6 +998,21 @@ func (v *GetMutableStateRequest) IsSetExpectedNextEventId() bool {
 	return v != nil && v.ExpectedNextEventId != nil
 }
 
+// GetCurrentBranchToken returns the value of CurrentBranchToken if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateRequest) GetCurrentBranchToken() (o []byte) {
+	if v != nil && v.CurrentBranchToken != nil {
+		return v.CurrentBranchToken
+	}
+
+	return
+}
+
+// IsSetCurrentBranchToken returns true if CurrentBranchToken is not nil.
+func (v *GetMutableStateRequest) IsSetCurrentBranchToken() bool {
+	return v != nil && v.CurrentBranchToken != nil
+}
+
 type GetMutableStateResponse struct {
 	Execution                            *shared.WorkflowExecution          `json:"execution,omitempty"`
 	WorkflowType                         *shared.WorkflowType               `json:"workflowType,omitempty"`
@@ -985,10 +1027,11 @@ type GetMutableStateResponse struct {
 	IsWorkflowRunning                    *bool                              `json:"isWorkflowRunning,omitempty"`
 	StickyTaskListScheduleToStartTimeout *int32                             `json:"stickyTaskListScheduleToStartTimeout,omitempty"`
 	EventStoreVersion                    *int32                             `json:"eventStoreVersion,omitempty"`
-	BranchToken                          []byte                             `json:"branchToken,omitempty"`
+	CurrentBranchToken                   []byte                             `json:"currentBranchToken,omitempty"`
 	ReplicationInfo                      map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
 	WorkflowState                        *int32                             `json:"workflowState,omitempty"`
 	WorkflowCloseState                   *int32                             `json:"workflowCloseState,omitempty"`
+	VersionHistories                     *shared.VersionHistories           `json:"versionHistories,omitempty"`
 }
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*shared.ReplicationInfo
@@ -1046,7 +1089,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [17]wire.Field
+		fields [18]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1156,8 +1199,8 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
-	if v.BranchToken != nil {
-		w, err = wire.NewValueBinary(v.BranchToken), error(nil)
+	if v.CurrentBranchToken != nil {
+		w, err = wire.NewValueBinary(v.CurrentBranchToken), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -1186,6 +1229,14 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 160, Value: w}
+		i++
+	}
+	if v.VersionHistories != nil {
+		w, err = v.VersionHistories.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 170, Value: w}
 		i++
 	}
 
@@ -1236,6 +1287,12 @@ func _Map_String_ReplicationInfo_Read(m wire.MapItemList) (map[string]*shared.Re
 	})
 	m.Close()
 	return o, err
+}
+
+func _VersionHistories_Read(w wire.Value) (*shared.VersionHistories, error) {
+	var v shared.VersionHistories
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a GetMutableStateResponse struct from its Thrift-level
@@ -1384,7 +1441,7 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 			}
 		case 130:
 			if field.Value.Type() == wire.TBinary {
-				v.BranchToken, err = field.Value.GetBinary(), error(nil)
+				v.CurrentBranchToken, err = field.Value.GetBinary(), error(nil)
 				if err != nil {
 					return err
 				}
@@ -1418,6 +1475,14 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 170:
+			if field.Value.Type() == wire.TStruct {
+				v.VersionHistories, err = _VersionHistories_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1431,7 +1496,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [17]string
+	var fields [18]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -1485,8 +1550,8 @@ func (v *GetMutableStateResponse) String() string {
 		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
 		i++
 	}
-	if v.BranchToken != nil {
-		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
+	if v.CurrentBranchToken != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchToken: %v", v.CurrentBranchToken)
 		i++
 	}
 	if v.ReplicationInfo != nil {
@@ -1499,6 +1564,10 @@ func (v *GetMutableStateResponse) String() string {
 	}
 	if v.WorkflowCloseState != nil {
 		fields[i] = fmt.Sprintf("WorkflowCloseState: %v", *(v.WorkflowCloseState))
+		i++
+	}
+	if v.VersionHistories != nil {
+		fields[i] = fmt.Sprintf("VersionHistories: %v", v.VersionHistories)
 		i++
 	}
 
@@ -1591,7 +1660,7 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
 		return false
 	}
-	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
+	if !((v.CurrentBranchToken == nil && rhs.CurrentBranchToken == nil) || (v.CurrentBranchToken != nil && rhs.CurrentBranchToken != nil && bytes.Equal(v.CurrentBranchToken, rhs.CurrentBranchToken))) {
 		return false
 	}
 	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
@@ -1601,6 +1670,9 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 		return false
 	}
 	if !_I32_EqualsPtr(v.WorkflowCloseState, rhs.WorkflowCloseState) {
+		return false
+	}
+	if !((v.VersionHistories == nil && rhs.VersionHistories == nil) || (v.VersionHistories != nil && rhs.VersionHistories != nil && v.VersionHistories.Equals(rhs.VersionHistories))) {
 		return false
 	}
 
@@ -1663,8 +1735,8 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	if v.EventStoreVersion != nil {
 		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
 	}
-	if v.BranchToken != nil {
-		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
+	if v.CurrentBranchToken != nil {
+		enc.AddString("currentBranchToken", base64.StdEncoding.EncodeToString(v.CurrentBranchToken))
 	}
 	if v.ReplicationInfo != nil {
 		err = multierr.Append(err, enc.AddObject("replicationInfo", (_Map_String_ReplicationInfo_Zapper)(v.ReplicationInfo)))
@@ -1674,6 +1746,9 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	}
 	if v.WorkflowCloseState != nil {
 		enc.AddInt32("workflowCloseState", *v.WorkflowCloseState)
+	}
+	if v.VersionHistories != nil {
+		err = multierr.Append(err, enc.AddObject("versionHistories", v.VersionHistories))
 	}
 	return err
 }
@@ -1873,19 +1948,19 @@ func (v *GetMutableStateResponse) IsSetEventStoreVersion() bool {
 	return v != nil && v.EventStoreVersion != nil
 }
 
-// GetBranchToken returns the value of BranchToken if it is set or its
+// GetCurrentBranchToken returns the value of CurrentBranchToken if it is set or its
 // zero value if it is unset.
-func (v *GetMutableStateResponse) GetBranchToken() (o []byte) {
-	if v != nil && v.BranchToken != nil {
-		return v.BranchToken
+func (v *GetMutableStateResponse) GetCurrentBranchToken() (o []byte) {
+	if v != nil && v.CurrentBranchToken != nil {
+		return v.CurrentBranchToken
 	}
 
 	return
 }
 
-// IsSetBranchToken returns true if BranchToken is not nil.
-func (v *GetMutableStateResponse) IsSetBranchToken() bool {
-	return v != nil && v.BranchToken != nil
+// IsSetCurrentBranchToken returns true if CurrentBranchToken is not nil.
+func (v *GetMutableStateResponse) IsSetCurrentBranchToken() bool {
+	return v != nil && v.CurrentBranchToken != nil
 }
 
 // GetReplicationInfo returns the value of ReplicationInfo if it is set or its
@@ -1931,6 +2006,21 @@ func (v *GetMutableStateResponse) GetWorkflowCloseState() (o int32) {
 // IsSetWorkflowCloseState returns true if WorkflowCloseState is not nil.
 func (v *GetMutableStateResponse) IsSetWorkflowCloseState() bool {
 	return v != nil && v.WorkflowCloseState != nil
+}
+
+// GetVersionHistories returns the value of VersionHistories if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetVersionHistories() (o *shared.VersionHistories) {
+	if v != nil && v.VersionHistories != nil {
+		return v.VersionHistories
+	}
+
+	return
+}
+
+// IsSetVersionHistories returns true if VersionHistories is not nil.
+func (v *GetMutableStateResponse) IsSetVersionHistories() bool {
+	return v != nil && v.VersionHistories != nil
 }
 
 type ParentExecutionInfo struct {
@@ -2199,6 +2289,1056 @@ func (v *ParentExecutionInfo) GetInitiatedId() (o int64) {
 // IsSetInitiatedId returns true if InitiatedId is not nil.
 func (v *ParentExecutionInfo) IsSetInitiatedId() bool {
 	return v != nil && v.InitiatedId != nil
+}
+
+type PollMutableStateRequest struct {
+	DomainUUID          *string                   `json:"domainUUID,omitempty"`
+	Execution           *shared.WorkflowExecution `json:"execution,omitempty"`
+	ExpectedNextEventId *int64                    `json:"expectedNextEventId,omitempty"`
+	CurrentBranchToken  []byte                    `json:"currentBranchToken,omitempty"`
+}
+
+// ToWire translates a PollMutableStateRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *PollMutableStateRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.ExpectedNextEventId != nil {
+		w, err = wire.NewValueI64(*(v.ExpectedNextEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.CurrentBranchToken != nil {
+		w, err = wire.NewValueBinary(v.CurrentBranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a PollMutableStateRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a PollMutableStateRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v PollMutableStateRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *PollMutableStateRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ExpectedNextEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				v.CurrentBranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a PollMutableStateRequest
+// struct.
+func (v *PollMutableStateRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [4]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
+		i++
+	}
+	if v.ExpectedNextEventId != nil {
+		fields[i] = fmt.Sprintf("ExpectedNextEventId: %v", *(v.ExpectedNextEventId))
+		i++
+	}
+	if v.CurrentBranchToken != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchToken: %v", v.CurrentBranchToken)
+		i++
+	}
+
+	return fmt.Sprintf("PollMutableStateRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this PollMutableStateRequest match the
+// provided PollMutableStateRequest.
+//
+// This function performs a deep comparison.
+func (v *PollMutableStateRequest) Equals(rhs *PollMutableStateRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ExpectedNextEventId, rhs.ExpectedNextEventId) {
+		return false
+	}
+	if !((v.CurrentBranchToken == nil && rhs.CurrentBranchToken == nil) || (v.CurrentBranchToken != nil && rhs.CurrentBranchToken != nil && bytes.Equal(v.CurrentBranchToken, rhs.CurrentBranchToken))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of PollMutableStateRequest.
+func (v *PollMutableStateRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.DomainUUID != nil {
+		enc.AddString("domainUUID", *v.DomainUUID)
+	}
+	if v.Execution != nil {
+		err = multierr.Append(err, enc.AddObject("execution", v.Execution))
+	}
+	if v.ExpectedNextEventId != nil {
+		enc.AddInt64("expectedNextEventId", *v.ExpectedNextEventId)
+	}
+	if v.CurrentBranchToken != nil {
+		enc.AddString("currentBranchToken", base64.StdEncoding.EncodeToString(v.CurrentBranchToken))
+	}
+	return err
+}
+
+// GetDomainUUID returns the value of DomainUUID if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateRequest) GetDomainUUID() (o string) {
+	if v != nil && v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+
+	return
+}
+
+// IsSetDomainUUID returns true if DomainUUID is not nil.
+func (v *PollMutableStateRequest) IsSetDomainUUID() bool {
+	return v != nil && v.DomainUUID != nil
+}
+
+// GetExecution returns the value of Execution if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateRequest) GetExecution() (o *shared.WorkflowExecution) {
+	if v != nil && v.Execution != nil {
+		return v.Execution
+	}
+
+	return
+}
+
+// IsSetExecution returns true if Execution is not nil.
+func (v *PollMutableStateRequest) IsSetExecution() bool {
+	return v != nil && v.Execution != nil
+}
+
+// GetExpectedNextEventId returns the value of ExpectedNextEventId if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateRequest) GetExpectedNextEventId() (o int64) {
+	if v != nil && v.ExpectedNextEventId != nil {
+		return *v.ExpectedNextEventId
+	}
+
+	return
+}
+
+// IsSetExpectedNextEventId returns true if ExpectedNextEventId is not nil.
+func (v *PollMutableStateRequest) IsSetExpectedNextEventId() bool {
+	return v != nil && v.ExpectedNextEventId != nil
+}
+
+// GetCurrentBranchToken returns the value of CurrentBranchToken if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateRequest) GetCurrentBranchToken() (o []byte) {
+	if v != nil && v.CurrentBranchToken != nil {
+		return v.CurrentBranchToken
+	}
+
+	return
+}
+
+// IsSetCurrentBranchToken returns true if CurrentBranchToken is not nil.
+func (v *PollMutableStateRequest) IsSetCurrentBranchToken() bool {
+	return v != nil && v.CurrentBranchToken != nil
+}
+
+type PollMutableStateResponse struct {
+	Execution                            *shared.WorkflowExecution          `json:"execution,omitempty"`
+	WorkflowType                         *shared.WorkflowType               `json:"workflowType,omitempty"`
+	NextEventId                          *int64                             `json:"NextEventId,omitempty"`
+	PreviousStartedEventId               *int64                             `json:"PreviousStartedEventId,omitempty"`
+	LastFirstEventId                     *int64                             `json:"LastFirstEventId,omitempty"`
+	TaskList                             *shared.TaskList                   `json:"taskList,omitempty"`
+	StickyTaskList                       *shared.TaskList                   `json:"stickyTaskList,omitempty"`
+	ClientLibraryVersion                 *string                            `json:"clientLibraryVersion,omitempty"`
+	ClientFeatureVersion                 *string                            `json:"clientFeatureVersion,omitempty"`
+	ClientImpl                           *string                            `json:"clientImpl,omitempty"`
+	StickyTaskListScheduleToStartTimeout *int32                             `json:"stickyTaskListScheduleToStartTimeout,omitempty"`
+	CurrentBranchToken                   []byte                             `json:"currentBranchToken,omitempty"`
+	ReplicationInfo                      map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
+	VersionHistories                     *shared.VersionHistories           `json:"versionHistories,omitempty"`
+	WorkflowState                        *int32                             `json:"workflowState,omitempty"`
+	WorkflowCloseState                   *int32                             `json:"workflowCloseState,omitempty"`
+}
+
+// ToWire translates a PollMutableStateResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *PollMutableStateResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [16]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowType != nil {
+		w, err = v.WorkflowType.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.NextEventId != nil {
+		w, err = wire.NewValueI64(*(v.NextEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.PreviousStartedEventId != nil {
+		w, err = wire.NewValueI64(*(v.PreviousStartedEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 35, Value: w}
+		i++
+	}
+	if v.LastFirstEventId != nil {
+		w, err = wire.NewValueI64(*(v.LastFirstEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.StickyTaskList != nil {
+		w, err = v.StickyTaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.ClientLibraryVersion != nil {
+		w, err = wire.NewValueString(*(v.ClientLibraryVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.ClientFeatureVersion != nil {
+		w, err = wire.NewValueString(*(v.ClientFeatureVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.ClientImpl != nil {
+		w, err = wire.NewValueString(*(v.ClientImpl)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.StickyTaskListScheduleToStartTimeout != nil {
+		w, err = wire.NewValueI32(*(v.StickyTaskListScheduleToStartTimeout)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.CurrentBranchToken != nil {
+		w, err = wire.NewValueBinary(v.CurrentBranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.ReplicationInfo != nil {
+		w, err = wire.NewValueMap(_Map_String_ReplicationInfo_MapItemList(v.ReplicationInfo)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.VersionHistories != nil {
+		w, err = v.VersionHistories.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
+		i++
+	}
+	if v.WorkflowState != nil {
+		w, err = wire.NewValueI32(*(v.WorkflowState)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
+	if v.WorkflowCloseState != nil {
+		w, err = wire.NewValueI32(*(v.WorkflowCloseState)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 150, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a PollMutableStateResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a PollMutableStateResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v PollMutableStateResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *PollMutableStateResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowType, err = _WorkflowType_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NextEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 35:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.PreviousStartedEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.LastFirstEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TStruct {
+				v.StickyTaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClientLibraryVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClientFeatureVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 90:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClientImpl = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 100:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.StickyTaskListScheduleToStartTimeout = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 110:
+			if field.Value.Type() == wire.TBinary {
+				v.CurrentBranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 120:
+			if field.Value.Type() == wire.TMap {
+				v.ReplicationInfo, err = _Map_String_ReplicationInfo_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 130:
+			if field.Value.Type() == wire.TStruct {
+				v.VersionHistories, err = _VersionHistories_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 140:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.WorkflowState = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 150:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.WorkflowCloseState = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a PollMutableStateResponse
+// struct.
+func (v *PollMutableStateResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [16]string
+	i := 0
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
+		i++
+	}
+	if v.WorkflowType != nil {
+		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
+		i++
+	}
+	if v.NextEventId != nil {
+		fields[i] = fmt.Sprintf("NextEventId: %v", *(v.NextEventId))
+		i++
+	}
+	if v.PreviousStartedEventId != nil {
+		fields[i] = fmt.Sprintf("PreviousStartedEventId: %v", *(v.PreviousStartedEventId))
+		i++
+	}
+	if v.LastFirstEventId != nil {
+		fields[i] = fmt.Sprintf("LastFirstEventId: %v", *(v.LastFirstEventId))
+		i++
+	}
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.StickyTaskList != nil {
+		fields[i] = fmt.Sprintf("StickyTaskList: %v", v.StickyTaskList)
+		i++
+	}
+	if v.ClientLibraryVersion != nil {
+		fields[i] = fmt.Sprintf("ClientLibraryVersion: %v", *(v.ClientLibraryVersion))
+		i++
+	}
+	if v.ClientFeatureVersion != nil {
+		fields[i] = fmt.Sprintf("ClientFeatureVersion: %v", *(v.ClientFeatureVersion))
+		i++
+	}
+	if v.ClientImpl != nil {
+		fields[i] = fmt.Sprintf("ClientImpl: %v", *(v.ClientImpl))
+		i++
+	}
+	if v.StickyTaskListScheduleToStartTimeout != nil {
+		fields[i] = fmt.Sprintf("StickyTaskListScheduleToStartTimeout: %v", *(v.StickyTaskListScheduleToStartTimeout))
+		i++
+	}
+	if v.CurrentBranchToken != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchToken: %v", v.CurrentBranchToken)
+		i++
+	}
+	if v.ReplicationInfo != nil {
+		fields[i] = fmt.Sprintf("ReplicationInfo: %v", v.ReplicationInfo)
+		i++
+	}
+	if v.VersionHistories != nil {
+		fields[i] = fmt.Sprintf("VersionHistories: %v", v.VersionHistories)
+		i++
+	}
+	if v.WorkflowState != nil {
+		fields[i] = fmt.Sprintf("WorkflowState: %v", *(v.WorkflowState))
+		i++
+	}
+	if v.WorkflowCloseState != nil {
+		fields[i] = fmt.Sprintf("WorkflowCloseState: %v", *(v.WorkflowCloseState))
+		i++
+	}
+
+	return fmt.Sprintf("PollMutableStateResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this PollMutableStateResponse match the
+// provided PollMutableStateResponse.
+//
+// This function performs a deep comparison.
+func (v *PollMutableStateResponse) Equals(rhs *PollMutableStateResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
+		return false
+	}
+	if !((v.WorkflowType == nil && rhs.WorkflowType == nil) || (v.WorkflowType != nil && rhs.WorkflowType != nil && v.WorkflowType.Equals(rhs.WorkflowType))) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NextEventId, rhs.NextEventId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.PreviousStartedEventId, rhs.PreviousStartedEventId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.LastFirstEventId, rhs.LastFirstEventId) {
+		return false
+	}
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !((v.StickyTaskList == nil && rhs.StickyTaskList == nil) || (v.StickyTaskList != nil && rhs.StickyTaskList != nil && v.StickyTaskList.Equals(rhs.StickyTaskList))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClientLibraryVersion, rhs.ClientLibraryVersion) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClientFeatureVersion, rhs.ClientFeatureVersion) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClientImpl, rhs.ClientImpl) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.StickyTaskListScheduleToStartTimeout, rhs.StickyTaskListScheduleToStartTimeout) {
+		return false
+	}
+	if !((v.CurrentBranchToken == nil && rhs.CurrentBranchToken == nil) || (v.CurrentBranchToken != nil && rhs.CurrentBranchToken != nil && bytes.Equal(v.CurrentBranchToken, rhs.CurrentBranchToken))) {
+		return false
+	}
+	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
+		return false
+	}
+	if !((v.VersionHistories == nil && rhs.VersionHistories == nil) || (v.VersionHistories != nil && rhs.VersionHistories != nil && v.VersionHistories.Equals(rhs.VersionHistories))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.WorkflowState, rhs.WorkflowState) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.WorkflowCloseState, rhs.WorkflowCloseState) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of PollMutableStateResponse.
+func (v *PollMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Execution != nil {
+		err = multierr.Append(err, enc.AddObject("execution", v.Execution))
+	}
+	if v.WorkflowType != nil {
+		err = multierr.Append(err, enc.AddObject("workflowType", v.WorkflowType))
+	}
+	if v.NextEventId != nil {
+		enc.AddInt64("NextEventId", *v.NextEventId)
+	}
+	if v.PreviousStartedEventId != nil {
+		enc.AddInt64("PreviousStartedEventId", *v.PreviousStartedEventId)
+	}
+	if v.LastFirstEventId != nil {
+		enc.AddInt64("LastFirstEventId", *v.LastFirstEventId)
+	}
+	if v.TaskList != nil {
+		err = multierr.Append(err, enc.AddObject("taskList", v.TaskList))
+	}
+	if v.StickyTaskList != nil {
+		err = multierr.Append(err, enc.AddObject("stickyTaskList", v.StickyTaskList))
+	}
+	if v.ClientLibraryVersion != nil {
+		enc.AddString("clientLibraryVersion", *v.ClientLibraryVersion)
+	}
+	if v.ClientFeatureVersion != nil {
+		enc.AddString("clientFeatureVersion", *v.ClientFeatureVersion)
+	}
+	if v.ClientImpl != nil {
+		enc.AddString("clientImpl", *v.ClientImpl)
+	}
+	if v.StickyTaskListScheduleToStartTimeout != nil {
+		enc.AddInt32("stickyTaskListScheduleToStartTimeout", *v.StickyTaskListScheduleToStartTimeout)
+	}
+	if v.CurrentBranchToken != nil {
+		enc.AddString("currentBranchToken", base64.StdEncoding.EncodeToString(v.CurrentBranchToken))
+	}
+	if v.ReplicationInfo != nil {
+		err = multierr.Append(err, enc.AddObject("replicationInfo", (_Map_String_ReplicationInfo_Zapper)(v.ReplicationInfo)))
+	}
+	if v.VersionHistories != nil {
+		err = multierr.Append(err, enc.AddObject("versionHistories", v.VersionHistories))
+	}
+	if v.WorkflowState != nil {
+		enc.AddInt32("workflowState", *v.WorkflowState)
+	}
+	if v.WorkflowCloseState != nil {
+		enc.AddInt32("workflowCloseState", *v.WorkflowCloseState)
+	}
+	return err
+}
+
+// GetExecution returns the value of Execution if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetExecution() (o *shared.WorkflowExecution) {
+	if v != nil && v.Execution != nil {
+		return v.Execution
+	}
+
+	return
+}
+
+// IsSetExecution returns true if Execution is not nil.
+func (v *PollMutableStateResponse) IsSetExecution() bool {
+	return v != nil && v.Execution != nil
+}
+
+// GetWorkflowType returns the value of WorkflowType if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetWorkflowType() (o *shared.WorkflowType) {
+	if v != nil && v.WorkflowType != nil {
+		return v.WorkflowType
+	}
+
+	return
+}
+
+// IsSetWorkflowType returns true if WorkflowType is not nil.
+func (v *PollMutableStateResponse) IsSetWorkflowType() bool {
+	return v != nil && v.WorkflowType != nil
+}
+
+// GetNextEventId returns the value of NextEventId if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetNextEventId() (o int64) {
+	if v != nil && v.NextEventId != nil {
+		return *v.NextEventId
+	}
+
+	return
+}
+
+// IsSetNextEventId returns true if NextEventId is not nil.
+func (v *PollMutableStateResponse) IsSetNextEventId() bool {
+	return v != nil && v.NextEventId != nil
+}
+
+// GetPreviousStartedEventId returns the value of PreviousStartedEventId if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetPreviousStartedEventId() (o int64) {
+	if v != nil && v.PreviousStartedEventId != nil {
+		return *v.PreviousStartedEventId
+	}
+
+	return
+}
+
+// IsSetPreviousStartedEventId returns true if PreviousStartedEventId is not nil.
+func (v *PollMutableStateResponse) IsSetPreviousStartedEventId() bool {
+	return v != nil && v.PreviousStartedEventId != nil
+}
+
+// GetLastFirstEventId returns the value of LastFirstEventId if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetLastFirstEventId() (o int64) {
+	if v != nil && v.LastFirstEventId != nil {
+		return *v.LastFirstEventId
+	}
+
+	return
+}
+
+// IsSetLastFirstEventId returns true if LastFirstEventId is not nil.
+func (v *PollMutableStateResponse) IsSetLastFirstEventId() bool {
+	return v != nil && v.LastFirstEventId != nil
+}
+
+// GetTaskList returns the value of TaskList if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetTaskList() (o *shared.TaskList) {
+	if v != nil && v.TaskList != nil {
+		return v.TaskList
+	}
+
+	return
+}
+
+// IsSetTaskList returns true if TaskList is not nil.
+func (v *PollMutableStateResponse) IsSetTaskList() bool {
+	return v != nil && v.TaskList != nil
+}
+
+// GetStickyTaskList returns the value of StickyTaskList if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetStickyTaskList() (o *shared.TaskList) {
+	if v != nil && v.StickyTaskList != nil {
+		return v.StickyTaskList
+	}
+
+	return
+}
+
+// IsSetStickyTaskList returns true if StickyTaskList is not nil.
+func (v *PollMutableStateResponse) IsSetStickyTaskList() bool {
+	return v != nil && v.StickyTaskList != nil
+}
+
+// GetClientLibraryVersion returns the value of ClientLibraryVersion if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetClientLibraryVersion() (o string) {
+	if v != nil && v.ClientLibraryVersion != nil {
+		return *v.ClientLibraryVersion
+	}
+
+	return
+}
+
+// IsSetClientLibraryVersion returns true if ClientLibraryVersion is not nil.
+func (v *PollMutableStateResponse) IsSetClientLibraryVersion() bool {
+	return v != nil && v.ClientLibraryVersion != nil
+}
+
+// GetClientFeatureVersion returns the value of ClientFeatureVersion if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetClientFeatureVersion() (o string) {
+	if v != nil && v.ClientFeatureVersion != nil {
+		return *v.ClientFeatureVersion
+	}
+
+	return
+}
+
+// IsSetClientFeatureVersion returns true if ClientFeatureVersion is not nil.
+func (v *PollMutableStateResponse) IsSetClientFeatureVersion() bool {
+	return v != nil && v.ClientFeatureVersion != nil
+}
+
+// GetClientImpl returns the value of ClientImpl if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetClientImpl() (o string) {
+	if v != nil && v.ClientImpl != nil {
+		return *v.ClientImpl
+	}
+
+	return
+}
+
+// IsSetClientImpl returns true if ClientImpl is not nil.
+func (v *PollMutableStateResponse) IsSetClientImpl() bool {
+	return v != nil && v.ClientImpl != nil
+}
+
+// GetStickyTaskListScheduleToStartTimeout returns the value of StickyTaskListScheduleToStartTimeout if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetStickyTaskListScheduleToStartTimeout() (o int32) {
+	if v != nil && v.StickyTaskListScheduleToStartTimeout != nil {
+		return *v.StickyTaskListScheduleToStartTimeout
+	}
+
+	return
+}
+
+// IsSetStickyTaskListScheduleToStartTimeout returns true if StickyTaskListScheduleToStartTimeout is not nil.
+func (v *PollMutableStateResponse) IsSetStickyTaskListScheduleToStartTimeout() bool {
+	return v != nil && v.StickyTaskListScheduleToStartTimeout != nil
+}
+
+// GetCurrentBranchToken returns the value of CurrentBranchToken if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetCurrentBranchToken() (o []byte) {
+	if v != nil && v.CurrentBranchToken != nil {
+		return v.CurrentBranchToken
+	}
+
+	return
+}
+
+// IsSetCurrentBranchToken returns true if CurrentBranchToken is not nil.
+func (v *PollMutableStateResponse) IsSetCurrentBranchToken() bool {
+	return v != nil && v.CurrentBranchToken != nil
+}
+
+// GetReplicationInfo returns the value of ReplicationInfo if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetReplicationInfo() (o map[string]*shared.ReplicationInfo) {
+	if v != nil && v.ReplicationInfo != nil {
+		return v.ReplicationInfo
+	}
+
+	return
+}
+
+// IsSetReplicationInfo returns true if ReplicationInfo is not nil.
+func (v *PollMutableStateResponse) IsSetReplicationInfo() bool {
+	return v != nil && v.ReplicationInfo != nil
+}
+
+// GetVersionHistories returns the value of VersionHistories if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetVersionHistories() (o *shared.VersionHistories) {
+	if v != nil && v.VersionHistories != nil {
+		return v.VersionHistories
+	}
+
+	return
+}
+
+// IsSetVersionHistories returns true if VersionHistories is not nil.
+func (v *PollMutableStateResponse) IsSetVersionHistories() bool {
+	return v != nil && v.VersionHistories != nil
+}
+
+// GetWorkflowState returns the value of WorkflowState if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetWorkflowState() (o int32) {
+	if v != nil && v.WorkflowState != nil {
+		return *v.WorkflowState
+	}
+
+	return
+}
+
+// IsSetWorkflowState returns true if WorkflowState is not nil.
+func (v *PollMutableStateResponse) IsSetWorkflowState() bool {
+	return v != nil && v.WorkflowState != nil
+}
+
+// GetWorkflowCloseState returns the value of WorkflowCloseState if it is set or its
+// zero value if it is unset.
+func (v *PollMutableStateResponse) GetWorkflowCloseState() (o int32) {
+	if v != nil && v.WorkflowCloseState != nil {
+		return *v.WorkflowCloseState
+	}
+
+	return
+}
+
+// IsSetWorkflowCloseState returns true if WorkflowCloseState is not nil.
+func (v *PollMutableStateResponse) IsSetWorkflowCloseState() bool {
+	return v != nil && v.WorkflowCloseState != nil
 }
 
 type QueryWorkflowRequest struct {
@@ -2563,6 +3703,192 @@ func (v *QueryWorkflowResponse) GetQueryResult() (o []byte) {
 // IsSetQueryResult returns true if QueryResult is not nil.
 func (v *QueryWorkflowResponse) IsSetQueryResult() bool {
 	return v != nil && v.QueryResult != nil
+}
+
+type ReapplyEventsRequest struct {
+	DomainUUID *string                      `json:"domainUUID,omitempty"`
+	Request    *shared.ReapplyEventsRequest `json:"request,omitempty"`
+}
+
+// ToWire translates a ReapplyEventsRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ReapplyEventsRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReapplyEventsRequest_Read(w wire.Value) (*shared.ReapplyEventsRequest, error) {
+	var v shared.ReapplyEventsRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a ReapplyEventsRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ReapplyEventsRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ReapplyEventsRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ReapplyEventsRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Request, err = _ReapplyEventsRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ReapplyEventsRequest
+// struct.
+func (v *ReapplyEventsRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
+		i++
+	}
+
+	return fmt.Sprintf("ReapplyEventsRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ReapplyEventsRequest match the
+// provided ReapplyEventsRequest.
+//
+// This function performs a deep comparison.
+func (v *ReapplyEventsRequest) Equals(rhs *ReapplyEventsRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ReapplyEventsRequest.
+func (v *ReapplyEventsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.DomainUUID != nil {
+		enc.AddString("domainUUID", *v.DomainUUID)
+	}
+	if v.Request != nil {
+		err = multierr.Append(err, enc.AddObject("request", v.Request))
+	}
+	return err
+}
+
+// GetDomainUUID returns the value of DomainUUID if it is set or its
+// zero value if it is unset.
+func (v *ReapplyEventsRequest) GetDomainUUID() (o string) {
+	if v != nil && v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+
+	return
+}
+
+// IsSetDomainUUID returns true if DomainUUID is not nil.
+func (v *ReapplyEventsRequest) IsSetDomainUUID() bool {
+	return v != nil && v.DomainUUID != nil
+}
+
+// GetRequest returns the value of Request if it is set or its
+// zero value if it is unset.
+func (v *ReapplyEventsRequest) GetRequest() (o *shared.ReapplyEventsRequest) {
+	if v != nil && v.Request != nil {
+		return v.Request
+	}
+
+	return
+}
+
+// IsSetRequest returns true if Request is not nil.
+func (v *ReapplyEventsRequest) IsSetRequest() bool {
+	return v != nil && v.Request != nil
 }
 
 type RecordActivityTaskHeartbeatRequest struct {
@@ -5088,6 +6414,7 @@ type ReplicateEventsRequest struct {
 	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
 	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
 	ResetWorkflow           *bool                              `json:"resetWorkflow,omitempty"`
+	NewRunNDC               *bool                              `json:"newRunNDC,omitempty"`
 }
 
 // ToWire translates a ReplicateEventsRequest struct into a Thrift-level intermediate
@@ -5107,7 +6434,7 @@ type ReplicateEventsRequest struct {
 //   }
 func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [13]wire.Field
+		fields [14]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -5215,6 +6542,14 @@ func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 130, Value: w}
+		i++
+	}
+	if v.NewRunNDC != nil {
+		w, err = wire.NewValueBool(*(v.NewRunNDC)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
 		i++
 	}
 
@@ -5371,6 +6706,16 @@ func (v *ReplicateEventsRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 140:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.NewRunNDC = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -5384,7 +6729,7 @@ func (v *ReplicateEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [13]string
+	var fields [14]string
 	i := 0
 	if v.SourceCluster != nil {
 		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
@@ -5436,6 +6781,10 @@ func (v *ReplicateEventsRequest) String() string {
 	}
 	if v.ResetWorkflow != nil {
 		fields[i] = fmt.Sprintf("ResetWorkflow: %v", *(v.ResetWorkflow))
+		i++
+	}
+	if v.NewRunNDC != nil {
+		fields[i] = fmt.Sprintf("NewRunNDC: %v", *(v.NewRunNDC))
 		i++
 	}
 
@@ -5491,6 +6840,9 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 	if !_Bool_EqualsPtr(v.ResetWorkflow, rhs.ResetWorkflow) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.NewRunNDC, rhs.NewRunNDC) {
+		return false
+	}
 
 	return true
 }
@@ -5539,6 +6891,9 @@ func (v *ReplicateEventsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (er
 	}
 	if v.ResetWorkflow != nil {
 		enc.AddBool("resetWorkflow", *v.ResetWorkflow)
+	}
+	if v.NewRunNDC != nil {
+		enc.AddBool("newRunNDC", *v.NewRunNDC)
 	}
 	return err
 }
@@ -5738,6 +7093,456 @@ func (v *ReplicateEventsRequest) IsSetResetWorkflow() bool {
 	return v != nil && v.ResetWorkflow != nil
 }
 
+// GetNewRunNDC returns the value of NewRunNDC if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetNewRunNDC() (o bool) {
+	if v != nil && v.NewRunNDC != nil {
+		return *v.NewRunNDC
+	}
+
+	return
+}
+
+// IsSetNewRunNDC returns true if NewRunNDC is not nil.
+func (v *ReplicateEventsRequest) IsSetNewRunNDC() bool {
+	return v != nil && v.NewRunNDC != nil
+}
+
+type ReplicateEventsV2Request struct {
+	DomainUUID          *string                      `json:"domainUUID,omitempty"`
+	WorkflowExecution   *shared.WorkflowExecution    `json:"workflowExecution,omitempty"`
+	VersionHistoryItems []*shared.VersionHistoryItem `json:"versionHistoryItems,omitempty"`
+	Events              *shared.DataBlob             `json:"events,omitempty"`
+	NewRunEvents        *shared.DataBlob             `json:"newRunEvents,omitempty"`
+	ResetWorkflow       *bool                        `json:"resetWorkflow,omitempty"`
+}
+
+type _List_VersionHistoryItem_ValueList []*shared.VersionHistoryItem
+
+func (v _List_VersionHistoryItem_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_VersionHistoryItem_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_VersionHistoryItem_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_VersionHistoryItem_ValueList) Close() {}
+
+// ToWire translates a ReplicateEventsV2Request struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ReplicateEventsV2Request) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowExecution != nil {
+		w, err = v.WorkflowExecution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.VersionHistoryItems != nil {
+		w, err = wire.NewValueList(_List_VersionHistoryItem_ValueList(v.VersionHistoryItems)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.Events != nil {
+		w, err = v.Events.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.NewRunEvents != nil {
+		w, err = v.NewRunEvents.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.ResetWorkflow != nil {
+		w, err = wire.NewValueBool(*(v.ResetWorkflow)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _VersionHistoryItem_Read(w wire.Value) (*shared.VersionHistoryItem, error) {
+	var v shared.VersionHistoryItem
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_VersionHistoryItem_Read(l wire.ValueList) ([]*shared.VersionHistoryItem, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*shared.VersionHistoryItem, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _VersionHistoryItem_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+func _DataBlob_Read(w wire.Value) (*shared.DataBlob, error) {
+	var v shared.DataBlob
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a ReplicateEventsV2Request struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ReplicateEventsV2Request struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ReplicateEventsV2Request
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ReplicateEventsV2Request) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowExecution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TList {
+				v.VersionHistoryItems, err = _List_VersionHistoryItem_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.Events, err = _DataBlob_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TStruct {
+				v.NewRunEvents, err = _DataBlob_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ResetWorkflow = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ReplicateEventsV2Request
+// struct.
+func (v *ReplicateEventsV2Request) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.WorkflowExecution != nil {
+		fields[i] = fmt.Sprintf("WorkflowExecution: %v", v.WorkflowExecution)
+		i++
+	}
+	if v.VersionHistoryItems != nil {
+		fields[i] = fmt.Sprintf("VersionHistoryItems: %v", v.VersionHistoryItems)
+		i++
+	}
+	if v.Events != nil {
+		fields[i] = fmt.Sprintf("Events: %v", v.Events)
+		i++
+	}
+	if v.NewRunEvents != nil {
+		fields[i] = fmt.Sprintf("NewRunEvents: %v", v.NewRunEvents)
+		i++
+	}
+	if v.ResetWorkflow != nil {
+		fields[i] = fmt.Sprintf("ResetWorkflow: %v", *(v.ResetWorkflow))
+		i++
+	}
+
+	return fmt.Sprintf("ReplicateEventsV2Request{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_VersionHistoryItem_Equals(lhs, rhs []*shared.VersionHistoryItem) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this ReplicateEventsV2Request match the
+// provided ReplicateEventsV2Request.
+//
+// This function performs a deep comparison.
+func (v *ReplicateEventsV2Request) Equals(rhs *ReplicateEventsV2Request) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.WorkflowExecution == nil && rhs.WorkflowExecution == nil) || (v.WorkflowExecution != nil && rhs.WorkflowExecution != nil && v.WorkflowExecution.Equals(rhs.WorkflowExecution))) {
+		return false
+	}
+	if !((v.VersionHistoryItems == nil && rhs.VersionHistoryItems == nil) || (v.VersionHistoryItems != nil && rhs.VersionHistoryItems != nil && _List_VersionHistoryItem_Equals(v.VersionHistoryItems, rhs.VersionHistoryItems))) {
+		return false
+	}
+	if !((v.Events == nil && rhs.Events == nil) || (v.Events != nil && rhs.Events != nil && v.Events.Equals(rhs.Events))) {
+		return false
+	}
+	if !((v.NewRunEvents == nil && rhs.NewRunEvents == nil) || (v.NewRunEvents != nil && rhs.NewRunEvents != nil && v.NewRunEvents.Equals(rhs.NewRunEvents))) {
+		return false
+	}
+	if !_Bool_EqualsPtr(v.ResetWorkflow, rhs.ResetWorkflow) {
+		return false
+	}
+
+	return true
+}
+
+type _List_VersionHistoryItem_Zapper []*shared.VersionHistoryItem
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_VersionHistoryItem_Zapper.
+func (l _List_VersionHistoryItem_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ReplicateEventsV2Request.
+func (v *ReplicateEventsV2Request) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.DomainUUID != nil {
+		enc.AddString("domainUUID", *v.DomainUUID)
+	}
+	if v.WorkflowExecution != nil {
+		err = multierr.Append(err, enc.AddObject("workflowExecution", v.WorkflowExecution))
+	}
+	if v.VersionHistoryItems != nil {
+		err = multierr.Append(err, enc.AddArray("versionHistoryItems", (_List_VersionHistoryItem_Zapper)(v.VersionHistoryItems)))
+	}
+	if v.Events != nil {
+		err = multierr.Append(err, enc.AddObject("events", v.Events))
+	}
+	if v.NewRunEvents != nil {
+		err = multierr.Append(err, enc.AddObject("newRunEvents", v.NewRunEvents))
+	}
+	if v.ResetWorkflow != nil {
+		enc.AddBool("resetWorkflow", *v.ResetWorkflow)
+	}
+	return err
+}
+
+// GetDomainUUID returns the value of DomainUUID if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsV2Request) GetDomainUUID() (o string) {
+	if v != nil && v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+
+	return
+}
+
+// IsSetDomainUUID returns true if DomainUUID is not nil.
+func (v *ReplicateEventsV2Request) IsSetDomainUUID() bool {
+	return v != nil && v.DomainUUID != nil
+}
+
+// GetWorkflowExecution returns the value of WorkflowExecution if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsV2Request) GetWorkflowExecution() (o *shared.WorkflowExecution) {
+	if v != nil && v.WorkflowExecution != nil {
+		return v.WorkflowExecution
+	}
+
+	return
+}
+
+// IsSetWorkflowExecution returns true if WorkflowExecution is not nil.
+func (v *ReplicateEventsV2Request) IsSetWorkflowExecution() bool {
+	return v != nil && v.WorkflowExecution != nil
+}
+
+// GetVersionHistoryItems returns the value of VersionHistoryItems if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsV2Request) GetVersionHistoryItems() (o []*shared.VersionHistoryItem) {
+	if v != nil && v.VersionHistoryItems != nil {
+		return v.VersionHistoryItems
+	}
+
+	return
+}
+
+// IsSetVersionHistoryItems returns true if VersionHistoryItems is not nil.
+func (v *ReplicateEventsV2Request) IsSetVersionHistoryItems() bool {
+	return v != nil && v.VersionHistoryItems != nil
+}
+
+// GetEvents returns the value of Events if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsV2Request) GetEvents() (o *shared.DataBlob) {
+	if v != nil && v.Events != nil {
+		return v.Events
+	}
+
+	return
+}
+
+// IsSetEvents returns true if Events is not nil.
+func (v *ReplicateEventsV2Request) IsSetEvents() bool {
+	return v != nil && v.Events != nil
+}
+
+// GetNewRunEvents returns the value of NewRunEvents if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsV2Request) GetNewRunEvents() (o *shared.DataBlob) {
+	if v != nil && v.NewRunEvents != nil {
+		return v.NewRunEvents
+	}
+
+	return
+}
+
+// IsSetNewRunEvents returns true if NewRunEvents is not nil.
+func (v *ReplicateEventsV2Request) IsSetNewRunEvents() bool {
+	return v != nil && v.NewRunEvents != nil
+}
+
+// GetResetWorkflow returns the value of ResetWorkflow if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsV2Request) GetResetWorkflow() (o bool) {
+	if v != nil && v.ResetWorkflow != nil {
+		return *v.ResetWorkflow
+	}
+
+	return
+}
+
+// IsSetResetWorkflow returns true if ResetWorkflow is not nil.
+func (v *ReplicateEventsV2Request) IsSetResetWorkflow() bool {
+	return v != nil && v.ResetWorkflow != nil
+}
+
 type ReplicateRawEventsRequest struct {
 	DomainUUID              *string                            `json:"domainUUID,omitempty"`
 	WorkflowExecution       *shared.WorkflowExecution          `json:"workflowExecution,omitempty"`
@@ -5829,12 +7634,6 @@ func (v *ReplicateRawEventsRequest) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _DataBlob_Read(w wire.Value) (*shared.DataBlob, error) {
-	var v shared.DataBlob
-	err := v.FromWire(w)
-	return &v, err
 }
 
 // FromWire deserializes a ReplicateRawEventsRequest struct from its Thrift-level
@@ -10527,7 +12326,7 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "history",
 	Package:  "github.com/uber/cadence/.gen/go/history",
 	FilePath: "history.thrift",
-	SHA1:     "3cc65b3d2711aa51cb3bdd8cfb2acc1abaff9149",
+	SHA1:     "ab284313a8c4213d10b21312e684a435c0ea2fe4",
 	Includes: []*thriftreflect.ThriftModule{
 		replicator.ThriftModule,
 		shared.ThriftModule,
@@ -10535,7 +12334,7 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\ninclude \"shared.thrift\"\ninclude \"replicator.thrift\"\n\nnamespace java com.uber.cadence.history\n\nexception EventAlreadyStartedError {\n  1: required string message\n}\n\nexception ShardOwnershipLostError {\n  10: optional string message\n  20: optional string owner\n}\n\nstruct ParentExecutionInfo {\n  10: optional string domainUUID\n  15: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") initiatedId\n}\n\nstruct StartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.StartWorkflowExecutionRequest startRequest\n  30: optional ParentExecutionInfo parentExecutionInfo\n  40: optional i32 attempt\n  50: optional i64 (js.type = \"Long\") expirationTimestamp\n  55: optional shared.ContinueAsNewInitiator continueAsNewInitiator\n  56: optional string continuedFailureReason\n  57: optional binary continuedFailureDetails\n  58: optional binary lastCompletionResult\n  60: optional i32 firstDecisionTaskBackoffSeconds\n}\n\nstruct DescribeMutableStateRequest{\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct DescribeMutableStateResponse{\n  30: optional string mutableStateInCache\n  40: optional string mutableStateInDatabase\n}\n\nstruct GetMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n}\n\nstruct GetMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  100: optional bool isWorkflowRunning\n  110: optional i32 stickyTaskListScheduleToStartTimeout\n  120: optional i32 eventStoreVersion\n  130: optional binary branchToken\n  140: optional map<string, shared.ReplicationInfo> replicationInfo\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  150: optional i32 workflowState\n  160: optional i32 workflowCloseState\n}\n\nstruct ResetStickyTaskListRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct ResetStickyTaskListResponse {\n  // The reason to keep this response is to allow returning\n  // information in the future.\n}\n\nstruct RespondDecisionTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskCompletedRequest completeRequest\n}\n\nstruct RespondDecisionTaskCompletedResponse {\n  10: optional RecordDecisionTaskStartedResponse startedResponse\n}\n\nstruct RespondDecisionTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskFailedRequest failedRequest\n}\n\nstruct RecordActivityTaskHeartbeatRequest {\n  10: optional string domainUUID\n  20: optional shared.RecordActivityTaskHeartbeatRequest heartbeatRequest\n}\n\nstruct RespondActivityTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCompletedRequest completeRequest\n}\n\nstruct RespondActivityTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskFailedRequest failedRequest\n}\n\nstruct RespondActivityTaskCanceledRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCanceledRequest cancelRequest\n}\n\nstruct RecordActivityTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForActivityTaskRequest pollRequest\n}\n\nstruct RecordActivityTaskStartedResponse {\n  20: optional shared.HistoryEvent scheduledEvent\n  30: optional i64 (js.type = \"Long\") startedTimestamp\n  40: optional i64 (js.type = \"Long\") attempt\n  50: optional i64 (js.type = \"Long\") scheduledTimestampOfThisAttempt\n  60: optional binary heartbeatDetails\n  70: optional shared.WorkflowType workflowType\n  80: optional string workflowDomain\n}\n\nstruct RecordDecisionTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForDecisionTaskRequest pollRequest\n}\n\nstruct RecordDecisionTaskStartedResponse {\n  10: optional shared.WorkflowType workflowType\n  20: optional i64 (js.type = \"Long\") previousStartedEventId\n  30: optional i64 (js.type = \"Long\") scheduledEventId\n  40: optional i64 (js.type = \"Long\") startedEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") attempt\n  70: optional bool stickyExecutionEnabled\n  80: optional shared.TransientDecisionInfo decisionInfo\n  90: optional shared.TaskList WorkflowExecutionTaskList\n  100: optional i32 eventStoreVersion\n  110: optional binary branchToken\n  120:  optional i64 (js.type = \"Long\") scheduledTimestamp\n  130:  optional i64 (js.type = \"Long\") startedTimestamp\n}\n\nstruct SignalWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWorkflowExecutionRequest signalRequest\n  30: optional shared.WorkflowExecution externalWorkflowExecution\n  40: optional bool childWorkflowOnly\n}\n\nstruct SignalWithStartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest\n}\n\nstruct RemoveSignalMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional string requestId\n}\n\nstruct TerminateWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.TerminateWorkflowExecutionRequest terminateRequest\n}\n\nstruct ResetWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.ResetWorkflowExecutionRequest resetRequest\n}\n\nstruct RequestCancelWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest\n  30: optional i64 (js.type = \"Long\") externalInitiatedEventId\n  40: optional shared.WorkflowExecution externalWorkflowExecution\n  50: optional bool childWorkflowOnly\n}\n\nstruct ScheduleDecisionTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional bool isFirstDecision\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.DescribeWorkflowExecutionRequest request\n}\n\n/**\n* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow\n* execution which started it.  When a child execution is completed it creates this request and calls the\n* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the\n* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when\n* child creates multiple runs through ContinueAsNew before finally completing.\n**/\nstruct RecordChildExecutionCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") initiatedId\n  40: optional shared.WorkflowExecution completedExecution\n  50: optional shared.HistoryEvent completionEvent\n}\n\nstruct ReplicateEventsRequest {\n  10: optional string sourceCluster\n  20: optional string domainUUID\n  30: optional shared.WorkflowExecution workflowExecution\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional bool forceBufferEvents // this attribute is deprecated\n  110: optional i32 eventStoreVersion\n  120: optional i32 newRunEventStoreVersion\n  130: optional bool resetWorkflow\n}\n\nstruct ReplicateRawEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional shared.DataBlob history\n  50: optional shared.DataBlob newRunHistory\n  60: optional i32 eventStoreVersion\n  70: optional i32 newRunEventStoreVersion\n}\n\nstruct SyncShardStatusRequest {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityRequest {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n}\n\nstruct QueryWorkflowRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional shared.WorkflowQuery query\n}\n\nstruct QueryWorkflowResponse {\n  10: optional binary queryResult\n}\n\n/**\n* HistoryService provides API to start a new long running workflow instance, as well as query and update the history\n* of workflow instances already created.\n**/\nservice HistoryService {\n  /**\n  * StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with\n  * 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the\n  * first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already\n  * exists with same workflowId.\n  **/\n  shared.StartWorkflowExecutionResponse StartWorkflowExecution(1: StartWorkflowExecutionRequest startRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Returns the information from mutable state of workflow execution.\n  * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n  **/\n  GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Reset the sticky tasklist related information in mutable state of a given workflow.\n  * Things cleared are:\n  * 1. StickyTaskList\n  * 2. StickyScheduleToStartTimeout\n  * 3. ClientLibraryVersion\n  * 4. ClientFeatureVersion\n  * 5. ClientImpl\n  **/\n  ResetStickyTaskListResponse ResetStickyTaskList(1: ResetStickyTaskListRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordDecisionTaskStartedResponse RecordDecisionTaskStarted(1: RecordDecisionTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordActivityTaskStartedResponse RecordActivityTaskStarted(1: RecordActivityTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of\n  * 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and\n  * potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted\n  * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call\n  * for completing the DecisionTask.\n  **/\n  RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in\n  * DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to\n  * either clear sticky tasklist or report ny panics during DecisionTask processing.\n  **/\n  void RespondDecisionTaskFailed(1: RespondDecisionTaskFailedRequest failedRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails\n  * to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and\n  * 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will\n  * fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for heartbeating.\n  **/\n  shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: RecordActivityTaskHeartbeatRequest heartbeatRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask\n  * created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void  RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will\n  * result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskCanceled(1: RespondActivityTaskCanceledRequest canceledRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in\n  * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.\n  **/\n  void SignalWorkflowExecution(1: SignalWorkflowExecutionRequest signalRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.\n  * If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history\n  * and a decision task being created for the execution.\n  * If workflow is not running or not found, it will first try start workflow with given WorkflowIDResuePolicy,\n  * and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.\n  * It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.\n  **/\n  shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: SignalWithStartWorkflowExecutionRequest signalWithStartRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: ShardOwnershipLostError shardOwnershipLostError,\n      4: shared.DomainNotActiveError domainNotActiveError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.WorkflowExecutionAlreadyStartedError workflowAlreadyStartedError,\n    )\n\n  /**\n  * RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently\n  * used to clean execution info when signal decision finished.\n  **/\n  void RemoveSignalMutableState(1: RemoveSignalMutableStateRequest removeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event\n  * in the history and immediately terminating the execution instance.\n  **/\n  void TerminateWorkflowExecution(1: TerminateWorkflowExecutionRequest terminateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ResetWorkflowExecution reset an existing workflow execution by a firstEventID of a existing event batch\n  * in the history and immediately terminating the current execution instance.\n  * After reset, the history will grow from nextFirstEventID.\n  **/\n  shared.ResetWorkflowExecutionResponse ResetWorkflowExecution(1: ResetWorkflowExecutionRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.\n  * It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid\n  * anymore due to completion or doesn't exist.\n  **/\n  void RequestCancelWorkflowExecution(1: RequestCancelWorkflowExecutionRequest cancelRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly\n  * used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts\n  * child execution without creating the decision task and then calls this API after updating the mutable state of\n  * parent execution.\n  **/\n  void ScheduleDecisionTask(1: ScheduleDecisionTaskRequest scheduleRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.\n  * This is mainly called by transfer queue processor during the processing of DeleteExecution task.\n  **/\n  void RecordChildExecutionCompleted(1: RecordChildExecutionCompletedRequest completionRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeWorkflowExecution returns information about the specified workflow execution.\n  **/\n  shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest describeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEvents(1: ReplicateEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateRawEvents(1: ReplicateRawEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncShardStatus sync the status between shards\n  **/\n  void SyncShardStatus(1: SyncShardStatusRequest syncShardStatusRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncActivity sync the activity status\n  **/\n  void SyncActivity(1: SyncActivityRequest syncActivityRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: shared.RetryTaskError retryTaskError,\n    )\n\n  /**\n  * DescribeMutableState returns information about the internal states of workflow mutable state.\n  **/\n  DescribeMutableStateResponse DescribeMutableState(1: DescribeMutableStateRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.AccessDeniedError accessDeniedError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.AccessDeniedError accessDeniedError,\n    )\n\n /**\n * CloseShard close the shard\n **/\n void CloseShard(1: shared.CloseShardRequest request)\n    throws (\n    1: shared.BadRequestError badRequestError,\n    2: shared.InternalServiceError internalServiceError,\n    3: shared.AccessDeniedError accessDeniedError,\n    )\n\n  /**\n  * RemoveTask remove task based on type, taskid, shardid\n  **/\n  void RemoveTask(1: shared.RemoveTaskRequest request)\n     throws (\n     1: shared.BadRequestError badRequestError,\n     2: shared.InternalServiceError internalServiceError,\n     3: shared.AccessDeniedError accessDeniedError,\n     )\n  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n    )\n\n  /**\n  * QueryWorkflow returns query result for a specified workflow execution\n  **/\n  QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)\n\tthrows (\n\t  1: shared.BadRequestError badRequestError,\n\t  2: shared.InternalServiceError internalServiceError,\n\t  3: shared.EntityNotExistsError entityNotExistError,\n\t  4: shared.QueryFailedError queryFailedError,\n\t  5: shared.LimitExceededError limitExceededError,\n\t  6: shared.ServiceBusyError serviceBusyError,\n\t  7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n\t)\n}\n"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\ninclude \"shared.thrift\"\ninclude \"replicator.thrift\"\n\nnamespace java com.uber.cadence.history\n\nexception EventAlreadyStartedError {\n  1: required string message\n}\n\nexception ShardOwnershipLostError {\n  10: optional string message\n  20: optional string owner\n}\n\nstruct ParentExecutionInfo {\n  10: optional string domainUUID\n  15: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") initiatedId\n}\n\nstruct StartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.StartWorkflowExecutionRequest startRequest\n  30: optional ParentExecutionInfo parentExecutionInfo\n  40: optional i32 attempt\n  50: optional i64 (js.type = \"Long\") expirationTimestamp\n  55: optional shared.ContinueAsNewInitiator continueAsNewInitiator\n  56: optional string continuedFailureReason\n  57: optional binary continuedFailureDetails\n  58: optional binary lastCompletionResult\n  60: optional i32 firstDecisionTaskBackoffSeconds\n}\n\nstruct DescribeMutableStateRequest{\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct DescribeMutableStateResponse{\n  30: optional string mutableStateInCache\n  40: optional string mutableStateInDatabase\n}\n\nstruct GetMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n  40: optional binary currentBranchToken\n}\n\nstruct GetMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field\n  100: optional bool isWorkflowRunning\n  110: optional i32 stickyTaskListScheduleToStartTimeout\n  120: optional i32 eventStoreVersion\n  130: optional binary currentBranchToken\n  140: optional map<string, shared.ReplicationInfo> replicationInfo\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  150: optional i32 workflowState\n  160: optional i32 workflowCloseState\n  170: optional shared.VersionHistories versionHistories\n}\n\nstruct PollMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n  40: optional binary currentBranchToken\n}\n\nstruct PollMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  100: optional i32 stickyTaskListScheduleToStartTimeout\n  110: optional binary currentBranchToken\n  120: optional map<string, shared.ReplicationInfo> replicationInfo\n  130: optional shared.VersionHistories versionHistories\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  140: optional i32 workflowState\n  150: optional i32 workflowCloseState\n}\n\nstruct ResetStickyTaskListRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct ResetStickyTaskListResponse {\n  // The reason to keep this response is to allow returning\n  // information in the future.\n}\n\nstruct RespondDecisionTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskCompletedRequest completeRequest\n}\n\nstruct RespondDecisionTaskCompletedResponse {\n  10: optional RecordDecisionTaskStartedResponse startedResponse\n}\n\nstruct RespondDecisionTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskFailedRequest failedRequest\n}\n\nstruct RecordActivityTaskHeartbeatRequest {\n  10: optional string domainUUID\n  20: optional shared.RecordActivityTaskHeartbeatRequest heartbeatRequest\n}\n\nstruct RespondActivityTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCompletedRequest completeRequest\n}\n\nstruct RespondActivityTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskFailedRequest failedRequest\n}\n\nstruct RespondActivityTaskCanceledRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCanceledRequest cancelRequest\n}\n\nstruct RecordActivityTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForActivityTaskRequest pollRequest\n}\n\nstruct RecordActivityTaskStartedResponse {\n  20: optional shared.HistoryEvent scheduledEvent\n  30: optional i64 (js.type = \"Long\") startedTimestamp\n  40: optional i64 (js.type = \"Long\") attempt\n  50: optional i64 (js.type = \"Long\") scheduledTimestampOfThisAttempt\n  60: optional binary heartbeatDetails\n  70: optional shared.WorkflowType workflowType\n  80: optional string workflowDomain\n}\n\nstruct RecordDecisionTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForDecisionTaskRequest pollRequest\n}\n\nstruct RecordDecisionTaskStartedResponse {\n  10: optional shared.WorkflowType workflowType\n  20: optional i64 (js.type = \"Long\") previousStartedEventId\n  30: optional i64 (js.type = \"Long\") scheduledEventId\n  40: optional i64 (js.type = \"Long\") startedEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") attempt\n  70: optional bool stickyExecutionEnabled\n  80: optional shared.TransientDecisionInfo decisionInfo\n  90: optional shared.TaskList WorkflowExecutionTaskList\n  100: optional i32 eventStoreVersion\n  110: optional binary branchToken\n  120:  optional i64 (js.type = \"Long\") scheduledTimestamp\n  130:  optional i64 (js.type = \"Long\") startedTimestamp\n}\n\nstruct SignalWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWorkflowExecutionRequest signalRequest\n  30: optional shared.WorkflowExecution externalWorkflowExecution\n  40: optional bool childWorkflowOnly\n}\n\nstruct SignalWithStartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest\n}\n\nstruct RemoveSignalMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional string requestId\n}\n\nstruct TerminateWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.TerminateWorkflowExecutionRequest terminateRequest\n}\n\nstruct ResetWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.ResetWorkflowExecutionRequest resetRequest\n}\n\nstruct RequestCancelWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest\n  30: optional i64 (js.type = \"Long\") externalInitiatedEventId\n  40: optional shared.WorkflowExecution externalWorkflowExecution\n  50: optional bool childWorkflowOnly\n}\n\nstruct ScheduleDecisionTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional bool isFirstDecision\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.DescribeWorkflowExecutionRequest request\n}\n\n/**\n* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow\n* execution which started it.  When a child execution is completed it creates this request and calls the\n* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the\n* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when\n* child creates multiple runs through ContinueAsNew before finally completing.\n**/\nstruct RecordChildExecutionCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") initiatedId\n  40: optional shared.WorkflowExecution completedExecution\n  50: optional shared.HistoryEvent completionEvent\n}\n\nstruct ReplicateEventsRequest {\n  10: optional string sourceCluster\n  20: optional string domainUUID\n  30: optional shared.WorkflowExecution workflowExecution\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional bool forceBufferEvents // this attribute is deprecated\n  110: optional i32 eventStoreVersion\n  120: optional i32 newRunEventStoreVersion\n  130: optional bool resetWorkflow\n  140: optional bool newRunNDC\n}\n\nstruct ReplicateRawEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional shared.DataBlob history\n  50: optional shared.DataBlob newRunHistory\n  60: optional i32 eventStoreVersion\n  70: optional i32 newRunEventStoreVersion\n}\n\nstruct ReplicateEventsV2Request {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional list<shared.VersionHistoryItem> versionHistoryItems\n  40: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  60: optional shared.DataBlob newRunEvents\n  70: optional bool resetWorkflow\n}\n\nstruct SyncShardStatusRequest {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityRequest {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n}\n\nstruct QueryWorkflowRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional shared.WorkflowQuery query\n}\n\nstruct QueryWorkflowResponse {\n  10: optional binary queryResult\n}\n\nstruct ReapplyEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.ReapplyEventsRequest request\n}\n\n/**\n* HistoryService provides API to start a new long running workflow instance, as well as query and update the history\n* of workflow instances already created.\n**/\nservice HistoryService {\n  /**\n  * StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with\n  * 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the\n  * first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already\n  * exists with same workflowId.\n  **/\n  shared.StartWorkflowExecutionResponse StartWorkflowExecution(1: StartWorkflowExecutionRequest startRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Returns the information from mutable state of workflow execution.\n  * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n  * It returns CurrentBranchChangedError if the workflow version branch has changed.\n  **/\n  GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.CurrentBranchChangedError currentBranchChangedError,\n    )\n\n  /**\n   * Returns the information from mutable state of workflow execution.\n   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n   * It returns CurrentBranchChangedError if the workflow version branch has changed.\n   **/\n   PollMutableStateResponse PollMutableState(1: PollMutableStateRequest pollRequest)\n     throws (\n       1: shared.BadRequestError badRequestError,\n       2: shared.InternalServiceError internalServiceError,\n       3: shared.EntityNotExistsError entityNotExistError,\n       4: ShardOwnershipLostError shardOwnershipLostError,\n       5: shared.LimitExceededError limitExceededError,\n       6: shared.ServiceBusyError serviceBusyError,\n       7: shared.CurrentBranchChangedError currentBranchChangedError,\n     )\n\n  /**\n  * Reset the sticky tasklist related information in mutable state of a given workflow.\n  * Things cleared are:\n  * 1. StickyTaskList\n  * 2. StickyScheduleToStartTimeout\n  * 3. ClientLibraryVersion\n  * 4. ClientFeatureVersion\n  * 5. ClientImpl\n  **/\n  ResetStickyTaskListResponse ResetStickyTaskList(1: ResetStickyTaskListRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordDecisionTaskStartedResponse RecordDecisionTaskStarted(1: RecordDecisionTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordActivityTaskStartedResponse RecordActivityTaskStarted(1: RecordActivityTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of\n  * 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and\n  * potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted\n  * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call\n  * for completing the DecisionTask.\n  **/\n  RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in\n  * DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to\n  * either clear sticky tasklist or report ny panics during DecisionTask processing.\n  **/\n  void RespondDecisionTaskFailed(1: RespondDecisionTaskFailedRequest failedRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails\n  * to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and\n  * 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will\n  * fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for heartbeating.\n  **/\n  shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: RecordActivityTaskHeartbeatRequest heartbeatRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask\n  * created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void  RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will\n  * result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskCanceled(1: RespondActivityTaskCanceledRequest canceledRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in\n  * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.\n  **/\n  void SignalWorkflowExecution(1: SignalWorkflowExecutionRequest signalRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.\n  * If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history\n  * and a decision task being created for the execution.\n  * If workflow is not running or not found, it will first try start workflow with given WorkflowIDResuePolicy,\n  * and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.\n  * It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.\n  **/\n  shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: SignalWithStartWorkflowExecutionRequest signalWithStartRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: ShardOwnershipLostError shardOwnershipLostError,\n      4: shared.DomainNotActiveError domainNotActiveError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.WorkflowExecutionAlreadyStartedError workflowAlreadyStartedError,\n    )\n\n  /**\n  * RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently\n  * used to clean execution info when signal decision finished.\n  **/\n  void RemoveSignalMutableState(1: RemoveSignalMutableStateRequest removeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event\n  * in the history and immediately terminating the execution instance.\n  **/\n  void TerminateWorkflowExecution(1: TerminateWorkflowExecutionRequest terminateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ResetWorkflowExecution reset an existing workflow execution by a firstEventID of a existing event batch\n  * in the history and immediately terminating the current execution instance.\n  * After reset, the history will grow from nextFirstEventID.\n  **/\n  shared.ResetWorkflowExecutionResponse ResetWorkflowExecution(1: ResetWorkflowExecutionRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.\n  * It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid\n  * anymore due to completion or doesn't exist.\n  **/\n  void RequestCancelWorkflowExecution(1: RequestCancelWorkflowExecutionRequest cancelRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly\n  * used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts\n  * child execution without creating the decision task and then calls this API after updating the mutable state of\n  * parent execution.\n  **/\n  void ScheduleDecisionTask(1: ScheduleDecisionTaskRequest scheduleRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.\n  * This is mainly called by transfer queue processor during the processing of DeleteExecution task.\n  **/\n  void RecordChildExecutionCompleted(1: RecordChildExecutionCompletedRequest completionRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeWorkflowExecution returns information about the specified workflow execution.\n  **/\n  shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest describeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEvents(1: ReplicateEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateRawEvents(1: ReplicateRawEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEventsV2(1: ReplicateEventsV2Request replicateV2Request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        3: shared.EntityNotExistsError entityNotExistError,\n        4: ShardOwnershipLostError shardOwnershipLostError,\n        5: shared.LimitExceededError limitExceededError,\n        6: shared.RetryTaskV2Error retryTaskError,\n        7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncShardStatus sync the status between shards\n  **/\n  void SyncShardStatus(1: SyncShardStatusRequest syncShardStatusRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncActivity sync the activity status\n  **/\n  void SyncActivity(1: SyncActivityRequest syncActivityRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: shared.RetryTaskError retryTaskError,\n    )\n\n  /**\n  * DescribeMutableState returns information about the internal states of workflow mutable state.\n  **/\n  DescribeMutableStateResponse DescribeMutableState(1: DescribeMutableStateRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.AccessDeniedError accessDeniedError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.AccessDeniedError accessDeniedError,\n    )\n\n /**\n * CloseShard close the shard\n **/\n void CloseShard(1: shared.CloseShardRequest request)\n    throws (\n    1: shared.BadRequestError badRequestError,\n    2: shared.InternalServiceError internalServiceError,\n    3: shared.AccessDeniedError accessDeniedError,\n    )\n\n  /**\n  * RemoveTask remove task based on type, taskid, shardid\n  **/\n  void RemoveTask(1: shared.RemoveTaskRequest request)\n     throws (\n     1: shared.BadRequestError badRequestError,\n     2: shared.InternalServiceError internalServiceError,\n     3: shared.AccessDeniedError accessDeniedError,\n     )\n  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n    )\n\n  /**\n  * QueryWorkflow returns query result for a specified workflow execution\n  **/\n  QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)\n\tthrows (\n\t  1: shared.BadRequestError badRequestError,\n\t  2: shared.InternalServiceError internalServiceError,\n\t  3: shared.EntityNotExistsError entityNotExistError,\n\t  4: shared.QueryFailedError queryFailedError,\n\t  5: shared.LimitExceededError limitExceededError,\n\t  6: shared.ServiceBusyError serviceBusyError,\n\t  7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n\t)\n\n  /**\n  * ReapplyEvents applies stale events to the current workflow and current run\n  **/\n  void ReapplyEvents(1: ReapplyEventsRequest reapplyEventsRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.DomainNotActiveError domainNotActiveError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: ShardOwnershipLostError shardOwnershipLostError,\n      7: shared.EntityNotExistsError entityNotExistError,\n    )\n}\n"
 
 // HistoryService_CloseShard_Args represents the arguments for the HistoryService.CloseShard function.
 //
@@ -13431,6 +15230,8 @@ func init() {
 			return true
 		case *shared.ServiceBusyError:
 			return true
+		case *shared.CurrentBranchChangedError:
+			return true
 		default:
 			return false
 		}
@@ -13472,6 +15273,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetMutableState_Result.ServiceBusyError")
 			}
 			return &HistoryService_GetMutableState_Result{ServiceBusyError: e}, nil
+		case *shared.CurrentBranchChangedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetMutableState_Result.CurrentBranchChangedError")
+			}
+			return &HistoryService_GetMutableState_Result{CurrentBranchChangedError: e}, nil
 		}
 
 		return nil, err
@@ -13501,6 +15307,10 @@ func init() {
 			err = result.ServiceBusyError
 			return
 		}
+		if result.CurrentBranchChangedError != nil {
+			err = result.CurrentBranchChangedError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -13520,13 +15330,14 @@ func init() {
 // Success is set only if the function did not throw an exception.
 type HistoryService_GetMutableState_Result struct {
 	// Value returned by GetMutableState after a successful execution.
-	Success                 *GetMutableStateResponse     `json:"success,omitempty"`
-	BadRequestError         *shared.BadRequestError      `json:"badRequestError,omitempty"`
-	InternalServiceError    *shared.InternalServiceError `json:"internalServiceError,omitempty"`
-	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
-	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
-	LimitExceededError      *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
-	ServiceBusyError        *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+	Success                   *GetMutableStateResponse          `json:"success,omitempty"`
+	BadRequestError           *shared.BadRequestError           `json:"badRequestError,omitempty"`
+	InternalServiceError      *shared.InternalServiceError      `json:"internalServiceError,omitempty"`
+	EntityNotExistError       *shared.EntityNotExistsError      `json:"entityNotExistError,omitempty"`
+	ShardOwnershipLostError   *ShardOwnershipLostError          `json:"shardOwnershipLostError,omitempty"`
+	LimitExceededError        *shared.LimitExceededError        `json:"limitExceededError,omitempty"`
+	ServiceBusyError          *shared.ServiceBusyError          `json:"serviceBusyError,omitempty"`
+	CurrentBranchChangedError *shared.CurrentBranchChangedError `json:"currentBranchChangedError,omitempty"`
 }
 
 // ToWire translates a HistoryService_GetMutableState_Result struct into a Thrift-level intermediate
@@ -13546,7 +15357,7 @@ type HistoryService_GetMutableState_Result struct {
 //   }
 func (v *HistoryService_GetMutableState_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -13608,6 +15419,14 @@ func (v *HistoryService_GetMutableState_Result) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
+	if v.CurrentBranchChangedError != nil {
+		w, err = v.CurrentBranchChangedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
 
 	if i != 1 {
 		return wire.Value{}, fmt.Errorf("HistoryService_GetMutableState_Result should have exactly one field: got %v fields", i)
@@ -13618,6 +15437,12 @@ func (v *HistoryService_GetMutableState_Result) ToWire() (wire.Value, error) {
 
 func _GetMutableStateResponse_Read(w wire.Value) (*GetMutableStateResponse, error) {
 	var v GetMutableStateResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _CurrentBranchChangedError_Read(w wire.Value) (*shared.CurrentBranchChangedError, error) {
+	var v shared.CurrentBranchChangedError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -13700,6 +15525,14 @@ func (v *HistoryService_GetMutableState_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.CurrentBranchChangedError, err = _CurrentBranchChangedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -13725,6 +15558,9 @@ func (v *HistoryService_GetMutableState_Result) FromWire(w wire.Value) error {
 	if v.ServiceBusyError != nil {
 		count++
 	}
+	if v.CurrentBranchChangedError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("HistoryService_GetMutableState_Result should have exactly one field: got %v fields", count)
 	}
@@ -13739,7 +15575,7 @@ func (v *HistoryService_GetMutableState_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -13767,6 +15603,10 @@ func (v *HistoryService_GetMutableState_Result) String() string {
 	}
 	if v.ServiceBusyError != nil {
 		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.CurrentBranchChangedError != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchChangedError: %v", v.CurrentBranchChangedError)
 		i++
 	}
 
@@ -13804,6 +15644,9 @@ func (v *HistoryService_GetMutableState_Result) Equals(rhs *HistoryService_GetMu
 	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
 		return false
 	}
+	if !((v.CurrentBranchChangedError == nil && rhs.CurrentBranchChangedError == nil) || (v.CurrentBranchChangedError != nil && rhs.CurrentBranchChangedError != nil && v.CurrentBranchChangedError.Equals(rhs.CurrentBranchChangedError))) {
+		return false
+	}
 
 	return true
 }
@@ -13834,6 +15677,9 @@ func (v *HistoryService_GetMutableState_Result) MarshalLogObject(enc zapcore.Obj
 	}
 	if v.ServiceBusyError != nil {
 		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	if v.CurrentBranchChangedError != nil {
+		err = multierr.Append(err, enc.AddObject("currentBranchChangedError", v.CurrentBranchChangedError))
 	}
 	return err
 }
@@ -13941,6 +15787,21 @@ func (v *HistoryService_GetMutableState_Result) GetServiceBusyError() (o *shared
 // IsSetServiceBusyError returns true if ServiceBusyError is not nil.
 func (v *HistoryService_GetMutableState_Result) IsSetServiceBusyError() bool {
 	return v != nil && v.ServiceBusyError != nil
+}
+
+// GetCurrentBranchChangedError returns the value of CurrentBranchChangedError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_GetMutableState_Result) GetCurrentBranchChangedError() (o *shared.CurrentBranchChangedError) {
+	if v != nil && v.CurrentBranchChangedError != nil {
+		return v.CurrentBranchChangedError
+	}
+
+	return
+}
+
+// IsSetCurrentBranchChangedError returns true if CurrentBranchChangedError is not nil.
+func (v *HistoryService_GetMutableState_Result) IsSetCurrentBranchChangedError() bool {
+	return v != nil && v.CurrentBranchChangedError != nil
 }
 
 // MethodName returns the name of the Thrift function as specified in
@@ -14660,6 +16521,817 @@ func (v *HistoryService_GetReplicationMessages_Result) MethodName() string {
 //
 // This will always be Reply for this struct.
 func (v *HistoryService_GetReplicationMessages_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
+
+// HistoryService_PollMutableState_Args represents the arguments for the HistoryService.PollMutableState function.
+//
+// The arguments for PollMutableState are sent and received over the wire as this struct.
+type HistoryService_PollMutableState_Args struct {
+	PollRequest *PollMutableStateRequest `json:"pollRequest,omitempty"`
+}
+
+// ToWire translates a HistoryService_PollMutableState_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryService_PollMutableState_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.PollRequest != nil {
+		w, err = v.PollRequest.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _PollMutableStateRequest_Read(w wire.Value) (*PollMutableStateRequest, error) {
+	var v PollMutableStateRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_PollMutableState_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryService_PollMutableState_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryService_PollMutableState_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryService_PollMutableState_Args) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.PollRequest, err = _PollMutableStateRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryService_PollMutableState_Args
+// struct.
+func (v *HistoryService_PollMutableState_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.PollRequest != nil {
+		fields[i] = fmt.Sprintf("PollRequest: %v", v.PollRequest)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryService_PollMutableState_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryService_PollMutableState_Args match the
+// provided HistoryService_PollMutableState_Args.
+//
+// This function performs a deep comparison.
+func (v *HistoryService_PollMutableState_Args) Equals(rhs *HistoryService_PollMutableState_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.PollRequest == nil && rhs.PollRequest == nil) || (v.PollRequest != nil && rhs.PollRequest != nil && v.PollRequest.Equals(rhs.PollRequest))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryService_PollMutableState_Args.
+func (v *HistoryService_PollMutableState_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.PollRequest != nil {
+		err = multierr.Append(err, enc.AddObject("pollRequest", v.PollRequest))
+	}
+	return err
+}
+
+// GetPollRequest returns the value of PollRequest if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Args) GetPollRequest() (o *PollMutableStateRequest) {
+	if v != nil && v.PollRequest != nil {
+		return v.PollRequest
+	}
+
+	return
+}
+
+// IsSetPollRequest returns true if PollRequest is not nil.
+func (v *HistoryService_PollMutableState_Args) IsSetPollRequest() bool {
+	return v != nil && v.PollRequest != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "PollMutableState" for this struct.
+func (v *HistoryService_PollMutableState_Args) MethodName() string {
+	return "PollMutableState"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *HistoryService_PollMutableState_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// HistoryService_PollMutableState_Helper provides functions that aid in handling the
+// parameters and return values of the HistoryService.PollMutableState
+// function.
+var HistoryService_PollMutableState_Helper = struct {
+	// Args accepts the parameters of PollMutableState in-order and returns
+	// the arguments struct for the function.
+	Args func(
+		pollRequest *PollMutableStateRequest,
+	) *HistoryService_PollMutableState_Args
+
+	// IsException returns true if the given error can be thrown
+	// by PollMutableState.
+	//
+	// An error can be thrown by PollMutableState only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for PollMutableState
+	// given its return value and error.
+	//
+	// This allows mapping values and errors returned by
+	// PollMutableState into a serializable result struct.
+	// WrapResponse returns a non-nil error if the provided
+	// error cannot be thrown by PollMutableState
+	//
+	//   value, err := PollMutableState(args)
+	//   result, err := HistoryService_PollMutableState_Helper.WrapResponse(value, err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from PollMutableState: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(*PollMutableStateResponse, error) (*HistoryService_PollMutableState_Result, error)
+
+	// UnwrapResponse takes the result struct for PollMutableState
+	// and returns the value or error returned by it.
+	//
+	// The error is non-nil only if PollMutableState threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   value, err := HistoryService_PollMutableState_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*HistoryService_PollMutableState_Result) (*PollMutableStateResponse, error)
+}{}
+
+func init() {
+	HistoryService_PollMutableState_Helper.Args = func(
+		pollRequest *PollMutableStateRequest,
+	) *HistoryService_PollMutableState_Args {
+		return &HistoryService_PollMutableState_Args{
+			PollRequest: pollRequest,
+		}
+	}
+
+	HistoryService_PollMutableState_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.BadRequestError:
+			return true
+		case *shared.InternalServiceError:
+			return true
+		case *shared.EntityNotExistsError:
+			return true
+		case *ShardOwnershipLostError:
+			return true
+		case *shared.LimitExceededError:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		case *shared.CurrentBranchChangedError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	HistoryService_PollMutableState_Helper.WrapResponse = func(success *PollMutableStateResponse, err error) (*HistoryService_PollMutableState_Result, error) {
+		if err == nil {
+			return &HistoryService_PollMutableState_Result{Success: success}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.BadRequestError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.BadRequestError")
+			}
+			return &HistoryService_PollMutableState_Result{BadRequestError: e}, nil
+		case *shared.InternalServiceError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.InternalServiceError")
+			}
+			return &HistoryService_PollMutableState_Result{InternalServiceError: e}, nil
+		case *shared.EntityNotExistsError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.EntityNotExistError")
+			}
+			return &HistoryService_PollMutableState_Result{EntityNotExistError: e}, nil
+		case *ShardOwnershipLostError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.ShardOwnershipLostError")
+			}
+			return &HistoryService_PollMutableState_Result{ShardOwnershipLostError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.LimitExceededError")
+			}
+			return &HistoryService_PollMutableState_Result{LimitExceededError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.ServiceBusyError")
+			}
+			return &HistoryService_PollMutableState_Result{ServiceBusyError: e}, nil
+		case *shared.CurrentBranchChangedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_PollMutableState_Result.CurrentBranchChangedError")
+			}
+			return &HistoryService_PollMutableState_Result{CurrentBranchChangedError: e}, nil
+		}
+
+		return nil, err
+	}
+	HistoryService_PollMutableState_Helper.UnwrapResponse = func(result *HistoryService_PollMutableState_Result) (success *PollMutableStateResponse, err error) {
+		if result.BadRequestError != nil {
+			err = result.BadRequestError
+			return
+		}
+		if result.InternalServiceError != nil {
+			err = result.InternalServiceError
+			return
+		}
+		if result.EntityNotExistError != nil {
+			err = result.EntityNotExistError
+			return
+		}
+		if result.ShardOwnershipLostError != nil {
+			err = result.ShardOwnershipLostError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+		if result.CurrentBranchChangedError != nil {
+			err = result.CurrentBranchChangedError
+			return
+		}
+
+		if result.Success != nil {
+			success = result.Success
+			return
+		}
+
+		err = errors.New("expected a non-void result")
+		return
+	}
+
+}
+
+// HistoryService_PollMutableState_Result represents the result of a HistoryService.PollMutableState function call.
+//
+// The result of a PollMutableState execution is sent and received over the wire as this struct.
+//
+// Success is set only if the function did not throw an exception.
+type HistoryService_PollMutableState_Result struct {
+	// Value returned by PollMutableState after a successful execution.
+	Success                   *PollMutableStateResponse         `json:"success,omitempty"`
+	BadRequestError           *shared.BadRequestError           `json:"badRequestError,omitempty"`
+	InternalServiceError      *shared.InternalServiceError      `json:"internalServiceError,omitempty"`
+	EntityNotExistError       *shared.EntityNotExistsError      `json:"entityNotExistError,omitempty"`
+	ShardOwnershipLostError   *ShardOwnershipLostError          `json:"shardOwnershipLostError,omitempty"`
+	LimitExceededError        *shared.LimitExceededError        `json:"limitExceededError,omitempty"`
+	ServiceBusyError          *shared.ServiceBusyError          `json:"serviceBusyError,omitempty"`
+	CurrentBranchChangedError *shared.CurrentBranchChangedError `json:"currentBranchChangedError,omitempty"`
+}
+
+// ToWire translates a HistoryService_PollMutableState_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryService_PollMutableState_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [8]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Success != nil {
+		w, err = v.Success.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 0, Value: w}
+		i++
+	}
+	if v.BadRequestError != nil {
+		w, err = v.BadRequestError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.InternalServiceError != nil {
+		w, err = v.InternalServiceError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		w, err = v.EntityNotExistError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.ShardOwnershipLostError != nil {
+		w, err = v.ShardOwnershipLostError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.CurrentBranchChangedError != nil {
+		w, err = v.CurrentBranchChangedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
+
+	if i != 1 {
+		return wire.Value{}, fmt.Errorf("HistoryService_PollMutableState_Result should have exactly one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _PollMutableStateResponse_Read(w wire.Value) (*PollMutableStateResponse, error) {
+	var v PollMutableStateResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_PollMutableState_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryService_PollMutableState_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryService_PollMutableState_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryService_PollMutableState_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 0:
+			if field.Value.Type() == wire.TStruct {
+				v.Success, err = _PollMutableStateResponse_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.BadRequestError, err = _BadRequestError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.InternalServiceError, err = _InternalServiceError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.ShardOwnershipLostError, err = _ShardOwnershipLostError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.CurrentBranchChangedError, err = _CurrentBranchChangedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.Success != nil {
+		count++
+	}
+	if v.BadRequestError != nil {
+		count++
+	}
+	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.EntityNotExistError != nil {
+		count++
+	}
+	if v.ShardOwnershipLostError != nil {
+		count++
+	}
+	if v.LimitExceededError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if v.CurrentBranchChangedError != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("HistoryService_PollMutableState_Result should have exactly one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryService_PollMutableState_Result
+// struct.
+func (v *HistoryService_PollMutableState_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [8]string
+	i := 0
+	if v.Success != nil {
+		fields[i] = fmt.Sprintf("Success: %v", v.Success)
+		i++
+	}
+	if v.BadRequestError != nil {
+		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
+		i++
+	}
+	if v.InternalServiceError != nil {
+		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.ShardOwnershipLostError != nil {
+		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.CurrentBranchChangedError != nil {
+		fields[i] = fmt.Sprintf("CurrentBranchChangedError: %v", v.CurrentBranchChangedError)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryService_PollMutableState_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryService_PollMutableState_Result match the
+// provided HistoryService_PollMutableState_Result.
+//
+// This function performs a deep comparison.
+func (v *HistoryService_PollMutableState_Result) Equals(rhs *HistoryService_PollMutableState_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
+		return false
+	}
+	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
+		return false
+	}
+	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.ShardOwnershipLostError == nil && rhs.ShardOwnershipLostError == nil) || (v.ShardOwnershipLostError != nil && rhs.ShardOwnershipLostError != nil && v.ShardOwnershipLostError.Equals(rhs.ShardOwnershipLostError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.CurrentBranchChangedError == nil && rhs.CurrentBranchChangedError == nil) || (v.CurrentBranchChangedError != nil && rhs.CurrentBranchChangedError != nil && v.CurrentBranchChangedError.Equals(rhs.CurrentBranchChangedError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryService_PollMutableState_Result.
+func (v *HistoryService_PollMutableState_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Success != nil {
+		err = multierr.Append(err, enc.AddObject("success", v.Success))
+	}
+	if v.BadRequestError != nil {
+		err = multierr.Append(err, enc.AddObject("badRequestError", v.BadRequestError))
+	}
+	if v.InternalServiceError != nil {
+		err = multierr.Append(err, enc.AddObject("internalServiceError", v.InternalServiceError))
+	}
+	if v.EntityNotExistError != nil {
+		err = multierr.Append(err, enc.AddObject("entityNotExistError", v.EntityNotExistError))
+	}
+	if v.ShardOwnershipLostError != nil {
+		err = multierr.Append(err, enc.AddObject("shardOwnershipLostError", v.ShardOwnershipLostError))
+	}
+	if v.LimitExceededError != nil {
+		err = multierr.Append(err, enc.AddObject("limitExceededError", v.LimitExceededError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	if v.CurrentBranchChangedError != nil {
+		err = multierr.Append(err, enc.AddObject("currentBranchChangedError", v.CurrentBranchChangedError))
+	}
+	return err
+}
+
+// GetSuccess returns the value of Success if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetSuccess() (o *PollMutableStateResponse) {
+	if v != nil && v.Success != nil {
+		return v.Success
+	}
+
+	return
+}
+
+// IsSetSuccess returns true if Success is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetSuccess() bool {
+	return v != nil && v.Success != nil
+}
+
+// GetBadRequestError returns the value of BadRequestError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetBadRequestError() (o *shared.BadRequestError) {
+	if v != nil && v.BadRequestError != nil {
+		return v.BadRequestError
+	}
+
+	return
+}
+
+// IsSetBadRequestError returns true if BadRequestError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetBadRequestError() bool {
+	return v != nil && v.BadRequestError != nil
+}
+
+// GetInternalServiceError returns the value of InternalServiceError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetInternalServiceError() (o *shared.InternalServiceError) {
+	if v != nil && v.InternalServiceError != nil {
+		return v.InternalServiceError
+	}
+
+	return
+}
+
+// IsSetInternalServiceError returns true if InternalServiceError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetInternalServiceError() bool {
+	return v != nil && v.InternalServiceError != nil
+}
+
+// GetEntityNotExistError returns the value of EntityNotExistError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetEntityNotExistError() (o *shared.EntityNotExistsError) {
+	if v != nil && v.EntityNotExistError != nil {
+		return v.EntityNotExistError
+	}
+
+	return
+}
+
+// IsSetEntityNotExistError returns true if EntityNotExistError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetEntityNotExistError() bool {
+	return v != nil && v.EntityNotExistError != nil
+}
+
+// GetShardOwnershipLostError returns the value of ShardOwnershipLostError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetShardOwnershipLostError() (o *ShardOwnershipLostError) {
+	if v != nil && v.ShardOwnershipLostError != nil {
+		return v.ShardOwnershipLostError
+	}
+
+	return
+}
+
+// IsSetShardOwnershipLostError returns true if ShardOwnershipLostError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetShardOwnershipLostError() bool {
+	return v != nil && v.ShardOwnershipLostError != nil
+}
+
+// GetLimitExceededError returns the value of LimitExceededError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
+	if v != nil && v.LimitExceededError != nil {
+		return v.LimitExceededError
+	}
+
+	return
+}
+
+// IsSetLimitExceededError returns true if LimitExceededError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetLimitExceededError() bool {
+	return v != nil && v.LimitExceededError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// GetCurrentBranchChangedError returns the value of CurrentBranchChangedError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_PollMutableState_Result) GetCurrentBranchChangedError() (o *shared.CurrentBranchChangedError) {
+	if v != nil && v.CurrentBranchChangedError != nil {
+		return v.CurrentBranchChangedError
+	}
+
+	return
+}
+
+// IsSetCurrentBranchChangedError returns true if CurrentBranchChangedError is not nil.
+func (v *HistoryService_PollMutableState_Result) IsSetCurrentBranchChangedError() bool {
+	return v != nil && v.CurrentBranchChangedError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "PollMutableState" for this struct.
+func (v *HistoryService_PollMutableState_Result) MethodName() string {
+	return "PollMutableState"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *HistoryService_PollMutableState_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }
 
@@ -15480,6 +18152,763 @@ func (v *HistoryService_QueryWorkflow_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }
 
+// HistoryService_ReapplyEvents_Args represents the arguments for the HistoryService.ReapplyEvents function.
+//
+// The arguments for ReapplyEvents are sent and received over the wire as this struct.
+type HistoryService_ReapplyEvents_Args struct {
+	ReapplyEventsRequest *ReapplyEventsRequest `json:"reapplyEventsRequest,omitempty"`
+}
+
+// ToWire translates a HistoryService_ReapplyEvents_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryService_ReapplyEvents_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.ReapplyEventsRequest != nil {
+		w, err = v.ReapplyEventsRequest.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReapplyEventsRequest_1_Read(w wire.Value) (*ReapplyEventsRequest, error) {
+	var v ReapplyEventsRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_ReapplyEvents_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryService_ReapplyEvents_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryService_ReapplyEvents_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryService_ReapplyEvents_Args) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.ReapplyEventsRequest, err = _ReapplyEventsRequest_1_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryService_ReapplyEvents_Args
+// struct.
+func (v *HistoryService_ReapplyEvents_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.ReapplyEventsRequest != nil {
+		fields[i] = fmt.Sprintf("ReapplyEventsRequest: %v", v.ReapplyEventsRequest)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryService_ReapplyEvents_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryService_ReapplyEvents_Args match the
+// provided HistoryService_ReapplyEvents_Args.
+//
+// This function performs a deep comparison.
+func (v *HistoryService_ReapplyEvents_Args) Equals(rhs *HistoryService_ReapplyEvents_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.ReapplyEventsRequest == nil && rhs.ReapplyEventsRequest == nil) || (v.ReapplyEventsRequest != nil && rhs.ReapplyEventsRequest != nil && v.ReapplyEventsRequest.Equals(rhs.ReapplyEventsRequest))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryService_ReapplyEvents_Args.
+func (v *HistoryService_ReapplyEvents_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.ReapplyEventsRequest != nil {
+		err = multierr.Append(err, enc.AddObject("reapplyEventsRequest", v.ReapplyEventsRequest))
+	}
+	return err
+}
+
+// GetReapplyEventsRequest returns the value of ReapplyEventsRequest if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Args) GetReapplyEventsRequest() (o *ReapplyEventsRequest) {
+	if v != nil && v.ReapplyEventsRequest != nil {
+		return v.ReapplyEventsRequest
+	}
+
+	return
+}
+
+// IsSetReapplyEventsRequest returns true if ReapplyEventsRequest is not nil.
+func (v *HistoryService_ReapplyEvents_Args) IsSetReapplyEventsRequest() bool {
+	return v != nil && v.ReapplyEventsRequest != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "ReapplyEvents" for this struct.
+func (v *HistoryService_ReapplyEvents_Args) MethodName() string {
+	return "ReapplyEvents"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *HistoryService_ReapplyEvents_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// HistoryService_ReapplyEvents_Helper provides functions that aid in handling the
+// parameters and return values of the HistoryService.ReapplyEvents
+// function.
+var HistoryService_ReapplyEvents_Helper = struct {
+	// Args accepts the parameters of ReapplyEvents in-order and returns
+	// the arguments struct for the function.
+	Args func(
+		reapplyEventsRequest *ReapplyEventsRequest,
+	) *HistoryService_ReapplyEvents_Args
+
+	// IsException returns true if the given error can be thrown
+	// by ReapplyEvents.
+	//
+	// An error can be thrown by ReapplyEvents only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for ReapplyEvents
+	// given the error returned by it. The provided error may
+	// be nil if ReapplyEvents did not fail.
+	//
+	// This allows mapping errors returned by ReapplyEvents into a
+	// serializable result struct. WrapResponse returns a
+	// non-nil error if the provided error cannot be thrown by
+	// ReapplyEvents
+	//
+	//   err := ReapplyEvents(args)
+	//   result, err := HistoryService_ReapplyEvents_Helper.WrapResponse(err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from ReapplyEvents: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(error) (*HistoryService_ReapplyEvents_Result, error)
+
+	// UnwrapResponse takes the result struct for ReapplyEvents
+	// and returns the erorr returned by it (if any).
+	//
+	// The error is non-nil only if ReapplyEvents threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   err := HistoryService_ReapplyEvents_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*HistoryService_ReapplyEvents_Result) error
+}{}
+
+func init() {
+	HistoryService_ReapplyEvents_Helper.Args = func(
+		reapplyEventsRequest *ReapplyEventsRequest,
+	) *HistoryService_ReapplyEvents_Args {
+		return &HistoryService_ReapplyEvents_Args{
+			ReapplyEventsRequest: reapplyEventsRequest,
+		}
+	}
+
+	HistoryService_ReapplyEvents_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.BadRequestError:
+			return true
+		case *shared.InternalServiceError:
+			return true
+		case *shared.DomainNotActiveError:
+			return true
+		case *shared.LimitExceededError:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		case *ShardOwnershipLostError:
+			return true
+		case *shared.EntityNotExistsError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	HistoryService_ReapplyEvents_Helper.WrapResponse = func(err error) (*HistoryService_ReapplyEvents_Result, error) {
+		if err == nil {
+			return &HistoryService_ReapplyEvents_Result{}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.BadRequestError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.BadRequestError")
+			}
+			return &HistoryService_ReapplyEvents_Result{BadRequestError: e}, nil
+		case *shared.InternalServiceError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.InternalServiceError")
+			}
+			return &HistoryService_ReapplyEvents_Result{InternalServiceError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.DomainNotActiveError")
+			}
+			return &HistoryService_ReapplyEvents_Result{DomainNotActiveError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.LimitExceededError")
+			}
+			return &HistoryService_ReapplyEvents_Result{LimitExceededError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.ServiceBusyError")
+			}
+			return &HistoryService_ReapplyEvents_Result{ServiceBusyError: e}, nil
+		case *ShardOwnershipLostError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.ShardOwnershipLostError")
+			}
+			return &HistoryService_ReapplyEvents_Result{ShardOwnershipLostError: e}, nil
+		case *shared.EntityNotExistsError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReapplyEvents_Result.EntityNotExistError")
+			}
+			return &HistoryService_ReapplyEvents_Result{EntityNotExistError: e}, nil
+		}
+
+		return nil, err
+	}
+	HistoryService_ReapplyEvents_Helper.UnwrapResponse = func(result *HistoryService_ReapplyEvents_Result) (err error) {
+		if result.BadRequestError != nil {
+			err = result.BadRequestError
+			return
+		}
+		if result.InternalServiceError != nil {
+			err = result.InternalServiceError
+			return
+		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+		if result.ShardOwnershipLostError != nil {
+			err = result.ShardOwnershipLostError
+			return
+		}
+		if result.EntityNotExistError != nil {
+			err = result.EntityNotExistError
+			return
+		}
+		return
+	}
+
+}
+
+// HistoryService_ReapplyEvents_Result represents the result of a HistoryService.ReapplyEvents function call.
+//
+// The result of a ReapplyEvents execution is sent and received over the wire as this struct.
+type HistoryService_ReapplyEvents_Result struct {
+	BadRequestError         *shared.BadRequestError      `json:"badRequestError,omitempty"`
+	InternalServiceError    *shared.InternalServiceError `json:"internalServiceError,omitempty"`
+	DomainNotActiveError    *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
+	LimitExceededError      *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
+	ServiceBusyError        *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
+	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
+}
+
+// ToWire translates a HistoryService_ReapplyEvents_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryService_ReapplyEvents_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [7]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.BadRequestError != nil {
+		w, err = v.BadRequestError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.InternalServiceError != nil {
+		w, err = v.InternalServiceError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.ShardOwnershipLostError != nil {
+		w, err = v.ShardOwnershipLostError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		w, err = v.EntityNotExistError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
+
+	if i > 1 {
+		return wire.Value{}, fmt.Errorf("HistoryService_ReapplyEvents_Result should have at most one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _DomainNotActiveError_Read(w wire.Value) (*shared.DomainNotActiveError, error) {
+	var v shared.DomainNotActiveError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_ReapplyEvents_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryService_ReapplyEvents_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryService_ReapplyEvents_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryService_ReapplyEvents_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.BadRequestError, err = _BadRequestError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.InternalServiceError, err = _InternalServiceError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.ShardOwnershipLostError, err = _ShardOwnershipLostError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.BadRequestError != nil {
+		count++
+	}
+	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
+	if v.LimitExceededError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if v.ShardOwnershipLostError != nil {
+		count++
+	}
+	if v.EntityNotExistError != nil {
+		count++
+	}
+	if count > 1 {
+		return fmt.Errorf("HistoryService_ReapplyEvents_Result should have at most one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryService_ReapplyEvents_Result
+// struct.
+func (v *HistoryService_ReapplyEvents_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [7]string
+	i := 0
+	if v.BadRequestError != nil {
+		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
+		i++
+	}
+	if v.InternalServiceError != nil {
+		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.ShardOwnershipLostError != nil {
+		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryService_ReapplyEvents_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryService_ReapplyEvents_Result match the
+// provided HistoryService_ReapplyEvents_Result.
+//
+// This function performs a deep comparison.
+func (v *HistoryService_ReapplyEvents_Result) Equals(rhs *HistoryService_ReapplyEvents_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
+		return false
+	}
+	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.ShardOwnershipLostError == nil && rhs.ShardOwnershipLostError == nil) || (v.ShardOwnershipLostError != nil && rhs.ShardOwnershipLostError != nil && v.ShardOwnershipLostError.Equals(rhs.ShardOwnershipLostError))) {
+		return false
+	}
+	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryService_ReapplyEvents_Result.
+func (v *HistoryService_ReapplyEvents_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.BadRequestError != nil {
+		err = multierr.Append(err, enc.AddObject("badRequestError", v.BadRequestError))
+	}
+	if v.InternalServiceError != nil {
+		err = multierr.Append(err, enc.AddObject("internalServiceError", v.InternalServiceError))
+	}
+	if v.DomainNotActiveError != nil {
+		err = multierr.Append(err, enc.AddObject("domainNotActiveError", v.DomainNotActiveError))
+	}
+	if v.LimitExceededError != nil {
+		err = multierr.Append(err, enc.AddObject("limitExceededError", v.LimitExceededError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	if v.ShardOwnershipLostError != nil {
+		err = multierr.Append(err, enc.AddObject("shardOwnershipLostError", v.ShardOwnershipLostError))
+	}
+	if v.EntityNotExistError != nil {
+		err = multierr.Append(err, enc.AddObject("entityNotExistError", v.EntityNotExistError))
+	}
+	return err
+}
+
+// GetBadRequestError returns the value of BadRequestError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetBadRequestError() (o *shared.BadRequestError) {
+	if v != nil && v.BadRequestError != nil {
+		return v.BadRequestError
+	}
+
+	return
+}
+
+// IsSetBadRequestError returns true if BadRequestError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetBadRequestError() bool {
+	return v != nil && v.BadRequestError != nil
+}
+
+// GetInternalServiceError returns the value of InternalServiceError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetInternalServiceError() (o *shared.InternalServiceError) {
+	if v != nil && v.InternalServiceError != nil {
+		return v.InternalServiceError
+	}
+
+	return
+}
+
+// IsSetInternalServiceError returns true if InternalServiceError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetInternalServiceError() bool {
+	return v != nil && v.InternalServiceError != nil
+}
+
+// GetDomainNotActiveError returns the value of DomainNotActiveError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetDomainNotActiveError() (o *shared.DomainNotActiveError) {
+	if v != nil && v.DomainNotActiveError != nil {
+		return v.DomainNotActiveError
+	}
+
+	return
+}
+
+// IsSetDomainNotActiveError returns true if DomainNotActiveError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetDomainNotActiveError() bool {
+	return v != nil && v.DomainNotActiveError != nil
+}
+
+// GetLimitExceededError returns the value of LimitExceededError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
+	if v != nil && v.LimitExceededError != nil {
+		return v.LimitExceededError
+	}
+
+	return
+}
+
+// IsSetLimitExceededError returns true if LimitExceededError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetLimitExceededError() bool {
+	return v != nil && v.LimitExceededError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// GetShardOwnershipLostError returns the value of ShardOwnershipLostError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetShardOwnershipLostError() (o *ShardOwnershipLostError) {
+	if v != nil && v.ShardOwnershipLostError != nil {
+		return v.ShardOwnershipLostError
+	}
+
+	return
+}
+
+// IsSetShardOwnershipLostError returns true if ShardOwnershipLostError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetShardOwnershipLostError() bool {
+	return v != nil && v.ShardOwnershipLostError != nil
+}
+
+// GetEntityNotExistError returns the value of EntityNotExistError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReapplyEvents_Result) GetEntityNotExistError() (o *shared.EntityNotExistsError) {
+	if v != nil && v.EntityNotExistError != nil {
+		return v.EntityNotExistError
+	}
+
+	return
+}
+
+// IsSetEntityNotExistError returns true if EntityNotExistError is not nil.
+func (v *HistoryService_ReapplyEvents_Result) IsSetEntityNotExistError() bool {
+	return v != nil && v.EntityNotExistError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "ReapplyEvents" for this struct.
+func (v *HistoryService_ReapplyEvents_Result) MethodName() string {
+	return "ReapplyEvents"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *HistoryService_ReapplyEvents_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
+
 // HistoryService_RecordActivityTaskHeartbeat_Args represents the arguments for the HistoryService.RecordActivityTaskHeartbeat function.
 //
 // The arguments for RecordActivityTaskHeartbeat are sent and received over the wire as this struct.
@@ -15915,12 +19344,6 @@ func (v *HistoryService_RecordActivityTaskHeartbeat_Result) ToWire() (wire.Value
 
 func _RecordActivityTaskHeartbeatResponse_Read(w wire.Value) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 	var v shared.RecordActivityTaskHeartbeatResponse
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _DomainNotActiveError_Read(w wire.Value) (*shared.DomainNotActiveError, error) {
-	var v shared.DomainNotActiveError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -20814,6 +24237,763 @@ func (v *HistoryService_ReplicateEvents_Result) MethodName() string {
 //
 // This will always be Reply for this struct.
 func (v *HistoryService_ReplicateEvents_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
+
+// HistoryService_ReplicateEventsV2_Args represents the arguments for the HistoryService.ReplicateEventsV2 function.
+//
+// The arguments for ReplicateEventsV2 are sent and received over the wire as this struct.
+type HistoryService_ReplicateEventsV2_Args struct {
+	ReplicateV2Request *ReplicateEventsV2Request `json:"replicateV2Request,omitempty"`
+}
+
+// ToWire translates a HistoryService_ReplicateEventsV2_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryService_ReplicateEventsV2_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.ReplicateV2Request != nil {
+		w, err = v.ReplicateV2Request.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReplicateEventsV2Request_Read(w wire.Value) (*ReplicateEventsV2Request, error) {
+	var v ReplicateEventsV2Request
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_ReplicateEventsV2_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryService_ReplicateEventsV2_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryService_ReplicateEventsV2_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryService_ReplicateEventsV2_Args) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.ReplicateV2Request, err = _ReplicateEventsV2Request_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryService_ReplicateEventsV2_Args
+// struct.
+func (v *HistoryService_ReplicateEventsV2_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.ReplicateV2Request != nil {
+		fields[i] = fmt.Sprintf("ReplicateV2Request: %v", v.ReplicateV2Request)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryService_ReplicateEventsV2_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryService_ReplicateEventsV2_Args match the
+// provided HistoryService_ReplicateEventsV2_Args.
+//
+// This function performs a deep comparison.
+func (v *HistoryService_ReplicateEventsV2_Args) Equals(rhs *HistoryService_ReplicateEventsV2_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.ReplicateV2Request == nil && rhs.ReplicateV2Request == nil) || (v.ReplicateV2Request != nil && rhs.ReplicateV2Request != nil && v.ReplicateV2Request.Equals(rhs.ReplicateV2Request))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryService_ReplicateEventsV2_Args.
+func (v *HistoryService_ReplicateEventsV2_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.ReplicateV2Request != nil {
+		err = multierr.Append(err, enc.AddObject("replicateV2Request", v.ReplicateV2Request))
+	}
+	return err
+}
+
+// GetReplicateV2Request returns the value of ReplicateV2Request if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Args) GetReplicateV2Request() (o *ReplicateEventsV2Request) {
+	if v != nil && v.ReplicateV2Request != nil {
+		return v.ReplicateV2Request
+	}
+
+	return
+}
+
+// IsSetReplicateV2Request returns true if ReplicateV2Request is not nil.
+func (v *HistoryService_ReplicateEventsV2_Args) IsSetReplicateV2Request() bool {
+	return v != nil && v.ReplicateV2Request != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "ReplicateEventsV2" for this struct.
+func (v *HistoryService_ReplicateEventsV2_Args) MethodName() string {
+	return "ReplicateEventsV2"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *HistoryService_ReplicateEventsV2_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// HistoryService_ReplicateEventsV2_Helper provides functions that aid in handling the
+// parameters and return values of the HistoryService.ReplicateEventsV2
+// function.
+var HistoryService_ReplicateEventsV2_Helper = struct {
+	// Args accepts the parameters of ReplicateEventsV2 in-order and returns
+	// the arguments struct for the function.
+	Args func(
+		replicateV2Request *ReplicateEventsV2Request,
+	) *HistoryService_ReplicateEventsV2_Args
+
+	// IsException returns true if the given error can be thrown
+	// by ReplicateEventsV2.
+	//
+	// An error can be thrown by ReplicateEventsV2 only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for ReplicateEventsV2
+	// given the error returned by it. The provided error may
+	// be nil if ReplicateEventsV2 did not fail.
+	//
+	// This allows mapping errors returned by ReplicateEventsV2 into a
+	// serializable result struct. WrapResponse returns a
+	// non-nil error if the provided error cannot be thrown by
+	// ReplicateEventsV2
+	//
+	//   err := ReplicateEventsV2(args)
+	//   result, err := HistoryService_ReplicateEventsV2_Helper.WrapResponse(err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from ReplicateEventsV2: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(error) (*HistoryService_ReplicateEventsV2_Result, error)
+
+	// UnwrapResponse takes the result struct for ReplicateEventsV2
+	// and returns the erorr returned by it (if any).
+	//
+	// The error is non-nil only if ReplicateEventsV2 threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   err := HistoryService_ReplicateEventsV2_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*HistoryService_ReplicateEventsV2_Result) error
+}{}
+
+func init() {
+	HistoryService_ReplicateEventsV2_Helper.Args = func(
+		replicateV2Request *ReplicateEventsV2Request,
+	) *HistoryService_ReplicateEventsV2_Args {
+		return &HistoryService_ReplicateEventsV2_Args{
+			ReplicateV2Request: replicateV2Request,
+		}
+	}
+
+	HistoryService_ReplicateEventsV2_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.BadRequestError:
+			return true
+		case *shared.InternalServiceError:
+			return true
+		case *shared.EntityNotExistsError:
+			return true
+		case *ShardOwnershipLostError:
+			return true
+		case *shared.LimitExceededError:
+			return true
+		case *shared.RetryTaskV2Error:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	HistoryService_ReplicateEventsV2_Helper.WrapResponse = func(err error) (*HistoryService_ReplicateEventsV2_Result, error) {
+		if err == nil {
+			return &HistoryService_ReplicateEventsV2_Result{}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.BadRequestError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.BadRequestError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{BadRequestError: e}, nil
+		case *shared.InternalServiceError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.InternalServiceError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{InternalServiceError: e}, nil
+		case *shared.EntityNotExistsError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.EntityNotExistError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{EntityNotExistError: e}, nil
+		case *ShardOwnershipLostError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.ShardOwnershipLostError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{ShardOwnershipLostError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.LimitExceededError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{LimitExceededError: e}, nil
+		case *shared.RetryTaskV2Error:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.RetryTaskError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{RetryTaskError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEventsV2_Result.ServiceBusyError")
+			}
+			return &HistoryService_ReplicateEventsV2_Result{ServiceBusyError: e}, nil
+		}
+
+		return nil, err
+	}
+	HistoryService_ReplicateEventsV2_Helper.UnwrapResponse = func(result *HistoryService_ReplicateEventsV2_Result) (err error) {
+		if result.BadRequestError != nil {
+			err = result.BadRequestError
+			return
+		}
+		if result.InternalServiceError != nil {
+			err = result.InternalServiceError
+			return
+		}
+		if result.EntityNotExistError != nil {
+			err = result.EntityNotExistError
+			return
+		}
+		if result.ShardOwnershipLostError != nil {
+			err = result.ShardOwnershipLostError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
+		if result.RetryTaskError != nil {
+			err = result.RetryTaskError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+		return
+	}
+
+}
+
+// HistoryService_ReplicateEventsV2_Result represents the result of a HistoryService.ReplicateEventsV2 function call.
+//
+// The result of a ReplicateEventsV2 execution is sent and received over the wire as this struct.
+type HistoryService_ReplicateEventsV2_Result struct {
+	BadRequestError         *shared.BadRequestError      `json:"badRequestError,omitempty"`
+	InternalServiceError    *shared.InternalServiceError `json:"internalServiceError,omitempty"`
+	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
+	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
+	LimitExceededError      *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
+	RetryTaskError          *shared.RetryTaskV2Error     `json:"retryTaskError,omitempty"`
+	ServiceBusyError        *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+}
+
+// ToWire translates a HistoryService_ReplicateEventsV2_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryService_ReplicateEventsV2_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [7]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.BadRequestError != nil {
+		w, err = v.BadRequestError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.InternalServiceError != nil {
+		w, err = v.InternalServiceError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		w, err = v.EntityNotExistError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.ShardOwnershipLostError != nil {
+		w, err = v.ShardOwnershipLostError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.RetryTaskError != nil {
+		w, err = v.RetryTaskError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
+
+	if i > 1 {
+		return wire.Value{}, fmt.Errorf("HistoryService_ReplicateEventsV2_Result should have at most one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _RetryTaskV2Error_Read(w wire.Value) (*shared.RetryTaskV2Error, error) {
+	var v shared.RetryTaskV2Error
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_ReplicateEventsV2_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryService_ReplicateEventsV2_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryService_ReplicateEventsV2_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryService_ReplicateEventsV2_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.BadRequestError, err = _BadRequestError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.InternalServiceError, err = _InternalServiceError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.ShardOwnershipLostError, err = _ShardOwnershipLostError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.RetryTaskError, err = _RetryTaskV2Error_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.BadRequestError != nil {
+		count++
+	}
+	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.EntityNotExistError != nil {
+		count++
+	}
+	if v.ShardOwnershipLostError != nil {
+		count++
+	}
+	if v.LimitExceededError != nil {
+		count++
+	}
+	if v.RetryTaskError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if count > 1 {
+		return fmt.Errorf("HistoryService_ReplicateEventsV2_Result should have at most one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryService_ReplicateEventsV2_Result
+// struct.
+func (v *HistoryService_ReplicateEventsV2_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [7]string
+	i := 0
+	if v.BadRequestError != nil {
+		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
+		i++
+	}
+	if v.InternalServiceError != nil {
+		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.ShardOwnershipLostError != nil {
+		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.RetryTaskError != nil {
+		fields[i] = fmt.Sprintf("RetryTaskError: %v", v.RetryTaskError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryService_ReplicateEventsV2_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryService_ReplicateEventsV2_Result match the
+// provided HistoryService_ReplicateEventsV2_Result.
+//
+// This function performs a deep comparison.
+func (v *HistoryService_ReplicateEventsV2_Result) Equals(rhs *HistoryService_ReplicateEventsV2_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
+		return false
+	}
+	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.ShardOwnershipLostError == nil && rhs.ShardOwnershipLostError == nil) || (v.ShardOwnershipLostError != nil && rhs.ShardOwnershipLostError != nil && v.ShardOwnershipLostError.Equals(rhs.ShardOwnershipLostError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.RetryTaskError == nil && rhs.RetryTaskError == nil) || (v.RetryTaskError != nil && rhs.RetryTaskError != nil && v.RetryTaskError.Equals(rhs.RetryTaskError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryService_ReplicateEventsV2_Result.
+func (v *HistoryService_ReplicateEventsV2_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.BadRequestError != nil {
+		err = multierr.Append(err, enc.AddObject("badRequestError", v.BadRequestError))
+	}
+	if v.InternalServiceError != nil {
+		err = multierr.Append(err, enc.AddObject("internalServiceError", v.InternalServiceError))
+	}
+	if v.EntityNotExistError != nil {
+		err = multierr.Append(err, enc.AddObject("entityNotExistError", v.EntityNotExistError))
+	}
+	if v.ShardOwnershipLostError != nil {
+		err = multierr.Append(err, enc.AddObject("shardOwnershipLostError", v.ShardOwnershipLostError))
+	}
+	if v.LimitExceededError != nil {
+		err = multierr.Append(err, enc.AddObject("limitExceededError", v.LimitExceededError))
+	}
+	if v.RetryTaskError != nil {
+		err = multierr.Append(err, enc.AddObject("retryTaskError", v.RetryTaskError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	return err
+}
+
+// GetBadRequestError returns the value of BadRequestError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetBadRequestError() (o *shared.BadRequestError) {
+	if v != nil && v.BadRequestError != nil {
+		return v.BadRequestError
+	}
+
+	return
+}
+
+// IsSetBadRequestError returns true if BadRequestError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetBadRequestError() bool {
+	return v != nil && v.BadRequestError != nil
+}
+
+// GetInternalServiceError returns the value of InternalServiceError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetInternalServiceError() (o *shared.InternalServiceError) {
+	if v != nil && v.InternalServiceError != nil {
+		return v.InternalServiceError
+	}
+
+	return
+}
+
+// IsSetInternalServiceError returns true if InternalServiceError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetInternalServiceError() bool {
+	return v != nil && v.InternalServiceError != nil
+}
+
+// GetEntityNotExistError returns the value of EntityNotExistError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetEntityNotExistError() (o *shared.EntityNotExistsError) {
+	if v != nil && v.EntityNotExistError != nil {
+		return v.EntityNotExistError
+	}
+
+	return
+}
+
+// IsSetEntityNotExistError returns true if EntityNotExistError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetEntityNotExistError() bool {
+	return v != nil && v.EntityNotExistError != nil
+}
+
+// GetShardOwnershipLostError returns the value of ShardOwnershipLostError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetShardOwnershipLostError() (o *ShardOwnershipLostError) {
+	if v != nil && v.ShardOwnershipLostError != nil {
+		return v.ShardOwnershipLostError
+	}
+
+	return
+}
+
+// IsSetShardOwnershipLostError returns true if ShardOwnershipLostError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetShardOwnershipLostError() bool {
+	return v != nil && v.ShardOwnershipLostError != nil
+}
+
+// GetLimitExceededError returns the value of LimitExceededError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
+	if v != nil && v.LimitExceededError != nil {
+		return v.LimitExceededError
+	}
+
+	return
+}
+
+// IsSetLimitExceededError returns true if LimitExceededError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetLimitExceededError() bool {
+	return v != nil && v.LimitExceededError != nil
+}
+
+// GetRetryTaskError returns the value of RetryTaskError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetRetryTaskError() (o *shared.RetryTaskV2Error) {
+	if v != nil && v.RetryTaskError != nil {
+		return v.RetryTaskError
+	}
+
+	return
+}
+
+// IsSetRetryTaskError returns true if RetryTaskError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetRetryTaskError() bool {
+	return v != nil && v.RetryTaskError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_ReplicateEventsV2_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *HistoryService_ReplicateEventsV2_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "ReplicateEventsV2" for this struct.
+func (v *HistoryService_ReplicateEventsV2_Result) MethodName() string {
+	return "ReplicateEventsV2"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *HistoryService_ReplicateEventsV2_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }
 

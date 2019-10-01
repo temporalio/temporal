@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -262,6 +262,39 @@ func (mr *_MockClientRecorder) GetReplicationMessages(
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetReplicationMessages", args...)
 }
 
+// PollMutableState responds to a PollMutableState call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().PollMutableState(gomock.Any(), ...).Return(...)
+// 	... := client.PollMutableState(...)
+func (m *MockClient) PollMutableState(
+	ctx context.Context,
+	_PollRequest *history.PollMutableStateRequest,
+	opts ...yarpc.CallOption,
+) (success *history.PollMutableStateResponse, err error) {
+
+	args := []interface{}{ctx, _PollRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "PollMutableState", args...)
+	success, _ = ret[i].(*history.PollMutableStateResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) PollMutableState(
+	ctx interface{},
+	_PollRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _PollRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "PollMutableState", args...)
+}
+
 // QueryWorkflow responds to a QueryWorkflow call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -293,6 +326,37 @@ func (mr *_MockClientRecorder) QueryWorkflow(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _QueryRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
+}
+
+// ReapplyEvents responds to a ReapplyEvents call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ReapplyEvents(gomock.Any(), ...).Return(...)
+// 	... := client.ReapplyEvents(...)
+func (m *MockClient) ReapplyEvents(
+	ctx context.Context,
+	_ReapplyEventsRequest *history.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _ReapplyEventsRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ReapplyEvents", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ReapplyEvents(
+	ctx interface{},
+	_ReapplyEventsRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ReapplyEventsRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ReapplyEvents", args...)
 }
 
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This
@@ -516,6 +580,37 @@ func (mr *_MockClientRecorder) ReplicateEvents(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _ReplicateRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "ReplicateEvents", args...)
+}
+
+// ReplicateEventsV2 responds to a ReplicateEventsV2 call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ReplicateEventsV2(gomock.Any(), ...).Return(...)
+// 	... := client.ReplicateEventsV2(...)
+func (m *MockClient) ReplicateEventsV2(
+	ctx context.Context,
+	_ReplicateV2Request *history.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _ReplicateV2Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ReplicateEventsV2", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ReplicateEventsV2(
+	ctx interface{},
+	_ReplicateV2Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ReplicateV2Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ReplicateEventsV2", args...)
 }
 
 // ReplicateRawEvents responds to a ReplicateRawEvents call based on the mock expectations. This

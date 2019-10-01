@@ -77,10 +77,19 @@ exception RetryTaskError {
   5: optional i64 (js.type = "Long") nextEventId
 }
 
+exception RetryTaskV2Error {
+  1: required string message
+}
+
 exception ClientVersionNotSupportedError {
   1: required string featureVersion
   2: required string clientImpl
   3: required string supportedVersions
+}
+
+exception CurrentBranchChangedError {
+  10: required string message
+  20: required binary currentBranchToken
 }
 
 enum WorkflowIdReusePolicy {
@@ -295,6 +304,7 @@ struct TaskList {
 
 enum EncodingType {
   ThriftRW,
+  JSON,
 }
 
 enum QueryRejectCondition {
@@ -1531,5 +1541,30 @@ struct HistoryBranchRange{
 struct HistoryBranch{
   10: optional string treeID
   20: optional string branchID
-  30: optional list<HistoryBranchRange>  ancestors
+  30: optional list<HistoryBranchRange> ancestors
+}
+
+// VersionHistoryItem contains signal eventID and the corresponding version
+struct VersionHistoryItem{
+  10: optional i64 (js.type = "Long") eventID
+  20: optional i64 (js.type = "Long") version
+}
+
+// VersionHistory contains the version history of a branch
+struct VersionHistory{
+  10: optional binary branchToken
+  20: optional list<VersionHistoryItem> items
+}
+
+// VersionHistories contains all version histories from all branches
+struct VersionHistories{
+  10: optional i32 currentVersionHistoryIndex
+  20: optional list<VersionHistory> histories
+}
+
+// ReapplyEventsRequest is the request for reapply events API
+struct ReapplyEventsRequest{
+  10: optional string domainName
+  20: optional WorkflowExecution workflowExecution
+  30: optional DataBlob events
 }

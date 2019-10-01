@@ -52,7 +52,7 @@ var (
 type (
 	conflictResolverProvider func(context workflowExecutionContext, logger log.Logger) conflictResolver
 	stateBuilderProvider     func(msBuilder mutableState, logger log.Logger) stateBuilder
-	mutableStateProvider     func(version int64, logger log.Logger, domainName string) mutableState
+	mutableStateProvider     func(domainEntry *cache.DomainCacheEntry, logger log.Logger) mutableState
 
 	historyReplicator struct {
 		shard             ShardContext
@@ -146,16 +146,12 @@ func newHistoryReplicator(
 		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
 		},
-		getNewMutableState: func(version int64, logger log.Logger, domainName string) mutableState {
+		getNewMutableState: func(domainEntry *cache.DomainCacheEntry, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithReplicationState(
 				shard,
 				shard.GetEventsCache(),
 				logger,
-				version,
-				// if can see replication task, meaning that domain is
-				// global domain with > 1 target clusters
-				cache.ReplicationPolicyMultiCluster,
-				domainName,
+				domainEntry,
 			)
 		},
 	}
@@ -210,7 +206,11 @@ func (r *historyReplicator) SyncActivity(
 	version := request.GetVersion()
 	scheduleID := request.GetScheduledId()
 	if scheduleID >= msBuilder.GetNextEventID() {
-		if version < msBuilder.GetLastWriteVersion() {
+		lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		if version < lastWriteVersion {
 			// activity version < workflow last write version
 			// this can happen if target workflow has
 			return nil
@@ -221,8 +221,8 @@ func (r *historyReplicator) SyncActivity(
 		return newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, domainID, execution.GetWorkflowId(), execution.GetRunId(), msBuilder.GetNextEventID())
 	}
 
-	ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
-	if !isRunning {
+	ai, ok := msBuilder.GetActivityInfo(scheduleID)
+	if !ok {
 		// this should not retry, can be caused by out of order delivery
 		// since the activity is already finished
 		return nil
@@ -278,7 +278,7 @@ func (r *historyReplicator) SyncActivity(
 	timerTasks := []persistence.Task{}
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
-	timerBuilder := newTimerBuilder(r.logger, timeSource)
+	timerBuilder := newTimerBuilder(timeSource)
 	if tt := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
 		timerTasks = append(timerTasks, tt)
 	}
@@ -436,9 +436,12 @@ func (r *historyReplicator) ApplyStartEvent(
 	logger log.Logger,
 ) error {
 
-	msBuilder := r.getNewMutableState(request.GetVersion(), logger, context.getDomainName())
-	err := r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
-	return err
+	domainEntry, err := r.domainCache.GetDomainByID(context.getDomainID())
+	if err != nil {
+		return err
+	}
+	msBuilder := r.getNewMutableState(domainEntry, logger)
+	return r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
@@ -466,7 +469,10 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 	currentRunID := currentMutableState.GetExecutionInfo().RunID
 	currentLastEventTaskID := currentMutableState.GetExecutionInfo().LastEventTaskID
 	currentNextEventID := currentMutableState.GetNextEventID()
-	currentLastWriteVersion := currentMutableState.GetLastWriteVersion()
+	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
 	currentStillRunning := currentMutableState.IsWorkflowExecutionRunning()
 
 	if currentLastWriteVersion > lastEvent.GetVersion() {
@@ -714,7 +720,10 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
-	lastEvent, _, newMutableState, err := sBuilder.applyEvents(domainID, requestID, execution, request.History.Events, newRunHistory, request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion())
+	lastEvent, _, newMutableState, err := sBuilder.applyEvents(
+		domainID, requestID, execution, request.History.Events, newRunHistory,
+		request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion(), request.GetNewRunNDC(),
+	)
 	if err != nil {
 		return err
 	}
@@ -787,10 +796,13 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	deleteHistory := func() {
 		// this function should be only called when we drop start workflow execution
 		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			r.shard.GetHistoryV2Manager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-				BranchToken: msBuilder.GetCurrentBranch(),
-				ShardID:     common.IntPtr(r.shard.GetShardID()),
-			})
+			currentBranchToken, err := msBuilder.GetCurrentBranchToken()
+			if err == nil {
+				r.shard.GetHistoryV2Manager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+					BranchToken: currentBranchToken,
+					ShardID:     common.IntPtr(r.shard.GetShardID()),
+				})
+			}
 		} else {
 			r.shard.GetHistoryManager().DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
 				DomainID:  domainID,
@@ -932,7 +944,11 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		// workflow still running, no continued as new edge case to solve
 		logger.Info("Conflict resolution self workflow running, skip.")
 		executionInfo := msBuilder.GetExecutionInfo()
-		return executionInfo.RunID, msBuilder.GetLastWriteVersion(), executionInfo.State, nil
+		lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		if err != nil {
+			return "", 0, 0, err
+		}
+		return executionInfo.RunID, lastWriteVersion, executionInfo.State, nil
 	}
 
 	// terminate the current running workflow
@@ -1038,14 +1054,18 @@ func (r *historyReplicator) terminateWorkflow(
 		RunId:      common.StringPtr(runID),
 	}
 	var currentLastWriteVersion int64
-	err := r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, false,
+	var err error
+	err = r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, false,
 		func(msBuilder mutableState, tBuilder *timerBuilder) error {
 
 			// compare the current last write version first
 			// since this function has assumption that
 			// incomingVersion <= currentLastWriteVersion
 			// if assumption is broken (race condition), then retry
-			currentLastWriteVersion = msBuilder.GetLastWriteVersion()
+			currentLastWriteVersion, err = msBuilder.GetLastWriteVersion()
+			if err != nil {
+				return err
+			}
 			if incomingVersion <= currentLastWriteVersion {
 				return newRetryTaskErrorWithHint(
 					ErrRetryExistingWorkflowMsg,
@@ -1376,7 +1396,10 @@ func (r *historyReplicator) prepareWorkflowMutation(
 	// 2. if the domain entry says this domain is active and failover version in the domain entry >= workflow's last write version
 	// if either of the above is true, then the workflow can be mutated
 
-	lastWriteVersion := msBuilder.GetLastWriteVersion()
+	lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+	if err != nil {
+		return false, err
+	}
 	lastWriteVersionActive := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion) == r.clusterMetadata.GetCurrentClusterName()
 	if lastWriteVersionActive {
 		msBuilder.UpdateReplicationStateVersion(lastWriteVersion, true)

@@ -510,11 +510,11 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 			Version:             currVersion,
 			LastReplicationInfo: repInfo,
 			EventStoreVersion:   exeInfo.EventStoreVersion,
-			BranchToken:         exeInfo.GetCurrentBranch(),
+			BranchToken:         exeInfo.BranchToken,
 		}
 
-		_, historyBatches, err := history.GetAllHistory(historyMgr, historyV2Mgr, nil, loggerimpl.NewNopLogger(), true,
-			domainID, wid, rid, minID, maxID, exeInfo.EventStoreVersion, exeInfo.GetCurrentBranch(), common.IntPtr(shardID))
+		_, historyBatches, err := history.GetAllHistory(historyMgr, historyV2Mgr, nil, true,
+			domainID, wid, rid, minID, maxID, exeInfo.EventStoreVersion, exeInfo.BranchToken, common.IntPtr(shardID))
 
 		if err != nil {
 			ErrorAndExit("GetAllHistory error", err)
@@ -541,12 +541,12 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 					ErrorAndExit("GetWorkflowExecution error", err)
 				}
 				taskTemplate.NewRunEventStoreVersion = resp.State.ExecutionInfo.EventStoreVersion
-				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.GetCurrentBranch()
+				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.BranchToken
 			}
 			taskTemplate.Version = firstEvent.GetVersion()
 			taskTemplate.FirstEventID = firstEvent.GetEventId()
 			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
-			task, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, loggerimpl.NewNopLogger(), batch, common.IntPtr(shardID))
+			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, batch, common.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
 			}

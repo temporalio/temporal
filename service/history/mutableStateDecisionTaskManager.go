@@ -224,7 +224,16 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 		decision.Attempt = 0
 	}
 
-	m.msb.executionInfo.State = persistence.WorkflowStateRunning
+	// set workflow state to running, since decision is scheduled
+	if state, _ := m.msb.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCreated {
+		if err := m.msb.UpdateWorkflowStateCloseStatus(
+			persistence.WorkflowStateRunning,
+			persistence.WorkflowCloseStatusNone,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	// Update mutable decision state
 	decision = &decisionInfo{
 		Version:                    version,
@@ -539,7 +548,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 
 	var event *workflow.HistoryEvent
 	// Only emit DecisionTaskFailedEvent for the very first time
-	if dt.Attempt == 0 || cause == workflow.DecisionTaskFailedCauseResetWorkflow {
+	if dt.Attempt == 0 {
 		event = m.msb.hBuilder.AddDecisionTaskFailedEvent(attr)
 	}
 
@@ -548,7 +557,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	}
 
 	// always clear decision attempt for reset
-	if cause == workflow.DecisionTaskFailedCauseResetWorkflow {
+	if cause == workflow.DecisionTaskFailedCauseResetWorkflow ||
+		cause == workflow.DecisionTaskFailedCauseFailoverCloseDecision {
 		m.msb.executionInfo.DecisionAttempt = 0
 	}
 	return event, nil

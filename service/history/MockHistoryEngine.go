@@ -139,6 +139,29 @@ func (_m *MockHistoryEngine) GetMutableState(ctx context.Context, request *gohis
 	return r0, r1
 }
 
+// PollMutableState is mock implementation for GetMutableState of HistoryEngine
+func (_m *MockHistoryEngine) PollMutableState(ctx context.Context, request *gohistory.PollMutableStateRequest) (*gohistory.PollMutableStateResponse, error) {
+	ret := _m.Called(ctx, request)
+
+	var r0 *gohistory.PollMutableStateResponse
+	if rf, ok := ret.Get(0).(func(*gohistory.PollMutableStateRequest) *gohistory.PollMutableStateResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gohistory.PollMutableStateResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*gohistory.PollMutableStateRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ResetStickyTaskList is mock implementation for ResetStickyTaskList of HistoryEngine
 func (_m *MockHistoryEngine) ResetStickyTaskList(ctx context.Context, request *gohistory.ResetStickyTaskListRequest) (*gohistory.ResetStickyTaskListResponse, error) {
 	ret := _m.Called(request)
@@ -492,6 +515,20 @@ func (_m *MockHistoryEngine) ReplicateRawEvents(ctx context.Context, request *go
 	return r0
 }
 
+// ReplicateEventsV2 is mock implementation for ReplicateEventsV2 of HistoryEngine
+func (_m *MockHistoryEngine) ReplicateEventsV2(ctx context.Context, request *gohistory.ReplicateEventsV2Request) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.ReplicateEventsV2Request) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SyncShardStatus is mock implementation for SyncShardStatus of HistoryEngine
 func (_m *MockHistoryEngine) SyncShardStatus(ctx context.Context, request *gohistory.SyncShardStatusRequest) error {
 	ret := _m.Called(request)
@@ -561,4 +598,18 @@ func (_m *MockHistoryEngine) GetReplicationMessages(ctx context.Context, taskID 
 	}
 
 	return r0, r1
+}
+
+// ReapplyEvents is mock implementation for ReapplyEvents of HistoryEngine
+func (_m *MockHistoryEngine) ReapplyEvents(ctx context.Context, domainUUID string, workflowID string, events []*shared.HistoryEvent) error {
+	ret := _m.Called(domainUUID, workflowID, events)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string, []*shared.HistoryEvent) error); ok {
+		r0 = rf(domainUUID, workflowID, events)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }

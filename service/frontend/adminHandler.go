@@ -318,9 +318,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		}
 
 		response, err := adh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
-			DomainUUID:          common.StringPtr(domainID),
-			Execution:           execution,
-			ExpectedNextEventId: common.Int64Ptr(common.FirstEventID), // common.FirstEventID means no long poll
+			DomainUUID: common.StringPtr(domainID),
+			Execution:  execution,
 		})
 		if err != nil {
 			return nil, err
@@ -332,13 +331,17 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 			nextEventID = response.GetNextEventId()
 		}
 		token = &getHistoryContinuationToken{
-			RunID:             execution.GetRunId(),
-			BranchToken:       response.BranchToken,
-			FirstEventID:      firstEventID,
-			NextEventID:       nextEventID,
-			PersistenceToken:  nil, // this is the initialized value
-			EventStoreVersion: response.GetEventStoreVersion(),
-			ReplicationInfo:   response.ReplicationInfo,
+			RunID:            execution.GetRunId(),
+			BranchToken:      response.CurrentBranchToken,
+			FirstEventID:     firstEventID,
+			NextEventID:      nextEventID,
+			PersistenceToken: nil, // this is the initialized value
+			ReplicationInfo:  response.ReplicationInfo,
+		}
+		// calculate event store version based on if branch token exist
+		token.EventStoreVersion = persistence.EventStoreVersionV2
+		if token.BranchToken == nil {
+			token.EventStoreVersion = 0
 		}
 	}
 
@@ -357,17 +360,15 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	_, historyBatches, token.PersistenceToken, size, err = historyService.PaginateHistory(
 		adh.historyMgr,
 		adh.historyV2Mgr,
-		adh.metricsClient,
-		adh.GetLogger(),
 		true, // this means that we are getting history by batch
 		domainID,
 		execution.GetWorkflowId(),
 		token.RunID,
+		token.EventStoreVersion,
+		token.BranchToken,
 		token.FirstEventID,
 		token.NextEventID,
 		token.PersistenceToken,
-		token.EventStoreVersion,
-		token.BranchToken,
 		pageSize,
 		common.IntPtr(shardID),
 	)

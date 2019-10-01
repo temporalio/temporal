@@ -114,6 +114,30 @@ func (c *clientImpl) GetMutableState(
 	return response, nil
 }
 
+func (c *clientImpl) PollMutableState(
+	ctx context.Context,
+	request *h.PollMutableStateRequest,
+	opts ...yarpc.CallOption) (*h.PollMutableStateResponse, error) {
+	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *h.PollMutableStateResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.PollMutableState(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
 	request *workflow.DescribeHistoryHostRequest,
@@ -651,6 +675,24 @@ func (c *clientImpl) ReplicateRawEvents(
 	return err
 }
 
+func (c *clientImpl) ReplicateEventsV2(
+	ctx context.Context,
+	request *h.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.ReplicateEventsV2(ctx, request, opts...)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
 func (c *clientImpl) SyncShardStatus(
 	ctx context.Context,
 	request *h.SyncShardStatusRequest,
@@ -766,6 +808,25 @@ func (c *clientImpl) GetReplicationMessages(
 	}
 
 	return response, nil
+}
+
+func (c *clientImpl) ReapplyEvents(
+	ctx context.Context,
+	request *h.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) error {
+	client, err := c.getClientForWorkflowID(request.GetRequest().GetWorkflowExecution().GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.ReapplyEvents(ctx, request, opts...)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

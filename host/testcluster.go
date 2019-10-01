@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client"
+	frontendclient "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/filestore"
@@ -39,7 +40,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	pes "github.com/uber/cadence/common/persistence/elasticsearch"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/zap"
@@ -76,6 +77,7 @@ type (
 		HistoryConfig         *HistoryConfig
 		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
+		MockFrontendClient    map[string]frontendclient.Client
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -171,6 +173,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ArchiverProvider:       archiverBase.provider,
 		HistoryConfig:          options.HistoryConfig,
 		WorkerConfig:           options.WorkerConfig,
+		MockFrontendClient:     options.MockFrontendClient,
 		DomainReplicationQueue: testBase.DomainReplicationQueue,
 	}
 	cluster := NewCadence(cadenceParams)
@@ -265,4 +268,9 @@ func (tc *TestCluster) GetFrontendClient() FrontendClient {
 // GetAdminClient returns an admin client from the test cluster
 func (tc *TestCluster) GetAdminClient() AdminClient {
 	return tc.host.GetAdminClient()
+}
+
+// GetHistoryClient returns a history client from the test cluster
+func (tc *TestCluster) GetHistoryClient() HistoryClient {
+	return tc.host.GetHistoryClient()
 }

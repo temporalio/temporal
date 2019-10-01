@@ -66,6 +66,7 @@ struct GetMutableStateRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution execution
   30: optional i64 (js.type = "Long") expectedNextEventId
+  40: optional binary currentBranchToken
 }
 
 struct GetMutableStateResponse {
@@ -79,16 +80,47 @@ struct GetMutableStateResponse {
   70: optional string clientLibraryVersion
   80: optional string clientFeatureVersion
   90: optional string clientImpl
+  //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field
   100: optional bool isWorkflowRunning
   110: optional i32 stickyTaskListScheduleToStartTimeout
   120: optional i32 eventStoreVersion
-  130: optional binary branchToken
+  130: optional binary currentBranchToken
   140: optional map<string, shared.ReplicationInfo> replicationInfo
   // TODO: when migrating to gRPC, make this a enum
   // TODO: when migrating to gRPC, unify internal & external representation
   // NOTE: workflowState & workflowCloseState are the same as persistence representation
   150: optional i32 workflowState
   160: optional i32 workflowCloseState
+  170: optional shared.VersionHistories versionHistories
+}
+
+struct PollMutableStateRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+  30: optional i64 (js.type = "Long") expectedNextEventId
+  40: optional binary currentBranchToken
+}
+
+struct PollMutableStateResponse {
+  10: optional shared.WorkflowExecution execution
+  20: optional shared.WorkflowType workflowType
+  30: optional i64 (js.type = "Long") NextEventId
+  35: optional i64 (js.type = "Long") PreviousStartedEventId
+  40: optional i64 (js.type = "Long") LastFirstEventId
+  50: optional shared.TaskList taskList
+  60: optional shared.TaskList stickyTaskList
+  70: optional string clientLibraryVersion
+  80: optional string clientFeatureVersion
+  90: optional string clientImpl
+  100: optional i32 stickyTaskListScheduleToStartTimeout
+  110: optional binary currentBranchToken
+  120: optional map<string, shared.ReplicationInfo> replicationInfo
+  130: optional shared.VersionHistories versionHistories
+  // TODO: when migrating to gRPC, make this a enum
+  // TODO: when migrating to gRPC, unify internal & external representation
+  // NOTE: workflowState & workflowCloseState are the same as persistence representation
+  140: optional i32 workflowState
+  150: optional i32 workflowCloseState
 }
 
 struct ResetStickyTaskListRequest {
@@ -255,6 +287,7 @@ struct ReplicateEventsRequest {
   110: optional i32 eventStoreVersion
   120: optional i32 newRunEventStoreVersion
   130: optional bool resetWorkflow
+  140: optional bool newRunNDC
 }
 
 struct ReplicateRawEventsRequest {
@@ -265,6 +298,16 @@ struct ReplicateRawEventsRequest {
   50: optional shared.DataBlob newRunHistory
   60: optional i32 eventStoreVersion
   70: optional i32 newRunEventStoreVersion
+}
+
+struct ReplicateEventsV2Request {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution workflowExecution
+  30: optional list<shared.VersionHistoryItem> versionHistoryItems
+  40: optional shared.DataBlob events
+  // new run events does not need version history since there is no prior events
+  60: optional shared.DataBlob newRunEvents
+  70: optional bool resetWorkflow
 }
 
 struct SyncShardStatusRequest {
@@ -300,6 +343,11 @@ struct QueryWorkflowResponse {
   10: optional binary queryResult
 }
 
+struct ReapplyEventsRequest {
+  10: optional string domainUUID
+  20: optional shared.ReapplyEventsRequest request
+}
+
 /**
 * HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 * of workflow instances already created.
@@ -325,6 +373,7 @@ service HistoryService {
   /**
   * Returns the information from mutable state of workflow execution.
   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
+  * It returns CurrentBranchChangedError if the workflow version branch has changed.
   **/
   GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)
     throws (
@@ -334,7 +383,24 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
       6: shared.ServiceBusyError serviceBusyError,
+      7: shared.CurrentBranchChangedError currentBranchChangedError,
     )
+
+  /**
+   * Returns the information from mutable state of workflow execution.
+   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
+   * It returns CurrentBranchChangedError if the workflow version branch has changed.
+   **/
+   PollMutableStateResponse PollMutableState(1: PollMutableStateRequest pollRequest)
+     throws (
+       1: shared.BadRequestError badRequestError,
+       2: shared.InternalServiceError internalServiceError,
+       3: shared.EntityNotExistsError entityNotExistError,
+       4: ShardOwnershipLostError shardOwnershipLostError,
+       5: shared.LimitExceededError limitExceededError,
+       6: shared.ServiceBusyError serviceBusyError,
+       7: shared.CurrentBranchChangedError currentBranchChangedError,
+     )
 
   /**
   * Reset the sticky tasklist related information in mutable state of a given workflow.
@@ -660,6 +726,17 @@ service HistoryService {
       7: shared.ServiceBusyError serviceBusyError,
     )
 
+  void ReplicateEventsV2(1: ReplicateEventsV2Request replicateV2Request)
+    throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+        4: ShardOwnershipLostError shardOwnershipLostError,
+        5: shared.LimitExceededError limitExceededError,
+        6: shared.RetryTaskV2Error retryTaskError,
+        7: shared.ServiceBusyError serviceBusyError,
+    )
+
   /**
   * SyncShardStatus sync the status between shards
   **/
@@ -749,4 +826,18 @@ service HistoryService {
 	  6: shared.ServiceBusyError serviceBusyError,
 	  7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
 	)
+
+  /**
+  * ReapplyEvents applies stale events to the current workflow and current run
+  **/
+  void ReapplyEvents(1: ReapplyEventsRequest reapplyEventsRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.DomainNotActiveError domainNotActiveError,
+      4: shared.LimitExceededError limitExceededError,
+      5: shared.ServiceBusyError serviceBusyError,
+      6: ShardOwnershipLostError shardOwnershipLostError,
+      7: shared.EntityNotExistsError entityNotExistError,
+    )
 }

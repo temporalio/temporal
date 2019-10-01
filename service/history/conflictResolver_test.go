@@ -97,7 +97,14 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
+	s.mockService = service.NewTestService(
+		s.mockClusterMetadata,
+		s.mockMessagingClient,
+		metricsClient,
+		s.mockClientBean,
+		nil,
+		nil,
+		nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockEventsCache = &MockEventsCache{}
 
@@ -136,9 +143,9 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{
+	s.mockContext = newWorkflowExecutionContext(testDomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(validRunID),
+		RunId:      common.StringPtr(testRunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger)
 
@@ -317,10 +324,12 @@ func (s *conflictResolverSuite) TestReset() {
 		input.ResetWorkflowSnapshot.TransferTasks = nil
 
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
-			RangeID:              s.mockShard.shardInfo.RangeID,
-			PrevRunID:            prevRunID,
-			PrevLastWriteVersion: prevLastWriteVersion,
-			PrevState:            prevState,
+			RangeID: s.mockShard.shardInfo.RangeID,
+			CurrentWorkflowCAS: &persistence.CurrentWorkflowCAS{
+				PrevRunID:            prevRunID,
+				PrevLastWriteVersion: prevLastWriteVersion,
+				PrevState:            prevState,
+			},
 			ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
 				ExecutionInfo: executionInfo,
 				ExecutionStats: &persistence.ExecutionStats{

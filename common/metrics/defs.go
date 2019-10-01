@@ -253,6 +253,8 @@ const (
 	HistoryClientRespondActivityTaskCanceledScope
 	// HistoryClientGetMutableStateScope tracks RPC calls to history service
 	HistoryClientGetMutableStateScope
+	// HistoryClientPollMutableStateScope tracks RPC calls to history service
+	HistoryClientPollMutableStateScope
 	// HistoryClientResetStickyTaskListScope tracks RPC calls to history service
 	HistoryClientResetStickyTaskListScope
 	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service
@@ -282,6 +284,8 @@ const (
 	// HistoryClientReplicateRawEventsScope tracks RPC calls to history service
 	HistoryClientReplicateRawEventsScope
 	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
+	HistoryClientReplicateEventsV2Scope
+	// HistoryClientReplicateRawEventsV2Scope tracks RPC calls to history service
 	HistoryClientSyncShardStatusScope
 	// HistoryClientSyncActivityScope tracks RPC calls to history service
 	HistoryClientSyncActivityScope
@@ -289,6 +293,8 @@ const (
 	HistoryClientGetReplicationTasksScope
 	// HistoryClientQueryWorkflowScope tracks RPC calls to history service
 	HistoryClientQueryWorkflowScope
+	// HistoryClientReapplyEventsScope tracks RPC calls to history service
+	HistoryClientReapplyEventsScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -381,6 +387,8 @@ const (
 	FrontendClientGetReplicationTasksScope
 	// FrontendClientGetDomainReplicationTasksScope tracks RPC calls to frontend service
 	FrontendClientGetDomainReplicationTasksScope
+	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
+	FrontendClientReapplyEventsScope
 	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributeScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
@@ -648,6 +656,8 @@ const (
 	FrontendGetReplicationMessagesScope
 	// FrontendGetDomainReplicationMessagesScope is the metric scope for frontend.GetDomainReplicationMessages
 	FrontendGetDomainReplicationMessagesScope
+	// FrontendReapplyEventsScope is the metric scope for frontend.ReapplyEvents
+	FrontendReapplyEventsScope
 
 	NumFrontendScopes
 )
@@ -696,6 +706,8 @@ const (
 	HistoryReplicateEventsScope
 	// HistoryReplicateRawEventsScope tracks ReplicateEvents API calls received by service
 	HistoryReplicateRawEventsScope
+	// HistoryReplicateEventsV2Scope tracks ReplicateEvents API calls received by service
+	HistoryReplicateEventsV2Scope
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
@@ -706,6 +718,8 @@ const (
 	HistoryGetReplicationMessagesScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
+	// HistoryReapplyEventsScope is the scope used by event reapplication
+	HistoryReapplyEventsScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope
 	// TransferActiveQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -870,6 +884,8 @@ const (
 	HistoryReplicationTaskScope
 	// HistoryMetadataReplicationTaskScope is the scope used by history metadata task replication processing
 	HistoryMetadataReplicationTaskScope
+	// HistoryReplicationTaskV2Scope is the scope used by history task replication processing
+	HistoryReplicationTaskV2Scope
 	// SyncShardTaskScope is the scope used by sync shrad information processing
 	SyncShardTaskScope
 	// SyncActivityTaskScope is the scope used by sync activity information processing
@@ -979,6 +995,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRespondActivityTaskFailedScope:         {operation: "HistoryClientRespondActivityTaskFailed", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRespondActivityTaskCanceledScope:       {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetMutableStateScope:                   {operation: "HistoryClientGetMutableState", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientPollMutableStateScope:                  {operation: "HistoryClientPollMutableState", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetStickyTaskListScope:               {operation: "HistoryClientResetStickyTaskListScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDescribeWorkflowExecutionScope:         {operation: "HistoryClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordDecisionTaskStartedScope:         {operation: "HistoryClientRecordDecisionTaskStarted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
@@ -993,10 +1010,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRecordChildExecutionCompletedScope:     {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateEventsScope:                   {operation: "HistoryClientReplicateEvents", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateRawEventsScope:                {operation: "HistoryClientReplicateRawEvents", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReplicateEventsV2Scope:                 {operation: "HistoryClientReplicateEventsV2", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncShardStatusScope:                   {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationTasksScope:               {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReapplyEventsScope:                     {operation: "HistoryClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollForActivityTaskScope:              {operation: "MatchingClientPollForActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                  {operation: "MatchingClientAddActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -1043,6 +1062,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetSearchAttributesScope:              {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetReplicationTasksScope:              {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetDomainReplicationTasksScope:        {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientReapplyEventsScope:                    {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		AdminClientAddSearchAttributeScope:                  {operation: "AdminClientAddSearchAttribute", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
@@ -1167,6 +1187,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetSearchAttributesScope:              {operation: "GetSearchAttributes"},
 		FrontendGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
 		FrontendGetDomainReplicationMessagesScope:     {operation: "GetDomainReplicationMessages"},
+		FrontendReapplyEventsScope:                    {operation: "ReapplyEvents"},
 	},
 	// History Scope Names
 	History: {
@@ -1194,11 +1215,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRequestCancelWorkflowExecutionScope:             {operation: "RequestCancelWorkflowExecution"},
 		HistoryReplicateEventsScope:                            {operation: "ReplicateEvents"},
 		HistoryReplicateRawEventsScope:                         {operation: "ReplicateRawEvents"},
+		HistoryReplicateEventsV2Scope:                          {operation: "ReplicateEventsV2"},
 		HistorySyncShardStatusScope:                            {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                               {operation: "SyncActivity"},
 		HistoryDescribeMutableStateScope:                       {operation: "DescribeMutableState"},
 		HistoryGetReplicationMessagesScope:                     {operation: "GetReplicationMessages"},
 		HistoryShardControllerScope:                            {operation: "ShardController"},
+		HistoryReapplyEventsScope:                              {operation: "EventReapplication"},
 		TransferQueueProcessorScope:                            {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
 		TransferStandbyQueueProcessorScope:                     {operation: "TransferStandbyQueueProcessor"},
@@ -1278,6 +1301,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DomainReplicationTaskScope:             {operation: "DomainReplicationTask"},
 		HistoryReplicationTaskScope:            {operation: "HistoryReplicationTask"},
 		HistoryMetadataReplicationTaskScope:    {operation: "HistoryMetadataReplicationTask"},
+		HistoryReplicationTaskV2Scope:          {operation: "HistoryReplicationTaskV2"},
 		SyncShardTaskScope:                     {operation: "SyncShardTask"},
 		SyncActivityTaskScope:                  {operation: "SyncActivityTask"},
 		ESProcessorScope:                       {operation: "ESProcessor"},
@@ -1515,6 +1539,7 @@ const (
 	GetReplicationMessagesForShardLatency
 	ArchiveVisibilityAttemptCount
 	ArchiveVisibilityFailedCount
+	EventReapplySkippedCount
 
 	NumHistoryMetrics
 )
@@ -1816,6 +1841,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		GetReplicationMessagesForShardLatency:             {metricName: "get_replication_messages_for_shard", metricType: Timer},
 		ArchiveVisibilityAttemptCount:                     {metricName: "archive_visibility_attempt_count", metricType: Counter},
 		ArchiveVisibilityFailedCount:                      {metricName: "archive_visibility_failed_count", metricType: Counter},
+		EventReapplySkippedCount:                          {metricName: "event_reapply_skipped_count", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},

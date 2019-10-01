@@ -85,14 +85,16 @@ type (
 
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
-		ShardID          int
-		DomainID         UUID
-		WorkflowID       string
-		RunID            UUID
-		NextEventID      int64
-		LastWriteVersion int64
-		Data             []byte
-		DataEncoding     string
+		ShardID                  int
+		DomainID                 UUID
+		WorkflowID               string
+		RunID                    UUID
+		NextEventID              int64
+		LastWriteVersion         int64
+		Data                     []byte
+		DataEncoding             string
+		VersionHistories         []byte
+		VersionHistoriesEncoding string
 	}
 
 	// ExecutionsFilter contains the column names within domain table that

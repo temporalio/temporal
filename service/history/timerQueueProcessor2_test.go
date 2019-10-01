@@ -117,7 +117,8 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 					{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
-			TableVersion: persistence.DomainTableVersionV1,
+			FailoverVersion: common.EmptyVersion,
+			TableVersion:    persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -126,7 +127,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
 	s.mockEventsCache = &MockEventsCache{}
 
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger)
@@ -225,7 +226,7 @@ func (s *timerQueueProcessor2Suite) stopProcessor() {
 
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("timer-update-timesout-test"),
-		RunId: common.StringPtr(validRunID)}
+		RunId: common.StringPtr(testRunID)}
 
 	taskList := "user-timer-update-times-out"
 
@@ -239,7 +240,6 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	}
 	_, _ = builder.AddWorkflowExecutionStartedEvent(
-		s.domainEntry,
 		we,
 		&history.StartWorkflowExecutionRequest{
 			DomainUUID:   common.StringPtr(s.domainID),
@@ -258,7 +258,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	timerTask := &persistence.TimerTaskInfo{
 		DomainID:   s.domainID,
 		WorkflowID: "wid",
-		RunID:      validRunID,
+		RunID:      testRunID,
 		TaskID:     taskID,
 		TaskType:   persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: mockTS.Now(),
@@ -301,7 +301,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
-		RunId: common.StringPtr(validRunID)}
+		RunId: common.StringPtr(testRunID)}
 	taskList := "task-workflow-times-out"
 
 	builder := newMutableStateBuilderWithEventV2(s.mockShard, s.mockEventsCache, s.logger, we.GetRunId())
@@ -314,7 +314,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	}
 	_, _ = builder.AddWorkflowExecutionStartedEvent(
-		s.domainEntry,
 		we,
 		&history.StartWorkflowExecutionRequest{
 			DomainUUID:   common.StringPtr(s.domainID),
@@ -333,7 +332,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	timerTask := &persistence.TimerTaskInfo{
 		DomainID:            s.domainID,
 		WorkflowID:          "wid",
-		RunID:               validRunID,
+		RunID:               testRunID,
 		TaskID:              taskID,
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
 		VisibilityTimestamp: mockTS.Now(),
@@ -377,7 +376,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
-		RunId: common.StringPtr(validRunID)}
+		RunId: common.StringPtr(testRunID)}
 	taskList := "task-workflow-times-out"
 	schedule := "@every 30s"
 
@@ -392,7 +391,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 		CronSchedule:                        &schedule,
 	}
 	_, _ = builder.AddWorkflowExecutionStartedEvent(
-		s.domainEntry,
 		we,
 		&history.StartWorkflowExecutionRequest{
 			DomainUUID:   common.StringPtr(s.domainID),
@@ -411,7 +409,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout_Cron() {
 	timerTask := &persistence.TimerTaskInfo{
 		DomainID:            s.domainID,
 		WorkflowID:          "wid",
-		RunID:               validRunID,
+		RunID:               testRunID,
 		TaskID:              taskID,
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
 		VisibilityTimestamp: mockTS.Now(),

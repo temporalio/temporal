@@ -30,6 +30,8 @@ import (
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
+
 	"go.uber.org/yarpc"
 )
 
@@ -70,5 +72,7 @@ type (
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		GetArchiverProvider() provider.ArchiverProvider
+
+		GetPayloadSerializer() persistence.PayloadSerializer
 	}
 )

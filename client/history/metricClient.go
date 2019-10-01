@@ -115,6 +115,23 @@ func (c *metricClient) GetMutableState(
 	return resp, err
 }
 
+func (c *metricClient) PollMutableState(
+	context context.Context,
+	request *h.PollMutableStateRequest,
+	opts ...yarpc.CallOption) (*h.PollMutableStateResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientPollMutableStateScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientPollMutableStateScope, metrics.CadenceClientLatency)
+	resp, err := c.client.PollMutableState(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientPollMutableStateScope, metrics.CadenceClientFailures)
+	}
+
+	return resp, err
+}
+
 func (c *metricClient) ResetStickyTaskList(
 	context context.Context,
 	request *h.ResetStickyTaskListRequest,
@@ -455,6 +472,23 @@ func (c *metricClient) ReplicateRawEvents(
 	return err
 }
 
+func (c *metricClient) ReplicateEventsV2(
+	context context.Context,
+	request *h.ReplicateEventsV2Request,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsV2Scope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientReplicateEventsV2Scope, metrics.CadenceClientLatency)
+	err := c.client.ReplicateEventsV2(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsV2Scope, metrics.CadenceClientFailures)
+	}
+
+	return err
+}
+
 func (c *metricClient) SyncShardStatus(
 	context context.Context,
 	request *h.SyncShardStatusRequest,
@@ -523,4 +557,21 @@ func (c *metricClient) QueryWorkflow(
 	}
 
 	return resp, err
+}
+
+func (c *metricClient) ReapplyEvents(
+	ctx context.Context,
+	request *h.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.HistoryClientReapplyEventsScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientReapplyEventsScope, metrics.CadenceClientLatency)
+	err := c.client.ReapplyEvents(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientReapplyEventsScope, metrics.CadenceClientFailures)
+	}
+	return err
 }

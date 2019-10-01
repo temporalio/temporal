@@ -38,9 +38,10 @@ type (
 		lastFirstEventID       int64
 		nextEventID            int64
 		previousStartedEventID int64
-		isWorkflowRunning      bool
-		closeStatus            int
 		timestamp              time.Time
+		currentBranchToken     []byte
+		workflowState          int
+		workflowCloseState     int
 	}
 
 	// Engine represents an interface for managing workflow execution history.
@@ -49,6 +50,7 @@ type (
 
 		StartWorkflowExecution(ctx context.Context, request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
 		GetMutableState(ctx context.Context, request *h.GetMutableStateRequest) (*h.GetMutableStateResponse, error)
+		PollMutableState(ctx context.Context, request *h.PollMutableStateRequest) (*h.PollMutableStateResponse, error)
 		DescribeMutableState(ctx context.Context, request *h.DescribeMutableStateRequest) (*h.DescribeMutableStateResponse, error)
 		ResetStickyTaskList(ctx context.Context, resetRequest *h.ResetStickyTaskListRequest) (*h.ResetStickyTaskListResponse, error)
 		DescribeWorkflowExecution(ctx context.Context, request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
@@ -70,10 +72,12 @@ type (
 		RecordChildExecutionCompleted(ctx context.Context, request *h.RecordChildExecutionCompletedRequest) error
 		ReplicateEvents(ctx context.Context, request *h.ReplicateEventsRequest) error
 		ReplicateRawEvents(ctx context.Context, request *h.ReplicateRawEventsRequest) error
+		ReplicateEventsV2(ctx context.Context, request *h.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *h.SyncActivityRequest) error
 		GetReplicationMessages(ctx context.Context, taskID int64) (*replicator.ReplicationMessages, error)
 		QueryWorkflow(ctx context.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
+		ReapplyEvents(ctx context.Context, domainUUID string, workflowID string, events []*workflow.HistoryEvent) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -94,7 +98,7 @@ type (
 	// ReplicatorQueueProcessor is the interface for replicator queue processor
 	ReplicatorQueueProcessor interface {
 		queueProcessor
-		getTasks(readLevel int64) (*replicator.ReplicationMessages, error)
+		getTasks(ctx context.Context, readLevel int64) (*replicator.ReplicationMessages, error)
 	}
 
 	queueAckMgr interface {

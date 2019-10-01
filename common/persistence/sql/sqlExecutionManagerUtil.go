@@ -40,9 +40,20 @@ func applyWorkflowMutationTx(
 ) error {
 
 	executionInfo := workflowMutation.ExecutionInfo
+	replicationState := workflowMutation.ReplicationState
+	versionHistories := workflowMutation.VersionHistories
+	startVersion := workflowMutation.StartVersion
+	lastWriteVersion := workflowMutation.LastWriteVersion
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
+
+	// TODO remove once 2DC is deprecated
+	//  since current version is only used by 2DC
+	currentVersion := lastWriteVersion
+	if replicationState != nil {
+		currentVersion = replicationState.CurrentVersion
+	}
 
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
 	if err := lockAndCheckNextEventID(tx,
@@ -63,7 +74,11 @@ func applyWorkflowMutationTx(
 
 	if err := updateExecution(tx,
 		executionInfo,
-		workflowMutation.ReplicationState,
+		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
@@ -94,7 +109,7 @@ func applyWorkflowMutationTx(
 	}
 
 	if err := updateTimerInfos(tx,
-		workflowMutation.UpserTimerInfos,
+		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
 		shardID,
 		domainID,
@@ -186,9 +201,19 @@ func applyWorkflowSnapshotTxAsReset(
 
 	executionInfo := workflowSnapshot.ExecutionInfo
 	replicationState := workflowSnapshot.ReplicationState
+	versionHistories := workflowSnapshot.VersionHistories
+	startVersion := workflowSnapshot.StartVersion
+	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
+
+	// TODO remove once 2DC is deprecated
+	//  since current version is only used by 2DC
+	currentVersion := lastWriteVersion
+	if replicationState != nil {
+		currentVersion = replicationState.CurrentVersion
+	}
 
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
 	if err := lockAndCheckNextEventID(tx,
@@ -210,6 +235,10 @@ func applyWorkflowSnapshotTxAsReset(
 	if err := updateExecution(tx,
 		executionInfo,
 		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
@@ -343,7 +372,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear signals requested set. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear signals requested set. Error: %v", err),
 		}
 	}
 
@@ -355,7 +384,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into signals requested set after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into signals requested set after clearing. Error: %v", err),
 		}
 	}
 
@@ -365,7 +394,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to clear buffered events. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to clear buffered events. Error: %v", err),
 		}
 	}
 	return nil
@@ -379,16 +408,30 @@ func applyWorkflowSnapshotTxAsNew(
 
 	executionInfo := workflowSnapshot.ExecutionInfo
 	replicationState := workflowSnapshot.ReplicationState
+	versionHistories := workflowSnapshot.VersionHistories
+	startVersion := workflowSnapshot.StartVersion
+	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
 	runID := sqldb.MustParseUUID(executionInfo.RunID)
 
+	// TODO remove once 2DC is deprecated
+	//  since current version is only used by 2DC
+	currentVersion := lastWriteVersion
+	if replicationState != nil {
+		currentVersion = replicationState.CurrentVersion
+	}
+
 	if err := createExecution(tx,
 		executionInfo,
 		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
 		shardID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to update executions row. Erorr: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 		}
 	}
 
@@ -411,7 +454,7 @@ func applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -423,7 +466,7 @@ func applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into timer info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into timer info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -435,7 +478,7 @@ func applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -447,7 +490,7 @@ func applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into request cancel info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into request cancel info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -459,7 +502,7 @@ func applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into signal info map after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into signal info map after clearing. Error: %v", err),
 		}
 	}
 
@@ -471,7 +514,7 @@ func applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runID); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into signals requested set after clearing. Error: %v", err),
+			Message: fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Failed to insert into signals requested set after clearing. Error: %v", err),
 		}
 	}
 
@@ -557,7 +600,7 @@ func lockCurrentExecutionIfExists(
 
 func createOrUpdateCurrentExecution(
 	tx sqldb.Tx,
-	createMode int,
+	createMode p.CreateWorkflowMode,
 	shardID int,
 	domainID sqldb.UUID,
 	workflowID string,
@@ -565,7 +608,8 @@ func createOrUpdateCurrentExecution(
 	state int,
 	closeStatus int,
 	createRequestID string,
-	replicationState *p.ReplicationState,
+	startVersion int64,
+	lastWriteVersion int64,
 ) error {
 
 	row := sqldb.CurrentExecutionsRow{
@@ -576,13 +620,8 @@ func createOrUpdateCurrentExecution(
 		CreateRequestID:  createRequestID,
 		State:            state,
 		CloseStatus:      closeStatus,
-		StartVersion:     common.EmptyVersion,
-		LastWriteVersion: common.EmptyVersion,
-	}
-
-	if replicationState != nil {
-		row.StartVersion = replicationState.StartVersion
-		row.LastWriteVersion = replicationState.LastWriteVersion
+		StartVersion:     startVersion,
+		LastWriteVersion: lastWriteVersion,
 	}
 
 	switch createMode {
@@ -622,6 +661,8 @@ func createOrUpdateCurrentExecution(
 				Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Failed to insert into current_executions table. Error: %v", err),
 			}
 		}
+	case p.CreateWorkflowModeZombie:
+		// noop
 	default:
 		return fmt.Errorf("Unknown workflow creation mode: %v", createMode)
 	}
@@ -987,6 +1028,23 @@ func createTimerTasks(
 	return nil
 }
 
+func assertNotCurrentExecution(
+	tx sqldb.Tx,
+	shardID int,
+	domainID sqldb.UUID,
+	workflowID string,
+	runID sqldb.UUID,
+) error {
+
+	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
+		return assertRunIDMismatch(runID, currentRow.RunID)
+	}
+	if err := assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn); err != nil {
+		return err
+	}
+	return nil
+}
+
 func assertRunIDAndUpdateCurrentExecution(
 	tx sqldb.Tx,
 	shardID int,
@@ -1086,6 +1144,18 @@ func assertCurrentExecution(
 	return assertFn(currentRow)
 }
 
+func assertRunIDMismatch(runID sqldb.UUID, currentRunID sqldb.UUID) error {
+	// zombie workflow creation with existence of current record, this is a noop
+	if bytes.Equal(currentRunID, runID) {
+		return &p.ConditionFailedError{Msg: fmt.Sprintf(
+			"Assert not current record failed failed. Current run ID was %v, input %v",
+			currentRunID,
+			runID,
+		)}
+	}
+	return nil
+}
+
 func updateCurrentExecution(
 	tx sqldb.Tx,
 	shardID int,
@@ -1132,10 +1202,13 @@ func updateCurrentExecution(
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
+	versionHistories *p.DataBlob,
+	startVersion int64,
+	lastWriteVersion int64,
+	currentVersion int64,
 	shardID int,
 ) (row *sqldb.ExecutionsRow, err error) {
 
-	lastWriteVersion := common.EmptyVersion
 	info := &sqlblobs.WorkflowExecutionInfo{
 		TaskList:                                &executionInfo.TaskList,
 		WorkflowTypeName:                        &executionInfo.WorkflowTypeName,
@@ -1190,14 +1263,23 @@ func buildExecutionRow(
 		info.CompletionEvent = completionEvent.Data
 		info.CompletionEventEncoding = common.StringPtr(string(completionEvent.Encoding))
 	}
-	if replicationState != nil {
-		lastWriteVersion = replicationState.LastWriteVersion
-		info.StartVersion = &replicationState.StartVersion
-		info.CurrentVersion = &replicationState.CurrentVersion
+
+	info.StartVersion = &startVersion
+	info.CurrentVersion = &currentVersion
+	if replicationState == nil && versionHistories == nil {
+		// this is allowed
+	} else if replicationState != nil {
 		info.LastWriteEventID = &replicationState.LastWriteEventID
 		info.LastReplicationInfo = make(map[string]*sqlblobs.ReplicationInfo, len(replicationState.LastReplicationInfo))
 		for k, v := range replicationState.LastReplicationInfo {
 			info.LastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
+		}
+	} else if versionHistories != nil {
+		info.VersionHistories = versionHistories.Data
+		info.VersionHistoriesEncoding = common.StringPtr(string(versionHistories.GetEncoding()))
+	} else {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("build workflow execution with both version histories and replication state."),
 		}
 	}
 
@@ -1235,6 +1317,10 @@ func createExecution(
 	tx sqldb.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
+	versionHistories *p.DataBlob,
+	startVersion int64,
+	lastWriteVersion int64,
+	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1249,7 +1335,15 @@ func createExecution(
 	executionInfo.StartTimestamp = time.Now()
 	executionInfo.LastUpdatedTimestamp = executionInfo.StartTimestamp
 
-	row, err := buildExecutionRow(executionInfo, replicationState, shardID)
+	row, err := buildExecutionRow(
+		executionInfo,
+		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
+		shardID,
+	)
 	if err != nil {
 		return err
 	}
@@ -1278,6 +1372,10 @@ func updateExecution(
 	tx sqldb.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
+	versionHistories *p.DataBlob,
+	startVersion int64,
+	lastWriteVersion int64,
+	currentVersion int64,
 	shardID int,
 ) error {
 
@@ -1291,7 +1389,15 @@ func updateExecution(
 	// TODO we should set the last update time on business logic layer
 	executionInfo.LastUpdatedTimestamp = time.Now()
 
-	row, err := buildExecutionRow(executionInfo, replicationState, shardID)
+	row, err := buildExecutionRow(
+		executionInfo,
+		replicationState,
+		versionHistories,
+		startVersion,
+		lastWriteVersion,
+		currentVersion,
+		shardID,
+	)
 	if err != nil {
 		return err
 	}

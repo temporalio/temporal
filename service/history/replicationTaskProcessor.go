@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/yarpc/yarpcerrors"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	r "github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -34,7 +36,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/service/worker/replicator"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 const (
@@ -202,14 +203,22 @@ Loop:
 }
 
 func (p *ReplicationTaskProcessor) processTask(replicationTask *r.ReplicationTask) {
-	err := backoff.Retry(func() error {
-		return p.processTaskOnce(replicationTask)
-	}, p.retryPolicy, isTransientRetryableError)
+	var err error
 
-	if err != nil {
-		// TODO: insert into our own dlq in cadence persistence?
-		// p.nackMsg(msg, err, logger)
-		p.logger.Error("Failed to apply replication task after retry.", tag.TaskID(replicationTask.GetSourceTaskId()))
+	for execute := true; execute; execute = err != nil {
+		err = backoff.Retry(func() error {
+			return p.processTaskOnce(replicationTask)
+		}, p.retryPolicy, isTransientRetryableError)
+
+		if err != nil {
+			// TODO: insert into our own dlq in cadence persistence?
+			// p.nackMsg(msg, err, logger)
+			p.logger.Error(
+				"Failed to apply replication task after retry.",
+				tag.TaskID(replicationTask.GetSourceTaskId()),
+				tag.Error(err),
+			)
+		}
 	}
 }
 
@@ -231,6 +240,9 @@ func (p *ReplicationTaskProcessor) processTaskOnce(replicationTask *r.Replicatio
 		err = p.handleHistoryReplicationTask(replicationTask)
 	case r.ReplicationTaskTypeHistoryMetadata:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
+	case r.ReplicationTaskTypeHistoryV2:
+		scope = metrics.HistoryReplicationTaskV2Scope
+		err = p.handleHistoryReplicationTaskV2(replicationTask)
 	default:
 		p.logger.Error("Unknown task type.")
 		scope = metrics.ReplicatorScope
@@ -324,10 +336,30 @@ func (p *ReplicationTaskProcessor) handleHistoryReplicationTask(task *r.Replicat
 		EventStoreVersion:       attr.EventStoreVersion,
 		NewRunEventStoreVersion: attr.NewRunEventStoreVersion,
 		ResetWorkflow:           attr.ResetWorkflow,
+		NewRunNDC:               attr.NewRunNDC,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
 	return p.historyEngine.ReplicateEvents(ctx, request)
+}
+
+func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(task *r.ReplicationTask) error {
+	attr := task.HistoryTaskV2Attributes
+	request := &h.ReplicateEventsV2Request{
+		DomainUUID: attr.DomainId,
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: attr.WorkflowId,
+			RunId:      attr.RunId,
+		},
+		VersionHistoryItems: attr.VersionHistoryItems,
+		Events:              attr.Events,
+		// new run events does not need version history since there is no prior events
+		NewRunEvents:  attr.NewRunEvents,
+		ResetWorkflow: attr.ResetWorkflow,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	defer cancel()
+	return p.historyEngine.ReplicateEventsV2(ctx, request)
 }
 
 func (p *ReplicationTaskProcessor) handleSyncShardTask(task *r.ReplicationTask) error {

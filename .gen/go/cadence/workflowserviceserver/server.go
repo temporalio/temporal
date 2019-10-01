@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -120,6 +120,11 @@ type Interface interface {
 		ctx context.Context,
 		QueryRequest *shared.QueryWorkflowRequest,
 	) (*shared.QueryWorkflowResponse, error)
+
+	ReapplyEvents(
+		ctx context.Context,
+		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	) error
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -426,6 +431,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "ReapplyEvents",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ReapplyEvents),
+				},
+				Signature:    "ReapplyEvents(ReapplyEventsRequest *shared.ReapplyEventsRequest)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RecordActivityTaskHeartbeat",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -658,7 +674,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 37)
+	procedures := make([]transport.Procedure, 0, 39)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -979,6 +995,25 @@ func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Res
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_QueryWorkflow_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ReapplyEvents(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_ReapplyEvents_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ReapplyEvents(ctx, args.ReapplyEventsRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_ReapplyEvents_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {
