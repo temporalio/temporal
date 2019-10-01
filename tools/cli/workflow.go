@@ -149,6 +149,14 @@ func newWorkflowCommands() []cli.Command {
 			},
 		},
 		{
+			Name:  "listarchived",
+			Usage: "list archived workflow executions",
+			Flags: getFlagsForListArchived(),
+			Action: func(c *cli.Context) {
+				ListArchivedWorkflow(c)
+			},
+		},
+		{
 			Name:    "scan",
 			Aliases: []string{"sc", "scanall"},
 			Usage: "scan workflow executions (need to enable Cadence server on ElasticSearch). " +

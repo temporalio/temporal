@@ -113,15 +113,14 @@ func newDomainCommands() []cli.Command {
 					Name:  FlagHistoryArchivalURIWithAlias,
 					Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 				},
-				// TODO ycyang: uncomment once visibility archival is implemented
-				// cli.StringFlag{
-				// 	Name:  FlagVisibilityArchivalStatusWithAlias,
-				// 	Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
-				// },
-				// cli.StringFlag{
-				// 	Name:  FlagVisibilityArchivalURIWithAlias,
-				// 	Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
-				// },
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalStatusWithAlias,
+					Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+				},
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalURIWithAlias,
+					Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
+				},
 			},
 			Action: func(c *cli.Context) {
 				RegisterDomain(c)
@@ -172,15 +171,14 @@ func newDomainCommands() []cli.Command {
 					Name:  FlagHistoryArchivalURIWithAlias,
 					Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 				},
-				// TODO ycyang: uncomment once visibility archival is implemented
-				// cli.StringFlag{
-				// 	Name:  FlagVisibilityArchivalStatusWithAlias,
-				// 	Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
-				// },
-				// cli.StringFlag{
-				// 	Name:  FlagVisibilityArchivalURIWithAlias,
-				// 	Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
-				// },
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalStatusWithAlias,
+					Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
+				},
+				cli.StringFlag{
+					Name:  FlagVisibilityArchivalURIWithAlias,
+					Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
+				},
 				cli.StringFlag{
 					Name:  FlagAddBadBinary,
 					Usage: "Binary checksum to add for resetting workflow",

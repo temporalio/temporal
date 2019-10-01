@@ -210,11 +210,11 @@ func getFlagsForShowID() []cli.Flag {
 	return []cli.Flag{
 		cli.BoolFlag{
 			Name:  FlagPrintDateTimeWithAlias,
-			Usage: "Print time stamp",
+			Usage: "Print timestamp",
 		},
 		cli.BoolFlag{
 			Name:  FlagPrintRawTimeWithAlias,
-			Usage: "Print raw time stamp",
+			Usage: "Print raw timestamp",
 		},
 		cli.StringFlag{
 			Name:  FlagOutputFilenameWithAlias,
@@ -335,6 +335,35 @@ func getFlagsForRun() []cli.Flag {
 	return flagsForRun
 }
 
+func getCommonFlagsForVisibility() []cli.Flag {
+	return []cli.Flag{
+		cli.BoolFlag{
+			Name:  FlagPrintRawTimeWithAlias,
+			Usage: "Print raw timestamp",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintDateTimeWithAlias,
+			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintMemoWithAlias,
+			Usage: "Print memo",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintSearchAttrWithAlias,
+			Usage: "Print search attributes",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintFullyDetailWithAlias,
+			Usage: "Print full message without table format",
+		},
+		cli.BoolFlag{
+			Name:  FlagPrintJSONWithAlias,
+			Usage: "Print in raw json format",
+		},
+	}
+}
+
 func getFlagsForList() []cli.Flag {
 	flagsForList := []cli.Flag{
 		cli.BoolFlag{
@@ -352,7 +381,7 @@ func getFlagsForList() []cli.Flag {
 }
 
 func getFlagsForListAll() []cli.Flag {
-	return []cli.Flag{
+	flagsForListAll := []cli.Flag{
 		cli.BoolFlag{
 			Name:  FlagOpenWithAlias,
 			Usage: "List for open workflow executions, default is to list for closed ones",
@@ -373,30 +402,6 @@ func getFlagsForListAll() []cli.Flag {
 			Name:  FlagWorkflowTypeWithAlias,
 			Usage: "WorkflowTypeName",
 		},
-		cli.BoolFlag{
-			Name:  FlagPrintRawTimeWithAlias,
-			Usage: "Print raw time stamp",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintDateTimeWithAlias,
-			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintMemoWithAlias,
-			Usage: "Print memo",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintSearchAttrWithAlias,
-			Usage: "Print search attributes",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintFullyDetailWithAlias,
-			Usage: "Print full message without table format",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintJSONWithAlias,
-			Usage: "Print in raw json format",
-		},
 		cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,
 			Usage: "Closed workflow status [completed, failed, canceled, terminated, continuedasnew, timedout]",
@@ -407,44 +412,44 @@ func getFlagsForListAll() []cli.Flag {
 				"[open, earliest_time, latest_time, workflow_id, workflow_type]",
 		},
 	}
+	flagsForListAll = append(getCommonFlagsForVisibility(), flagsForListAll...)
+	return flagsForListAll
 }
 
 func getFlagsForScan() []cli.Flag {
-	return []cli.Flag{
+	flagsForScan := []cli.Flag{
 		cli.IntFlag{
 			Name:  FlagPageSizeWithAlias,
 			Value: 2000,
 			Usage: "Page size for each Scan API call",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintRawTimeWithAlias,
-			Usage: "Print raw time stamp",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintDateTimeWithAlias,
-			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintMemoWithAlias,
-			Usage: "Print memo",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintSearchAttrWithAlias,
-			Usage: "Print search attributes",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintFullyDetailWithAlias,
-			Usage: "Print full message without table format",
-		},
-		cli.BoolFlag{
-			Name:  FlagPrintJSONWithAlias,
-			Usage: "Print in raw json format",
 		},
 		cli.StringFlag{
 			Name:  FlagListQueryWithAlias,
 			Usage: "Optional SQL like query",
 		},
 	}
+	flagsForScan = append(getCommonFlagsForVisibility(), flagsForScan...)
+	return flagsForScan
+}
+
+func getFlagsForListArchived() []cli.Flag {
+	flagsForListArchived := []cli.Flag{
+		cli.StringFlag{
+			Name:  FlagListQueryWithAlias,
+			Usage: "SQL like query. Please check the documentation of the visibility archiver used by your domain for detailed instructions",
+		},
+		cli.IntFlag{
+			Name:  FlagPageSizeWithAlias,
+			Value: 100,
+			Usage: "Count of visibility records included in a single page",
+		},
+		cli.BoolFlag{
+			Name:  FlagMoreWithAlias,
+			Usage: "List more pages, default is to list one page of default page size 10",
+		},
+	}
+	flagsForListArchived = append(getCommonFlagsForVisibility(), flagsForListArchived...)
+	return flagsForListArchived
 }
 
 func getFlagsForCount() []cli.Flag {

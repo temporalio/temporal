@@ -474,6 +474,13 @@ func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowType() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestListArchivedWorkflow() {
+	resp := &shared.ListArchivedWorkflowExecutionsResponse{}
+	s.clientFrontendClient.EXPECT().ListArchivedWorkflowExecutions(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "listarchived", "-q", "some query string", "-m"})
+	s.Nil(err)
+}
+
 func (s *cliAppSuite) TestCountWorkflow() {
 	resp := &shared.CountWorkflowExecutionsResponse{}
 	s.clientFrontendClient.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
