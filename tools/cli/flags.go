@@ -189,6 +189,12 @@ const (
 	FlagJobID                             = "job_id"
 	FlagJobIDWithAlias                    = FlagJobID + ", jid"
 	FlagYes                               = "yes"
+	FlagServiceConfigDir                  = "service_config_dir"
+	FlagServiceConfigDirWithAlias         = FlagServiceConfigDir + ", scd"
+	FlagServiceEnv                        = "service_env"
+	FlagServiceEnvWithAlias               = FlagServiceEnv + ", se"
+	FlagServiceZone                       = "service_zone"
+	FlagServiceZoneWithAlias              = FlagServiceZone + ", sz"
 )
 
 var flagsForExecution = []cli.Flag{

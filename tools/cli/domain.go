@@ -68,146 +68,27 @@ func newDomainCommands() []cli.Command {
 			Name:    "register",
 			Aliases: []string{"re"},
 			Usage:   "Register workflow domain",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagDescriptionWithAlias,
-					Usage: "Domain description",
-				},
-				cli.StringFlag{
-					Name:  FlagOwnerEmailWithAlias,
-					Usage: "Owner email",
-				},
-				cli.StringFlag{
-					Name:  FlagRetentionDaysWithAlias,
-					Usage: "Workflow execution retention in days",
-				},
-				cli.StringFlag{
-					Name:  FlagEmitMetricWithAlias,
-					Usage: "Flag to emit metric",
-				},
-				cli.StringFlag{
-					Name:  FlagActiveClusterNameWithAlias,
-					Usage: "Active cluster name",
-				},
-				cli.StringFlag{ // use StringFlag instead of buggy StringSliceFlag
-					Name:  FlagClustersWithAlias,
-					Usage: "Clusters",
-				},
-				cli.StringFlag{
-					Name:  FlagIsGlobalDomainWithAlias,
-					Usage: "Flag to indicate whether domain is a global domain",
-				},
-				cli.StringFlag{
-					Name:  FlagDomainDataWithAlias,
-					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
-				},
-				cli.StringFlag{
-					Name:  FlagSecurityTokenWithAlias,
-					Usage: "Security token with permission",
-				},
-				cli.StringFlag{
-					Name:  FlagHistoryArchivalStatusWithAlias,
-					Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
-				},
-				cli.StringFlag{
-					Name:  FlagHistoryArchivalURIWithAlias,
-					Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagVisibilityArchivalStatusWithAlias,
-					Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
-				},
-				cli.StringFlag{
-					Name:  FlagVisibilityArchivalURIWithAlias,
-					Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
-				},
-			},
+			Flags:   registerDomainFlags,
 			Action: func(c *cli.Context) {
-				RegisterDomain(c)
+				newDomainCLI(c, false).RegisterDomain(c)
 			},
 		},
 		{
 			Name:    "update",
 			Aliases: []string{"up", "u"},
 			Usage:   "Update existing workflow domain",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagDescriptionWithAlias,
-					Usage: "Domain description",
-				},
-				cli.StringFlag{
-					Name:  FlagOwnerEmailWithAlias,
-					Usage: "Owner email",
-				},
-				cli.StringFlag{
-					Name:  FlagRetentionDaysWithAlias,
-					Usage: "Workflow execution retention in days",
-				},
-				cli.StringFlag{
-					Name:  FlagEmitMetricWithAlias,
-					Usage: "Flag to emit metric",
-				},
-				cli.StringFlag{
-					Name:  FlagActiveClusterNameWithAlias,
-					Usage: "Active cluster name",
-				},
-				cli.StringFlag{ // use StringFlag instead of buggy StringSliceFlag
-					Name:  FlagClustersWithAlias,
-					Usage: "Clusters",
-				},
-				cli.StringFlag{
-					Name:  FlagDomainDataWithAlias,
-					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
-				},
-				cli.StringFlag{
-					Name:  FlagSecurityTokenWithAlias,
-					Usage: "Security token with permission ",
-				},
-				cli.StringFlag{
-					Name:  FlagHistoryArchivalStatusWithAlias,
-					Usage: "Flag to set history archival status, valid values are \"disabled\" and \"enabled\"",
-				},
-				cli.StringFlag{
-					Name:  FlagHistoryArchivalURIWithAlias,
-					Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagVisibilityArchivalStatusWithAlias,
-					Usage: "Flag to set visibility archival status, valid values are \"disabled\" and \"enabled\"",
-				},
-				cli.StringFlag{
-					Name:  FlagVisibilityArchivalURIWithAlias,
-					Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagAddBadBinary,
-					Usage: "Binary checksum to add for resetting workflow",
-				},
-				cli.StringFlag{
-					Name:  FlagRemoveBadBinary,
-					Usage: "Binary checksum to remove for resetting workflow",
-				},
-				cli.StringFlag{
-					Name:  FlagReason,
-					Usage: "Reason for the operation",
-				},
-			},
+			Flags:   updateDomainFlags,
 			Action: func(c *cli.Context) {
-				UpdateDomain(c)
+				newDomainCLI(c, false).UpdateDomain(c)
 			},
 		},
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
 			Usage:   "Describe existing workflow domain",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagDomainID,
-					Usage: "Domain UUID (required if not specify domainName)",
-				},
-			},
+			Flags:   describeDomainFlags,
 			Action: func(c *cli.Context) {
-				DescribeDomain(c)
+				newDomainCLI(c, false).DescribeDomain(c)
 			},
 		},
 	}

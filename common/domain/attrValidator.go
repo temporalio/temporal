@@ -36,6 +36,7 @@ type (
 	}
 )
 
+// newAttrValidator create a new domain attr validator
 func newAttrValidator(
 	clusterMetadata cluster.Metadata,
 	minRetentionDays int32,

@@ -21,6 +21,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -28,16 +29,46 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
+	serviceFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/domain"
 	"github.com/urfave/cli"
 	s "go.uber.org/cadence/.gen/go/shared"
 )
 
+type (
+	domainCLIImpl struct {
+		// used when making RPC call to frontend service
+		frontendClient serviceFrontend.Interface
+
+		// act as admin to modify domain in DB directly
+		domainHandler domain.Handler
+	}
+)
+
+// newDomainCLI creates a domain CLI
+func newDomainCLI(
+	c *cli.Context,
+	isAdminMode bool,
+) *domainCLIImpl {
+
+	var frontendClient serviceFrontend.Interface
+	var domainHandler domain.Handler
+	if !isAdminMode {
+		frontendClient = initializeFrontendClient(c)
+	} else {
+		domainHandler = initializeAdminDomainHandler(c)
+	}
+	return &domainCLIImpl{
+		frontendClient: frontendClient,
+		domainHandler:  domainHandler,
+	}
+}
+
 // RegisterDomain register a domain
-func RegisterDomain(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
+func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
+	domainName := getRequiredGlobalOption(c, FlagDomain)
 
 	description := c.String(FlagDescription)
 	ownerEmail := c.String(FlagOwnerEmail)
@@ -98,7 +129,7 @@ func RegisterDomain(c *cli.Context) {
 	}
 
 	request := &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domain),
+		Name:                                   common.StringPtr(domainName),
 		Description:                            common.StringPtr(description),
 		OwnerEmail:                             common.StringPtr(ownerEmail),
 		Data:                                   domainData,
@@ -116,22 +147,21 @@ func RegisterDomain(c *cli.Context) {
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	err = frontendClient.RegisterDomain(ctx, request)
+	err = d.registerDomain(ctx, request)
 	if err != nil {
 		if _, ok := err.(*s.DomainAlreadyExistsError); !ok {
 			ErrorAndExit("Register Domain operation failed.", err)
 		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domain), err)
+			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), err)
 		}
 	} else {
-		fmt.Printf("Domain %s successfully registered.\n", domain)
+		fmt.Printf("Domain %s successfully registered.\n", domainName)
 	}
 }
 
 // UpdateDomain updates a domain
-func UpdateDomain(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
+func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
+	domainName := getRequiredGlobalOption(c, FlagDomain)
 
 	var updateRequest *shared.UpdateDomainRequest
 	ctx, cancel := newContext(c)
@@ -144,18 +174,18 @@ func UpdateDomain(c *cli.Context) {
 			ActiveClusterName: common.StringPtr(activeCluster),
 		}
 		updateRequest = &shared.UpdateDomainRequest{
-			Name:                     common.StringPtr(domain),
+			Name:                     common.StringPtr(domainName),
 			ReplicationConfiguration: replicationConfig,
 		}
 	} else {
-		resp, err := frontendClient.DescribeDomain(ctx, &shared.DescribeDomainRequest{
-			Name: common.StringPtr(domain),
+		resp, err := d.describeDomain(ctx, &shared.DescribeDomainRequest{
+			Name: common.StringPtr(domainName),
 		})
 		if err != nil {
 			if _, ok := err.(*shared.EntityNotExistsError); !ok {
 				ErrorAndExit("Operation UpdateDomain failed.", err)
 			} else {
-				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
+				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 			}
 			return
 		}
@@ -242,7 +272,7 @@ func UpdateDomain(c *cli.Context) {
 			Clusters: clusters,
 		}
 		updateRequest = &shared.UpdateDomainRequest{
-			Name:                     common.StringPtr(domain),
+			Name:                     common.StringPtr(domainName),
 			UpdatedInfo:              updateInfo,
 			Configuration:            updateConfig,
 			ReplicationConfiguration: replicationConfig,
@@ -252,20 +282,20 @@ func UpdateDomain(c *cli.Context) {
 
 	securityToken := c.String(FlagSecurityToken)
 	updateRequest.SecurityToken = common.StringPtr(securityToken)
-	_, err := frontendClient.UpdateDomain(ctx, updateRequest)
+	_, err := d.updateDomain(ctx, updateRequest)
 	if err != nil {
 		if _, ok := err.(*s.EntityNotExistsError); !ok {
 			ErrorAndExit("Operation UpdateDomain failed.", err)
 		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domain), err)
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 		}
 	} else {
-		fmt.Printf("Domain %s successfully updated.\n", domain)
+		fmt.Printf("Domain %s successfully updated.\n", domainName)
 	}
 }
 
 // DescribeDomain updates a domain
-func DescribeDomain(c *cli.Context) {
+func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 	domainName := c.GlobalString(FlagDomain)
 	domainID := c.String(FlagDomainID)
 
@@ -274,8 +304,7 @@ func DescribeDomain(c *cli.Context) {
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	frontendClient := cFactory.ServerFrontendClient(c)
-	resp, err := frontendClient.DescribeDomain(ctx, &shared.DescribeDomainRequest{
+	resp, err := d.describeDomain(ctx, &shared.DescribeDomainRequest{
 		Name: common.StringPtr(domainName),
 		UUID: common.StringPtr(domainID),
 	})
@@ -330,6 +359,42 @@ func DescribeDomain(c *cli.Context) {
 		}
 		table.Render()
 	}
+}
+
+func (d *domainCLIImpl) registerDomain(
+	ctx context.Context,
+	request *shared.RegisterDomainRequest,
+) error {
+
+	if d.frontendClient != nil {
+		return d.frontendClient.RegisterDomain(ctx, request)
+	}
+
+	return d.domainHandler.RegisterDomain(ctx, request)
+}
+
+func (d *domainCLIImpl) updateDomain(
+	ctx context.Context,
+	request *shared.UpdateDomainRequest,
+) (*shared.UpdateDomainResponse, error) {
+
+	if d.frontendClient != nil {
+		return d.frontendClient.UpdateDomain(ctx, request)
+	}
+
+	return d.domainHandler.UpdateDomain(ctx, request)
+}
+
+func (d *domainCLIImpl) describeDomain(
+	ctx context.Context,
+	request *shared.DescribeDomainRequest,
+) (*shared.DescribeDomainResponse, error) {
+
+	if d.frontendClient != nil {
+		return d.frontendClient.DescribeDomain(ctx, request)
+	}
+
+	return d.domainHandler.DescribeDomain(ctx, request)
 }
 
 func archivalStatus(c *cli.Context, statusFlagName string) *shared.ArchivalStatus {

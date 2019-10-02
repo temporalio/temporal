@@ -247,6 +247,33 @@ func newAdminHistoryHostCommands() []cli.Command {
 func newAdminDomainCommands() []cli.Command {
 	return []cli.Command{
 		{
+			Name:    "register",
+			Aliases: []string{"re"},
+			Usage:   "Register workflow domain",
+			Flags:   adminRegisterDomainFlags,
+			Action: func(c *cli.Context) {
+				newDomainCLI(c, true).RegisterDomain(c)
+			},
+		},
+		{
+			Name:    "update",
+			Aliases: []string{"up", "u"},
+			Usage:   "Update existing workflow domain",
+			Flags:   adminUpdateDomainFlags,
+			Action: func(c *cli.Context) {
+				newDomainCLI(c, true).UpdateDomain(c)
+			},
+		},
+		{
+			Name:    "describe",
+			Aliases: []string{"desc"},
+			Usage:   "Describe existing workflow domain",
+			Flags:   adminDescribeDomainFlags,
+			Action: func(c *cli.Context) {
+				newDomainCLI(c, true).DescribeDomain(c)
+			},
+		},
+		{
 			Name:    "getdomainidorname",
 			Aliases: []string{"getdn"},
 			Usage:   "Get domainID or domainName",
