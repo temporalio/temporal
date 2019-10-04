@@ -27,9 +27,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
 	"github.com/uber/cadence/.gen/go/admin"
@@ -42,7 +40,6 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -56,7 +53,7 @@ type (
 		targetClusterName string
 
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockMetadataMgr     *mocks.MetadataManager
+		mockDomainCache     *cache.DomainCacheMock
 		mockAdminClient     *adminservicetest.MockClient
 		mockHistoryClient   *historyservicetest.MockClient
 		serializer          persistence.PayloadSerializer
@@ -85,34 +82,34 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
 	s.targetClusterName = "some random target cluster name"
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
-				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{ClusterName: cluster.TestCurrentClusterName},
-				},
+	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
+		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []*persistence.ClusterReplicationConfig{
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
 			},
-			TableVersion: persistence.DomainTableVersionV1,
-		}, nil,
+		},
+		1234,
+		nil,
 	)
+	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil).Maybe()
+	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil).Maybe()
 	s.serializer = persistence.NewPayloadSerializer()
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, loggerimpl.NewNopLogger())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockAdminClient = adminservicetest.NewMockClient(s.controller)
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.rereplicator = NewHistoryRereplicator(
 		s.targetClusterName,
-		domainCache,
+		s.mockDomainCache,
 		s.mockAdminClient,
 		func(ctx context.Context, request *history.ReplicateRawEventsRequest) error {
 			return s.mockHistoryClient.ReplicateRawEvents(ctx, request)

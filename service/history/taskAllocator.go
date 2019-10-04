@@ -21,7 +21,6 @@
 package history
 
 import (
-	"fmt"
 	"sync"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -69,18 +68,18 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskDomainID string, task interface
 		// it is possible that the domain is deleted
 		// we should treat that domain as active
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-			t.logger.Warn("Cannot find domainID", tag.WorkflowDomainID(taskDomainID))
+			t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
 			return false, err
 		}
-		t.logger.Warn("Cannot find domainID: %v, default to process task: %v.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Warn("Cannot find domain, default to process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return true, nil
 	}
 	if domainEntry.IsGlobalDomain() && t.currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
 		// timer task does not belong to cluster name
-		t.logger.Debug(fmt.Sprintf("DomainID: %v is not active, skip task: %v.", taskDomainID, task))
+		t.logger.Debug("Domain is not active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return false, nil
 	}
-	t.logger.Debug(fmt.Sprintf("DomainID: %v is active, process task: %v.", taskDomainID, task))
+	t.logger.Debug("Domain is active, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 	return true, nil
 }
 
@@ -88,10 +87,10 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskDomainID string, task interface
 func (t *taskAllocatorImpl) verifyFailoverActiveTask(targetDomainIDs map[string]struct{}, taskDomainID string, task interface{}) (bool, error) {
 	_, ok := targetDomainIDs[taskDomainID]
 	if ok {
-		t.logger.Debug(fmt.Sprintf("Failover DomainID: %v is active, process task: %v.", taskDomainID, task))
+		t.logger.Debug("Failover Domain is active, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return true, nil
 	}
-	t.logger.Debug(fmt.Sprintf("Failover DomainID: %v is not active, skip task: %v.", taskDomainID, task))
+	t.logger.Debug("Failover Domain is not active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 	return false, nil
 }
 
@@ -105,22 +104,22 @@ func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskDomainI
 		// it is possible that the domain is deleted
 		// we should treat that domain as not active
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-			t.logger.Warn("Cannot find domainID", tag.WorkflowDomainID(taskDomainID))
+			t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
 			return false, err
 		}
-		t.logger.Warn("Cannot find domainID: %v, default to not process task: %v.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Warn("Cannot find domain, default to not process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return false, nil
 	}
 	if !domainEntry.IsGlobalDomain() {
 		// non global domain, timer task does not belong here
-		t.logger.Debug(fmt.Sprintf("DomainID: %v is not global, skip task: %v.", taskDomainID, task))
+		t.logger.Debug("Domain is not global, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return false, nil
 	} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != standbyCluster {
 		// timer task does not belong here
-		t.logger.Debug(fmt.Sprintf("DomainID: %v is not standby, skip task: %v.", taskDomainID, task))
+		t.logger.Debug("Domain is not standby, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 		return false, nil
 	}
-	t.logger.Debug(fmt.Sprintf("DomainID: %v is standby, process task: %v.", taskDomainID, task))
+	t.logger.Debug("Domain is standby, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
 	return true, nil
 }
 

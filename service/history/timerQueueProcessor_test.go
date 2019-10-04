@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
@@ -54,7 +55,6 @@ type (
 		logger         log.Logger
 
 		controller               *gomock.Controller
-		mockMetadataMgr          *mocks.MetadataManager
 		mockVisibilityMgr        *mocks.VisibilityManager
 		mockMatchingClient       *matchingservicetest.MockClient
 		mockClusterMetadata      *mocks.ClusterMetadata

@@ -24,7 +24,6 @@ package domain
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -536,17 +535,7 @@ func (d *HandlerImpl) UpdateDomain(
 			ConfigVersion:               configVersion,
 			FailoverVersion:             failoverVersion,
 			FailoverNotificationVersion: failoverNotificationVersion,
-		}
-
-		switch getResponse.TableVersion {
-		case persistence.DomainTableVersionV1:
-			updateReq.NotificationVersion = getResponse.NotificationVersion
-			updateReq.TableVersion = persistence.DomainTableVersionV1
-		case persistence.DomainTableVersionV2:
-			updateReq.NotificationVersion = notificationVersion
-			updateReq.TableVersion = persistence.DomainTableVersionV2
-		default:
-			return nil, errors.New("domain table version is not set")
+			NotificationVersion:         notificationVersion,
 		}
 		err = d.metadataMgr.UpdateDomain(updateReq)
 		if err != nil {
@@ -608,23 +597,13 @@ func (d *HandlerImpl) DeprecateDomain(
 	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
 	getResponse.Info.Status = persistence.DomainStatusDeprecated
 	updateReq := &persistence.UpdateDomainRequest{
-		Info:              getResponse.Info,
-		Config:            getResponse.Config,
-		ReplicationConfig: getResponse.ReplicationConfig,
-		ConfigVersion:     getResponse.ConfigVersion,
-		FailoverVersion:   getResponse.FailoverVersion,
-	}
-
-	switch getResponse.TableVersion {
-	case persistence.DomainTableVersionV1:
-		updateReq.NotificationVersion = getResponse.NotificationVersion
-		updateReq.TableVersion = persistence.DomainTableVersionV1
-	case persistence.DomainTableVersionV2:
-		updateReq.FailoverNotificationVersion = getResponse.FailoverNotificationVersion
-		updateReq.NotificationVersion = notificationVersion
-		updateReq.TableVersion = persistence.DomainTableVersionV2
-	default:
-		return errors.New("domain table version is not set")
+		Info:                        getResponse.Info,
+		Config:                      getResponse.Config,
+		ReplicationConfig:           getResponse.ReplicationConfig,
+		ConfigVersion:               getResponse.ConfigVersion,
+		FailoverVersion:             getResponse.FailoverVersion,
+		FailoverNotificationVersion: getResponse.FailoverNotificationVersion,
+		NotificationVersion:         notificationVersion,
 	}
 	err = d.metadataMgr.UpdateDomain(updateReq)
 	if err != nil {

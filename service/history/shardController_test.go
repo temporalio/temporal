@@ -53,7 +53,6 @@ type (
 		mockExecutionMgrFactory *mmocks.ExecutionManagerFactory
 		mockHistoryMgr          *mmocks.HistoryManager
 		mockHistoryV2Mgr        *mmocks.HistoryV2Manager
-		mockMetadaraMgr         *mmocks.MetadataManager
 		mockServiceResolver     *mmocks.ServiceResolver
 		mockMessaging           *mmocks.KafkaProducer
 		mockClusterMetadata     *mmocks.ClusterMetadata
@@ -82,7 +81,6 @@ func (s *shardControllerSuite) SetupTest() {
 	s.mockExecutionMgrFactory = &mmocks.ExecutionManagerFactory{}
 	s.mockHistoryMgr = &mmocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mmocks.HistoryV2Manager{}
-	s.mockMetadaraMgr = &mmocks.MetadataManager{}
 	s.mockServiceResolver = &mmocks.ServiceResolver{}
 	s.mockEngineFactory = &MockHistoryEngineFactory{}
 	s.mockMessaging = &mmocks.KafkaProducer{}
@@ -90,9 +88,8 @@ func (s *shardControllerSuite) SetupTest() {
 	s.mockMessagingClient = mmocks.NewMockMessagingClient(s.mockMessaging, nil)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, nil, nil, nil)
-	s.domainCache = cache.NewDomainCache(s.mockMetadaraMgr, s.mockClusterMetadata, s.metricsClient, s.logger)
 	s.controller = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
-		s.mockHistoryMgr, s.mockHistoryV2Mgr, s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+		s.mockHistoryMgr, s.mockHistoryV2Mgr, nil, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
 }
 
 func (s *shardControllerSuite) TearDownTest() {

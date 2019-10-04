@@ -60,7 +60,7 @@ type (
 		controller               *gomock.Controller
 		mockHistoryEngine        *historyEngineImpl
 		mockMatchingClient       *matchingservicetest.MockClient
-		mockMetadataMgr          *mocks.MetadataManager
+		mockDomainCache          *cache.DomainCacheMock
 		mockVisibilityMgr        *mocks.VisibilityManager
 		mockExecutionMgr         *mocks.ExecutionManager
 		mockHistoryMgr           *mocks.HistoryManager
@@ -104,22 +104,11 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	// ack manager will use the domain information
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: "domainID"},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
-				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{ClusterName: cluster.TestCurrentClusterName},
-				},
-			},
-			FailoverVersion: common.EmptyVersion,
-			TableVersion:    persistence.DomainTableVersionV1,
-		},
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(
+		testLocalDomainEntry,
 		nil,
 	)
 	s.mockProducer = &mocks.KafkaProducer{}
@@ -130,7 +119,6 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
 	s.mockEventsCache = &MockEventsCache{}
 
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
 		shardInfo: &persistence.ShardInfo{
@@ -151,7 +139,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
-		domainCache:               domainCache,
+		domainCache:               s.mockDomainCache,
 		eventsCache:               s.mockEventsCache,
 		metricsClient:             metricsClient,
 		timerMaxReadLevelMap:      make(map[string]time.Time),

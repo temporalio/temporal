@@ -302,7 +302,7 @@ func initializeMetadataMgr(
 		metricsClient,
 		logger,
 	)
-	metadata, err := pFactory.NewMetadataManager(persistenceFactory.MetadataV2)
+	metadata, err := pFactory.NewMetadataManager()
 	if err != nil {
 		ErrorAndExit("Unable to initialize metadata manager.", err)
 	}

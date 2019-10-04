@@ -156,7 +156,7 @@ func (s *Service) Start() {
 	}
 	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
 
-	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
+	metadata, err := pFactory.NewMetadataManager()
 	if err != nil {
 		log.Fatal("failed to create metadata manager", tag.Error(err))
 	}

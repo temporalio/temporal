@@ -21,7 +21,6 @@
 package cache
 
 import (
-	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -56,10 +55,9 @@ const (
 	domainCacheInitialSize = 10 * 1024
 	domainCacheMaxSize     = 64 * 1024
 	domainCacheTTL         = 0 // 0 means infinity
-	domainCacheEntryTTL    = 300 * time.Second
 	// DomainCacheRefreshInterval domain cache refresh interval
 	DomainCacheRefreshInterval = 10 * time.Second
-	domainCacheRefreshPageSize = 100
+	domainCacheRefreshPageSize = 200
 
 	domainCacheInitialized int32 = 0
 	domainCacheStarted     int32 = 1
@@ -103,6 +101,10 @@ type (
 		metricsClient   metrics.Client
 		logger          log.Logger
 
+		// refresh lock is used to guarantee at most one
+		// coroutine is doing domain refreshment
+		refreshLock sync.Mutex
+
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int]PrepareCallbackFn
 		callbacks        map[int]CallbackFn
@@ -123,7 +125,7 @@ type (
 		isGlobalDomain              bool
 		failoverNotificationVersion int64
 		notificationVersion         int64
-		expiry                      time.Time
+		initialized                 bool
 	}
 )
 
@@ -161,8 +163,14 @@ func newDomainCache() Cache {
 	return New(domainCacheMaxSize, opts)
 }
 
-func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
-	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
+func newDomainCacheEntry(
+	clusterMetadata cluster.Metadata,
+) *DomainCacheEntry {
+
+	return &DomainCacheEntry{
+		clusterMetadata: clusterMetadata,
+		initialized:     false,
+	}
 }
 
 // NewGlobalDomainCacheEntryForTest returns an entry with test data
@@ -236,7 +244,10 @@ func (c *domainCache) Start() {
 	}
 
 	// initialize the cache by initial scan
-	c.refreshDomains()
+	err := c.refreshDomains()
+	if err != nil {
+		c.logger.Fatal("Unable to initialize domain cache", tag.Error(err))
+	}
 	go c.refreshLoop()
 }
 
@@ -269,8 +280,13 @@ func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
 // WARN: the beforeCallback function will be triggered by domain cache when holding the domain cache lock,
 // make sure the callback function will not call domain cache again in case of dead lock
 // afterCallback will be invoked when NOT holding the domain cache lock.
-func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64,
-	prepareCallback PrepareCallbackFn, callback CallbackFn) {
+func (c *domainCache) RegisterDomainChangeCallback(
+	shard int,
+	initialNotificationVersion int64,
+	prepareCallback PrepareCallbackFn,
+	callback CallbackFn,
+) {
+
 	c.callbackLock.Lock()
 	c.prepareCallbacks[shard] = prepareCallback
 	c.callbacks[shard] = callback
@@ -301,7 +317,10 @@ func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificatio
 }
 
 // UnregisterDomainChangeCallback delete a domain failover callback
-func (c *domainCache) UnregisterDomainChangeCallback(shard int) {
+func (c *domainCache) UnregisterDomainChangeCallback(
+	shard int,
+) {
+
 	c.callbackLock.Lock()
 	defer c.callbackLock.Unlock()
 
@@ -311,7 +330,10 @@ func (c *domainCache) UnregisterDomainChangeCallback(shard int) {
 
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) GetDomain(name string) (*DomainCacheEntry, error) {
+func (c *domainCache) GetDomain(
+	name string,
+) (*DomainCacheEntry, error) {
+
 	if name == "" {
 		return nil, &workflow.BadRequestError{Message: "Domain is empty."}
 	}
@@ -320,7 +342,10 @@ func (c *domainCache) GetDomain(name string) (*DomainCacheEntry, error) {
 
 // GetDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) GetDomainByID(id string) (*DomainCacheEntry, error) {
+func (c *domainCache) GetDomainByID(
+	id string,
+) (*DomainCacheEntry, error) {
+
 	if id == "" {
 		return nil, &workflow.BadRequestError{Message: "DomainID is empty."}
 	}
@@ -328,7 +353,10 @@ func (c *domainCache) GetDomainByID(id string) (*DomainCacheEntry, error) {
 }
 
 // GetDomainID retrieves domainID by using GetDomain
-func (c *domainCache) GetDomainID(name string) (string, error) {
+func (c *domainCache) GetDomainID(
+	name string,
+) (string, error) {
+
 	entry, err := c.GetDomain(name)
 	if err != nil {
 		return "", err
@@ -337,7 +365,10 @@ func (c *domainCache) GetDomainID(name string) (string, error) {
 }
 
 // GetDomainName returns domain name given the domain id
-func (c *domainCache) GetDomainName(id string) (string, error) {
+func (c *domainCache) GetDomainName(
+	id string,
+) (string, error) {
+
 	entry, err := c.getDomainByID(id)
 	if err != nil {
 		return "", err
@@ -354,7 +385,7 @@ func (c *domainCache) refreshLoop() {
 			return
 		case <-timer.C:
 			timer.Reset(DomainCacheRefreshInterval)
-			err := c.refreshDomains()
+			err := c.refreshDomainsLocked()
 			if err != nil {
 				c.logger.Error("Error refreshing domain cache", tag.Error(err))
 			}
@@ -362,9 +393,15 @@ func (c *domainCache) refreshLoop() {
 	}
 }
 
+func (c *domainCache) refreshDomains() error {
+	c.refreshLock.Lock()
+	defer c.refreshLock.Unlock()
+	return c.refreshDomainsLocked()
+}
+
 // this function only refresh the domains in the v2 table
 // the domains in the v1 table will be refreshed if cache is stale
-func (c *domainCache) refreshDomains() error {
+func (c *domainCache) refreshDomainsLocked() error {
 	// first load the metadata record, then load domains
 	// this can guarantee that domains in the cache are not updated more than metadata record
 	metadata, err := c.metadataMgr.GetMetadata()
@@ -440,34 +477,30 @@ UpdateLoop:
 	return nil
 }
 
-func (c *domainCache) loadDomain(name string, id string) (*persistence.GetDomainResponse, error) {
-	resp, err := c.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: name, ID: id})
-	if err == nil {
-		if resp.TableVersion == persistence.DomainTableVersionV1 {
-			// if loaded from V1 table
-			// this means the FailoverNotificationVersion will be 0
-			// and NotificationVersion has complete different meaning
-			resp.FailoverNotificationVersion = 0
-			resp.NotificationVersion = 0
-		} else {
-			// the result is from V2 table
-			// this should not happen since background thread is refreshing.
-			// if this actually happen, just discard the result
-			// since we need to guarantee that domainNotificationVersion > all notification versions
-			// inside the cache
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Domain: %v", name),
-			}
-		}
-	}
-	return resp, err
+func (c *domainCache) checkDomainExists(
+	name string,
+	id string,
+) error {
+
+	_, err := c.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: name, ID: id})
+	return err
 }
 
-func (c *domainCache) updateNameToIDCache(cacheNameToID Cache, name string, id string) {
+func (c *domainCache) updateNameToIDCache(
+	cacheNameToID Cache,
+	name string,
+	id string,
+) {
+
 	cacheNameToID.Put(name, id)
 }
 
-func (c *domainCache) updateIDToDomainCache(cacheByID Cache, id string, record *DomainCacheEntry) (*DomainCacheEntry, *DomainCacheEntry, error) {
+func (c *domainCache) updateIDToDomainCache(
+	cacheByID Cache,
+	id string,
+	record *DomainCacheEntry,
+) (*DomainCacheEntry, *DomainCacheEntry, error) {
+
 	elem, err := cacheByID.PutIfNotExist(id, newDomainCacheEntry(c.clusterMetadata))
 	if err != nil {
 		return nil, nil, err
@@ -479,10 +512,9 @@ func (c *domainCache) updateIDToDomainCache(cacheByID Cache, id string, record *
 
 	var prevDomain *DomainCacheEntry
 	triggerCallback := c.clusterMetadata.IsGlobalDomainEnabled() &&
-		// expiry will be non zero when the entry is initialized / valid
-		!entry.expiry.IsZero() &&
+		// initialized will be true when the entry contains valid data
+		entry.initialized &&
 		record.notificationVersion > entry.notificationVersion
-	// expiry will be non zero when the entry is initialized / valid
 	if triggerCallback {
 		prevDomain = entry.duplicate()
 	}
@@ -495,7 +527,7 @@ func (c *domainCache) updateIDToDomainCache(cacheByID Cache, id string, record *
 	entry.isGlobalDomain = record.isGlobalDomain
 	entry.failoverNotificationVersion = record.failoverNotificationVersion
 	entry.notificationVersion = record.notificationVersion
-	entry.expiry = c.timeSource.Now().Add(domainCacheEntryTTL)
+	entry.initialized = record.initialized
 
 	nextDomain := entry.duplicate()
 
@@ -504,73 +536,76 @@ func (c *domainCache) updateIDToDomainCache(cacheByID Cache, id string, record *
 
 // getDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) getDomain(name string) (*DomainCacheEntry, error) {
+func (c *domainCache) getDomain(
+	name string,
+) (*DomainCacheEntry, error) {
+
 	id, cacheHit := c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
 		return c.getDomainByID(id)
 	}
 
-	record, err := c.loadDomain(name, "")
-	if err != nil {
+	if err := c.checkDomainExists(name, ""); err != nil {
 		return nil, err
 	}
-	id = record.Info.ID
-	_, newEntry, err := c.updateIDToDomainCache(c.cacheByID.Load().(Cache), id, c.buildEntryFromRecord(record))
-	if err != nil {
+
+	c.refreshLock.Lock()
+	defer c.refreshLock.Unlock()
+	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
+	if cacheHit {
+		return c.getDomainByID(id)
+	}
+	if err := c.refreshDomainsLocked(); err != nil {
 		return nil, err
 	}
-	c.updateNameToIDCache(c.cacheNameToID.Load().(Cache), name, id)
-	return newEntry, nil
+	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
+	if cacheHit {
+		return c.getDomainByID(id)
+	}
+	// impossible case
+	return nil, &workflow.InternalServiceError{Message: "domainCache encounter case where domain exists but cannot be loaded"}
 }
 
 // getDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) getDomainByID(id string) (*DomainCacheEntry, error) {
-	now := c.timeSource.Now()
-	var result *DomainCacheEntry
+func (c *domainCache) getDomainByID(
+	id string,
+) (*DomainCacheEntry, error) {
 
+	var result *DomainCacheEntry
 	entry, cacheHit := c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
 	if cacheHit {
-		// Found the information in the cache, lets check if it needs to be refreshed before returning back
 		entry.RLock()
-		if !entry.isExpired(now) {
-			result = entry.duplicate()
-			entry.RUnlock()
-			return result, nil
-		}
-		// cache expired, need to refresh
+		result = entry.duplicate()
 		entry.RUnlock()
+		return result, nil
 	}
 
-	record, err := c.loadDomain("", id)
-	if err != nil {
-		// err updating, use the existing record if record is valid
-		// i.e. expiry is set
-		if cacheHit {
-			entry.RLock()
-			defer entry.RUnlock()
-			if !entry.expiry.IsZero() {
-				return entry.duplicate(), nil
-			}
-		}
+	if err := c.checkDomainExists("", id); err != nil {
 		return nil, err
 	}
 
-	_, newEntry, err := c.updateIDToDomainCache(c.cacheByID.Load().(Cache), id, c.buildEntryFromRecord(record))
-	if err != nil {
-		// err updating, use the existing record if record is valid
-		// i.e. expiry is set
-		if cacheHit {
-			entry.RLock()
-			defer entry.RUnlock()
-			if !entry.expiry.IsZero() {
-				return entry.duplicate(), nil
-			}
-		}
+	c.refreshLock.Lock()
+	defer c.refreshLock.Unlock()
+	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
+	if cacheHit {
+		entry.RLock()
+		result = entry.duplicate()
+		entry.RUnlock()
+		return result, nil
+	}
+	if err := c.refreshDomainsLocked(); err != nil {
 		return nil, err
 	}
-	c.updateNameToIDCache(c.cacheNameToID.Load().(Cache), newEntry.GetInfo().Name, id)
-	return newEntry, nil
+	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
+	if cacheHit {
+		entry.RLock()
+		result = entry.duplicate()
+		entry.RUnlock()
+		return result, nil
+	}
+	// impossible case
+	return nil, &workflow.InternalServiceError{Message: "domainCache encounter case where domain exists but cannot be loaded"}
 }
 
 func (c *domainCache) triggerDomainChangePrepareCallbackLocked() {
@@ -582,7 +617,11 @@ func (c *domainCache) triggerDomainChangePrepareCallbackLocked() {
 	}
 }
 
-func (c *domainCache) triggerDomainChangeCallbackLocked(prevDomains []*DomainCacheEntry, nextDomains []*DomainCacheEntry) {
+func (c *domainCache) triggerDomainChangeCallbackLocked(
+	prevDomains []*DomainCacheEntry,
+	nextDomains []*DomainCacheEntry,
+) {
+
 	sw := c.metricsClient.StartTimer(metrics.DomainCacheScope, metrics.DomainCacheCallbacksLatency)
 	defer sw.Stop()
 
@@ -591,7 +630,10 @@ func (c *domainCache) triggerDomainChangeCallbackLocked(prevDomains []*DomainCac
 	}
 }
 
-func (c *domainCache) buildEntryFromRecord(record *persistence.GetDomainResponse) *DomainCacheEntry {
+func (c *domainCache) buildEntryFromRecord(
+	record *persistence.GetDomainResponse,
+) *DomainCacheEntry {
+
 	// this is a shallow copy, but since the record is generated by persistence
 	// and only accessible here, it would be fine
 	newEntry := newDomainCacheEntry(c.clusterMetadata)
@@ -603,6 +645,7 @@ func (c *domainCache) buildEntryFromRecord(record *persistence.GetDomainResponse
 	newEntry.isGlobalDomain = record.IsGlobalDomain
 	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
 	newEntry.notificationVersion = record.NotificationVersion
+	newEntry.initialized = true
 	return newEntry
 }
 
@@ -642,20 +685,16 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 	result.replicationConfig = &persistence.DomainReplicationConfig{
 		ActiveClusterName: entry.replicationConfig.ActiveClusterName,
 	}
-	for _, cluster := range entry.replicationConfig.Clusters {
-		result.replicationConfig.Clusters = append(result.replicationConfig.Clusters, &*cluster)
+	for _, clusterName := range entry.replicationConfig.Clusters {
+		result.replicationConfig.Clusters = append(result.replicationConfig.Clusters, &*clusterName)
 	}
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalDomain = entry.isGlobalDomain
 	result.failoverNotificationVersion = entry.failoverNotificationVersion
 	result.notificationVersion = entry.notificationVersion
-	result.expiry = entry.expiry
+	result.initialized = entry.initialized
 	return result
-}
-
-func (entry *DomainCacheEntry) isExpired(now time.Time) bool {
-	return entry.expiry.IsZero() || now.After(entry.expiry)
 }
 
 // GetInfo return the domain info
@@ -723,7 +762,11 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 		// domain is consider active
 		return nil
 	}
-	return errors.NewDomainNotActiveError(entry.info.Name, entry.clusterMetadata.GetCurrentClusterName(), entry.replicationConfig.ActiveClusterName)
+	return errors.NewDomainNotActiveError(
+		entry.info.Name,
+		entry.clusterMetadata.GetCurrentClusterName(),
+		entry.replicationConfig.ActiveClusterName,
+	)
 }
 
 // Len return length
@@ -742,7 +785,10 @@ func (t DomainCacheEntries) Less(i, j int) bool {
 }
 
 // CreateDomainCacheEntry create a cache entry with domainName
-func CreateDomainCacheEntry(domainName string) *DomainCacheEntry {
+func CreateDomainCacheEntry(
+	domainName string,
+) *DomainCacheEntry {
+
 	return &DomainCacheEntry{info: &persistence.DomainInfo{Name: domainName}}
 }
 
@@ -753,7 +799,10 @@ var SampleRetentionKey = "sample_retention_days"
 var SampleRateKey = "sample_retention_rate"
 
 // GetRetentionDays returns retention in days for given workflow
-func (entry *DomainCacheEntry) GetRetentionDays(workflowID string) int32 {
+func (entry *DomainCacheEntry) GetRetentionDays(
+	workflowID string,
+) int32 {
+
 	if entry.IsSampledForLongerRetention(workflowID) {
 		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
 			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
@@ -767,13 +816,19 @@ func (entry *DomainCacheEntry) GetRetentionDays(workflowID string) int32 {
 }
 
 // IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not
-func (entry *DomainCacheEntry) IsSampledForLongerRetentionEnabled(workflowID string) bool {
+func (entry *DomainCacheEntry) IsSampledForLongerRetentionEnabled(
+	workflowID string,
+) bool {
+
 	_, ok := entry.info.Data[SampleRateKey]
 	return ok
 }
 
 // IsSampledForLongerRetention return should given workflow been sampled or not
-func (entry *DomainCacheEntry) IsSampledForLongerRetention(workflowID string) bool {
+func (entry *DomainCacheEntry) IsSampledForLongerRetention(
+	workflowID string,
+) bool {
+
 	if sampledRateValue, ok := entry.info.Data[SampleRateKey]; ok {
 		sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
 		if err != nil {

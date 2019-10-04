@@ -61,7 +61,7 @@ func (s *domainReplicatorSuite) SetupTest() {
 	s.Require().NoError(err)
 	logger := loggerimpl.NewLogger(zapLogger)
 	s.domainReplicator = NewDomainReplicator(
-		s.MetadataManagerV2,
+		s.MetadataManager,
 		logger,
 	).(*domainReplicatorImpl)
 }
@@ -192,13 +192,13 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	metadata, err := s.MetadataManagerV2.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
 	err = s.domainReplicator.HandleReceivingTask(task)
 	s.Nil(err)
 
-	resp, err := s.MetadataManagerV2.GetDomain(&persistence.GetDomainRequest{ID: id})
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{ID: id})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
@@ -278,13 +278,13 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	metadata, err := s.MetadataManagerV2.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
 	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
 
-	resp, err := s.MetadataManagerV2.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
@@ -412,12 +412,12 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	metadata, err := s.MetadataManagerV2.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
 	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManagerV2.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
@@ -545,12 +545,12 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	metadata, err := s.MetadataManagerV2.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
 	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManagerV2.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
@@ -674,12 +674,12 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	metadata, err := s.MetadataManagerV2.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
 	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManagerV2.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
@@ -754,7 +754,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		ConfigVersion:   common.Int64Ptr(configVersion),
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
-	metadata, err := s.MetadataManagerV2.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
 	err = s.domainReplicator.HandleReceivingTask(createTask)
@@ -807,7 +807,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	}
 	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManagerV2.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)

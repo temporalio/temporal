@@ -217,7 +217,6 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow
 	}
 
 	return &persistence.InternalGetDomainResponse{
-		TableVersion: persistence.DomainTableVersionV2,
 		Info: &persistence.DomainInfo{
 			ID:          row.ID.String(),
 			Name:        row.Name,

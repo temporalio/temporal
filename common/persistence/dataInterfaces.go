@@ -32,13 +32,8 @@ import (
 	"github.com/uber/cadence/common/codec"
 )
 
-// TODO remove this table version
+// TODO remove this event store version
 const (
-	// this is a temp version indicating where is the domain resides
-	// either V1 or V2
-	DomainTableVersionV1 = 1
-	DomainTableVersionV2 = 2
-
 	// 0/1 or empty are all considered as V1
 	EventStoreVersionV2 = 2
 )
@@ -1218,7 +1213,6 @@ type (
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
 		NotificationVersion         int64
-		TableVersion                int
 	}
 
 	// UpdateDomainRequest is used to update domain
@@ -1230,7 +1224,6 @@ type (
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
 		NotificationVersion         int64
-		TableVersion                int
 	}
 
 	// DeleteDomainRequest is used to delete domain entry from domains table

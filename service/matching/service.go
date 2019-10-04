@@ -67,7 +67,7 @@ func (s *Service) Start() {
 		log.Fatal("failed to create task persistence", tag.Error(err))
 	}
 
-	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
+	metadata, err := pFactory.NewMetadataManager()
 	if err != nil {
 		log.Fatal("failed to create metadata manager", tag.Error(err))
 	}

@@ -51,7 +51,6 @@ type (
 		logger                log.Logger
 		mockService           service.Service
 		mockShard             ShardContext
-		mockMetadataMgr       *mocks.MetadataManager
 		mockClusterMetadata   *mocks.ClusterMetadata
 		mockMessagingClient   messaging.Client
 		mockProcessor         *MockTimerProcessor
@@ -90,7 +89,6 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockProcessor = &MockTimerProcessor{}
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil, nil)
@@ -107,7 +105,6 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
@@ -138,7 +135,6 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 }
 
 func (s *timerQueueProcessorBaseSuite) TearDownTest() {
-	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockProcessor.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())

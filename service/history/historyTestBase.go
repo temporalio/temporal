@@ -94,7 +94,7 @@ var _ ShardContext = (*TestShardContext)(nil)
 
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, executionMgr persistence.ExecutionManager,
-	metadataMgr persistence.MetadataManager, metadataMgrV2 persistence.MetadataManager, clusterMetadata cluster.Metadata,
+	metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata,
 	clientBean client.Bean, config *Config, logger log.Logger) *TestShardContext {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, metricsClient, logger)
@@ -574,8 +574,8 @@ func (s *TestBase) SetupWorkflowStore() {
 	log := loggerimpl.NewDevelopmentForTest(s.Suite)
 	config := NewDynamicConfigForTest()
 	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
-		clusterMetadata, nil, config, log)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr,
+		s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, clusterMetadata, nil, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
 
@@ -603,15 +603,29 @@ func (s *TestBase) SetupDomains() {
 		IsGlobalDomain:  testDomainIsGlobalDomain,
 		FailoverVersion: version,
 	}
-	s.MetadataManager.CreateDomain(createDomainRequest)
+	_, err := s.MetadataManager.CreateDomain(createDomainRequest)
+	if err != nil {
+		s.Fail(err.Error())
+	}
 	createDomainRequest.Info.ID = testDomainStandbyID
 	createDomainRequest.Info.Name = testDomainStandbyName
 	createDomainRequest.ReplicationConfig.ActiveClusterName = testDomainStandbyClusterName
-	s.MetadataManager.CreateDomain(createDomainRequest)
+	_, err = s.MetadataManager.CreateDomain(createDomainRequest)
+	if err != nil {
+		s.Fail(err.Error())
+	}
+	s.ShardContext.domainCache.Start()
 }
 
 // TeardownDomains delete the domains used for testing
 func (s *TestBase) TeardownDomains() {
-	s.MetadataManager.DeleteDomain(&persistence.DeleteDomainRequest{ID: testDomainActiveID})
-	s.MetadataManager.DeleteDomain(&persistence.DeleteDomainRequest{ID: testDomainStandbyID})
+	s.ShardContext.domainCache.Stop()
+	err := s.MetadataManager.DeleteDomain(&persistence.DeleteDomainRequest{ID: testDomainActiveID})
+	if err != nil {
+		s.Fail(err.Error())
+	}
+	err = s.MetadataManager.DeleteDomain(&persistence.DeleteDomainRequest{ID: testDomainStandbyID})
+	if err != nil {
+		s.Fail(err.Error())
+	}
 }

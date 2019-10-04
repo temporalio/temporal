@@ -235,7 +235,7 @@ func (s *Service) startScanner(base service.Service) {
 }
 
 func (s *Service) startReplicator(base service.Service, pFactory persistencefactory.Factory) {
-	metadataV2Mgr, err := pFactory.NewMetadataManager(persistencefactory.MetadataV2)
+	metadataV2Mgr, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("failed to start replicator, could not create MetadataManager", tag.Error(err))
 	}
@@ -282,7 +282,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 	if err != nil {
 		s.logger.Fatal("failed to start archiver, could not create HistoryV2Manager", tag.Error(err))
 	}
-	metadataMgr, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
+	metadataMgr, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("failed to start archiver, could not create MetadataManager", tag.Error(err))
 	}
@@ -326,7 +326,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 }
 
 func (s *Service) ensureSystemDomainExists(pFactory persistencefactory.Factory, clusterName string) {
-	metadataProxy, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
+	metadataProxy, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("error creating metadataMgr proxy", tag.Error(err))
 	}
@@ -366,7 +366,7 @@ func isErrSystemDomainNotExist(err *cshared.EntityNotExistsError) bool {
 }
 
 func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clusterName string) {
-	metadataV2, err := pFactory.NewMetadataManager(persistencefactory.MetadataV2)
+	metadataV2, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("error creating metadataV2Mgr", tag.Error(err))
 	}

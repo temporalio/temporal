@@ -106,16 +106,6 @@ func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 	return newMetadataPersistenceV2(conn, f.clusterName, f.logger)
 }
 
-// NewMetadataStoreV1 returns the default metadatastore
-func (f *Factory) NewMetadataStoreV1() (p.MetadataStore, error) {
-	return f.NewMetadataStore()
-}
-
-// NewMetadataStoreV2 returns the default metadatastore
-func (f *Factory) NewMetadataStoreV2() (p.MetadataStore, error) {
-	return f.NewMetadataStore()
-}
-
 // NewExecutionStore returns an ExecutionStore for a given shardID
 func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
 	conn, err := f.dbConn.get()

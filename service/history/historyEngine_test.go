@@ -90,12 +90,15 @@ type (
 	}
 )
 
+var testVersion = int64(1234)
 var testDomainID = "deadbeef-0123-4567-890a-bcdef0123456"
 var testDomainName = "some random domain name"
 var testParentDomainID = "deadbeef-0123-4567-890a-bcdef0123457"
 var testParentDomainName = "some random parent domain name"
 var testTargetDomainID = "deadbeef-0123-4567-890a-bcdef0123458"
 var testTargetDomainName = "some random target domain name"
+var testChildDomainID = "deadbeef-0123-4567-890a-bcdef0123459"
+var testChildDomainName = "some random child domain name"
 var testRunID = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 var testLocalDomainEntry = cache.NewLocalDomainCacheEntryForTest(
@@ -115,7 +118,7 @@ var testGlobalDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	},
-	1234,
+	testVersion,
 	nil,
 )
 
@@ -136,7 +139,7 @@ var testGlobalParentDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	},
-	1234,
+	testVersion,
 	nil,
 )
 
@@ -157,7 +160,28 @@ var testGlobalTargetDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	},
-	1234,
+	testVersion,
+	nil,
+)
+
+var testLocalChildDomainEntry = cache.NewLocalDomainCacheEntryForTest(
+	&persistence.DomainInfo{ID: testChildDomainID, Name: testChildDomainName},
+	&p.DomainConfig{Retention: 1},
+	cluster.TestCurrentClusterName,
+	nil,
+)
+
+var testGlobalChildDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
+	&persistence.DomainInfo{ID: testChildDomainID, Name: testChildDomainName},
+	&p.DomainConfig{Retention: 1},
+	&persistence.DomainReplicationConfig{
+		ActiveClusterName: cluster.TestCurrentClusterName,
+		Clusters: []*persistence.ClusterReplicationConfig{
+			{ClusterName: cluster.TestCurrentClusterName},
+			{ClusterName: cluster.TestAlternativeClusterName},
+		},
+	},
+	testVersion,
 	nil,
 )
 

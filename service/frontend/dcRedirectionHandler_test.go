@@ -55,12 +55,11 @@ type (
 		alternativeClusterName string
 		config                 *Config
 		service                service.Service
-		domainCache            cache.DomainCache
 
 		controller               *gomock.Controller
 		mockDCRedirectionPolicy  *MockDCRedirectionPolicy
 		mockClusterMetadata      *mocks.ClusterMetadata
-		mockMetadataMgr          *mocks.MetadataManager
+		mockDomainCache          *cache.DomainCacheMock
 		mockClientBean           *client.MockClientBean
 		mockFrontendHandler      *MockWorkflowHandler
 		mockRemoteFrontendClient *workflowservicetest.MockClient
@@ -92,7 +91,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), 0, false)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(s.currentClusterName)
@@ -106,8 +105,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.mockArchivalMetadata, s.mockArchiverProvider, nil)
 
-	s.domainCache = cache.NewDomainCache(s.mockMetadataMgr, s.service.GetClusterMetadata(), s.service.GetMetricsClient(), s.service.GetLogger())
-	frontendHandler := NewWorkflowHandler(s.service, s.config, s.mockMetadataMgr, nil, nil, nil, nil, nil, s.domainCache)
+	frontendHandler := NewWorkflowHandler(s.service, s.config, nil, nil, nil, nil, nil, nil, s.mockDomainCache)
 	frontendHandler.metricsClient = metricsClient
 	frontendHandler.startWG.Done()
 
@@ -119,7 +117,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 }
 
 func (s *dcRedirectionHandlerSuite) TearDownTest() {
-	s.mockMetadataMgr.AssertExpectations(s.T())
+	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockDCRedirectionPolicy.AssertExpectations(s.T())
 	s.mockArchivalMetadata.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())

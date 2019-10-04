@@ -56,7 +56,6 @@ type (
 		mockShardManager         *mocks.ShardManager
 		mockClusterMetadata      *mocks.ClusterMetadata
 		mockProducer             *mocks.KafkaProducer
-		mockMetadataMgr          *mocks.MetadataManager
 		mockMessagingClient      messaging.Client
 		mockService              service.Service
 		mockShard                *shardContextImpl
@@ -94,7 +93,6 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(
@@ -158,7 +156,6 @@ func (s *conflictResolverSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockEventsCache.AssertExpectations(s.T())

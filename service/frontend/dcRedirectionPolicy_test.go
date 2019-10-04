@@ -26,12 +26,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -51,7 +49,7 @@ type (
 		currentClusterName     string
 		alternativeClusterName string
 		mockConfig             *Config
-		mockMetadataMgr        *mocks.MetadataManager
+		mockDomainCache        *cache.DomainCacheMock
 		mockClusterMetadata    *mocks.ClusterMetadata
 		policy                 *SelectedAPIsForwardingRedirectionPolicy
 	}
@@ -120,19 +118,13 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.Nil(err)
 
 	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	domainCache := cache.NewDomainCache(
-		s.mockMetadataMgr,
-		s.mockClusterMetadata,
-		metrics.NewClient(tally.NoopScope, metrics.Frontend),
-		logger,
-	)
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,
 		s.mockConfig,
-		domainCache,
+		s.mockDomainCache,
 	)
 }
 
@@ -330,39 +322,34 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalDomain() {
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-			},
-		},
-		IsGlobalDomain: false,
-		TableVersion:   persistence.DomainTableVersionV1,
-	}
+	domainEntry := cache.NewLocalDomainCacheEntryForTest(
+		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
+		&persistence.DomainConfig{Retention: 1},
+		cluster.TestCurrentClusterName,
+		nil,
+	)
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(domainRecord, nil)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: s.domainName}).Return(domainRecord, nil)
+	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil)
+	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneReplicationCluster() {
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
+	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
+		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
+				{ClusterName: cluster.TestCurrentClusterName},
 				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
-		IsGlobalDomain: true,
-		TableVersion:   persistence.DomainTableVersionV1,
-	}
+		1234, // not used
+		nil,
+	)
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(domainRecord, nil)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: s.domainName}).Return(domainRecord, nil)
+	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil)
+	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoReplicationCluster(forwardingEnabled bool, isRecordActive bool) {
@@ -370,21 +357,21 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoR
 	if isRecordActive {
 		activeCluster = s.currentClusterName
 	}
-	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		Config: &persistence.DomainConfig{},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
+	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
+		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
 			ActiveClusterName: activeCluster,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
 				{ClusterName: cluster.TestAlternativeClusterName},
 			},
 		},
-		IsGlobalDomain: true,
-		TableVersion:   persistence.DomainTableVersionV1,
-	}
+		1234, // not used
+		nil,
+	)
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: s.domainID}).Return(domainRecord, nil)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: s.domainName}).Return(domainRecord, nil)
+	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil)
+	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil)
 	s.mockConfig.EnableDomainNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByDomain(forwardingEnabled)
 }

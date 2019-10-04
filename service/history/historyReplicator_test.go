@@ -66,7 +66,7 @@ type (
 		mockShardManager         *mocks.ShardManager
 		mockClusterMetadata      *mocks.ClusterMetadata
 		mockProducer             *mocks.KafkaProducer
-		mockMetadataMgr          *mocks.MetadataManager
+		mockDomainCache          *cache.DomainCacheMock
 		mockMessagingClient      messaging.Client
 		mockService              service.Service
 		mockShard                *shardContextImpl
@@ -103,7 +103,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockDomainCache = &cache.DomainCacheMock{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(
@@ -129,7 +129,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
+		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
@@ -175,7 +175,7 @@ func (s *historyReplicatorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
+	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockTxProcessor.AssertExpectations(s.T())
 	s.mockTimerProcessor.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
@@ -203,22 +203,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 			RunId:      common.StringPtr(runID),
 		},
 	}).Return(nil, &shared.EntityNotExistsError{})
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: version,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			version,
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
@@ -250,22 +249,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	}
 	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
 	msBuilder.On("IsWorkflowExecutionRunning").Return(false)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: version,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			version,
+			nil,
+		), nil,
+	)
 
 	err = s.historyReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
@@ -305,22 +303,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: lastWriteVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			lastWriteVersion,
+			nil,
+		), nil,
+	)
 
 	err = s.historyReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
@@ -360,22 +357,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: lastWriteVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			lastWriteVersion,
+			nil,
+		), nil,
+	)
 
 	err = s.historyReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, domainID, workflowID, runID, nextEventID), err)
@@ -414,22 +410,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: lastWriteVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			lastWriteVersion,
+			nil,
+		), nil,
+	)
 	msBuilder.On("GetActivityInfo", scheduleID).Return(nil, false)
 
 	err = s.historyReplicator.SyncActivity(ctx.Background(), request)
@@ -469,22 +464,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivityV
 	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: lastWriteVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			lastWriteVersion,
+			nil,
+		), nil,
+	)
 	msBuilder.On("GetActivityInfo", scheduleID).Return(&persistence.ActivityInfo{
 		Version: lastWriteVersion - 1,
 	}, true)
@@ -537,22 +531,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVer
 	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: version,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			version,
+			nil,
+		), nil,
+	)
 	activityInfo := &persistence.ActivityInfo{
 		Version:    version,
 		ScheduleID: scheduleID,
@@ -612,22 +605,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVer
 	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: version,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			version,
+			nil,
+		), nil,
+	)
 	activityInfo := &persistence.ActivityInfo{
 		Version:    version,
 		ScheduleID: scheduleID,
@@ -687,22 +679,21 @@ func (s *historyReplicatorSuite) TestSyncActivity_ActivityRunning_Update_LargerV
 	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: version,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			version,
+			nil,
+		), nil,
+	)
 	activityInfo := &persistence.ActivityInfo{
 		Version:    version - 1,
 		ScheduleID: scheduleID,
@@ -1018,22 +1009,21 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: currentVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			currentVersion,
+			nil,
+		), nil,
+	)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -1090,22 +1080,21 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: currentVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			currentVersion,
+			nil,
+		), nil,
+	)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -1236,22 +1225,21 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: currentVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			currentVersion,
+			nil,
+		), nil,
+	)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -1306,22 +1294,21 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 		ResetWorkflow: common.BoolPtr(true),
 	}
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: currentVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			currentVersion,
+			nil,
+		), nil,
+	)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -1378,22 +1365,21 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: currentVersion,
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			currentVersion,
+			nil,
+		), nil,
+	)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -2555,13 +2541,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		}, input)
 		return true
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Nil(err)
@@ -2663,12 +2657,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet)
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil) // this is called when err is returned, and shard will try to update
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Equal(errRet, err)
@@ -2776,12 +2779,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	}
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Nil(err)
@@ -2922,12 +2934,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Nil(err)
@@ -3051,12 +3072,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Nil(err)
@@ -3180,12 +3210,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Nil(err)
@@ -3300,12 +3339,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", delReq).Return(nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	contextCurrent := &mockWorkflowExecutionContext{}
 	defer contextCurrent.AssertExpectations(s.T())
@@ -3454,12 +3502,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	contextCurrent := &mockWorkflowExecutionContext{}
 	defer contextCurrent.AssertExpectations(s.T())
@@ -3628,12 +3685,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	contextCurrent := &mockWorkflowExecutionContext{}
 	defer contextCurrent.AssertExpectations(s.T())
@@ -3829,12 +3895,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	})
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Equal(newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
@@ -3980,12 +4055,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	})
 	msBuilderCurrent.On("GetNextEventID").Return(currentNextEventID)
 
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		Info:              &persistence.DomainInfo{ID: domainID, Name: "domain name"},
-		TableVersion:      p.DomainTableVersionV1,
-		Config:            &p.DomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
-	}, nil)
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			0, // not used
+			nil,
+		), nil,
+	)
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, sBuilder, s.logger)
 	s.Nil(err)
@@ -4130,22 +4214,21 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// this mocks are for the terminate current workflow operation
 	domainVersion := int64(4081)
 	domainName := "some random domain name"
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
-		&persistence.GetDomainResponse{
-			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
-			Config: &persistence.DomainConfig{Retention: 1},
-			ReplicationConfig: &persistence.DomainReplicationConfig{
+	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			FailoverVersion: domainVersion, // this does not matter
-			IsGlobalDomain:  true,
-			TableVersion:    persistence.DomainTableVersionV1,
-		}, nil,
-	).Once()
+			domainVersion,
+			nil,
+		), nil,
+	)
 
 	contextCurrent := &mockWorkflowExecutionContext{}
 	defer contextCurrent.AssertExpectations(s.T())

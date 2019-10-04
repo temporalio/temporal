@@ -68,8 +68,6 @@ type (
 		HistoryMgr             p.HistoryManager
 		HistoryV2Mgr           p.HistoryV2Manager
 		MetadataManager        p.MetadataManager
-		MetadataManagerV2      p.MetadataManager
-		MetadataProxy          p.MetadataManager
 		VisibilityMgr          p.VisibilityManager
 		DomainReplicationQueue p.DomainReplicationQueue
 		ShardInfo              *p.ShardInfo
@@ -182,13 +180,7 @@ func (s *TestBase) Setup() {
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
 
-	s.MetadataManager, err = factory.NewMetadataManager(pfactory.MetadataV1)
-	s.fatalOnError("NewMetadataManager", err)
-
-	s.MetadataManagerV2, err = factory.NewMetadataManager(pfactory.MetadataV2)
-	s.fatalOnError("NewMetadataManager", err)
-
-	s.MetadataProxy, err = factory.NewMetadataManager(pfactory.MetadataV1V2)
+	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
 
 	s.HistoryMgr, err = factory.NewHistoryManager()
