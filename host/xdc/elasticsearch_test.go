@@ -51,7 +51,7 @@ import (
 )
 
 const (
-	numOfRetry        = 50
+	numOfRetry        = 100
 	waitTimeInMs      = 400
 	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )

@@ -33,11 +33,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/client/frontend"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -67,6 +68,7 @@ type (
 		domainName         string
 		domainID           string
 		version            int64
+		versionIncrement   int64
 		mockFrontendClient map[string]frontend.Client
 	}
 )
@@ -128,7 +130,8 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 
 	s.registerDomain()
 
-	s.version = 101
+	s.version = clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].InitialFailoverVersion
+	s.versionIncrement = clusterConfigs[0].ClusterMetadata.FailoverVersionIncrement
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, s.version)
 }
 
@@ -672,43 +675,61 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 }
 
 func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
+
 	workflowID := "ndc-single-branch-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 	version := int64(101)
+	isWorkflowFinished := false
 
 	historyClient := s.active.GetHistoryClient()
 
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
-	currentBranch := []*shared.History{}
+	baseBranch := []*shared.History{}
 	var taskID int64
-	for i := 0; i < 10 && s.generator.HasNextVertex(); i++ {
+	for i := 0; i < 4 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &shared.History{}
 		for _, event := range events {
-			history := event.GetData().(*shared.HistoryEvent)
-			taskID = history.GetTaskId()
-			historyEvents.Events = append(historyEvents.Events, history)
+			historyEvent := event.GetData().(*shared.HistoryEvent)
+			taskID = historyEvent.GetTaskId()
+			historyEvents.Events = append(historyEvents.Events, historyEvent)
+			switch historyEvent.GetEventType() {
+			case workflow.EventTypeWorkflowExecutionCompleted,
+				workflow.EventTypeWorkflowExecutionFailed,
+				workflow.EventTypeWorkflowExecutionTimedOut,
+				workflow.EventTypeWorkflowExecutionTerminated,
+				workflow.EventTypeWorkflowExecutionContinuedAsNew,
+				workflow.EventTypeWorkflowExecutionCanceled:
+				isWorkflowFinished = true
+			}
 		}
-		currentBranch = append(currentBranch, historyEvents)
+		baseBranch = append(baseBranch, historyEvents)
 	}
-	versionHistory := s.eventBatchesToVersionHistory(nil, currentBranch)
+	if isWorkflowFinished {
+		// cannot proceed since the test below requires workflow not finished
+		// this is ok since build kite will run this test several times
+		s.logger.Info("Encounter finish workflow history event during randomization test, skip")
+		return
+	}
+
+	versionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
 	s.applyEvents(
 		workflowID,
 		runID,
 		workflowType,
 		tasklist,
 		versionHistory,
-		currentBranch,
+		baseBranch,
 		historyClient,
 	)
 
 	newGenerator := s.generator.DeepCopy()
-	newGenerator.SetVersion(int64(102))
 	newBranch := []*shared.History{}
 	newVersionHistory := versionHistory.Duplicate()
-	for i := 0; i < 10 && newGenerator.HasNextVertex(); i++ {
+	newGenerator.SetVersion(newGenerator.GetVersion() + 1) // simulate events from other cluster
+	for i := 0; i < 4 && newGenerator.HasNextVertex(); i++ {
 		events := newGenerator.GetNextVertices()
 		historyEvents := &shared.History{}
 		for _, event := range events {
@@ -731,16 +752,16 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 
 	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	// Handcraft a stale signal event
-	currentEvents := currentBranch[len(currentBranch)-1].GetEvents()
-	staleEventID := currentEvents[len(currentEvents)-1].GetEventId() + 1
+	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
+	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
 	staleBranch := []*shared.History{
 		{
 			Events: []*shared.HistoryEvent{
 				{
-					EventId:   common.Int64Ptr(staleEventID),
+					EventId:   common.Int64Ptr(baseBranchLastEvent.GetEventId() + 1),
 					EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
 					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(101),
+					Version:   common.Int64Ptr(baseBranchLastEvent.GetVersion()), // dummy event from other cluster
 					TaskId:    common.Int64Ptr(taskID),
 					WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
 						SignalName: common.StringPtr("signal"),
@@ -751,7 +772,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 			},
 		},
 	}
-	staleVersionHistory := s.eventBatchesToVersionHistory(nil, staleBranch)
+	staleVersionHistory := s.eventBatchesToVersionHistory(versionHistory.Duplicate(), staleBranch)
 	s.applyEvents(
 		workflowID,
 		runID,
