@@ -105,6 +105,7 @@ type (
 		clientWorker           archiver.ClientWorker
 		indexer                *indexer.Indexer
 		enableEventsV2         bool
+		enbaleNDC              bool
 		archiverMetadata       carchiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
 		historyConfig          *HistoryConfig
@@ -139,6 +140,7 @@ type (
 		Logger                        log.Logger
 		ClusterNo                     int
 		EnableEventsV2                bool
+		EnableNDC                     bool
 		ArchiverMetadata              carchiver.ArchivalMetadata
 		ArchiverProvider              provider.ArchiverProvider
 		EnableReadHistoryFromArchival bool
@@ -176,6 +178,7 @@ func NewCadence(params *CadenceParams) Cadence {
 		shutdownCh:             make(chan struct{}),
 		clusterNo:              params.ClusterNo,
 		enableEventsV2:         params.EnableEventsV2,
+		enbaleNDC:              params.EnableNDC,
 		esConfig:               params.ESConfig,
 		esClient:               params.ESClient,
 		archiverMetadata:       params.ArchiverMetadata,
@@ -207,7 +210,7 @@ func (c *cadenceImpl) Start() error {
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(hosts, &startWG, c.enableEventsV2)
+	go c.startHistory(hosts, &startWG, c.enableEventsV2, c.enbaleNDC)
 	go c.startMatching(hosts, &startWG)
 	startWG.Wait()
 
@@ -496,7 +499,12 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.WaitGroup, enableEventsV2 bool) {
+func (c *cadenceImpl) startHistory(
+	hosts map[string][]string,
+	startWG *sync.WaitGroup,
+	enableEventsV2 bool,
+	enableNDC bool,
+) {
 
 	pprofPorts := c.HistoryPProfPort()
 	for i, hostport := range c.HistoryServiceAddress() {
@@ -532,6 +540,8 @@ func (c *cadenceImpl) startHistory(hosts map[string][]string, startWG *sync.Wait
 		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)
 		historyConfig.DecisionHeartbeatTimeout = dynamicconfig.GetDurationPropertyFnFilteredByDomain(time.Second * 5)
 		historyConfig.TimerProcessorHistoryArchivalSizeLimit = dynamicconfig.GetIntPropertyFn(5 * 1024)
+		historyConfig.EnableNDC = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableNDC)
+
 		if c.workerConfig.EnableIndexer {
 			historyConfig.AdvancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeDual)
 		}

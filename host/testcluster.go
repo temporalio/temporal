@@ -68,6 +68,7 @@ type (
 	TestClusterConfig struct {
 		FrontendAddress       string
 		EnableEventsV2        bool
+		EnableNDC             bool
 		EnableArchival        bool
 		IsMasterCluster       bool
 		ClusterNo             int
@@ -167,6 +168,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		Logger:                 logger,
 		ClusterNo:              options.ClusterNo,
 		EnableEventsV2:         options.EnableEventsV2,
+		EnableNDC:              options.EnableNDC,
 		ESConfig:               options.ESConfig,
 		ESClient:               esClient,
 		ArchiverMetadata:       archiverBase.metadata,

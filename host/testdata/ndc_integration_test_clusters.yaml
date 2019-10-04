@@ -37,7 +37,8 @@
     enablearchiver: false
     enablereplicator: true
     enableindexer: false
-  enableeventsv2: false
+  enableeventsv2: true
+  enablendc: true
   clusterno: 0
   historyconfig:
     numhistoryshards: 1
@@ -112,7 +113,8 @@
     enablearchiver: false
     enablereplicator: true
     enableindexer: false
-  enableeventsv2: false
+  enableeventsv2: true
+  enablendc: true
   clusterno: 1
   historyconfig:
     numhistoryshards: 1
@@ -187,7 +189,8 @@
     enablearchiver: false
     enablereplicator: true
     enableindexer: false
-  enableeventsv2: false
+  enableeventsv2: true
+  enablendc: true
   clusterno: 2
   historyconfig:
     numhistoryshards: 1
