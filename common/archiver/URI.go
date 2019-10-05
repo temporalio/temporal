@@ -21,7 +21,6 @@
 package archiver
 
 import (
-	"errors"
 	"net/url"
 )
 
@@ -35,6 +34,8 @@ type (
 		Username() string
 		Password() string
 		String() string
+		Opaque() string
+		Query() map[string][]string
 	}
 
 	uri struct {
@@ -47,9 +48,6 @@ func NewURI(s string) (URI, error) {
 	url, err := url.ParseRequestURI(s)
 	if err != nil {
 		return nil, err
-	}
-	if url.Opaque != "" {
-		return nil, errors.New("URI should begin with scheme://")
 	}
 	return &uri{url: url}, nil
 }
@@ -86,6 +84,14 @@ func (u *uri) Password() string {
 		return ""
 	}
 	return password
+}
+
+func (u *uri) Opaque() string {
+	return u.url.Opaque
+}
+
+func (u *uri) Query() map[string][]string {
+	return u.url.Query()
 }
 
 func (u *uri) String() string {

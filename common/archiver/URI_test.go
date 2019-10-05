@@ -52,6 +52,8 @@ func (s *URISuite) TestURI() {
 		port      string
 		username  string
 		password  string
+		opaque    string
+		query     map[string][]string
 	}{
 		{
 			URIString: "",
@@ -63,7 +65,9 @@ func (s *URISuite) TestURI() {
 		},
 		{
 			URIString: "mailto:a@b.com",
-			valid:     false,
+			valid:     true,
+			scheme:    "mailto",
+			opaque:    "a@b.com",
 		},
 		{
 			URIString: "test://",
@@ -85,11 +89,15 @@ func (s *URISuite) TestURI() {
 			path:      "/path with space",
 		},
 		{
-			URIString: "https://localhost:8080",
+			URIString: "https://localhost:8080?key1=value1&key1=value2&key2=value3",
 			valid:     true,
 			scheme:    "https",
 			hostname:  "localhost",
 			port:      "8080",
+			query: map[string][]string{
+				"key1": []string{"value1", "value2"},
+				"key2": []string{"value3"},
+			},
 		},
 		{
 			URIString: "file:///absolute/path/to/dir",
@@ -105,6 +113,16 @@ func (s *URISuite) TestURI() {
 			path:      "/path",
 			username:  "person",
 			password:  "password",
+		},
+		{
+			URIString: "test:opaque?key1=value1&key1=value2&key2=value3",
+			valid:     true,
+			scheme:    "test",
+			opaque:    "opaque",
+			query: map[string][]string{
+				"key1": []string{"value1", "value2"},
+				"key2": []string{"value3"},
+			},
 		},
 	}
 
@@ -122,5 +140,9 @@ func (s *URISuite) TestURI() {
 		s.Equal(tc.port, URI.Port())
 		s.Equal(tc.username, URI.Username())
 		s.Equal(tc.password, URI.Password())
+		s.Equal(tc.opaque, URI.Opaque())
+		if tc.query != nil {
+			s.Equal(tc.query, URI.Query())
+		}
 	}
 }
