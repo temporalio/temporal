@@ -27,6 +27,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	cshared "go.uber.org/cadence/.gen/go/shared"
+	cclient "go.uber.org/cadence/client"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
@@ -46,8 +49,6 @@ import (
 	"github.com/uber/cadence/service/worker/parentclosepolicy"
 	"github.com/uber/cadence/service/worker/replicator"
 	"github.com/uber/cadence/service/worker/scanner"
-	cshared "go.uber.org/cadence/.gen/go/shared"
-	cclient "go.uber.org/cadence/client"
 )
 
 type (
