@@ -699,7 +699,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	// emit workflow completion stats if any
 	if currentWorkflow.ExecutionInfo.State == persistence.WorkflowStateCompleted {
 		if event, err := c.msBuilder.GetCompletionEvent(); err == nil {
-			emitWorkflowCompletionStats(c.metricsClient, domainName, event)
+			taskList := currentWorkflow.ExecutionInfo.TaskList
+			emitWorkflowCompletionStats(c.metricsClient, domainName, taskList, event)
 		}
 	}
 

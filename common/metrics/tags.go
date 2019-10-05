@@ -30,6 +30,7 @@ const (
 	instance      = "instance"
 	domain        = "domain"
 	targetCluster = "target_cluster"
+	taskList      = "tasklist"
 
 	domainAllValue = "all"
 	unknownValue   = "_unknown_"
@@ -53,6 +54,10 @@ type (
 	}
 
 	targetClusterTag struct {
+		value string
+	}
+
+	taskListTag struct {
 		value string
 	}
 )
@@ -122,5 +127,23 @@ func (d targetClusterTag) Key() string {
 
 // Value returns the value of a target cluster tag
 func (d targetClusterTag) Value() string {
+	return d.value
+}
+
+// TaskListTag returns a new task list tag.
+func TaskListTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return taskListTag{value}
+}
+
+// Key returns the key of the task list tag
+func (d taskListTag) Key() string {
+	return taskList
+}
+
+// Value returns the value of the task list tag
+func (d taskListTag) Value() string {
 	return d.value
 }

@@ -110,6 +110,7 @@ func emitSessionUpdateStats(
 func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
 	domainName string,
+	taskList string,
 	event *workflow.HistoryEvent,
 ) {
 
@@ -117,7 +118,11 @@ func emitWorkflowCompletionStats(
 		return
 	}
 
-	scope := metricsClient.Scope(metrics.WorkflowCompletionStatsScope, metrics.DomainTag(domainName))
+	scope := metricsClient.Scope(
+		metrics.WorkflowCompletionStatsScope,
+		metrics.DomainTag(domainName),
+		metrics.TaskListTag(taskList),
+	)
 
 	switch *event.EventType {
 	case shared.EventTypeWorkflowExecutionCompleted:
