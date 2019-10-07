@@ -89,6 +89,7 @@ type (
 	// ArchiveVisibilityRequest is request to Archive single workflow visibility record
 	ArchiveVisibilityRequest struct {
 		DomainID           string
+		DomainName         string // doesn't need to be archived
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string

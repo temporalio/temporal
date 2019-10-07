@@ -236,6 +236,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 
 	err = visibilityArchiver.Archive(ctx, URI, &carchiver.ArchiveVisibilityRequest{
 		DomainID:           request.ArchiveRequest.DomainID,
+		DomainName:         request.ArchiveRequest.DomainName,
 		WorkflowID:         request.ArchiveRequest.WorkflowID,
 		RunID:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,

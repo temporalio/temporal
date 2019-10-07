@@ -166,6 +166,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 	}
 	err = visibilityArchiver.Archive(ctx, URI, &carchiver.ArchiveVisibilityRequest{
 		DomainID:           request.DomainID,
+		DomainName:         request.DomainName,
 		WorkflowID:         request.WorkflowID,
 		RunID:              request.RunID,
 		WorkflowTypeName:   request.WorkflowTypeName,
