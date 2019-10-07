@@ -214,6 +214,9 @@ SubmitLoop:
 		case replicator.ReplicationTaskTypeHistoryMetadata:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
+		case replicator.ReplicationTaskTypeHistoryV2:
+			scope = metrics.HistoryReplicationV2TaskScope
+			err = p.handleHistoryReplicationV2Task(replicationTask, msg, logger)
 		default:
 			logger.Error("Unknown task type.")
 			scope = metrics.ReplicatorScope
@@ -318,22 +321,81 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 	return p.historyClient.SyncShardStatus(ctx, req)
 }
 
-func (p *replicationTaskProcessor) handleActivityTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
-	activityReplicationTask := newActivityReplicationTask(task, msg, logger,
-		p.config, p.timeSource, p.historyClient, p.metricsClient, p.historyRereplicator)
+func (p *replicationTaskProcessor) handleActivityTask(
+	task *replicator.ReplicationTask,
+	msg messaging.Message,
+	logger log.Logger,
+) error {
+
+	activityReplicationTask := newActivityReplicationTask(
+		task,
+		msg,
+		logger,
+		p.config,
+		p.timeSource,
+		p.historyClient,
+		p.metricsClient,
+		p.historyRereplicator,
+	)
 	return p.sequentialTaskProcessor.Submit(activityReplicationTask)
 }
 
-func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
-	historyReplicationTask := newHistoryReplicationTask(task, msg, p.sourceCluster, logger,
-		p.config, p.timeSource, p.historyClient, p.metricsClient, p.historyRereplicator)
+func (p *replicationTaskProcessor) handleHistoryReplicationTask(
+	task *replicator.ReplicationTask,
+	msg messaging.Message,
+	logger log.Logger,
+) error {
+
+	historyReplicationTask := newHistoryReplicationTask(
+		task,
+		msg,
+		p.sourceCluster,
+		logger,
+		p.config,
+		p.timeSource,
+		p.historyClient,
+		p.metricsClient,
+		p.historyRereplicator,
+	)
 	return p.sequentialTaskProcessor.Submit(historyReplicationTask)
 }
 
-func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) error {
-	historyMetadataReplicationTask := newHistoryMetadataReplicationTask(task, msg, p.sourceCluster, logger,
-		p.config, p.timeSource, p.historyClient, p.metricsClient, p.historyRereplicator)
+func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
+	task *replicator.ReplicationTask,
+	msg messaging.Message,
+	logger log.Logger,
+) error {
+
+	historyMetadataReplicationTask := newHistoryMetadataReplicationTask(
+		task,
+		msg,
+		p.sourceCluster,
+		logger,
+		p.config,
+		p.timeSource,
+		p.historyClient,
+		p.metricsClient,
+		p.historyRereplicator,
+	)
 	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)
+}
+
+func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
+	task *replicator.ReplicationTask,
+	msg messaging.Message,
+	logger log.Logger,
+) error {
+
+	historyReplicationTask := newHistoryReplicationV2Task(
+		task,
+		msg,
+		logger,
+		p.config,
+		p.timeSource,
+		p.historyClient,
+		p.metricsClient,
+	)
+	return p.sequentialTaskProcessor.Submit(historyReplicationTask)
 }
 
 func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {

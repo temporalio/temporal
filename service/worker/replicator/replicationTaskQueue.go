@@ -41,6 +41,8 @@ func newReplicationSequentialTaskQueue(task task.SequentialTask) task.Sequential
 		id = t.queueID
 	case *historyReplicationTask:
 		id = t.queueID
+	case *historyReplicationV2Task:
+		id = t.queueID
 	case *activityReplicationTask:
 		id = t.queueID
 	default:
@@ -91,6 +93,8 @@ func replicationSequentialTaskQueueCompareLess(this interface{}, that interface{
 		case *historyReplicationTask:
 			return task.taskID
 		case *historyMetadataReplicationTask:
+			return task.taskID
+		case *historyReplicationV2Task:
 			return task.taskID
 		default:
 			panic("unknown task type")

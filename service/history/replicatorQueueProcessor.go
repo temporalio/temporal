@@ -182,34 +182,17 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence
 
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) error {
 
-	domainEntry, err := p.shard.GetDomainCache().GetDomainByID(task.DomainID)
+	replicationTask, err := p.toReplicationTask(ctx.Background(), task)
 	if err != nil {
 		return err
 	}
-	targetClusters := []string{}
-	for _, cluster := range domainEntry.GetReplicationConfig().Clusters {
-		targetClusters = append(targetClusters, cluster.ClusterName)
-	}
-	replicationTask, newRunID, err := GenerateReplicationTask(targetClusters, task, p.historyMgr, p.historyV2Mgr, p.metricsClient, nil, common.IntPtr(p.shard.GetShardID()))
-	if err != nil || replicationTask == nil {
-		return err
-	}
-	if newRunID != "" {
-		context, cancel := ctx.WithTimeout(ctx.Background(), 30*time.Second)
-		defer cancel()
-		isNDCWorkflow, err := p.getVersionHistory(context, task.DomainID, task.WorkflowID, newRunID)
-		if err != nil {
-			return err
-		}
-		replicationTask.HistoryTaskAttributes.NewRunNDC = common.BoolPtr(isNDCWorkflow)
-	}
 
 	err = p.replicator.Publish(replicationTask)
-	if err == messaging.ErrMessageSizeLimit {
+	if err == messaging.ErrMessageSizeLimit && replicationTask.HistoryTaskAttributes != nil {
 		// message size exceeds the server messaging size limit
 		// for this specific case, just send out a metadata message and
 		// let receiver fetch from source (for the concrete history events)
-		err = p.replicator.Publish(p.generateHistoryMetadataTask(targetClusters, task))
+		err = p.replicator.Publish(p.generateHistoryMetadataTask(replicationTask.HistoryTaskAttributes.TargetClusters, task))
 	}
 	return err
 }
@@ -677,6 +660,9 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					nil,
 					common.IntPtr(p.shard.GetShardID()),
 				)
+				if err != nil {
+					return nil, err
+				}
 				if newRunID != "" {
 					isNDCWorkflow, err := p.getVersionHistory(ctx, task.DomainID, task.WorkflowID, newRunID)
 					if err != nil {
@@ -720,10 +706,10 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			// TODO version history?
 			replicationTask := &replicator.ReplicationTask{
 				TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeHistoryV2),
 				HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
+					TaskId:              common.Int64Ptr(task.FirstEventID),
 					DomainId:            common.StringPtr(task.DomainID),
 					WorkflowId:          common.StringPtr(task.WorkflowID),
 					RunId:               common.StringPtr(task.RunID),

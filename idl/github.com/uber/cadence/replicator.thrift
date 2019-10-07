@@ -96,6 +96,7 @@ struct SyncActicvityTaskAttributes {
 }
 
 struct HistoryTaskV2Attributes {
+  05: optional i64 (js.type = "Long") taskId
   10: optional string domainId
   20: optional string workflowId
   30: optional string runId

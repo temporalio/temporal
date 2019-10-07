@@ -543,5 +543,6 @@ func (r *nDCHistoryReplicatorImpl) notify(
 }
 
 func newNDCRetryTaskErrorWithHint() error {
+	// TODO add detail info here
 	return &shared.RetryTaskV2Error{}
 }

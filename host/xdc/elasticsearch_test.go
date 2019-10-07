@@ -351,7 +351,7 @@ GetHistoryLoop:
 	var historyResponse *workflow.GetWorkflowExecutionHistoryResponse
 	eventsReplicated := false
 GetHistoryLoop2:
-	for i := 0; i < 15; i++ {
+	for i := 0; i < numOfRetry; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
 		if err == nil {
 			history := historyResponse.History
@@ -365,7 +365,7 @@ GetHistoryLoop2:
 				break GetHistoryLoop2
 			}
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.Nil(err)
 	s.True(eventsReplicated)

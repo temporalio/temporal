@@ -216,9 +216,19 @@ func (r *historyReplicator) SyncActivity(
 			return nil
 		}
 
-		// version >= last write version
-		// this can happen if out of order delivery heppens
-		return newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, domainID, execution.GetWorkflowId(), execution.GetRunId(), msBuilder.GetNextEventID())
+		// TODO when 2DC is deprecated, remove this block
+		if msBuilder.GetReplicationState() != nil {
+			// version >= last write version
+			// this can happen if out of order delivery happens
+			return newRetryTaskErrorWithHint(
+				ErrRetrySyncActivityMsg,
+				domainID,
+				execution.GetWorkflowId(),
+				execution.GetRunId(),
+				msBuilder.GetNextEventID(),
+			)
+		}
+		return newNDCRetryTaskErrorWithHint()
 	}
 
 	ai, ok := msBuilder.GetActivityInfo(scheduleID)

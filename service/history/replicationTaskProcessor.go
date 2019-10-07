@@ -241,7 +241,7 @@ func (p *ReplicationTaskProcessor) processTaskOnce(replicationTask *r.Replicatio
 	case r.ReplicationTaskTypeHistoryMetadata:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 	case r.ReplicationTaskTypeHistoryV2:
-		scope = metrics.HistoryReplicationTaskV2Scope
+		scope = metrics.HistoryReplicationV2TaskScope
 		err = p.handleHistoryReplicationTaskV2(replicationTask)
 	default:
 		p.logger.Error("Unknown task type.")

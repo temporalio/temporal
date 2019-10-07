@@ -703,8 +703,12 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	}
 
 	// do version check for global domain task
-	if msBuilder.GetReplicationState() != nil {
-		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetReplicationState().StartVersion, task.Version, task)
+	if msBuilder.GetReplicationState() != nil || msBuilder.GetVersionHistories() != nil {
+		startVersion, err := msBuilder.GetStartVersion()
+		if err != nil {
+			return err
+		}
+		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
 		if err != nil {
 			return err
 		} else if !ok {

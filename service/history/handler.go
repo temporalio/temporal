@@ -1635,6 +1635,8 @@ func (h *Handler) updateErrorMetric(
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
 	case *gen.RetryTaskError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
+	case *gen.RetryTaskV2Error:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
 	case *gen.ServiceBusyError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
 	case *yarpcerrors.Status:

@@ -360,7 +360,9 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
-		msBuilder.UpdateReplicationStateVersion(lastWriteVersion, true)
+		if err := msBuilder.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
+			return err
+		}
 
 		msBuilder.AddTimerTasks(newTimerTasks...)
 		err = context.updateWorkflowExecutionAsPassive(now)

@@ -357,6 +357,7 @@ func (s *historyReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Incom
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
+	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
