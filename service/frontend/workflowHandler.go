@@ -229,6 +229,7 @@ func (wh *WorkflowHandler) Start() error {
 
 // Stop stops the handler
 func (wh *WorkflowHandler) Stop() {
+	wh.domainReplicationQueue.Close()
 	wh.domainCache.Stop()
 	wh.metadataMgr.Close()
 	wh.visibilityMgr.Close()
@@ -3538,16 +3539,38 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 		return nil, wh.error(errors.New("domain replication queue not enabled for cluster"), scope)
 	}
 
-	// TODO: Set it to last ack level for the cluster.
 	lastMessageID := defaultLastMessageID
 	if request.IsSetLastRetrivedMessageId() {
 		lastMessageID = int(request.GetLastRetrivedMessageId())
+	}
+
+	if lastMessageID == defaultLastMessageID {
+		clusterAckLevels, err := wh.domainReplicationQueue.GetAckLevels()
+		if err == nil {
+			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
+				lastMessageID = ackLevel
+			}
+		}
 	}
 
 	replicationTasks, lastMessageID, err := wh.domainReplicationQueue.GetReplicationMessages(
 		lastMessageID, getDomainReplicationMessageBatchSize)
 	if err != nil {
 		return nil, wh.error(err, scope)
+	}
+
+	lastProcessedMessageID := defaultLastMessageID
+	if request.IsSetLastProcessedMessageId() {
+		lastProcessedMessageID = int(request.GetLastProcessedMessageId())
+	}
+
+	if lastProcessedMessageID != defaultLastMessageID {
+		err := wh.domainReplicationQueue.UpdateAckLevel(lastProcessedMessageID, request.GetClusterName())
+		if err != nil {
+			wh.GetLogger().Warn("Failed to update domain replication queue ack level.",
+				tag.TaskID(int64(lastProcessedMessageID)),
+				tag.ClusterName(request.GetClusterName()))
+		}
 	}
 
 	return &replicator.GetDomainReplicationMessagesResponse{

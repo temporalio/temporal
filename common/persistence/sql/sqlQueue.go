@@ -21,9 +21,11 @@
 package sql
 
 import (
-	"database/sql"
 	"fmt"
+
+	"database/sql"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
@@ -31,7 +33,7 @@ import (
 
 type (
 	sqlQueue struct {
-		queueType int
+		queueType common.QueueType
 		logger    log.Logger
 		sqlStore
 	}
@@ -40,7 +42,7 @@ type (
 func newQueue(
 	db sqldb.Interface,
 	logger log.Logger,
-	queueType int,
+	queueType common.QueueType,
 ) (persistence.Queue, error) {
 	return &sqlQueue{
 		sqlStore: sqlStore{
@@ -72,7 +74,7 @@ func (q *sqlQueue) EnqueueMessage(messagePayload []byte) error {
 	return nil
 }
 
-func (q *sqlQueue) DequeueMessages(lastMessageID, maxCount int) ([]*persistence.QueueMessage, error) {
+func (q *sqlQueue) ReadMessages(lastMessageID, maxCount int) ([]*persistence.QueueMessage, error) {
 	rows, err := q.db.GetMessagesFromQueue(q.queueType, lastMessageID, maxCount)
 	if err != nil {
 		return nil, err
@@ -85,6 +87,60 @@ func (q *sqlQueue) DequeueMessages(lastMessageID, maxCount int) ([]*persistence.
 	return messages, nil
 }
 
-func newQueueRow(queueType int, messageID int, payload []byte) *sqldb.QueueRow {
+func newQueueRow(queueType common.QueueType, messageID int, payload []byte) *sqldb.QueueRow {
 	return &sqldb.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
+}
+
+func (q *sqlQueue) DeleteMessagesBefore(messageID int) error {
+	_, err := q.db.DeleteMessagesBefore(q.queueType, messageID)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err),
+		}
+	}
+	return nil
+}
+
+func (q *sqlQueue) UpdateAckLevel(messageID int, clusterName string) error {
+	err := q.txExecute("UpdateAckLevel", func(tx sqldb.Tx) error {
+		clusterAckLevels, err := tx.GetAckLevels(q.queueType, true)
+		if err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
+			}
+		}
+
+		if clusterAckLevels == nil {
+			err := tx.InsertAckLevel(q.queueType, messageID, clusterName)
+			if err != nil {
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
+				}
+			}
+			return nil
+		}
+
+		// Ignore possibly delayed message
+		if clusterAckLevels[clusterName] > messageID {
+			return nil
+		}
+
+		clusterAckLevels[clusterName] = messageID
+		err = tx.UpdateAckLevels(q.queueType, clusterAckLevels)
+		if err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return &workflow.InternalServiceError{Message: err.Error()}
+	}
+	return nil
+}
+
+func (q *sqlQueue) GetAckLevels() (map[string]int, error) {
+	return q.db.GetAckLevels(q.queueType, false)
 }

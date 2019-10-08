@@ -783,10 +783,38 @@ func (p *queueRateLimitedPersistenceClient) EnqueueMessage(message []byte) error
 	return p.persistence.EnqueueMessage(message)
 }
 
-func (p *queueRateLimitedPersistenceClient) DequeueMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error) {
+func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.DequeueMessages(lastMessageID, maxCount)
+	return p.persistence.ReadMessages(lastMessageID, maxCount)
+}
+
+func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(messageID int, clusterName string) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.UpdateAckLevel(messageID, clusterName)
+}
+
+func (p *queueRateLimitedPersistenceClient) GetAckLevels() (map[string]int, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.GetAckLevels()
+}
+
+func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.DeleteMessagesBefore(messageID)
+}
+
+func (p *queueRateLimitedPersistenceClient) Close() {
+	p.persistence.Close()
 }

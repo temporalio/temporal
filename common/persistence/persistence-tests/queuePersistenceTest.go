@@ -99,5 +99,36 @@ func (s *QueuePersistenceSuite) TestDomainReplicationQueue() {
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Len(result, numMessages)
 	s.Equal(numMessages-1, lastRetrievedMessageID)
+}
 
+// TestQueueMetadataOperations tests queue metadata operations
+func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
+	clusterAckLevels, err := s.GetAckLevels()
+	s.Require().NoError(err)
+	s.Assert().Len(clusterAckLevels, 0)
+
+	err = s.UpdateAckLevel(10, "test1")
+	s.Require().NoError(err)
+
+	clusterAckLevels, err = s.GetAckLevels()
+	s.Require().NoError(err)
+	s.Assert().Len(clusterAckLevels, 1)
+	s.Assert().Equal(10, clusterAckLevels["test1"])
+
+	err = s.UpdateAckLevel(20, "test1")
+	s.Require().NoError(err)
+
+	clusterAckLevels, err = s.GetAckLevels()
+	s.Require().NoError(err)
+	s.Assert().Len(clusterAckLevels, 1)
+	s.Assert().Equal(20, clusterAckLevels["test1"])
+
+	err = s.UpdateAckLevel(25, "test2")
+	s.Require().NoError(err)
+
+	clusterAckLevels, err = s.GetAckLevels()
+	s.Require().NoError(err)
+	s.Assert().Len(clusterAckLevels, 2)
+	s.Assert().Equal(20, clusterAckLevels["test1"])
+	s.Assert().Equal(25, clusterAckLevels["test2"])
 }

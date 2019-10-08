@@ -23,25 +23,40 @@ package persistence
 import (
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common/codec"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
+)
+
+const (
+	purgeInterval = time.Minute
 )
 
 var _ DomainReplicationQueue = (*domainReplicationQueueImpl)(nil)
 
 // NewDomainReplicationQueue creates a new DomainReplicationQueue instance
-func NewDomainReplicationQueue(queue Queue) DomainReplicationQueue {
+func NewDomainReplicationQueue(queue Queue, logger log.Logger) DomainReplicationQueue {
 	return &domainReplicationQueueImpl{
-		queue:   queue,
-		encoder: codec.NewThriftRWEncoder(),
+		queue:               queue,
+		logger:              logger,
+		encoder:             codec.NewThriftRWEncoder(),
+		ackNotificationChan: make(chan bool),
+		done:                make(chan bool),
 	}
 }
 
 type (
 	domainReplicationQueueImpl struct {
-		queue   Queue
-		encoder codec.BinaryEncoder
+		logger              log.Logger
+		queue               Queue
+		encoder             codec.BinaryEncoder
+		ackLevelUpdated     bool
+		ackNotificationChan chan bool
+		done                chan bool
 	}
 )
 
@@ -62,7 +77,7 @@ func (q *domainReplicationQueueImpl) GetReplicationMessages(
 	lastMessageID int,
 	maxCount int,
 ) ([]*replicator.ReplicationTask, int, error) {
-	messages, err := q.queue.DequeueMessages(lastMessageID, maxCount)
+	messages, err := q.queue.ReadMessages(lastMessageID, maxCount)
 	if err != nil {
 		return nil, lastMessageID, err
 	}
@@ -80,4 +95,74 @@ func (q *domainReplicationQueueImpl) GetReplicationMessages(
 	}
 
 	return replicationTasks, lastMessageID, nil
+}
+
+func (q *domainReplicationQueueImpl) UpdateAckLevel(lastProcessedMessageID int, clusterName string) error {
+	err := q.queue.UpdateAckLevel(lastProcessedMessageID, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to update ack level: %v", err)
+	}
+
+	select {
+	case q.ackNotificationChan <- true:
+	default:
+	}
+
+	return nil
+}
+
+func (q *domainReplicationQueueImpl) GetAckLevels() (map[string]int, error) {
+	return q.queue.GetAckLevels()
+}
+
+func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
+	ackLevelByCluster, err := q.GetAckLevels()
+	if err != nil {
+		return fmt.Errorf("failed to purge messages: %v", err)
+	}
+
+	if len(ackLevelByCluster) == 0 {
+		return nil
+	}
+
+	minAckLevel := math.MaxInt64
+	for _, ackLevel := range ackLevelByCluster {
+		if ackLevel < minAckLevel {
+			minAckLevel = ackLevel
+		}
+	}
+
+	err = q.queue.DeleteMessagesBefore(minAckLevel)
+	if err != nil {
+		return fmt.Errorf("failed to purge messages: %v", err)
+	}
+
+	q.ackLevelUpdated = false
+
+	return nil
+}
+
+func (q *domainReplicationQueueImpl) purgeProcessor() {
+	ticker := time.NewTicker(purgeInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-q.done:
+			return
+		case <-ticker.C:
+			if q.ackLevelUpdated {
+				err := q.purgeAckedMessages()
+				if err != nil {
+					q.logger.Warn("Failed to purge acked domain replication messages.", tag.Error(err))
+				}
+			}
+		case <-q.ackNotificationChan:
+			q.ackLevelUpdated = true
+		}
+	}
+}
+
+func (q *domainReplicationQueueImpl) Close() {
+	close(q.done)
 }

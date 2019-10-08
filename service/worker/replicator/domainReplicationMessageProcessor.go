@@ -92,7 +92,6 @@ func (p *domainReplicationMessageProcessor) Start() {
 }
 
 // TODO: need to make sure only one worker is processing per source DC
-// TODO: store checkpoints in DB
 func (p *domainReplicationMessageProcessor) processorLoop() {
 	timer := time.NewTimer(getWaitDuration())
 

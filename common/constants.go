@@ -68,6 +68,9 @@ const (
 type (
 	// EncodingType is an enum that represents various data encoding types
 	EncodingType string
+
+	// QueueType is an enum that represents various queue types
+	QueueType int
 )
 
 // MaxTaskTimeout is maximum task timeout allowed. 366 days in seconds
@@ -124,7 +127,7 @@ const (
 
 // Queue types used in queue table
 const (
-	DomainReplicationQueueType = 1
+	DomainReplicationQueueType QueueType = 1
 )
 
 // enum for dynamic config AdvancedVisibilityWritingMode

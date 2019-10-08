@@ -76,7 +76,7 @@ type (
 		NewExecutionStore(shardID int) (p.ExecutionStore, error)
 		// NewVisibilityStore returns a new visibility store
 		NewVisibilityStore() (p.VisibilityStore, error)
-		NewQueue(queueType int) (p.Queue, error)
+		NewQueue(queueType common.QueueType) (p.Queue, error)
 	}
 	// Datastore represents a datastore
 	Datastore struct {
@@ -279,7 +279,7 @@ func (f *factoryImpl) NewDomainReplicationQueue() (p.DomainReplicationQueue, err
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 
-	return p.NewDomainReplicationQueue(result), nil
+	return p.NewDomainReplicationQueue(result, f.logger), nil
 }
 
 // Close closes this factory

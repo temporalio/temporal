@@ -1223,16 +1223,62 @@ func (p *queuePersistenceClient) EnqueueMessage(message []byte) error {
 	return err
 }
 
-func (p *queuePersistenceClient) DequeueMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error) {
-	p.metricClient.IncCounter(metrics.PersistenceDequeueMessagesScope, metrics.PersistenceRequests)
+func (p *queuePersistenceClient) ReadMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error) {
+	p.metricClient.IncCounter(metrics.PersistenceReadQueueMessagesScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceDequeueMessagesScope, metrics.PersistenceLatency)
-	result, err := p.persistence.DequeueMessages(lastMessageID, maxCount)
+	sw := p.metricClient.StartTimer(metrics.PersistenceReadQueueMessagesScope, metrics.PersistenceLatency)
+	result, err := p.persistence.ReadMessages(lastMessageID, maxCount)
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceDequeueMessagesScope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(metrics.PersistenceReadQueueMessagesScope, metrics.PersistenceFailures)
 	}
 
 	return result, err
+}
+
+func (p *queuePersistenceClient) UpdateAckLevel(messageID int, clusterName string) error {
+	p.metricClient.IncCounter(metrics.PersistenceUpdateAckLevelScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateAckLevelScope, metrics.PersistenceLatency)
+	err := p.persistence.UpdateAckLevel(messageID, clusterName)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceUpdateAckLevelScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (p *queuePersistenceClient) GetAckLevels() (map[string]int, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetAckLevelScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetAckLevelScope, metrics.PersistenceLatency)
+	result, err := p.persistence.GetAckLevels()
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceGetAckLevelScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
+func (p *queuePersistenceClient) DeleteMessagesBefore(messageID int) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteQueueMessagesScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteQueueMessagesScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteMessagesBefore(messageID)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceDeleteQueueMessagesScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (p *queuePersistenceClient) Close() {
+	p.persistence.Close()
 }

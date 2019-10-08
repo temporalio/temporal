@@ -1373,6 +1373,16 @@ func (s *TestBase) GetReplicationMessages(lastMessageID int, maxCount int) ([]*r
 	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
+// UpdateAckLevel updates replication queue ack level
+func (s *TestBase) UpdateAckLevel(lastProcessedMessageID int, clusterName string) error {
+	return s.DomainReplicationQueue.UpdateAckLevel(lastProcessedMessageID, clusterName)
+}
+
+// GetAckLevels returns replication queue ack levels
+func (s *TestBase) GetAckLevels() (map[string]int, error) {
+	return s.DomainReplicationQueue.GetAckLevels()
+}
+
 // GenerateTransferTaskIDs helper
 func (g *TestTransferTaskIDGenerator) GenerateTransferTaskIDs(number int) ([]int64, error) {
 	result := []int64{}

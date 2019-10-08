@@ -235,8 +235,14 @@ const (
 	PersistenceCountWorkflowExecutionsScope
 	// PersistenceEnqueueMessageScope tracks Encueue calls made by service to persistence layer
 	PersistenceEnqueueMessageScope
-	// PersistenceDequeueMessagesScope tracks DequeueMessages calls made by service to persistence layer
-	PersistenceDequeueMessagesScope
+	// PersistenceReadQueueMessagesScope tracks ReadMessages calls made by service to persistence layer
+	PersistenceReadQueueMessagesScope
+	// PersistenceDeleteQueueMessagesScope tracks DeleteMessages calls made by service to persistence layer
+	PersistenceDeleteQueueMessagesScope
+	// PersistenceUpdateAckLevelScope tracks UpdateAckLevel calls made by service to persistence layer
+	PersistenceUpdateAckLevelScope
+	// PersistenceGetAckLevelScope tracks GetAckLeve calls made by service to persistence layer
+	PersistenceGetAckLevelScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -985,7 +991,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree"},
 		PersistenceGetAllHistoryTreeBranchesScope:                {operation: "GetAllHistoryTreeBranches"},
 		PersistenceEnqueueMessageScope:                           {operation: "EnqueueMessage"},
-		PersistenceDequeueMessagesScope:                          {operation: "DequeueMessages"},
+		PersistenceReadQueueMessagesScope:                        {operation: "ReadQueueMessages"},
+		PersistenceDeleteQueueMessagesScope:                      {operation: "DeleteQueueMessages"},
+		PersistenceUpdateAckLevelScope:                           {operation: "UpdateAckLevel"},
+		PersistenceGetAckLevelScope:                              {operation: "GetAckLevel"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 

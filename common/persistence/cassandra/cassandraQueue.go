@@ -26,6 +26,7 @@ import (
 
 	"github.com/gocql/gocql"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
@@ -37,23 +38,37 @@ const (
 )
 
 const (
-	templateEnqueueMessageQuery   = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(?, ?, ?) IF NOT EXISTS`
-	templateGetLastMessageIDQuery = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
-	templateGetMessagesQuery      = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
+	templateEnqueueMessageQuery      = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(?, ?, ?) IF NOT EXISTS`
+	templateGetLastMessageIDQuery    = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
+	templateGetMessagesQuery         = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
+	templateDeleteMessagesQuery      = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
+	templateGetQueueMetadataQuery    = `SELECT cluster_ack_level, version FROM queue_metadata WHERE queue_type = ?`
+	templateInsertQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, version) VALUES(?, ?, ?) IF NOT EXISTS`
+	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET cluster_ack_level = ?, version = ? WHERE queue_type = ? IF version = ?`
 )
 
 type (
 	cassandraQueue struct {
-		queueType int
+		queueType common.QueueType
 		logger    log.Logger
 		cassandraStore
+	}
+
+	// Note that this struct is defined in the cassandra package not the persistence interface
+	// because we only have ack levels in metadata (version is a cassandra only concept because
+	// of the CAS operation). Consider moving this to persistence interface if we end up having
+	// more shared fields.
+	queueMetadata struct {
+		clusterAckLevels map[string]int
+		// version is used for CAS operation.
+		version int
 	}
 )
 
 func newQueue(
 	cfg config.Cassandra,
 	logger log.Logger,
-	queueType int,
+	queueType common.QueueType,
 ) (persistence.Queue, error) {
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
 	cluster.Keyspace = cfg.Keyspace
@@ -71,11 +86,29 @@ func newQueue(
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
 
-	return &cassandraQueue{
+	queue := &cassandraQueue{
 		cassandraStore: cassandraStore{session: session, logger: logger},
 		logger:         logger,
 		queueType:      queueType,
-	}, nil
+	}
+	if err := queue.createQueueMetadataEntryIfNotExist(); err != nil {
+		return nil, fmt.Errorf("failed to check and create queue metadata entry: %v", err)
+	}
+
+	return queue, nil
+}
+
+func (q *cassandraQueue) createQueueMetadataEntryIfNotExist() error {
+	queueMetadata, err := q.getQueueMetadata()
+	if err != nil {
+		return err
+	}
+
+	if queueMetadata == nil {
+		return q.insertInitialQueueMetadataRecord()
+	}
+
+	return nil
 }
 
 func (q *cassandraQueue) EnqueueMessage(
@@ -136,7 +169,7 @@ func (q *cassandraQueue) getNextMessageID() (int, error) {
 	return result["message_id"].(int) + 1, nil
 }
 
-func (q *cassandraQueue) DequeueMessages(
+func (q *cassandraQueue) ReadMessages(
 	lastMessageID int,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
@@ -150,7 +183,7 @@ func (q *cassandraQueue) DequeueMessages(
 	iter := query.Iter()
 	if iter == nil {
 		return nil, &workflow.InternalServiceError{
-			Message: "DequeueMessages operation failed. Not able to create query iterator.",
+			Message: "ReadMessages operation failed. Not able to create query iterator.",
 		}
 	}
 
@@ -165,19 +198,11 @@ func (q *cassandraQueue) DequeueMessages(
 
 	if err := iter.Close(); err != nil {
 		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DequeueMessages operation failed. Error: %v", err),
+			Message: fmt.Sprintf("ReadMessages operation failed. Error: %v", err),
 		}
 	}
 
 	return result, nil
-}
-
-func (q *cassandraQueue) Close() error {
-	if q.session != nil {
-		q.session.Close()
-	}
-
-	return nil
 }
 
 func getMessagePayload(message map[string]interface{}) []byte {
@@ -186,4 +211,111 @@ func getMessagePayload(message map[string]interface{}) []byte {
 
 func getMessageID(message map[string]interface{}) int {
 	return message["message_id"].(int)
+}
+
+func (q *cassandraQueue) DeleteMessagesBefore(messageID int) error {
+	query := q.session.Query(templateDeleteMessagesQuery, q.queueType, messageID)
+	if err := query.Exec(); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (q *cassandraQueue) insertInitialQueueMetadataRecord() error {
+	version := 0
+	clusterAckLevels := map[string]int{}
+	query := q.session.Query(templateInsertQueueMetadataQuery, q.queueType, clusterAckLevels, version)
+	_, err := query.ScanCAS()
+	if err != nil {
+		return fmt.Errorf("failed to insert initial queue metadata record: %v", err)
+	}
+	// it's ok if the query is not applied, which means that the record exists already.
+	return nil
+}
+
+func (q *cassandraQueue) UpdateAckLevel(messageID int, clusterName string) error {
+	queueMetadata, err := q.getQueueMetadata()
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
+		}
+	}
+
+	// Ignore possibly delayed message
+	if queueMetadata.clusterAckLevels[clusterName] > messageID {
+		return nil
+	}
+
+	queueMetadata.clusterAckLevels[clusterName] = messageID
+	queueMetadata.version++
+
+	err = q.updateQueueMetadata(queueMetadata)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (q *cassandraQueue) GetAckLevels() (map[string]int, error) {
+	queueMetadata, err := q.getQueueMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	return queueMetadata.clusterAckLevels, nil
+}
+
+func (q *cassandraQueue) getQueueMetadata() (*queueMetadata, error) {
+	query := q.session.Query(templateGetQueueMetadataQuery, q.queueType)
+	var ackLevels map[string]int
+	var version int
+	err := query.Scan(&ackLevels, &version)
+	if err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to get queue metadata: %v", err)
+	}
+
+	// if record exist but ackLevels is empty, we initialize the map
+	if ackLevels == nil {
+		ackLevels = make(map[string]int)
+	}
+
+	return &queueMetadata{clusterAckLevels: ackLevels, version: version}, nil
+}
+
+func (q *cassandraQueue) updateQueueMetadata(metadata *queueMetadata) error {
+	query := q.session.Query(templateUpdateQueueMetadataQuery,
+		metadata.clusterAckLevels,
+		metadata.version,
+		q.queueType,
+		metadata.version-1,
+	)
+	applied, err := query.ScanCAS()
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
+		}
+	}
+	if !applied {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateAckLevel operation encounter concurrent write."),
+		}
+	}
+
+	return nil
+}
+
+func (q *cassandraQueue) Close() {
+	if q.session != nil {
+		q.session.Close()
+	}
 }

@@ -21,6 +21,7 @@
 package cassandra
 
 import (
+	"github.com/uber/cadence/common"
 	"sync"
 
 	"github.com/gocql/gocql"
@@ -94,7 +95,7 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 }
 
 // NewQueue returns a new queue backed by cassandra
-func (f *Factory) NewQueue(queueType int) (p.Queue, error) {
+func (f *Factory) NewQueue(queueType common.QueueType) (p.Queue, error) {
 	return newQueue(f.cfg, f.logger, queueType)
 }
 
