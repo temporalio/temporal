@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -58,6 +59,8 @@ type (
 		logger            log.Logger
 		metricsClient     metrics.Client
 		historySerializer persistence.PayloadSerializer
+		hostInfo          *membership.HostInfo
+		serviceResolver   membership.ServiceResolver
 	}
 
 	// Config contains all the replication config for worker
@@ -78,12 +81,23 @@ const (
 )
 
 // NewReplicator creates a new replicator for processing replication tasks
-func NewReplicator(clusterMetadata cluster.Metadata, metadataManagerV2 persistence.MetadataManager,
-	domainCache cache.DomainCache, clientBean client.Bean, config *Config,
-	client messaging.Client, logger log.Logger, metricsClient metrics.Client) *Replicator {
+func NewReplicator(
+	clusterMetadata cluster.Metadata,
+	metadataManagerV2 persistence.MetadataManager,
+	domainCache cache.DomainCache,
+	clientBean client.Bean,
+	config *Config,
+	client messaging.Client,
+	logger log.Logger,
+	metricsClient metrics.Client,
+	hostInfo *membership.HostInfo,
+	serviceResolver membership.ServiceResolver,
+) *Replicator {
 
 	logger = logger.WithTags(tag.ComponentReplicator)
 	return &Replicator{
+		hostInfo:          hostInfo,
+		serviceResolver:   serviceResolver,
 		domainCache:       domainCache,
 		clusterMetadata:   clusterMetadata,
 		domainReplicator:  NewDomainReplicator(metadataManagerV2, logger),
@@ -112,7 +126,10 @@ func (r *Replicator) Start() error {
 					clusterName,
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 					r.clientBean.GetRemoteFrontendClient(clusterName),
-					r.metricsClient, r.domainReplicator,
+					r.metricsClient,
+					r.domainReplicator,
+					r.hostInfo,
+					r.serviceResolver,
 				)
 				r.domainProcessors = append(r.domainProcessors, processor)
 			} else {

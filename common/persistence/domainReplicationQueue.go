@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/metrics"
 )
 
 const (
@@ -39,9 +40,16 @@ const (
 var _ DomainReplicationQueue = (*domainReplicationQueueImpl)(nil)
 
 // NewDomainReplicationQueue creates a new DomainReplicationQueue instance
-func NewDomainReplicationQueue(queue Queue, logger log.Logger) DomainReplicationQueue {
+func NewDomainReplicationQueue(
+	queue Queue,
+	clusterName string,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) DomainReplicationQueue {
 	return &domainReplicationQueueImpl{
 		queue:               queue,
+		clusterName:         clusterName,
+		metricsClient:       metricsClient,
 		logger:              logger,
 		encoder:             codec.NewThriftRWEncoder(),
 		ackNotificationChan: make(chan bool),
@@ -51,8 +59,10 @@ func NewDomainReplicationQueue(queue Queue, logger log.Logger) DomainReplication
 
 type (
 	domainReplicationQueueImpl struct {
-		logger              log.Logger
 		queue               Queue
+		clusterName         string
+		metricsClient       metrics.Client
+		logger              log.Logger
 		encoder             codec.BinaryEncoder
 		ackLevelUpdated     bool
 		ackNotificationChan chan bool
@@ -136,6 +146,10 @@ func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}
+
+	q.metricsClient.
+		Scope(metrics.FrontendDomainReplicationQueueScope).
+		UpdateGauge(metrics.DomainReplicationTaskAckLevel, float64(minAckLevel))
 
 	q.ackLevelUpdated = false
 

@@ -697,6 +697,10 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
+	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
+	if err != nil {
+		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
+	}
 	c.replicator = replicator.NewReplicator(
 		c.clusterMetadata,
 		metadataManager,
@@ -705,7 +709,10 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 		workerConfig.ReplicationCfg,
 		c.messagingClient,
 		c.logger,
-		service.GetMetricsClient())
+		service.GetMetricsClient(),
+		service.GetHostInfo(),
+		serviceResolver,
+	)
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
 		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))

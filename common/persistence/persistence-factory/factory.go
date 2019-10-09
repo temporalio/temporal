@@ -89,6 +89,7 @@ type (
 		metricsClient metrics.Client
 		logger        log.Logger
 		datastores    map[storeType]Datastore
+		clusterName   string
 	}
 
 	storeType int
@@ -131,6 +132,7 @@ func New(
 		config:        cfg,
 		metricsClient: metricsClient,
 		logger:        logger,
+		clusterName:   clusterName,
 	}
 	limiters := buildRatelimiters(cfg)
 	factory.init(clusterName, limiters)
@@ -279,7 +281,7 @@ func (f *factoryImpl) NewDomainReplicationQueue() (p.DomainReplicationQueue, err
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 
-	return p.NewDomainReplicationQueue(result, f.logger), nil
+	return p.NewDomainReplicationQueue(result, f.clusterName, f.metricsClient, f.logger), nil
 }
 
 // Close closes this factory

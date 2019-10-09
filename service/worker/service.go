@@ -243,6 +243,11 @@ func (s *Service) startReplicator(base service.Service, pFactory persistencefact
 	domainCache := cache.NewDomainCache(metadataV2Mgr, base.GetClusterMetadata(), s.metricsClient, s.logger)
 	domainCache.Start()
 
+	serviceResolver, err := base.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
+	if err != nil {
+		s.logger.Fatal("failed to get service resolver", tag.Error(err))
+	}
+
 	replicator := replicator.NewReplicator(
 		base.GetClusterMetadata(),
 		metadataV2Mgr,
@@ -251,7 +256,10 @@ func (s *Service) startReplicator(base service.Service, pFactory persistencefact
 		s.config.ReplicationCfg,
 		base.GetMessagingClient(),
 		s.logger,
-		s.metricsClient)
+		s.metricsClient,
+		base.GetHostInfo(),
+		serviceResolver,
+	)
 	if err := replicator.Start(); err != nil {
 		replicator.Stop()
 		s.logger.Fatal("fail to start replicator", tag.Error(err))

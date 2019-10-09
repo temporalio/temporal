@@ -23,8 +23,8 @@ package mysql
 import (
 	"database/sql"
 	"encoding/json"
-	"github.com/uber/cadence/common"
 
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 )
 

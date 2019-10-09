@@ -241,7 +241,7 @@ const (
 	PersistenceDeleteQueueMessagesScope
 	// PersistenceUpdateAckLevelScope tracks UpdateAckLevel calls made by service to persistence layer
 	PersistenceUpdateAckLevelScope
-	// PersistenceGetAckLevelScope tracks GetAckLeve calls made by service to persistence layer
+	// PersistenceGetAckLevelScope tracks GetAckLevel calls made by service to persistence layer
 	PersistenceGetAckLevelScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
@@ -666,6 +666,8 @@ const (
 	FrontendGetDomainReplicationMessagesScope
 	// FrontendReapplyEventsScope is the metric scope for frontend.ReapplyEvents
 	FrontendReapplyEventsScope
+	// FrontendDomainReplicationQueueScope is the metrics scope for domain replication queue
+	FrontendDomainReplicationQueueScope
 
 	NumFrontendScopes
 )
@@ -1200,6 +1202,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
 		FrontendGetDomainReplicationMessagesScope:     {operation: "GetDomainReplicationMessages"},
 		FrontendReapplyEventsScope:                    {operation: "ReapplyEvents"},
+		FrontendDomainReplicationQueueScope:           {operation: "DomainReplicationQueue"},
 	},
 	// History Scope Names
 	History: {
@@ -1423,9 +1426,16 @@ const (
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
+// Frontend Metrics enum
+const (
+	DomainReplicationTaskAckLevel = iota + NumCommonMetrics
+
+	NumFrontendMetrics
+)
+
 // History Metrics enum
 const (
-	TaskRequests = iota + NumCommonMetrics
+	TaskRequests = iota + NumFrontendMetrics
 	TaskLatency
 	TaskFailures
 	TaskDiscarded
@@ -1727,7 +1737,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
 	},
-	Frontend: {},
+	Frontend: {
+		DomainReplicationTaskAckLevel: {metricName: "domain_replication_task_ack_level", metricType: Gauge},
+	},
 	History: {
 		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
 		TaskLatency:                                       {metricName: "task_latency", metricType: Timer},
