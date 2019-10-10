@@ -4,7 +4,6 @@
   "Description": "add cross DC domain replication config, add target child workflow only to transfer task, add cross DC domain config verion, as a sequency ID to prevent out of order domain update, add flag indicating whether a domain is a global domain",
   "SchemaUpdateCqlFiles": [
     "add_replication_config.cql",
-    "add_domain_config_version.cql",
     "add_target_child_workflow_only_to_transfer_task.cql"
   ]
 }

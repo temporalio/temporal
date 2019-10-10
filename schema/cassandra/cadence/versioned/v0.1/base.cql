@@ -201,12 +201,3 @@ CREATE TABLE domains (
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
-
-CREATE TABLE domains_by_name (
-  name   text,
-  domain frozen<domain>,
-  config frozen<domain_config>,
-  PRIMARY KEY (name)
-)  WITH COMPACTION = {
-     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-   };
