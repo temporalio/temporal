@@ -34,12 +34,14 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	messageMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/common/xdc"
@@ -61,6 +63,7 @@ type (
 		mockHistoryClient           *historyservicetest.MockClient
 		mockRereplicator            *xdc.MockHistoryRereplicator
 		mockSequentialTaskProcessor *task.MockSequentialTaskProcessor
+		mockDomainCache             *cache.DomainCacheMock
 
 		controller *gomock.Controller
 		processor  *replicationTaskProcessor
@@ -97,6 +100,25 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 	s.mockSequentialTaskProcessor = &task.MockSequentialTaskProcessor{}
+	s.mockDomainCache = &cache.DomainCacheMock{}
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{},
+			&persistence.DomainConfig{},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			123,
+			nil,
+		),
+		nil,
+	)
+	s.currentCluster = cluster.TestAlternativeClusterName
+	s.sourceCluster = cluster.TestCurrentClusterName
 
 	s.processor = newReplicationTaskProcessor(
 		s.currentCluster,
@@ -109,6 +131,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		s.mockDomainReplicator,
 		s.mockRereplicator,
 		s.mockHistoryClient,
+		s.mockDomainCache,
 		s.mockSequentialTaskProcessor,
 	)
 }

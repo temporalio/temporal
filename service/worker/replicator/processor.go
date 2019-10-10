@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 
 	h "github.com/uber/cadence/.gen/go/history"
@@ -61,6 +62,7 @@ type (
 		domainReplicator        DomainReplicator
 		historyRereplicator     xdc.HistoryRereplicator
 		historyClient           history.Client
+		domainCache             cache.DomainCache
 		msgEncoder              codec.BinaryEncoder
 		timeSource              clock.TimeSource
 		sequentialTaskProcessor task.SequentialTaskProcessor
@@ -80,10 +82,20 @@ var (
 	ErrDeserializeReplicationTask = &shared.BadRequestError{Message: "Failed to deserialize replication task"}
 )
 
-func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string, client messaging.Client, config *Config,
-	logger log.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
-	historyRereplicator xdc.HistoryRereplicator, historyClient history.Client,
-	sequentialTaskProcessor task.SequentialTaskProcessor) *replicationTaskProcessor {
+func newReplicationTaskProcessor(
+	currentCluster string,
+	sourceCluster string,
+	consumer string,
+	client messaging.Client,
+	config *Config,
+	logger log.Logger,
+	metricsClient metrics.Client,
+	domainReplicator DomainReplicator,
+	historyRereplicator xdc.HistoryRereplicator,
+	historyClient history.Client,
+	domainCache cache.DomainCache,
+	sequentialTaskProcessor task.SequentialTaskProcessor,
+) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
@@ -102,6 +114,7 @@ func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string,
 		historyClient:           retryableHistoryClient,
 		msgEncoder:              codec.NewThriftRWEncoder(),
 		timeSource:              clock.NewRealTimeSource(),
+		domainCache:             domainCache,
 		sequentialTaskProcessor: sequentialTaskProcessor,
 	}
 }
@@ -327,6 +340,11 @@ func (p *replicationTaskProcessor) handleActivityTask(
 	logger log.Logger,
 ) error {
 
+	doContinue, err := p.filterTask(task.SyncActicvityTaskAttributes.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
+
 	activityReplicationTask := newActivityReplicationTask(
 		task,
 		msg,
@@ -345,6 +363,11 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
+
+	doContinue, err := p.filterTask(task.HistoryTaskAttributes.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
 
 	historyReplicationTask := newHistoryReplicationTask(
 		task,
@@ -366,6 +389,11 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 	logger log.Logger,
 ) error {
 
+	doContinue, err := p.filterTask(task.HistoryMetadataTaskAttributes.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
+
 	historyMetadataReplicationTask := newHistoryMetadataReplicationTask(
 		task,
 		msg,
@@ -386,6 +414,11 @@ func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
 	logger log.Logger,
 ) error {
 
+	doContinue, err := p.filterTask(task.HistoryTaskV2Attributes.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
+
 	historyReplicationTask := newHistoryReplicationV2Task(
 		task,
 		msg,
@@ -396,6 +429,27 @@ func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
 		p.metricsClient,
 	)
 	return p.sequentialTaskProcessor.Submit(historyReplicationTask)
+}
+
+func (p *replicationTaskProcessor) filterTask(
+	domainID string,
+) (bool, error) {
+
+	domainEntry, err := p.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return false, err
+	}
+
+	shouldProcessTask := false
+
+FilterLoop:
+	for _, targetCluster := range domainEntry.GetReplicationConfig().Clusters {
+		if p.currentCluster == targetCluster.ClusterName {
+			shouldProcessTask = true
+			break FilterLoop
+		}
+	}
+	return shouldProcessTask, nil
 }
 
 func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {

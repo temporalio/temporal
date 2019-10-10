@@ -68,6 +68,7 @@ func NewReplicationTaskFetchers(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) *ReplicationTaskFetchers {
+
 	var fetchers []*ReplicationTaskFetcher
 	if consumerConfig.Type == config.ReplicationConsumerTypeRPC {
 		fetcherConfig := consumerConfig.FetcherConfig
@@ -85,7 +86,11 @@ func NewReplicationTaskFetchers(
 
 	}
 
-	return &ReplicationTaskFetchers{fetchers: fetchers, status: common.DaemonStatusInitialized, logger: logger}
+	return &ReplicationTaskFetchers{
+		fetchers: fetchers,
+		status:   common.DaemonStatusInitialized,
+		logger:   logger,
+	}
 }
 
 // Start starts the fetchers
@@ -118,7 +123,13 @@ func (f *ReplicationTaskFetchers) GetFetchers() []*ReplicationTaskFetcher {
 }
 
 // newReplicationTaskFetcher creates a new fetcher.
-func newReplicationTaskFetcher(logger log.Logger, sourceCluster string, config *config.FetcherConfig, sourceFrontend workflowserviceclient.Interface) *ReplicationTaskFetcher {
+func newReplicationTaskFetcher(
+	logger log.Logger,
+	sourceCluster string,
+	config *config.FetcherConfig,
+	sourceFrontend workflowserviceclient.Interface,
+) *ReplicationTaskFetcher {
+
 	return &ReplicationTaskFetcher{
 		status:        common.DaemonStatusInitialized,
 		config:        config,
@@ -154,7 +165,10 @@ func (f *ReplicationTaskFetcher) Stop() {
 
 // fetchTasks collects getReplicationTasks request from shards and send out aggregated request to source frontend.
 func (f *ReplicationTaskFetcher) fetchTasks() {
-	timer := time.NewTimer(backoff.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+	timer := time.NewTimer(backoff.JitDuration(
+		time.Duration(f.config.AggregationIntervalSecs)*time.Second,
+		f.config.TimerJitterCoefficient,
+	))
 
 	requestByShard := make(map[int32]*request)
 
@@ -177,7 +191,10 @@ Loop:
 			if len(requestByShard) == 0 {
 				// We don't receive tasks from previous fetch so processors are all sleeping.
 				f.logger.Debug("Skip fetching as no processor is asking for tasks.")
-				timer.Reset(backoff.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+				timer.Reset(backoff.JitDuration(
+					time.Duration(f.config.AggregationIntervalSecs)*time.Second,
+					f.config.TimerJitterCoefficient,
+				))
 				continue Loop
 			}
 
@@ -193,7 +210,10 @@ Loop:
 			cancel()
 			if err != nil {
 				f.logger.Error("Failed to get replication tasks", tag.Error(err))
-				timer.Reset(backoff.JitDuration(time.Duration(f.config.ErrorRetryWaitSecs)*time.Second, f.config.TimerJitterCoefficient))
+				timer.Reset(backoff.JitDuration(time.Duration(
+					f.config.ErrorRetryWaitSecs)*time.Second,
+					f.config.TimerJitterCoefficient,
+				))
 				continue Loop
 			}
 
@@ -206,7 +226,10 @@ Loop:
 				delete(requestByShard, shardID)
 			}
 
-			timer.Reset(backoff.JitDuration(time.Duration(f.config.AggregationIntervalSecs)*time.Second, f.config.TimerJitterCoefficient))
+			timer.Reset(backoff.JitDuration(time.Duration(
+				f.config.AggregationIntervalSecs)*time.Second,
+				f.config.TimerJitterCoefficient,
+			))
 
 		case <-f.done:
 			timer.Stop()

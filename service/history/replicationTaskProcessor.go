@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -54,17 +55,21 @@ var (
 type (
 	// ReplicationTaskProcessor is responsible for processing replication tasks for a shard.
 	ReplicationTaskProcessor struct {
-		status                 int32
-		shard                  ShardContext
+		currentCluster   string
+		sourceCluster    string
+		status           int32
+		shard            ShardContext
+		historyEngine    Engine
+		domainCache      cache.DomainCache
+		metricsClient    metrics.Client
+		domainReplicator replicator.DomainReplicator
+		logger           log.Logger
+
+		retryPolicy          backoff.RetryPolicy
+		noTaskBackoffRetrier backoff.Retrier
+
 		lastProcessedMessageID int64
 		lastRetrievedMessageID int64
-		historyEngine          Engine
-		sourceCluster          string
-		domainReplicator       replicator.DomainReplicator
-		metricsClient          metrics.Client
-		logger                 log.Logger
-		retryPolicy            backoff.RetryPolicy
-		noTaskBackoffRetrier   backoff.Retrier
 
 		requestChan chan<- *request
 		done        chan struct{}
@@ -100,12 +105,14 @@ func NewReplicationTaskProcessor(
 	}
 
 	return &ReplicationTaskProcessor{
+		currentCluster:       shard.GetClusterMetadata().GetCurrentClusterName(),
+		sourceCluster:        replicationTaskFetcher.GetSourceCluster(),
 		status:               common.DaemonStatusInitialized,
 		shard:                shard,
 		historyEngine:        historyEngine,
-		sourceCluster:        replicationTaskFetcher.GetSourceCluster(),
-		domainReplicator:     domainReplicator,
+		domainCache:          shard.GetDomainCache(),
 		metricsClient:        metricsClient,
+		domainReplicator:     domainReplicator,
 		logger:               shard.GetLogger(),
 		retryPolicy:          retryPolicy,
 		noTaskBackoffRetrier: noTaskBackoffRetrier,
@@ -253,7 +260,10 @@ func (p *ReplicationTaskProcessor) processTaskOnce(replicationTask *r.Replicatio
 		p.updateFailureMetric(scope, err)
 	} else {
 		p.logger.Debug("Successfully applied replication task.", tag.TaskID(replicationTask.GetSourceTaskId()))
-		p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster)).IncCounter(metrics.ReplicationTasksApplied)
+		p.metricsClient.Scope(
+			metrics.ReplicationTaskFetcherScope,
+			metrics.TargetClusterTag(p.sourceCluster),
+		).IncCounter(metrics.ReplicationTasksApplied)
 	}
 
 	return err
@@ -295,8 +305,16 @@ func (p *ReplicationTaskProcessor) updateFailureMetric(scope int, err error) {
 	}
 }
 
-func (p *ReplicationTaskProcessor) handleActivityTask(task *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessor) handleActivityTask(
+	task *r.ReplicationTask,
+) error {
+
 	attr := task.SyncActicvityTaskAttributes
+	doContinue, err := p.filterTask(attr.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
+
 	request := &h.SyncActivityRequest{
 		DomainId:           attr.DomainId,
 		WorkflowId:         attr.WorkflowId,
@@ -317,8 +335,16 @@ func (p *ReplicationTaskProcessor) handleActivityTask(task *r.ReplicationTask) e
 	return p.historyEngine.SyncActivity(ctx, request)
 }
 
-func (p *ReplicationTaskProcessor) handleHistoryReplicationTask(task *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessor) handleHistoryReplicationTask(
+	task *r.ReplicationTask,
+) error {
+
 	attr := task.HistoryTaskAttributes
+	doContinue, err := p.filterTask(attr.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
+
 	request := &h.ReplicateEventsRequest{
 		SourceCluster: common.StringPtr(p.sourceCluster),
 		DomainUUID:    attr.DomainId,
@@ -343,8 +369,16 @@ func (p *ReplicationTaskProcessor) handleHistoryReplicationTask(task *r.Replicat
 	return p.historyEngine.ReplicateEvents(ctx, request)
 }
 
-func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(task *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(
+	task *r.ReplicationTask,
+) error {
+
 	attr := task.HistoryTaskV2Attributes
+	doContinue, err := p.filterTask(attr.GetDomainId())
+	if err != nil || !doContinue {
+		return err
+	}
+
 	request := &h.ReplicateEventsV2Request{
 		DomainUUID: attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
@@ -362,7 +396,10 @@ func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(task *r.Replic
 	return p.historyEngine.ReplicateEventsV2(ctx, request)
 }
 
-func (p *ReplicationTaskProcessor) handleSyncShardTask(task *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessor) handleSyncShardTask(
+	task *r.ReplicationTask,
+) error {
+
 	attr := task.SyncShardStatusTaskAttributes
 	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
 		return nil
@@ -378,10 +415,33 @@ func (p *ReplicationTaskProcessor) handleSyncShardTask(task *r.ReplicationTask) 
 	return p.historyEngine.SyncShardStatus(ctx, req)
 }
 
-func (p *ReplicationTaskProcessor) handleDomainReplicationTask(task *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessor) handleDomainReplicationTask(
+	task *r.ReplicationTask,
+) error {
+
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
 	return p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
+}
+
+func (p *ReplicationTaskProcessor) filterTask(
+	domainID string,
+) (bool, error) {
+
+	domainEntry, err := p.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return false, err
+	}
+
+	shouldProcessTask := false
+FilterLoop:
+	for _, targetCluster := range domainEntry.GetReplicationConfig().Clusters {
+		if p.currentCluster == targetCluster.ClusterName {
+			shouldProcessTask = true
+			break FilterLoop
+		}
+	}
+	return shouldProcessTask, nil
 }

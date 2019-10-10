@@ -176,9 +176,17 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.logger,
 	)
 	r.processors = append(r.processors, newReplicationTaskProcessor(
-		currentClusterName, clusterName, consumerName, r.client,
-		r.config, logger, r.metricsClient, r.domainReplicator,
-		historyRereplicator, r.historyClient,
+		currentClusterName,
+		clusterName,
+		consumerName,
+		r.client,
+		r.config,
+		logger,
+		r.metricsClient,
+		r.domainReplicator,
+		historyRereplicator,
+		r.historyClient,
+		r.domainCache,
 		task.NewSequentialTaskProcessor(
 			r.config.ReplicatorTaskConcurrency(),
 			replicationSequentialTaskQueueHashFn,
