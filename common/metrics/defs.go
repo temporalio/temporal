@@ -405,6 +405,8 @@ const (
 	AdminClientDescribeWorkflowExecutionScope
 	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryScope
+	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
+	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateDomainScope
 	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
@@ -580,6 +582,8 @@ const (
 	AdminDescribeWorkflowExecutionScope
 	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryScope
+	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryV2Scope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
 	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
@@ -1080,6 +1084,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetWorkflowExecutionRawHistoryV2Scope:    {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                          {operation: "AdminClientCloseShard", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		DCRedirectionDeprecateDomainScope:                   {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeDomainScope:                    {operation: "DCRedirectionDescribeDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1158,11 +1163,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// Frontend Scope Names
 	Frontend: {
 		// Admin API scope co-locates with with frontend
-		AdminRemoveTaskScope:                     {operation: "AdminRemoveTask"},
-		AdminCloseShardTaskScope:                 {operation: "AdminCloseShardTask"},
-		AdminDescribeHistoryHostScope:            {operation: "DescribeHistoryHost"},
-		AdminDescribeWorkflowExecutionScope:      {operation: "DescribeWorkflowExecution"},
-		AdminGetWorkflowExecutionRawHistoryScope: {operation: "GetWorkflowExecutionRawHistory"},
+		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
+		AdminCloseShardTaskScope:                   {operation: "AdminCloseShardTask"},
+		AdminDescribeHistoryHostScope:              {operation: "DescribeHistoryHost"},
+		AdminDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
+		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
+		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
 
 		FrontendStartWorkflowExecutionScope:           {operation: "StartWorkflowExecution"},
 		FrontendPollForDecisionTaskScope:              {operation: "PollForDecisionTask"},

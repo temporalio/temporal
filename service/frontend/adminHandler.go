@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/olivere/elastic"
 	"strconv"
@@ -65,13 +66,25 @@ type (
 		startWG       sync.WaitGroup
 		params        *service.BootstrapParams
 	}
+
+	getWorkflowRawHistoryV2Token struct {
+		DomainName        string
+		WorkflowID        string
+		RunID             string
+		StartEventID      int64
+		StartEventVersion int64
+		EndEventID        int64
+		EndEventVersion   int64
+		PersistenceToken  []byte
+		VersionHistories  *gen.VersionHistories
+	}
 )
 
 // NewAdminHandler creates a thrift handler for the cadence admin service
 func NewAdminHandler(
 	sVice service.Service,
 	numberOfHistoryShards int,
-	metadataMgr persistence.MetadataManager,
+	domainCache cache.DomainCache,
 	historyMgr persistence.HistoryManager,
 	historyV2Mgr persistence.HistoryV2Manager,
 	params *service.BootstrapParams,
@@ -80,7 +93,7 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: numberOfHistoryShards,
 		Service:               sVice,
-		domainCache:           cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
+		domainCache:           domainCache,
 		historyMgr:            historyMgr,
 		historyV2Mgr:          historyV2Mgr,
 		params:                params,
@@ -252,7 +265,10 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *gen.D
 
 // GetWorkflowExecutionRawHistory - retrieves the history of workflow execution
 func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
-	ctx context.Context, request *admin.GetWorkflowExecutionRawHistoryRequest) (resp *admin.GetWorkflowExecutionRawHistoryResponse, retError error) {
+	ctx context.Context,
+	request *admin.GetWorkflowExecutionRawHistoryRequest,
+) (resp *admin.GetWorkflowExecutionRawHistoryResponse, retError error) {
+
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope := metrics.AdminGetWorkflowExecutionRawHistoryScope
@@ -279,7 +295,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	}
 
 	pageSize := int(request.GetMaximumPageSize())
-	if pageSize < 0 {
+	if pageSize <= 0 {
 		return nil, &gen.BadRequestError{Message: "Invalid PageSize."}
 	}
 
@@ -391,10 +407,9 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	adh.metricsClient.RecordTimer(scope, metrics.HistorySize, time.Duration(size))
 	domainScope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
-	serializer := persistence.NewPayloadSerializer()
 	blobs := []*gen.DataBlob{}
 	for _, historyBatch := range historyBatches {
-		blob, err := serializer.SerializeBatchEvents(historyBatch.Events, common.EncodingTypeThriftRW)
+		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeThriftRW)
 		if err != nil {
 			return nil, err
 		}
@@ -419,6 +434,281 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	}
 
 	return result, nil
+}
+
+// GetWorkflowExecutionRawHistoryV2 - retrieves the history of workflow execution
+func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+) (resp *admin.GetWorkflowExecutionRawHistoryV2Response, retError error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+	scope := metrics.AdminGetWorkflowExecutionRawHistoryV2Scope
+	sw := adh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if err := adh.validateGetWorkflowExecutionRawHistoryV2Request(
+		request,
+	); err != nil {
+		return nil, adh.error(err, scope)
+	}
+	domainID, err := adh.domainCache.GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	execution := request.Execution
+	var pageToken *getWorkflowRawHistoryV2Token
+	var versionHistory *persistence.VersionHistory
+	if request.NextPageToken == nil {
+		response, err := adh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
+			DomainUUID: common.StringPtr(domainID),
+			Execution:  execution,
+		})
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		versionHistories := persistence.NewVersionHistoriesFromThrift(
+			response.GetVersionHistories(),
+		)
+		versionHistory, err = adh.updateEventRange(
+			request,
+			versionHistories,
+		)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		pageToken = adh.generatePaginationToken(request, versionHistories)
+	} else {
+		pageToken, err = deserializeRawHistoryToken(request.NextPageToken)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+		versionHistories := pageToken.VersionHistories
+		if versionHistories == nil {
+			return nil, adh.error(&gen.BadRequestError{Message: "Invalid version histories."}, scope)
+		}
+		versionHistory, err = adh.updateEventRange(
+			request,
+			persistence.NewVersionHistoriesFromThrift(versionHistories),
+		)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+	}
+
+	if err := adh.validatePaginationToken(
+		request,
+		pageToken,
+	); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	pageSize := int(request.GetMaximumPageSize())
+	shardID := common.WorkflowIDToHistoryShard(
+		execution.GetWorkflowId(),
+		adh.numberOfHistoryShards,
+	)
+	rawHistoryResponse, err := adh.historyV2Mgr.ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken: versionHistory.GetBranchToken(),
+		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
+		// ReadRawHistoryBranch is inclusive exclusive.
+		MinEventID:    pageToken.StartEventID + 1,
+		MaxEventID:    pageToken.EndEventID,
+		PageSize:      pageSize,
+		NextPageToken: pageToken.PersistenceToken,
+		ShardID:       common.IntPtr(shardID),
+	})
+	if err != nil {
+		if _, ok := err.(*gen.EntityNotExistsError); ok {
+			// when no events can be returned from DB, DB layer will return
+			// EntityNotExistsError, this API shall return empty response
+			return &admin.GetWorkflowExecutionRawHistoryV2Response{
+				HistoryBatches: []*gen.DataBlob{},
+				NextPageToken:  nil, // no further pagination
+				VersionHistory: versionHistory.ToThrift(),
+			}, nil
+		}
+		return nil, err
+	}
+
+	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
+	size := rawHistoryResponse.Size
+	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
+	// domains along with the individual domains stats
+	adh.metricsClient.RecordTimer(scope, metrics.HistorySize, time.Duration(size))
+	domainScope := adh.metricsClient.Scope(scope, metrics.DomainTag(request.GetDomain()))
+	domainScope.RecordTimer(metrics.HistorySize, time.Duration(size))
+
+	rawBlobs := rawHistoryResponse.HistoryEventBlobs
+	blobs := []*gen.DataBlob{}
+	for _, blob := range rawBlobs {
+		blobs = append(blobs, blob.ToThrift())
+	}
+
+	result := &admin.GetWorkflowExecutionRawHistoryV2Response{
+		HistoryBatches: blobs,
+		VersionHistory: versionHistory.ToThrift(),
+	}
+	if len(pageToken.PersistenceToken) == 0 {
+		result.NextPageToken = nil
+	} else {
+		result.NextPageToken, err = serializeRawHistoryToken(pageToken)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
+	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+) error {
+
+	execution := request.Execution
+	if len(execution.GetWorkflowId()) == 0 {
+		return &gen.BadRequestError{Message: "Invalid WorkflowID."}
+	}
+	// TODO currently, this API is only going to be used by re-send history events
+	// to remote cluster if kafka is lossy again, in the future, this API can be used
+	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
+	if len(execution.GetRunId()) == 0 || uuid.Parse(execution.GetRunId()) == nil {
+		return &gen.BadRequestError{Message: "Invalid RunID."}
+	}
+
+	pageSize := int(request.GetMaximumPageSize())
+	if pageSize <= 0 {
+		return &gen.BadRequestError{Message: "Invalid PageSize."}
+	}
+
+	if request.StartEventId == nil &&
+		request.StartEventVersion == nil &&
+		request.EndEventId == nil &&
+		request.EndEventVersion == nil {
+		return &gen.BadRequestError{Message: "Invalid event query range."}
+	}
+
+	if (request.StartEventId != nil && request.StartEventVersion == nil) ||
+		(request.StartEventId == nil && request.StartEventVersion != nil) {
+		return &gen.BadRequestError{Message: "Invalid start event id and start event version combination."}
+	}
+
+	if (request.EndEventId != nil && request.EndEventVersion == nil) ||
+		(request.EndEventId == nil && request.EndEventVersion != nil) {
+		return &gen.BadRequestError{Message: "Invalid end event id and end event version combination."}
+	}
+	return nil
+}
+
+func (adh *AdminHandler) updateEventRange(
+	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+	versionHistories *persistence.VersionHistories,
+) (*persistence.VersionHistory, error) {
+
+	targetBranch, err := versionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return nil, err
+	}
+	if request.StartEventId == nil || request.StartEventVersion == nil {
+		firstItem, err := targetBranch.GetFirstItem()
+		if err != nil {
+			return nil, err
+		}
+		// If start event is not set, get the events from the first event
+		// As the API is exclusive-exclusive, use first event id - 1 here
+		request.StartEventId = common.Int64Ptr(common.FirstEventID - 1)
+		request.StartEventVersion = common.Int64Ptr(firstItem.GetVersion())
+	}
+	isEndBoundarySet := true
+	if request.EndEventId == nil || request.EndEventVersion == nil {
+		lastItem, err := targetBranch.GetLastItem()
+		if err != nil {
+			return nil, err
+		}
+		// If end event is not set, get the events until the end event
+		// As the API is exclusive-exclusive, use end event id + 1 1 here
+		request.EndEventId = common.Int64Ptr(lastItem.GetEventID() + 1)
+		request.EndEventVersion = common.Int64Ptr(lastItem.GetVersion())
+		isEndBoundarySet = false
+	}
+
+	if request.GetStartEventId() < 0 {
+		return nil, &gen.BadRequestError{Message: "Invalid FirstEventID && NextEventID combination."}
+	}
+
+	// get branch based on the end event
+	if isEndBoundarySet {
+		endItem := persistence.NewVersionHistoryItem(request.GetEndEventId(), request.GetEndEventVersion())
+		idx, err := versionHistories.FindFirstVersionHistoryIndexByItem(endItem)
+		if err != nil {
+			return nil, err
+		}
+		targetBranch, err = versionHistories.GetVersionHistory(idx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	startItem := persistence.NewVersionHistoryItem(request.GetStartEventId(), request.GetStartEventVersion())
+	// Start event is not on the same branch as target branch
+	if !targetBranch.ContainsItem(startItem) {
+		idx, err := versionHistories.FindFirstVersionHistoryIndexByItem(startItem)
+		if err != nil {
+			return nil, err
+		}
+		startBranch, err := versionHistories.GetVersionHistory(idx)
+		if err != nil {
+			return nil, err
+		}
+		startItem, err = targetBranch.FindLCAItem(startBranch)
+		if err != nil {
+			return nil, err
+		}
+		request.StartEventId = common.Int64Ptr(startItem.GetEventID())
+		request.StartEventVersion = common.Int64Ptr(startItem.GetVersion())
+	}
+
+	return targetBranch, nil
+}
+
+func (adh *AdminHandler) generatePaginationToken(
+	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+	versionHistories *persistence.VersionHistories,
+) *getWorkflowRawHistoryV2Token {
+
+	execution := request.Execution
+	return &getWorkflowRawHistoryV2Token{
+		DomainName:        request.GetDomain(),
+		WorkflowID:        execution.GetWorkflowId(),
+		RunID:             execution.GetRunId(),
+		StartEventID:      request.GetStartEventId(),
+		StartEventVersion: request.GetStartEventVersion(),
+		EndEventID:        request.GetEndEventId(),
+		EndEventVersion:   request.GetEndEventVersion(),
+		VersionHistories:  versionHistories.ToThrift(),
+		PersistenceToken:  nil, // this is the initialized value
+	}
+}
+
+func (adh *AdminHandler) validatePaginationToken(
+	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+	token *getWorkflowRawHistoryV2Token,
+) error {
+
+	execution := request.Execution
+	if request.GetDomain() != token.DomainName ||
+		execution.GetWorkflowId() != token.WorkflowID ||
+		execution.GetRunId() != token.RunID ||
+		request.GetStartEventId() != token.StartEventID ||
+		request.GetStartEventVersion() != token.StartEventVersion ||
+		request.GetEndEventId() != token.EndEventID ||
+		request.GetEndEventVersion() != token.EndEventVersion {
+		return &gen.BadRequestError{Message: "Invalid pagination token."}
+	}
+	return nil
 }
 
 // startRequestProfile initiates recording of request metrics
@@ -463,4 +753,19 @@ func convertIndexedValueTypeToESDataType(valueType gen.IndexedValueType) string 
 	default:
 		return ""
 	}
+}
+
+func serializeRawHistoryToken(token *getWorkflowRawHistoryV2Token) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	bytes, err := json.Marshal(token)
+	return bytes, err
+}
+
+func deserializeRawHistoryToken(bytes []byte) (*getWorkflowRawHistoryV2Token, error) {
+	token := &getWorkflowRawHistoryV2Token{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
 }

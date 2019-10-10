@@ -150,3 +150,21 @@ func (c *metricClient) GetWorkflowExecutionRawHistory(
 	}
 	return resp, err
 }
+
+func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+	opts ...yarpc.CallOption,
+) (*admin.GetWorkflowExecutionRawHistoryV2Response, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}

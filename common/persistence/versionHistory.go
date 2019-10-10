@@ -90,7 +90,7 @@ func (item *VersionHistoryItem) Equals(input *VersionHistoryItem) bool {
 // NewVersionHistory create a new version history
 func NewVersionHistory(
 	inputToken []byte,
-	inputitems []*VersionHistoryItem,
+	inputItems []*VersionHistoryItem,
 ) *VersionHistory {
 
 	token := make([]byte, len(inputToken))
@@ -100,7 +100,7 @@ func NewVersionHistory(
 		items:       nil,
 	}
 
-	for _, item := range inputitems {
+	for _, item := range inputItems {
 		if err := versionHistory.AddOrUpdateItem(item.Duplicate()); err != nil {
 			panic(fmt.Sprintf("unable to initialize version history: %v", err))
 		}
@@ -243,6 +243,10 @@ func (v *VersionHistory) ContainsItem(
 	prevEventID := common.FirstEventID - 1
 	for _, currentItem := range v.items {
 		if item.GetVersion() == currentItem.GetVersion() {
+			// this is a special handling for event id = 0
+			if (item.GetEventID() == common.FirstEventID-1) && item.GetEventID() <= currentItem.GetEventID() {
+				return true
+			}
 			if prevEventID < item.GetEventID() && item.GetEventID() <= currentItem.GetEventID() {
 				return true
 			}

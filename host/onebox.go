@@ -431,13 +431,13 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 
 	c.frontEndService = service.New(params)
 
+	domainCache := cache.NewDomainCache(c.metadataMgr, c.clusterMetadata, c.frontEndService.GetMetricsClient(), c.logger)
 	c.adminHandler = frontend.NewAdminHandler(
-		c.frontEndService, c.historyConfig.NumHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr, params)
+		c.frontEndService, c.historyConfig.NumHistoryShards, domainCache, c.historyMgr, c.historyV2Mgr, params)
 	c.adminHandler.RegisterHandler()
 
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, c.logger)
 	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.esConfig != nil)
-	domainCache := cache.NewDomainCache(c.metadataMgr, c.clusterMetadata, c.frontEndService.GetMetricsClient(), c.logger)
 
 	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
 		HistoryManager:   c.historyMgr,

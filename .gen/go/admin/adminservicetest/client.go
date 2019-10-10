@@ -226,6 +226,39 @@ func (mr *_MockClientRecorder) GetWorkflowExecutionRawHistory(
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetWorkflowExecutionRawHistory", args...)
 }
 
+// GetWorkflowExecutionRawHistoryV2 responds to a GetWorkflowExecutionRawHistoryV2 call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), ...).Return(...)
+// 	... := client.GetWorkflowExecutionRawHistoryV2(...)
+func (m *MockClient) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	_GetRequest *admin.GetWorkflowExecutionRawHistoryV2Request,
+	opts ...yarpc.CallOption,
+) (success *admin.GetWorkflowExecutionRawHistoryV2Response, err error) {
+
+	args := []interface{}{ctx, _GetRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", args...)
+	success, _ = ret[i].(*admin.GetWorkflowExecutionRawHistoryV2Response)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) GetWorkflowExecutionRawHistoryV2(
+	ctx interface{},
+	_GetRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _GetRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "GetWorkflowExecutionRawHistoryV2", args...)
+}
+
 // RemoveTask responds to a RemoveTask call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

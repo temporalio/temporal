@@ -75,6 +75,20 @@ service AdminService {
     )
 
   /**
+  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
+  * execution in unknown to the service.
+  * StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+  **/
+  GetWorkflowExecutionRawHistoryV2Response GetWorkflowExecutionRawHistoryV2(1: GetWorkflowExecutionRawHistoryV2Request getRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.ServiceBusyError serviceBusyError,
+    )
+
+  /**
   * AddSearchAttribute whitelist search attribute in request.
   **/
   void AddSearchAttribute(1: AddSearchAttributeRequest request)
@@ -111,6 +125,27 @@ struct GetWorkflowExecutionRawHistoryResponse {
   20: optional list<shared.DataBlob> historyBatches
   30: optional map<string, shared.ReplicationInfo> replicationInfo
   40: optional i32 eventStoreVersion
+}
+
+/**
+  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
+  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+  **/
+struct GetWorkflowExecutionRawHistoryV2Request {
+  10: optional string domain
+  20: optional shared.WorkflowExecution execution
+  30: optional i64 (js.type = "Long") startEventId
+  40: optional i64 (js.type = "Long") startEventVersion
+  50: optional i64 (js.type = "Long") endEventId
+  60: optional i64 (js.type = "Long") endEventVersion
+  70: optional i32 maximumPageSize
+  80: optional binary nextPageToken
+}
+
+struct GetWorkflowExecutionRawHistoryV2Response {
+  10: optional binary nextPageToken
+  20: optional list<shared.DataBlob> historyBatches
+  30: optional shared.VersionHistory versionHistory
 }
 
 struct AddSearchAttributeRequest {

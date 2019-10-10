@@ -280,6 +280,17 @@ func (s *versionHistoriesSuite) TestContainsItem_False() {
 	s.False(history.ContainsItem(NewVersionHistoryItem(6, 5)))
 }
 
+func (s *versionHistoriesSuite) TestContainsItem_True_WhenFirstEventIDIsZero() {
+	branchToken := []byte("some random branch token")
+	items := []*VersionHistoryItem{
+		{eventID: 3, version: 0},
+		{eventID: 6, version: 4},
+	}
+	history := NewVersionHistory(branchToken, items)
+
+	s.True(history.ContainsItem(NewVersionHistoryItem(common.FirstEventID-1, 0)))
+}
+
 func (s *versionHistorySuite) TestIsLCAAppendable_True() {
 	branchToken := []byte("some random branch token")
 	items := []*VersionHistoryItem{
