@@ -97,7 +97,6 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 	})
 	s.Nil(err)
 
-	tb.AddUserTimer(ti1, msb)
 	t1 := tb.GetUserTimerTaskIfNeeded(msb)
 
 	s.NotNil(t1)
@@ -130,14 +129,12 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 		StartToFireTimeoutSeconds: common.Int64Ptr(1),
 	})
 	s.Nil(err)
-	tb.AddUserTimer(tiBefore, msb)
 
-	_, tiAfter, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, _, err = msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-after"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
 	s.Nil(err)
-	tb.AddUserTimer(tiAfter, msb)
 
 	t1 := tb.GetUserTimerTaskIfNeeded(msb)
 	s.NotNil(t1)
@@ -154,12 +151,11 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 		TimerInfos:    timerInfos,
 	})
 
-	_, ti3, err := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, _, err = msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-after"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
 	s.Nil(err)
-	tb.AddUserTimer(ti3, msb)
 
 	t1 = tb.GetUserTimerTaskIfNeeded(msb)
 	s.NotNil(t1)

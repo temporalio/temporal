@@ -215,11 +215,10 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Pending() 
 
 	timerID := "timer"
 	timerTimeout := 2 * time.Second
-	event, timerInfo := addTimerStartedEvent(msBuilder, event.GetEventId(), timerID, int64(timerTimeout.Seconds()))
+	event, _ = addTimerStartedEvent(msBuilder, event.GetEventId(), timerID, int64(timerTimeout.Seconds()))
 	nextEventID := event.GetEventId() + 1
 
 	tBuilder := newTimerBuilder(clock.NewRealTimeSource())
-	tBuilder.AddUserTimer(timerInfo, msBuilder)
 	timerTask := &persistence.TimerTaskInfo{
 		Version:             version,
 		DomainID:            s.domainID,
@@ -280,10 +279,9 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Success() 
 
 	timerID := "timer"
 	timerTimeout := 2 * time.Second
-	event, timerInfo := addTimerStartedEvent(msBuilder, event.GetEventId(), timerID, int64(timerTimeout.Seconds()))
+	_, _ = addTimerStartedEvent(msBuilder, event.GetEventId(), timerID, int64(timerTimeout.Seconds()))
 
 	tBuilder := newTimerBuilder(clock.NewRealTimeSource())
-	tBuilder.AddUserTimer(timerInfo, msBuilder)
 	timerTask := &persistence.TimerTaskInfo{
 		Version:             version,
 		DomainID:            s.domainID,
@@ -337,15 +335,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Multiple()
 
 	timerID1 := "timer-1"
 	timerTimeout1 := 2 * time.Second
-	timerEvent1, timerInfo1 := addTimerStartedEvent(msBuilder, event.GetEventId(), timerID1, int64(timerTimeout1.Seconds()))
+	timerEvent1, _ := addTimerStartedEvent(msBuilder, event.GetEventId(), timerID1, int64(timerTimeout1.Seconds()))
 
 	timerID2 := "timer-2"
 	timerTimeout2 := 50 * time.Second
-	_, timerInfo2 := addTimerStartedEvent(msBuilder, event.GetEventId(), timerID2, int64(timerTimeout2.Seconds()))
+	_, _ = addTimerStartedEvent(msBuilder, event.GetEventId(), timerID2, int64(timerTimeout2.Seconds()))
 
 	tBuilder := newTimerBuilder(clock.NewRealTimeSource())
-	tBuilder.AddUserTimer(timerInfo1, msBuilder)
-	tBuilder.AddUserTimer(timerInfo2, msBuilder)
 
 	timerTask := &persistence.TimerTaskInfo{
 		Version:             version,

@@ -199,7 +199,6 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 			})
 		s.Nil(err)
 		timerInfos = append(timerInfos, ti)
-		tBuilder.AddUserTimer(ti, builder)
 	}
 
 	if t := tBuilder.GetUserTimerTaskIfNeeded(builder); t != nil {
@@ -249,10 +248,9 @@ func (s *timerQueueProcessorSuite) addUserTimer(domainID string, we workflow.Wor
 	condition := state.ExecutionInfo.NextEventID
 
 	// create a user timer
-	_, ti, err := builder.AddTimerStartedEvent(common.EmptyEventID,
+	_, _, err = builder.AddTimerStartedEvent(common.EmptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr(timerID), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 	s.Nil(err)
-	tb.AddUserTimer(ti, builder)
 	t := tb.GetUserTimerTaskIfNeeded(builder)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
@@ -962,8 +960,6 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers_SameExpiry() {
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid2"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 	s.Nil(err)
 
-	tBuilder.AddUserTimer(ti, builder)
-	tBuilder.AddUserTimer(ti2, builder)
 	t := tBuilder.GetUserTimerTaskIfNeeded(builder)
 	timerTasks = append(timerTasks, t)
 

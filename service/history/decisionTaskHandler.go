@@ -311,10 +311,9 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 		return err
 	}
 
-	_, ti, err := handler.mutableState.AddTimerStartedEvent(handler.decisionTaskCompletedID, attr)
+	_, _, err := handler.mutableState.AddTimerStartedEvent(handler.decisionTaskCompletedID, attr)
 	switch err.(type) {
 	case nil:
-		handler.timerBuilder.AddUserTimer(ti, handler.mutableState)
 		return nil
 	case *workflow.BadRequestError:
 		return handler.handlerFailDecision(

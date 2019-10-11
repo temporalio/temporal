@@ -167,19 +167,6 @@ func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
 	return timeOutTask
 }
 
-// AddUserTimer - Adds an user timeout request.
-func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder mutableState) {
-	if !tb.isLoadedUserTimers {
-		tb.loadUserTimers(msBuilder)
-	}
-	seqNum := tb.localSeqNumGen.NextSeq()
-	timer := &timerDetails{
-		TimerSequenceID: TimerSequenceID{VisibilityTimestamp: ti.ExpiryTime, TaskID: seqNum},
-		TimerID:         ti.TimerID,
-		TaskCreated:     ti.TaskID == TimerTaskStatusCreated}
-	tb.insertTimer(timer)
-}
-
 // GetUserTimerTaskIfNeeded - if we need create a timer task for the user timers
 func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder mutableState) persistence.Task {
 	if !tb.isLoadedUserTimers {

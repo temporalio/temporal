@@ -716,7 +716,6 @@ func (b *stateBuilderImpl) scheduleUserTimerTask(
 	msBuilder mutableState,
 ) persistence.Task {
 	timerBuilder := b.getTimerBuilder(event)
-	timerBuilder.AddUserTimer(ti, msBuilder)
 	return timerBuilder.GetUserTimerTaskIfNeeded(msBuilder)
 }
 
