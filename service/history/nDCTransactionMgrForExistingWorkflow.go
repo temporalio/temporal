@@ -314,9 +314,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		if err != nil {
 			return err
 		}
-		if err := targetWorkflow.revive(); err != nil {
-			return err
-		}
+	}
+	if err := targetWorkflow.revive(); err != nil {
+		return err
 	}
 
 	var newContext workflowExecutionContext
@@ -324,6 +324,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 	if newWorkflow != nil {
 		newContext = newWorkflow.getContext()
 		newMutableState = newWorkflow.getMutableState()
+		if err := newWorkflow.revive(); err != nil {
+			return err
+		}
 	}
 
 	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
