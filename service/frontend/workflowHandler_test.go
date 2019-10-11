@@ -76,7 +76,6 @@ type (
 		mockMetricClient     metrics.Client
 		mockMessagingClient  messaging.Client
 		mockMetadataMgr      *mocks.MetadataManager
-		mockHistoryMgr       *mocks.HistoryManager
 		mockHistoryV2Mgr     *mocks.HistoryV2Manager
 		mockVisibilityMgr    *mocks.VisibilityManager
 		mockDomainCache      *cache.DomainCacheMock
@@ -109,7 +108,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.Frontend)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockMetadataMgr = &mocks.MetadataManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockDomainCache = &cache.DomainCacheMock{}
@@ -130,7 +128,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 func (s *workflowHandlerSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockMetadataMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
@@ -147,7 +144,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockService.GetMetricsClient(),
 		s.mockService.GetLogger(),
 	)
-	return NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr,
+	return NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr,
 		s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer, nil, domainCache)
 }
 
@@ -494,7 +491,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 
 func (s *workflowHandlerSuite) getWorkflowHandlerWithParams(mService cs.Service, config *Config,
 	mMetadataManager persistence.MetadataManager, mockDomainCache *cache.DomainCacheMock) *WorkflowHandler {
-	return NewWorkflowHandler(mService, config, mMetadataManager, s.mockHistoryMgr, s.mockHistoryV2Mgr,
+	return NewWorkflowHandler(mService, config, mMetadataManager, s.mockHistoryV2Mgr,
 		s.mockVisibilityMgr, s.mockProducer, nil, mockDomainCache)
 }
 

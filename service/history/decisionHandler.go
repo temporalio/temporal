@@ -266,10 +266,6 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	}
 	domainID := domainEntry.GetInfo().ID
 
-	var eventStoreVersion int32
-	if handler.config.EnableEventsV2(domainEntry.GetInfo().Name) {
-		eventStoreVersion = persistence.EventStoreVersionV2
-	}
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -411,7 +407,6 @@ Update_History_Loop:
 			decisionTaskHandler := newDecisionTaskHandler(
 				request.GetIdentity(),
 				completedEvent.GetEventId(),
-				eventStoreVersion,
 				domainEntry,
 				msBuilder,
 				handler.decisionAttrValidator,
@@ -613,7 +608,6 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent
 	}
-	response.EventStoreVersion = common.Int32Ptr(msBuilder.GetEventStoreVersion())
 	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err

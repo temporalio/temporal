@@ -29,19 +29,6 @@ func newAdminWorkflowCommands() []cli.Command {
 			Aliases: []string{"show"},
 			Usage:   "show workflow history from database",
 			Flags: []cli.Flag{
-				// v1 history events
-				cli.StringFlag{
-					Name:  FlagDomainID,
-					Usage: "DomainID",
-				},
-				cli.StringFlag{
-					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
-				},
-				cli.StringFlag{
-					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
-				},
 				// v2 history events
 				cli.StringFlag{
 					Name:  FlagTreeID,

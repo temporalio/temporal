@@ -68,7 +68,6 @@ type (
 		service                service.Service
 		shardInfo              *persistence.ShardInfo
 		transferSequenceNumber int64
-		historyMgr             persistence.HistoryManager
 		historyV2Mgr           persistence.HistoryV2Manager
 		executionMgr           persistence.ExecutionManager
 		domainCache            cache.DomainCache
@@ -93,7 +92,7 @@ type (
 var _ ShardContext = (*TestShardContext)(nil)
 
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64,
-	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, executionMgr persistence.ExecutionManager,
+	historyV2Mgr persistence.HistoryV2Manager, executionMgr persistence.ExecutionManager,
 	metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata,
 	clientBean client.Bean, config *Config, logger log.Logger) *TestShardContext {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -132,7 +131,6 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 			serializer),
 		shardInfo:                 shardInfo,
 		transferSequenceNumber:    transferSequenceNumber,
-		historyMgr:                historyMgr,
 		historyV2Mgr:              historyV2Mgr,
 		executionMgr:              executionMgr,
 		domainCache:               domainCache,
@@ -161,11 +159,6 @@ func (s *TestShardContext) GetService() service.Service {
 // GetExecutionManager test implementation
 func (s *TestShardContext) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionMgr
-}
-
-// GetHistoryManager test implementation
-func (s *TestShardContext) GetHistoryManager() persistence.HistoryManager {
-	return s.historyMgr
 }
 
 // GetHistoryV2Manager return historyV2
@@ -476,18 +469,15 @@ func (s *TestShardContext) ResetWorkflowExecution(request *persistence.ResetWork
 	return s.executionMgr.ResetWorkflowExecution(request)
 }
 
-// AppendHistoryEvents test implementation
-func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
-	resp, err := s.historyMgr.AppendHistoryEvents(request)
-	return resp.Size, err
-}
-
 // AppendHistoryV2Events append history V2 events
 func (s *TestShardContext) AppendHistoryV2Events(
 	request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error) {
 	request.ShardID = common.IntPtr(s.shardID)
 	resp, err := s.historyV2Mgr.AppendHistoryNodes(request)
-	return resp.Size, err
+	if err != nil {
+		return 0, err
+	}
+	return resp.Size, nil
 }
 
 // GetConfig test implementation
@@ -559,14 +549,6 @@ func NewDynamicConfigForTest() *Config {
 	return config
 }
 
-// NewDynamicConfigForEventsV2Test with enableEventsV2 = true
-func NewDynamicConfigForEventsV2Test() *Config {
-	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, cconfig.StoreTypeCassandra, false)
-	config.EnableEventsV2 = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, true)
-	return config
-}
-
 // SetupWorkflowStore to setup workflow test base
 func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
@@ -574,7 +556,7 @@ func (s *TestBase) SetupWorkflowStore() {
 	log := loggerimpl.NewDevelopmentForTest(s.Suite)
 	config := NewDynamicConfigForTest()
 	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr,
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0,
 		s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, clusterMetadata, nil, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }

@@ -66,7 +66,6 @@ type (
 		mockHistoryClient        *historyservicetest.MockClient
 		mockVisibilityMgr        *mocks.VisibilityManager
 		mockExecutionMgr         *mocks.ExecutionManager
-		mockHistoryMgr           *mocks.HistoryManager
 		mockHistoryV2Mgr         *mocks.HistoryV2Manager
 		mockShardManager         *mocks.ShardManager
 		mockClusterMetadata      *mocks.ClusterMetadata
@@ -97,7 +96,7 @@ func TestWorkflowResetorSuite(t *testing.T) {
 func (s *resetorSuite) SetupSuite() {
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.config = NewDynamicConfigForEventsV2Test()
+	s.config = NewDynamicConfigForTest()
 }
 
 func (s *resetorSuite) TearDownSuite() {
@@ -114,7 +113,6 @@ func (s *resetorSuite) SetupTest() {
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -134,7 +132,6 @@ func (s *resetorSuite) SetupTest() {
 		shardID:                   shardID,
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
-		historyMgr:                s.mockHistoryMgr,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
 		domainCache:               s.mockDomainCache,
 		eventsCache:               s.mockEventsCache,
@@ -164,7 +161,6 @@ func (s *resetorSuite) SetupTest() {
 		shard:                mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
-		historyMgr:           s.mockHistoryMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
@@ -185,7 +181,6 @@ func (s *resetorSuite) SetupTest() {
 
 func (s *resetorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
@@ -259,7 +254,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              forkRunID,
-		EventStoreVersion:  p.EventStoreVersionV2,
 		BranchToken:        forkBranchToken,
 		NextEventID:        34,
 		DecisionVersion:    common.EmptyVersion,
@@ -765,9 +759,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		ShardID:     common.IntPtr(s.shardID),
 	}
 
-	appendV1Resp := &p.AppendHistoryEventsResponse{
-		Size: 100,
-	}
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,
 	}
@@ -779,8 +770,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(appendV1Resp, nil).Once()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Times(2)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 	s.mockClusterMetadata.On("TestResetWorkflowExecution_NoReplication")
@@ -795,8 +785,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	// 4. signal 2 :32
 	// 5. decisionTaskScheduled :33
 	calls := s.mockHistoryV2Mgr.Calls
-	s.Equal(4, len(calls))
-	appendCall := calls[2]
+	s.Equal(5, len(calls))
+	appendCall := calls[3]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
 	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
 	s.Equal(true, ok)
@@ -836,7 +826,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
 	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
 	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
-	s.Equal(int64(100), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
+	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
@@ -964,7 +954,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              forkRunID,
-		EventStoreVersion:  p.EventStoreVersionV2,
 		BranchToken:        forkBranchToken,
 		NextEventID:        35,
 		DecisionVersion:    common.EmptyVersion,
@@ -1559,7 +1548,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              forkRunID,
-		EventStoreVersion:  p.EventStoreVersionV2,
 		BranchToken:        forkBranchToken,
 		NextEventID:        35,
 		DecisionVersion:    common.EmptyVersion,
@@ -2083,9 +2071,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		ShardID:     common.IntPtr(s.shardID),
 	}
 
-	appendV1Resp := &p.AppendHistoryEventsResponse{
-		Size: 100,
-	}
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,
 	}
@@ -2097,8 +2082,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
 	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(appendV1Resp, nil).Once()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Times(2)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
@@ -2113,8 +2097,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	// 4. signal 2
 	// 5. decisionTaskScheduled
 	calls := s.mockHistoryV2Mgr.Calls
-	s.Equal(4, len(calls))
-	appendCall := calls[2]
+	s.Equal(5, len(calls))
+	appendCall := calls[3]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
 	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
 	s.Equal(true, ok)
@@ -2153,7 +2137,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
 	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
 	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
-	s.Equal(int64(100), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
+	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
 	s.True(len(resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID) > 0)
@@ -2289,7 +2273,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              forkRunID,
-		EventStoreVersion:  p.EventStoreVersionV2,
 		BranchToken:        forkBranchToken,
 		NextEventID:        35,
 		DecisionVersion:    common.EmptyVersion,
@@ -2903,7 +2886,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              forkRunID,
-		EventStoreVersion:  p.EventStoreVersionV2,
 		BranchToken:        forkBranchToken,
 		NextEventID:        35,
 		DecisionVersion:    common.EmptyVersion,
@@ -3595,7 +3577,6 @@ func (s *resetorSuite) TestApplyReset() {
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              forkRunID,
-		EventStoreVersion:  p.EventStoreVersionV2,
 		BranchToken:        forkBranchToken,
 		NextEventID:        35,
 		DecisionVersion:    common.EmptyVersion,

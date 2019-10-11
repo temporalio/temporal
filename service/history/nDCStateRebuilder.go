@@ -168,7 +168,6 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.logger,
 		domainEntry,
 	)
-	resetMutableStateBuilder.executionInfo.EventStoreVersion = nDCProtocolVersion
 	stateBuilder := newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 	return resetMutableStateBuilder, stateBuilder
 }
@@ -189,8 +188,6 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 		},
 		events,
 		nil, // no new run history when rebuilding mutable state
-		nDCProtocolVersion,
-		nDCProtocolVersion,
 		true,
 	)
 	if err != nil {
@@ -210,13 +207,8 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
 		_, historyBatches, token, size, err := PaginateHistory(
-			nil,
 			r.historyV2Mgr,
 			true,
-			workflowIdentifier.DomainID,
-			workflowIdentifier.WorkflowID,
-			workflowIdentifier.RunID,
-			persistence.EventStoreVersionV2,
 			branchToken,
 			firstEventID,
 			nextEventID,

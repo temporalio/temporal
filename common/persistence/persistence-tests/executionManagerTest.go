@@ -2048,7 +2048,6 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			expected := replicationTasks[index].(*p.HistoryReplicationTask)
 			s.Equal(expected.FirstEventID, respTasks[index].FirstEventID)
 			s.Equal(expected.NextEventID, respTasks[index].NextEventID)
-			s.Equal(expected.EventStoreVersion, respTasks[index].EventStoreVersion)
 			s.Equal(expected.BranchToken, respTasks[index].BranchToken)
 			s.Equal(expected.NewRunBranchToken, respTasks[index].NewRunBranchToken)
 			s.Equal(expected.ResetWorkflow, respTasks[index].ResetWorkflow)
@@ -4940,7 +4939,6 @@ func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowE
 		DecisionStartedID:    sourceInfo.DecisionStartedID,
 		DecisionRequestID:    sourceInfo.DecisionRequestID,
 		DecisionTimeout:      sourceInfo.DecisionTimeout,
-		EventStoreVersion:    sourceInfo.EventStoreVersion,
 		BranchToken:          sourceInfo.BranchToken,
 		AutoResetPoints:      sourceInfo.AutoResetPoints,
 	}

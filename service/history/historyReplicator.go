@@ -61,7 +61,6 @@ type (
 		historyCache      *historyCache
 		domainCache       cache.DomainCache
 		historySerializer persistence.PayloadSerializer
-		historyMgr        persistence.HistoryManager
 		clusterMetadata   cluster.Metadata
 		metricsClient     metrics.Client
 		logger            log.Logger
@@ -123,7 +122,6 @@ func newHistoryReplicator(
 	historyEngine *historyEngineImpl,
 	historyCache *historyCache,
 	domainCache cache.DomainCache,
-	historyMgr persistence.HistoryManager,
 	historyV2Mgr persistence.HistoryV2Manager,
 	logger log.Logger,
 ) *historyReplicator {
@@ -135,13 +133,12 @@ func newHistoryReplicator(
 		historyCache:      historyCache,
 		domainCache:       domainCache,
 		historySerializer: persistence.NewPayloadSerializer(),
-		historyMgr:        historyMgr,
 		clusterMetadata:   shard.GetService().GetClusterMetadata(),
 		metricsClient:     shard.GetMetricsClient(),
 		logger:            logger.WithTags(tag.ComponentHistoryReplicator),
 
 		getNewConflictResolver: func(context workflowExecutionContext, logger log.Logger) conflictResolver {
-			return newConflictResolver(shard, context, historyMgr, historyV2Mgr, logger)
+			return newConflictResolver(shard, context, historyV2Mgr, logger)
 		},
 		getNewStateBuilder: func(msBuilder mutableState, logger log.Logger) stateBuilder {
 			return newStateBuilder(shard, msBuilder, logger)
@@ -317,17 +314,15 @@ func (r *historyReplicator) ApplyRawEvents(
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(version)
 
 	requestOut := &h.ReplicateEventsRequest{
-		SourceCluster:           common.StringPtr(sourceCluster),
-		DomainUUID:              requestIn.DomainUUID,
-		WorkflowExecution:       requestIn.WorkflowExecution,
-		FirstEventId:            common.Int64Ptr(firstEventID),
-		NextEventId:             common.Int64Ptr(nextEventID),
-		Version:                 common.Int64Ptr(version),
-		ReplicationInfo:         requestIn.ReplicationInfo,
-		History:                 &shared.History{Events: events},
-		EventStoreVersion:       requestIn.EventStoreVersion,
-		NewRunHistory:           nil,
-		NewRunEventStoreVersion: nil,
+		SourceCluster:     common.StringPtr(sourceCluster),
+		DomainUUID:        requestIn.DomainUUID,
+		WorkflowExecution: requestIn.WorkflowExecution,
+		FirstEventId:      common.Int64Ptr(firstEventID),
+		NextEventId:       common.Int64Ptr(nextEventID),
+		Version:           common.Int64Ptr(version),
+		ReplicationInfo:   requestIn.ReplicationInfo,
+		History:           &shared.History{Events: events},
+		NewRunHistory:     nil,
 	}
 
 	if requestIn.NewRunHistory != nil {
@@ -336,7 +331,6 @@ func (r *historyReplicator) ApplyRawEvents(
 			return err
 		}
 		requestOut.NewRunHistory = &shared.History{Events: newRunEvents}
-		requestOut.NewRunEventStoreVersion = requestIn.NewRunEventStoreVersion
 	}
 
 	return r.ApplyEvents(ctx, requestOut)
@@ -731,8 +725,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
 	lastEvent, _, newMutableState, err := sBuilder.applyEvents(
-		domainID, requestID, execution, request.History.Events, newRunHistory,
-		request.GetEventStoreVersion(), request.GetNewRunEventStoreVersion(), request.GetNewRunNDC(),
+		domainID, requestID, execution, request.History.Events, newRunHistory, request.GetNewRunNDC(),
 	)
 	if err != nil {
 		return err
@@ -805,21 +798,13 @@ func (r *historyReplicator) replicateWorkflowStarted(
 
 	deleteHistory := func() {
 		// this function should be only called when we drop start workflow execution
-		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			currentBranchToken, err := msBuilder.GetCurrentBranchToken()
-			if err == nil {
-				r.shard.GetHistoryV2Manager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-					BranchToken: currentBranchToken,
-					ShardID:     common.IntPtr(r.shard.GetShardID()),
-				})
-			}
-		} else {
-			r.shard.GetHistoryManager().DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-				DomainID:  domainID,
-				Execution: execution,
+		currentBranchToken, err := msBuilder.GetCurrentBranchToken()
+		if err == nil {
+			r.shard.GetHistoryV2Manager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+				BranchToken: currentBranchToken,
+				ShardID:     common.IntPtr(r.shard.GetShardID()),
 			})
 		}
-
 	}
 
 	// try to create the workflow execution

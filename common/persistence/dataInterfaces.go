@@ -32,12 +32,6 @@ import (
 	"github.com/uber/cadence/common/codec"
 )
 
-// TODO remove this event store version
-const (
-	// 0/1 or empty are all considered as V1
-	EventStoreVersionV2 = 2
-)
-
 // Domain status
 const (
 	DomainStatusRegistered = iota
@@ -315,9 +309,7 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
-		// events V2 related
-		EventStoreVersion int32
-		BranchToken       []byte
+		BranchToken        []byte
 		// Cron
 		CronSchedule      string
 		ExpirationSeconds int32
@@ -372,9 +364,7 @@ type (
 		ResetWorkflow     bool
 
 		// TODO deprecate when NDC is fully released && migrated
-		EventStoreVersion       int32
-		NewRunEventStoreVersion int32
-		LastReplicationInfo     map[string]*ReplicationInfo
+		LastReplicationInfo map[string]*ReplicationInfo
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -573,17 +563,15 @@ type (
 
 	// HistoryReplicationTask is the replication task created for shipping history replication events to other clusters
 	HistoryReplicationTask struct {
-		VisibilityTimestamp     time.Time
-		TaskID                  int64
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		LastReplicationInfo     map[string]*ReplicationInfo
-		EventStoreVersion       int32
-		BranchToken             []byte
-		ResetWorkflow           bool
-		NewRunEventStoreVersion int32
-		NewRunBranchToken       []byte
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		FirstEventID        int64
+		NextEventID         int64
+		Version             int64
+		LastReplicationInfo map[string]*ReplicationInfo
+		BranchToken         []byte
+		ResetWorkflow       bool
+		NewRunBranchToken   []byte
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -1547,23 +1535,6 @@ type (
 		//  - number of rows actually deleted, if limit is honored
 		//  - UnknownNumRowsDeleted, when all rows below value are deleted
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
-	}
-
-	// HistoryManager is used to manage Workflow Execution HistoryEventBatch
-	// Deprecated: use HistoryV2Manager instead
-	HistoryManager interface {
-		Closeable
-		GetName() string
-
-		// Deprecated: use v2 API-AppendHistoryNodes() instead
-		AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error)
-		// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
-		// Deprecated: use v2 API-ReadHistoryBranch() instead
-		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error)
-		// Deprecated: use v2 API-ReadHistoryBranchByBatch() instead
-		GetWorkflowExecutionHistoryByBatch(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryByBatchResponse, error)
-		// Deprecated: use v2 API-DeleteHistoryBranch instead
-		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
 	}
 
 	// HistoryV2Manager is used to manager workflow history events

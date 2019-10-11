@@ -64,7 +64,6 @@ type esCrossDCTestSuite struct {
 	cluster1       *host.TestCluster
 	cluster2       *host.TestCluster
 	logger         log.Logger
-	enableEventsV2 bool
 	clusterConfigs []*host.TestClusterConfig
 	esClient       *elastic.Client
 

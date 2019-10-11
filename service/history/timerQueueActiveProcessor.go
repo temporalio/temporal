@@ -757,20 +757,11 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 		FailureReason:                       common.StringPtr(timeoutReason),
 		CronSchedule:                        common.StringPtr(msBuilder.GetExecutionInfo().CronSchedule),
 	}
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
-	if err != nil {
-		return err
-	}
-	var eventStoreVersion int32
-	if t.config.EnableEventsV2(domainEntry.GetInfo().Name) {
-		eventStoreVersion = persistence.EventStoreVersionV2
-	}
 	_, newMutableState, err := msBuilder.AddContinueAsNewEvent(
 		msBuilder.GetNextEventID(),
 		common.EmptyEventID,
 		startAttributes.GetParentWorkflowDomain(),
 		continueAsnewAttributes,
-		eventStoreVersion,
 	)
 	if err != nil {
 		return err

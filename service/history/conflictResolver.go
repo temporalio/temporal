@@ -46,20 +46,18 @@ type (
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
 		context         workflowExecutionContext
-		historyMgr      persistence.HistoryManager
 		historyV2Mgr    persistence.HistoryV2Manager
 		logger          log.Logger
 	}
 )
 
-func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
+func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyV2Mgr persistence.HistoryV2Manager,
 	logger log.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{
 		shard:           shard,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		context:         context,
-		historyMgr:      historyMgr,
 		historyV2Mgr:    historyV2Mgr,
 		logger:          logger,
 	}
@@ -78,7 +76,6 @@ func (r *conflictResolverImpl) reset(
 	domainID := r.context.getDomainID()
 	execution := *r.context.getExecution()
 	startTime := info.StartTimestamp
-	eventStoreVersion := info.EventStoreVersion
 	branchToken := info.BranchToken // in 2DC world branch token is stored in execution info
 	replayNextEventID := replayEventID + 1
 
@@ -96,7 +93,7 @@ func (r *conflictResolverImpl) reset(
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		var size int
-		history, size, _, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, eventStoreVersion, branchToken)
+		history, size, _, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, branchToken)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
 			return nil, err
@@ -124,12 +121,10 @@ func (r *conflictResolverImpl) reset(
 				domainEntry,
 			)
 
-			resetMutableStateBuilder.executionInfo.EventStoreVersion = eventStoreVersion
 			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 		}
 
-		// NOTE: passing 0 as newRunEventStoreVersion is safe here, since we don't need the newMutableState of the new run
-		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, resetMutableStateBuilder.GetEventStoreVersion(), 0, false)
+		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, false)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err
@@ -189,35 +184,20 @@ func (r *conflictResolverImpl) reset(
 }
 
 func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte, eventStoreVersion int32, branchToken []byte) ([]*shared.HistoryEvent, int, int64, []byte, error) {
+	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*shared.HistoryEvent, int, int64, []byte, error) {
 
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
-			BranchToken:   branchToken,
-			MinEventID:    firstEventID,
-			MaxEventID:    nextEventID,
-			PageSize:      defaultHistoryPageSize,
-			NextPageToken: nextPageToken,
-			ShardID:       common.IntPtr(r.shard.GetShardID()),
-		})
-		if err != nil {
-			return nil, 0, 0, nil, err
-		}
-		return response.HistoryEvents, response.Size, response.LastFirstEventID, response.NextPageToken, nil
-	}
-	response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID:      domainID,
-		Execution:     execution,
-		FirstEventID:  firstEventID,
-		NextEventID:   nextEventID,
+	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nextPageToken,
+		ShardID:       common.IntPtr(r.shard.GetShardID()),
 	})
-
 	if err != nil {
 		return nil, 0, 0, nil, err
 	}
-	return response.History.Events, response.Size, response.LastFirstEventID, response.NextPageToken, nil
+	return response.HistoryEvents, response.Size, response.LastFirstEventID, response.NextPageToken, nil
 }
 
 func (r *conflictResolverImpl) logError(msg string, err error) {

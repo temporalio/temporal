@@ -265,8 +265,6 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 		*task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
-		nDCProtocolVersion,
-		nDCProtocolVersion,
 		true,
 	)
 	if err != nil {
@@ -346,8 +344,6 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		*task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
-		nDCProtocolVersion,
-		nDCProtocolVersion,
 		true,
 	)
 	if err != nil {
@@ -501,8 +497,6 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		*task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
-		nDCProtocolVersion,
-		nDCProtocolVersion,
 		true,
 	)
 	if err != nil {

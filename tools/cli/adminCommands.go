@@ -43,9 +43,6 @@ const maxEventID = 9999
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) {
-	domainID := c.String(FlagDomainID)
-	wid := c.String(FlagWorkflowID)
-	rid := c.String(FlagRunID)
 	tid := c.String(FlagTreeID)
 	bid := c.String(FlagBranchID)
 	sid := c.Int(FlagShardID)
@@ -54,25 +51,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	session := connectToCassandra(c)
 	serializer := persistence.NewPayloadSerializer()
 	var history []*persistence.DataBlob
-	if len(wid) != 0 {
-		histV1 := cassp.NewHistoryPersistenceFromSession(session, loggerimpl.NewNopLogger())
-		resp, err := histV1.GetWorkflowExecutionHistory(&persistence.InternalGetWorkflowExecutionHistoryRequest{
-			LastEventBatchVersion: common.EmptyVersion,
-			DomainID:              domainID,
-			Execution: shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(wid),
-				RunId:      common.StringPtr(rid),
-			},
-			FirstEventID: 1,
-			NextEventID:  maxEventID,
-			PageSize:     maxEventID,
-		})
-		if err != nil {
-			ErrorAndExit("GetWorkflowExecutionHistory err", err)
-		}
-
-		history = resp.History
-	} else if len(tid) != 0 {
+	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
@@ -88,7 +67,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 		history = resp.History
 	} else {
-		ErrorAndExit("need to specify either WorkflowId/RunID for v1, or TreeID/BranchID/ShardID for v2", nil)
+		ErrorAndExit("need to specify TreeID/BranchID/ShardID", nil)
 	}
 
 	if len(history) == 0 {
@@ -139,7 +118,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
 		}
-		if ms.ExecutionInfo != nil && ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
+		if ms.ExecutionInfo != nil {
 			branchInfo := shared.HistoryBranch{}
 			thriftrwEncoder := codec.NewThriftRWEncoder()
 			err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
@@ -202,42 +181,25 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
-	if ms.ExecutionInfo.EventStoreVersion == persistence.EventStoreVersionV2 {
-		branchInfo := shared.HistoryBranch{}
-		thriftrwEncoder := codec.NewThriftRWEncoder()
-		err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
-		if err != nil {
-			ErrorAndExit("thriftrwEncoder.Decode err", err)
-		}
-		fmt.Println("deleting history events for ...")
-		prettyPrintJSONObject(branchInfo)
-		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
-		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
-			BranchInfo: branchInfo,
-			ShardID:    shardIDInt,
-		})
-		if err != nil {
-			if skipError {
-				fmt.Println("failed to delete history, ", err)
-			} else {
-				ErrorAndExit("DeleteHistoryBranch err", err)
-			}
-		}
-	} else {
-		histV1 := cassp.NewHistoryPersistenceFromSession(session, loggerimpl.NewNopLogger())
-		err = histV1.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-			DomainID: domainID,
-			Execution: shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(wid),
-				RunId:      common.StringPtr(rid),
-			},
-		})
-		if err != nil {
-			if skipError {
-				fmt.Println("failed to delete history, ", err)
-			} else {
-				ErrorAndExit("DeleteWorkflowExecutionHistory err", err)
-			}
+
+	branchInfo := shared.HistoryBranch{}
+	thriftrwEncoder := codec.NewThriftRWEncoder()
+	err = thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
+	if err != nil {
+		ErrorAndExit("thriftrwEncoder.Decode err", err)
+	}
+	fmt.Println("deleting history events for ...")
+	prettyPrintJSONObject(branchInfo)
+	histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
+	err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
+		BranchInfo: branchInfo,
+		ShardID:    shardIDInt,
+	})
+	if err != nil {
+		if skipError {
+			fmt.Println("failed to delete history, ", err)
+		} else {
+			ErrorAndExit("DeleteHistoryBranch err", err)
 		}
 	}
 

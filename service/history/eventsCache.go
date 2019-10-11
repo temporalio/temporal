@@ -34,7 +34,7 @@ import (
 
 type (
 	eventsCache interface {
-		getEvent(domainID, workflowID, runID string, firstEventID, eventID int64, eventStoreVersion int32,
+		getEvent(domainID, workflowID, runID string, firstEventID, eventID int64,
 			branchToken []byte) (*shared.HistoryEvent, error)
 		putEvent(domainID, workflowID, runID string, eventID int64, event *shared.HistoryEvent)
 		deleteEvent(domainID, workflowID, runID string, eventID int64)
@@ -42,7 +42,6 @@ type (
 
 	eventsCacheImpl struct {
 		cache.Cache
-		eventsMgr     persistence.HistoryManager
 		eventsV2Mgr   persistence.HistoryV2Manager
 		disabled      bool
 		logger        log.Logger
@@ -68,10 +67,10 @@ func newEventsCache(shardCtx ShardContext) eventsCache {
 	config := shardCtx.GetConfig()
 	shardID := common.IntPtr(shardCtx.GetShardID())
 	return newEventsCacheWithOptions(config.EventsCacheInitialSize(), config.EventsCacheMaxSize(), config.EventsCacheTTL(),
-		shardCtx.GetHistoryManager(), shardCtx.GetHistoryV2Manager(), false, shardCtx.GetLogger(), shardCtx.GetMetricsClient(), shardID)
+		shardCtx.GetHistoryV2Manager(), false, shardCtx.GetLogger(), shardCtx.GetMetricsClient(), shardID)
 }
 
-func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration, eventsMgr persistence.HistoryManager,
+func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration,
 	eventsV2Mgr persistence.HistoryV2Manager, disabled bool, logger log.Logger, metrics metrics.Client, shardID *int) *eventsCacheImpl {
 	opts := &cache.Options{}
 	opts.InitialCapacity = initialSize
@@ -79,7 +78,6 @@ func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration, even
 
 	return &eventsCacheImpl{
 		Cache:         cache.New(maxSize, opts),
-		eventsMgr:     eventsMgr,
 		eventsV2Mgr:   eventsV2Mgr,
 		disabled:      disabled,
 		logger:        logger.WithTags(tag.ComponentEventsCache),
@@ -97,7 +95,7 @@ func newEventKey(domainID, workflowID, runID string, eventID int64) eventKey {
 	}
 }
 
-func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64, eventStoreVersion int32,
+func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64,
 	branchToken []byte) (*shared.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
@@ -113,7 +111,7 @@ func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEven
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(domainID, workflowID, runID, firstEventID, eventID, eventStoreVersion, branchToken)
+	event, err := e.getHistoryEventFromStore(domainID, workflowID, runID, firstEventID, eventID, branchToken)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("EventsCache unable to retrieve event from store",
@@ -148,50 +146,28 @@ func (e *eventsCacheImpl) deleteEvent(domainID, workflowID, runID string, eventI
 }
 
 func (e *eventsCacheImpl) getHistoryEventFromStore(domainID, workflowID, runID string, firstEventID, eventID int64,
-	eventStoreVersion int32, branchToken []byte) (*shared.HistoryEvent, error) {
+	branchToken []byte) (*shared.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()
 
 	var historyEvents []*shared.HistoryEvent
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		response, err := e.eventsV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
-			BranchToken:   branchToken,
-			MinEventID:    firstEventID,
-			MaxEventID:    eventID + 1,
-			PageSize:      1,
-			NextPageToken: nil,
-			ShardID:       e.shardID,
-		})
 
-		if err != nil {
-			e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
-			return nil, err
-		}
+	response, err := e.eventsV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    eventID + 1,
+		PageSize:      1,
+		NextPageToken: nil,
+		ShardID:       e.shardID,
+	})
 
-		historyEvents = response.HistoryEvents
-	} else {
-		response, err := e.eventsMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID: domainID,
-			Execution: shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			FirstEventID:  firstEventID,
-			NextEventID:   eventID + 1,
-			PageSize:      1,
-			NextPageToken: nil,
-		})
-
-		if err != nil {
-			e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
-			return nil, err
-		}
-
-		if response.History != nil {
-			historyEvents = response.History.Events
-		}
+	if err != nil {
+		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
+		return nil, err
 	}
+
+	historyEvents = response.HistoryEvents
 
 	// find history event from batch and return back single event to caller
 	for _, e := range historyEvents {

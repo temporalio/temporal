@@ -105,7 +105,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.mockArchivalMetadata, s.mockArchiverProvider, nil)
 
-	frontendHandler := NewWorkflowHandler(s.service, s.config, nil, nil, nil, nil, nil, nil, s.mockDomainCache)
+	frontendHandler := NewWorkflowHandler(s.service, s.config, nil, nil, nil, nil, nil, s.mockDomainCache)
 	frontendHandler.metricsClient = metricsClient
 	frontendHandler.startWG.Done()
 

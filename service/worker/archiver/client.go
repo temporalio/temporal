@@ -62,7 +62,6 @@ type (
 
 		// history archival
 		ShardID              int
-		EventStoreVersion    int32
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64
@@ -205,7 +204,6 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 		DomainName:           request.ArchiveRequest.DomainName,
 		WorkflowID:           request.ArchiveRequest.WorkflowID,
 		RunID:                request.ArchiveRequest.RunID,
-		EventStoreVersion:    request.ArchiveRequest.EventStoreVersion,
 		BranchToken:          request.ArchiveRequest.BranchToken,
 		NextEventID:          request.ArchiveRequest.NextEventID,
 		CloseFailoverVersion: request.ArchiveRequest.CloseFailoverVersion,

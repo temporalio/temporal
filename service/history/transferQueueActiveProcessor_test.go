@@ -63,7 +63,6 @@ type (
 		mockDomainCache             *cache.DomainCacheMock
 		mockVisibilityMgr           *mocks.VisibilityManager
 		mockExecutionMgr            *mocks.ExecutionManager
-		mockHistoryMgr              *mocks.HistoryManager
 		mockHistoryV2Mgr            *mocks.HistoryV2Manager
 		mockMatchingClient          *matchingservicetest.MockClient
 		mockHistoryClient           *historyservicetest.MockClient
@@ -108,7 +107,6 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
@@ -146,7 +144,6 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
-		historyMgr:                s.mockHistoryMgr,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
 		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
@@ -175,7 +172,6 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		currentClusterName:   s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
-		historyMgr:           s.mockHistoryMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		executionManager:     s.mockExecutionMgr,
 		historyCache:         historyCache,
@@ -213,7 +209,6 @@ func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())

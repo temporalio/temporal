@@ -65,11 +65,6 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 	return newShardPersistence(f.cfg, f.clusterName, f.logger)
 }
 
-// NewHistoryStore returns a new history store
-func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
-	return newHistoryPersistence(f.cfg, f.logger)
-}
-
 // NewHistoryV2Store returns a new history store
 func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
 	return newHistoryV2Persistence(f.cfg, f.logger)

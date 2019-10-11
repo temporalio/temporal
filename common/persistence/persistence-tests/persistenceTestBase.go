@@ -65,7 +65,6 @@ type (
 		ExecutionMgrFactory    pfactory.Factory
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
-		HistoryMgr             p.HistoryManager
 		HistoryV2Mgr           p.HistoryV2Manager
 		MetadataManager        p.MetadataManager
 		VisibilityMgr          p.VisibilityManager
@@ -183,9 +182,6 @@ func (s *TestBase) Setup() {
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
 
-	s.HistoryMgr, err = factory.NewHistoryManager()
-	s.fatalOnError("NewHistoryManager", err)
-
 	s.HistoryV2Mgr, err = factory.NewHistoryV2Manager()
 	s.fatalOnError("NewHistoryV2Manager", err)
 
@@ -268,10 +264,9 @@ func (s *TestBase) UpdateShard(updatedInfo *p.ShardInfo, previousRangeID int64) 
 	})
 }
 
-// CreateWorkflowExecution is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution, taskList,
+func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workflowExecution workflow.WorkflowExecution, taskList,
 	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
-	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
+	decisionScheduleID int64, branchToken []byte, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
@@ -292,6 +287,7 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 				DecisionScheduleID:   decisionScheduleID,
 				DecisionStartedID:    common.EmptyEventID,
 				DecisionTimeout:      1,
+				BranchToken:          branchToken,
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -309,6 +305,14 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 	})
 
 	return response, err
+}
+
+// CreateWorkflowExecution is a utility method to create workflow executions
+func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution, taskList,
+	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
+	return s.CreateWorkflowExecutionWithBranchToken(domainID, workflowExecution, taskList, wType, wTimeout, decisionTimeout,
+		executionContext, nextEventID, lastProcessedEventID, decisionScheduleID, nil, timerTasks)
 }
 
 // CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
@@ -1420,4 +1424,8 @@ func pickRandomEncoding() common.EncodingType {
 		encoding = common.EncodingType("")
 	}
 	return encoding
+}
+
+func int64Ptr(i int64) *int64 {
+	return &i
 }

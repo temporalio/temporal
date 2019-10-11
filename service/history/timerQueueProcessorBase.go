@@ -493,7 +493,6 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 		req.AttemptArchiveInline = executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
 		req.ArchiveRequest.ShardID = t.shard.GetShardID()
 		req.ArchiveRequest.DomainName = domainCacheEntry.GetInfo().Name
-		req.ArchiveRequest.EventStoreVersion = msBuilder.GetEventStoreVersion()
 		req.ArchiveRequest.BranchToken, err = msBuilder.GetCurrentBranchToken()
 		if err != nil {
 			return err
@@ -595,28 +594,21 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(
 	msBuilder mutableState,
 ) error {
 
-	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op := func() error {
-		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			branchToken, err := msBuilder.GetCurrentBranchToken()
-			if err != nil {
-				return err
-			}
-
-			logger := t.logger.WithTags(tag.WorkflowID(task.WorkflowID),
-				tag.WorkflowRunID(task.RunID),
-				tag.WorkflowDomainID(task.DomainID),
-				tag.ShardID(t.shard.GetShardID()),
-				tag.TaskID(task.GetTaskID()),
-				tag.FailoverVersion(task.GetVersion()),
-				tag.TaskType(task.GetTaskType()))
-			return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, branchToken, common.IntPtr(t.shard.GetShardID()), logger)
+		branchToken, err := msBuilder.GetCurrentBranchToken()
+		if err != nil {
+			return err
 		}
-		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
-			&persistence.DeleteWorkflowExecutionHistoryRequest{
-				DomainID:  domainID,
-				Execution: workflowExecution,
-			})
+
+		logger := t.logger.WithTags(tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
+			tag.WorkflowDomainID(task.DomainID),
+			tag.ShardID(t.shard.GetShardID()),
+			tag.TaskID(task.GetTaskID()),
+			tag.FailoverVersion(task.GetVersion()),
+			tag.TaskType(task.GetTaskType()))
+		return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, branchToken, common.IntPtr(t.shard.GetShardID()), logger)
+
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }

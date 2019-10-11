@@ -61,7 +61,6 @@ type (
 		history       history.Client
 		domainCache   cache.DomainCache
 		metricsClient metrics.Client
-		historyMgr    persistence.HistoryManager
 		historyV2Mgr  persistence.HistoryV2Manager
 		startWG       sync.WaitGroup
 		params        *service.BootstrapParams
@@ -85,7 +84,6 @@ func NewAdminHandler(
 	sVice service.Service,
 	numberOfHistoryShards int,
 	domainCache cache.DomainCache,
-	historyMgr persistence.HistoryManager,
 	historyV2Mgr persistence.HistoryV2Manager,
 	params *service.BootstrapParams,
 ) *AdminHandler {
@@ -94,7 +92,6 @@ func NewAdminHandler(
 		numberOfHistoryShards: numberOfHistoryShards,
 		Service:               sVice,
 		domainCache:           domainCache,
-		historyMgr:            historyMgr,
 		historyV2Mgr:          historyV2Mgr,
 		params:                params,
 	}
@@ -323,7 +320,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 		// IsWorkflowRunning: not used
 		// TransientDecision: not used
 		// PersistenceToken: trust
-		// EventStoreVersion: trust
 		// ReplicationInfo: trust
 
 	} else {
@@ -354,19 +350,13 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 			PersistenceToken: nil, // this is the initialized value
 			ReplicationInfo:  response.ReplicationInfo,
 		}
-		// calculate event store version based on if branch token exist
-		token.EventStoreVersion = persistence.EventStoreVersionV2
-		if token.BranchToken == nil {
-			token.EventStoreVersion = 0
-		}
 	}
 
 	if token.FirstEventID >= token.NextEventID {
 		return &admin.GetWorkflowExecutionRawHistoryResponse{
-			HistoryBatches:    []*gen.DataBlob{},
-			ReplicationInfo:   token.ReplicationInfo,
-			EventStoreVersion: common.Int32Ptr(token.EventStoreVersion),
-			NextPageToken:     nil, // no further pagination
+			HistoryBatches:  []*gen.DataBlob{},
+			ReplicationInfo: token.ReplicationInfo,
+			NextPageToken:   nil, // no further pagination
 		}, nil
 	}
 
@@ -374,13 +364,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	var historyBatches []*gen.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, token.PersistenceToken, size, err = historyService.PaginateHistory(
-		adh.historyMgr,
 		adh.historyV2Mgr,
 		true, // this means that we are getting history by batch
-		domainID,
-		execution.GetWorkflowId(),
-		token.RunID,
-		token.EventStoreVersion,
 		token.BranchToken,
 		token.FirstEventID,
 		token.NextEventID,
@@ -393,10 +378,9 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &admin.GetWorkflowExecutionRawHistoryResponse{
-				HistoryBatches:    []*gen.DataBlob{},
-				ReplicationInfo:   token.ReplicationInfo,
-				EventStoreVersion: common.Int32Ptr(token.EventStoreVersion),
-				NextPageToken:     nil, // no further pagination
+				HistoryBatches:  []*gen.DataBlob{},
+				ReplicationInfo: token.ReplicationInfo,
+				NextPageToken:   nil, // no further pagination
 			}, nil
 		}
 		return nil, err
@@ -420,9 +404,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 	}
 
 	result := &admin.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:    blobs,
-		ReplicationInfo:   token.ReplicationInfo,
-		EventStoreVersion: common.Int32Ptr(token.EventStoreVersion),
+		HistoryBatches:  blobs,
+		ReplicationInfo: token.ReplicationInfo,
 	}
 	if len(token.PersistenceToken) == 0 {
 		result.NextPageToken = nil

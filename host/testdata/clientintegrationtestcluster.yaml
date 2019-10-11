@@ -1,4 +1,3 @@
-enableeventsv2: false
 enablearchival: false
 clusterno: 0
 messagingclientconfig:

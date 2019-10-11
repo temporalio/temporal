@@ -294,10 +294,6 @@ func (e *mutableStateBuilder) Load(
 	e.versionHistories = state.VersionHistories
 }
 
-func (e *mutableStateBuilder) GetEventStoreVersion() int32 {
-	return e.GetExecutionInfo().EventStoreVersion
-}
-
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
 	if e.versionHistories != nil {
 		currentVersionHistory, err := e.versionHistories.GetCurrentVersionHistory()
@@ -313,7 +309,7 @@ func (e *mutableStateBuilder) GetVersionHistories() *persistence.VersionHistorie
 	return e.versionHistories
 }
 
-// set eventStoreVersion/treeID/historyBranches
+// set treeID/historyBranches
 func (e *mutableStateBuilder) SetHistoryTree(
 	treeID string,
 ) error {
@@ -330,7 +326,6 @@ func (e *mutableStateBuilder) SetCurrentBranchToken(
 ) error {
 
 	exeInfo := e.GetExecutionInfo()
-	exeInfo.EventStoreVersion = persistence.EventStoreVersionV2
 	if e.versionHistories == nil {
 		exeInfo.BranchToken = branchToken
 		return nil
@@ -933,7 +928,6 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 		e.executionInfo.RunID,
 		ai.ScheduledEventBatchID,
 		ai.ScheduleID,
-		e.executionInfo.EventStoreVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -1012,7 +1006,6 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 		e.executionInfo.RunID,
 		ci.InitiatedEventBatchID,
 		ci.InitiatedID,
-		e.executionInfo.EventStoreVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -1110,7 +1103,6 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, erro
 		e.executionInfo.RunID,
 		firstEventID,
 		completionEventID,
-		e.executionInfo.EventStoreVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -1134,7 +1126,6 @@ func (e *mutableStateBuilder) GetStartEvent() (*workflow.HistoryEvent, error) {
 		e.executionInfo.RunID,
 		common.FirstEventID,
 		common.FirstEventID,
-		e.executionInfo.EventStoreVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -1489,7 +1480,6 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	previousExecutionState mutableState,
 	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
 	firstRunID string,
-	eventStoreVersion int32,
 ) (*workflow.HistoryEvent, error) {
 
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
@@ -1571,10 +1561,8 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
-	if eventStoreVersion == persistence.EventStoreVersionV2 {
-		if err := e.SetHistoryTree(e.GetExecutionInfo().RunID); err != nil {
-			return nil, err
-		}
+	if err := e.SetHistoryTree(e.GetExecutionInfo().RunID); err != nil {
+		return nil, err
 	}
 
 	// TODO merge active & passive task generation
@@ -1855,11 +1843,6 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 
 // TODO: we will release the restriction when reset API allow those pending
 func (e *mutableStateBuilder) CheckResettable() error {
-	if e.GetEventStoreVersion() != persistence.EventStoreVersionV2 {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("reset API is not supported for V1 history events, runID"),
-		}
-	}
 	if len(e.GetPendingChildExecutionInfos()) > 0 {
 		return &workflow.BadRequestError{
 			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending child workflow."),
@@ -3110,7 +3093,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	decisionCompletedEventID int64,
 	parentDomainName string,
 	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
-	eventStoreVersion int32,
 ) (*workflow.HistoryEvent, mutableState, error) {
 
 	opTag := tag.WorkflowActionWorkflowContinueAsNew
@@ -3149,7 +3131,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	domainName := e.domainEntry.GetInfo().Name
 	domainID := e.domainEntry.GetInfo().ID
 	var newStateBuilder *mutableStateBuilder
-	if e.config.EnableEventsV2(domainName) && e.config.EnableNDC(domainName) {
+	if e.config.EnableNDC(domainName) {
 		newStateBuilder = newMutableStateBuilderWithVersionHistories(
 			e.shard,
 			e.shard.GetEventsCache(),
@@ -3178,7 +3160,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		e,
 		attributes,
 		firstRunID,
-		eventStoreVersion,
 	); err != nil {
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -4048,21 +4029,18 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 	}
 
 	replicationTask := &persistence.HistoryReplicationTask{
-		FirstEventID:            firstEvent.GetEventId(),
-		NextEventID:             lastEvent.GetEventId() + 1,
-		Version:                 firstEvent.GetVersion(),
-		BranchToken:             currentBranchToken,
-		NewRunEventStoreVersion: 0,
-		NewRunBranchToken:       nil,
+		FirstEventID:      firstEvent.GetEventId(),
+		NextEventID:       lastEvent.GetEventId() + 1,
+		Version:           firstEvent.GetVersion(),
+		BranchToken:       currentBranchToken,
+		NewRunBranchToken: nil,
 	}
 
 	// TODO after NDC release and migration is done, remove this check
 	if e.GetReplicationState() != nil {
 		replicationTask.LastReplicationInfo = e.GetReplicationState().LastReplicationInfo
-		replicationTask.EventStoreVersion = e.GetEventStoreVersion()
 	} else if e.GetVersionHistories() != nil {
 		replicationTask.LastReplicationInfo = nil
-		replicationTask.EventStoreVersion = persistence.EventStoreVersionV2
 	} else {
 		return nil, &workflow.InternalServiceError{
 			Message: "should not generate replication task when missing replication state & version history",

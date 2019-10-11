@@ -179,7 +179,6 @@ var keys = map[Key]string{
 	DefaultEventEncoding:                                  "history.defaultEventEncoding",
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
-	EnableEventsV2:                                        "history.enableEventsV2",
 	EnableParentClosePolicy:                               "history.enableParentClosePolicy",
 	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
 	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
@@ -491,8 +490,6 @@ const (
 	// HistoryMaxAutoResetPoints is the key for max number of auto reset points stored in mutableState
 	HistoryMaxAutoResetPoints
 
-	// EnableEventsV2 is whether to use eventsV2
-	EnableEventsV2
 	// EnableParentClosePolicy whether to  ParentClosePolicy
 	EnableParentClosePolicy
 	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if

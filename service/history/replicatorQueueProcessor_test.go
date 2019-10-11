@@ -52,7 +52,6 @@ type (
 		logger              log.Logger
 		mockShard           ShardContext
 		mockExecutionMgr    *mocks.ExecutionManager
-		mockHistoryMgr      *mocks.HistoryManager
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockProducer        *mocks.KafkaProducer
 		mockDomainCache     *cache.DomainCacheMock
@@ -84,7 +83,6 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.currentClusterNamer = cluster.TestCurrentClusterName
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockDomainCache = &cache.DomainCacheMock{}
@@ -112,13 +110,12 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
-		s.mockShard, historyCache, s.mockProducer, s.mockExecutionMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger,
+		s.mockShard, historyCache, s.mockProducer, s.mockExecutionMgr, s.mockHistoryV2Mgr, s.logger,
 	).(*replicatorQueueProcessorImpl)
 }
 
 func (s *replicatorQueueProcessorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
@@ -448,9 +445,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 }
 
 func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
-	domainID := testDomainID
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
 	firstEventID := int64(133)
 	nextEventID := int64(134)
 	pageSize := 1
@@ -474,8 +468,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		Size:             1,
 		LastFirstEventID: nextEventID,
 	}, nil).Once()
-	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryMgr, s.mockHistoryV2Mgr,
-		false, domainID, workflowID, runID, persistence.EventStoreVersionV2, []byte("asd"),
+	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryV2Mgr, false, []byte("asd"),
 		firstEventID, nextEventID, []byte{}, pageSize, shardID)
 	s.NotNil(hEvents)
 	s.NotNil(bEvents)

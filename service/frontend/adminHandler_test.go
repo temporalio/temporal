@@ -61,7 +61,6 @@ type (
 		controller          *gomock.Controller
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockClientBean      *client.MockClientBean
-		mockHistoryMgr      *mocks.HistoryManager
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		historyClient       *historyservicetest.MockClient
 
@@ -96,7 +95,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.domainCache.On("Start").Return()
 	s.domainCache.On("Stop").Return()
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	s.handler = NewAdminHandler(s.service, 1, s.domainCache, s.mockHistoryMgr, s.mockHistoryV2Mgr, nil)
+	s.handler = NewAdminHandler(s.service, 1, s.domainCache, s.mockHistoryV2Mgr, nil)
 	s.handler.Start()
 }
 

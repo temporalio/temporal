@@ -159,7 +159,6 @@ func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockVisibilityManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
-	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
 	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
 	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil)
 
@@ -175,7 +174,6 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFa
 	mockWorkflowExecutionContext.On("clear")
 
 	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
 	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
 	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
 	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
@@ -202,7 +200,6 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	}, nil)
 
 	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
 	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
 	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
 	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
@@ -221,7 +218,6 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveVisibility_SendSignalNoErr() {
 	mockWorkflowExecutionContext.On("clear")
 
 	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
 	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
 	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
 	mockMutableState.On("GetStartEvent").Return(&workflow.HistoryEvent{
@@ -259,7 +255,6 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveBoth_SendSignalErr() {
 	}, nil)
 
 	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetEventStoreVersion").Return(int32(persistence.EventStoreVersionV2)).Once()
 	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
 	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
 	mockMutableState.On("GetNextEventID").Return(int64(101)).Twice()

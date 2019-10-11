@@ -855,7 +855,6 @@ func createReplicationTasks(
 		activityScheduleID := common.EmptyEventID
 		var lastReplicationInfo map[string]*sqlblobs.ReplicationInfo
 
-		var eventStoreVersion, newRunEventStoreVersion int32
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
 
@@ -870,8 +869,6 @@ func createReplicationTasks(
 			firstEventID = historyReplicationTask.FirstEventID
 			nextEventID = historyReplicationTask.NextEventID
 			version = task.GetVersion()
-			eventStoreVersion = historyReplicationTask.EventStoreVersion
-			newRunEventStoreVersion = historyReplicationTask.NewRunEventStoreVersion
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
@@ -892,20 +889,18 @@ func createReplicationTasks(
 		}
 
 		blob, err := replicationTaskInfoToBlob(&sqlblobs.ReplicationTaskInfo{
-			DomainID:                domainID,
-			WorkflowID:              &workflowID,
-			RunID:                   runID,
-			TaskType:                common.Int16Ptr(int16(task.GetType())),
-			FirstEventID:            &firstEventID,
-			NextEventID:             &nextEventID,
-			Version:                 &version,
-			LastReplicationInfo:     lastReplicationInfo,
-			ScheduledID:             &activityScheduleID,
-			EventStoreVersion:       &eventStoreVersion,
-			NewRunEventStoreVersion: &newRunEventStoreVersion,
-			BranchToken:             branchToken,
-			NewRunBranchToken:       newRunBranchToken,
-			ResetWorkflow:           &resetWorkflow,
+			DomainID:            domainID,
+			WorkflowID:          &workflowID,
+			RunID:               runID,
+			TaskType:            common.Int16Ptr(int16(task.GetType())),
+			FirstEventID:        &firstEventID,
+			NextEventID:         &nextEventID,
+			Version:             &version,
+			LastReplicationInfo: lastReplicationInfo,
+			ScheduledID:         &activityScheduleID,
+			BranchToken:         branchToken,
+			NewRunBranchToken:   newRunBranchToken,
+			ResetWorkflow:       &resetWorkflow,
 		})
 		if err != nil {
 			return err
@@ -1250,7 +1245,6 @@ func buildExecutionRow(
 		RetryExpirationSeconds:                  &executionInfo.ExpirationSeconds,
 		RetryExpirationTimeNanos:                common.Int64Ptr(executionInfo.ExpirationTime.UnixNano()),
 		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
-		EventStoreVersion:                       &executionInfo.EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
 		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
 		AutoResetPointsEncoding:                 common.StringPtr(string(executionInfo.AutoResetPoints.GetEncoding())),

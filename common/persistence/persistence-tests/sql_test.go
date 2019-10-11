@@ -33,13 +33,6 @@ func TestSQLHistoryV2PersistenceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestSQLHistoryPersistenceSuite(t *testing.T) {
-	s := new(HistoryPersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
-	s.TestBase.Setup()
-	suite.Run(t, s)
-}
-
 func TestSQLMatchingPersistenceSuite(t *testing.T) {
 	s := new(MatchingPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})

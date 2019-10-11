@@ -45,7 +45,6 @@ type (
 		GetShardID() int
 		GetService() service.Service
 		GetExecutionManager() persistence.ExecutionManager
-		GetHistoryManager() persistence.HistoryManager
 		GetHistoryV2Manager() persistence.HistoryV2Manager
 		GetDomainCache() cache.DomainCache
 		GetClusterMetadata() cluster.Metadata
@@ -100,7 +99,6 @@ type (
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
-		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
 		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string, execution shared.WorkflowExecution) (int, error)
 	}
 
@@ -111,7 +109,6 @@ type (
 		service          service.Service
 		rangeID          int64
 		shardManager     persistence.ShardManager
-		historyMgr       persistence.HistoryManager
 		historyV2Mgr     persistence.HistoryV2Manager
 		executionManager persistence.ExecutionManager
 		domainCache      cache.DomainCache
@@ -156,10 +153,6 @@ func (s *shardContextImpl) GetService() service.Service {
 
 func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
-}
-
-func (s *shardContextImpl) GetHistoryManager() persistence.HistoryManager {
-	return s.historyMgr
 }
 
 func (s *shardContextImpl) GetHistoryV2Manager() persistence.HistoryV2Manager {
@@ -813,64 +806,6 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	return size, err0
 }
 
-func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
-
-	domainEntry, err := s.domainCache.GetDomainByID(request.DomainID)
-	if err != nil {
-		return 0, err
-	}
-
-	// NOTE: do not use generateNextTransferTaskIDLocked since
-	// generateNextTransferTaskIDLocked is not guarded by lock
-	transactionID, err := s.GenerateTransferTaskID()
-	if err != nil {
-		return 0, err
-	}
-
-	request.Encoding = s.getDefaultEncoding(domainEntry)
-	request.TransactionID = transactionID
-
-	size := 0
-	defer func() {
-		domain := ""
-		if domainEntry != nil && domainEntry.GetInfo() != nil {
-			domain = domainEntry.GetInfo().Name
-		}
-		domainSizeScope := s.metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(domain))
-		domainSizeScope.RecordTimer(metrics.HistorySize, time.Duration(size))
-
-		if size >= historySizeLogThreshold {
-			s.throttledLogger.Warn("history size threshold breached",
-				tag.WorkflowID(request.Execution.GetWorkflowId()),
-				tag.WorkflowRunID(request.Execution.GetRunId()),
-				tag.WorkflowDomainID(request.DomainID),
-				tag.WorkflowHistorySizeBytes(size))
-		}
-	}()
-
-	// No need to lock context here, as we can write concurrently to append history events
-	currentRangeID := atomic.LoadInt64(&s.rangeID)
-	request.RangeID = currentRangeID
-	resp, err0 := s.historyMgr.AppendHistoryEvents(request)
-	if resp != nil {
-		size = resp.Size
-	}
-
-	if err0 != nil {
-		if _, ok := err0.(*persistence.ConditionFailedError); ok {
-			// Inserting a new event failed, lets try to overwrite the tail
-			request.Overwrite = true
-			resp, err1 := s.historyMgr.AppendHistoryEvents(request)
-			if resp != nil {
-				size = resp.Size
-			}
-			return size, err1
-		}
-	}
-
-	return size, err0
-}
-
 func (s *shardContextImpl) GetConfig() *Config {
 	return s.config
 }
@@ -1253,7 +1188,6 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		clusterMetadata:           shardItem.service.GetClusterMetadata(),
 		service:                   shardItem.service,
 		shardManager:              shardItem.shardMgr,
-		historyMgr:                shardItem.historyMgr,
 		historyV2Mgr:              shardItem.historyV2Mgr,
 		executionManager:          shardItem.executionMgr,
 		domainCache:               shardItem.domainCache,

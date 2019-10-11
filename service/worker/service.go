@@ -292,17 +292,12 @@ func (s *Service) startIndexer(base service.Service) {
 func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory) {
 	publicClient := s.params.PublicClient
 
-	historyManager, err := pFactory.NewHistoryManager()
-	if err != nil {
-		s.logger.Fatal("failed to start archiver, could not create HistoryManager", tag.Error(err))
-	}
 	historyV2Manager, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
 		s.logger.Fatal("failed to start archiver, could not create HistoryV2Manager", tag.Error(err))
 	}
 
 	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
-		HistoryManager:   historyManager,
 		HistoryV2Manager: historyV2Manager,
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,
@@ -325,7 +320,6 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 		PublicClient:     publicClient,
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
-		HistoryManager:   historyManager,
 		HistoryV2Manager: historyV2Manager,
 		DomainCache:      s.domainCache,
 		Config:           s.config.ArchiverConfig,

@@ -58,10 +58,9 @@ type (
 		// not merely log an error
 		*require.Assertions
 		suite.Suite
-		cluster1       *host.TestCluster
-		cluster2       *host.TestCluster
-		logger         log.Logger
-		enableEventsV2 bool
+		cluster1 *host.TestCluster
+		cluster2 *host.TestCluster
+		logger   log.Logger
 	}
 )
 

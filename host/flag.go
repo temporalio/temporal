@@ -24,14 +24,12 @@ import "flag"
 
 // TestFlags contains the feature flags for integration tests
 var TestFlags struct {
-	EnableEventsV2        bool
 	FrontendAddr          string
 	PersistenceType       string
 	TestClusterConfigFile string
 }
 
 func init() {
-	flag.BoolVar(&TestFlags.EnableEventsV2, "eventsV2", false, "run integration tests with eventsV2")
 	flag.StringVar(&TestFlags.FrontendAddr, "frontendAddress", "", "host:port for cadence frontend service")
 	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "cassandra", "type of persistence store - [cassandra or sql]")
 	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")

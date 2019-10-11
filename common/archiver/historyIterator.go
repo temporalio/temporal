@@ -70,7 +70,6 @@ type (
 		historyIteratorState
 
 		request               *ArchiveHistoryRequest
-		historyManager        persistence.HistoryManager
 		historyV2Manager      persistence.HistoryV2Manager
 		sizeEstimator         SizeEstimator
 		historyPageSize       int
@@ -85,22 +84,20 @@ var (
 // NewHistoryIterator returns a new HistoryIterator
 func NewHistoryIterator(
 	request *ArchiveHistoryRequest,
-	historyManager persistence.HistoryManager,
 	historyV2Manager persistence.HistoryV2Manager,
 	targetHistoryBlobSize int,
 ) HistoryIterator {
-	return newHistoryIterator(request, historyManager, historyV2Manager, targetHistoryBlobSize)
+	return newHistoryIterator(request, historyV2Manager, targetHistoryBlobSize)
 }
 
 // NewHistoryIteratorFromState returns a new HistoryIterator with specified state
 func NewHistoryIteratorFromState(
 	request *ArchiveHistoryRequest,
-	historyManager persistence.HistoryManager,
 	historyV2Manager persistence.HistoryV2Manager,
 	targetHistoryBlobSize int,
 	initialState []byte,
 ) (HistoryIterator, error) {
-	it := newHistoryIterator(request, historyManager, historyV2Manager, targetHistoryBlobSize)
+	it := newHistoryIterator(request, historyV2Manager, targetHistoryBlobSize)
 	if initialState == nil {
 		return it, nil
 	}
@@ -112,7 +109,6 @@ func NewHistoryIteratorFromState(
 
 func newHistoryIterator(
 	request *ArchiveHistoryRequest,
-	historyManager persistence.HistoryManager,
 	historyV2Manager persistence.HistoryV2Manager,
 	targetHistoryBlobSize int,
 ) *historyIterator {
@@ -122,7 +118,6 @@ func newHistoryIterator(
 			FinishedIteration: false,
 		},
 		request:               request,
-		historyManager:        historyManager,
 		historyV2Manager:      historyV2Manager,
 		historyPageSize:       historyPageSize,
 		targetHistoryBlobSize: targetHistoryBlobSize,
@@ -226,32 +221,16 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.Hist
 }
 
 func (i *historyIterator) readHistory(firstEventID int64) ([]*shared.History, error) {
-	if i.request.EventStoreVersion == persistence.EventStoreVersionV2 {
-		req := &persistence.ReadHistoryBranchRequest{
-			BranchToken: i.request.BranchToken,
-			MinEventID:  firstEventID,
-			MaxEventID:  common.EndEventID,
-			PageSize:    i.historyPageSize,
-			ShardID:     common.IntPtr(i.request.ShardID),
-		}
-		historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
-		return historyBatches, err
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken: i.request.BranchToken,
+		MinEventID:  firstEventID,
+		MaxEventID:  common.EndEventID,
+		PageSize:    i.historyPageSize,
+		ShardID:     common.IntPtr(i.request.ShardID),
 	}
-	req := &persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID: i.request.DomainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(i.request.WorkflowID),
-			RunId:      common.StringPtr(i.request.RunID),
-		},
-		FirstEventID: firstEventID,
-		NextEventID:  common.EndEventID,
-		PageSize:     i.historyPageSize,
-	}
-	resp, err := i.historyManager.GetWorkflowExecutionHistoryByBatch(req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.History, nil
+	historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
+	return historyBatches, err
+
 }
 
 // reset resets iterator to a certain state given its encoded representation

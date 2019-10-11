@@ -487,11 +487,6 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	s.True(len(resp.HistoryBatches) == pageSize)
 	blobs = append(blobs, resp.HistoryBatches...)
 	token = resp.NextPageToken
-	if s.testClusterConfig.EnableEventsV2 {
-		s.Equal(int32(2), resp.GetEventStoreVersion())
-	} else {
-		s.Equal(int32(0), resp.GetEventStoreVersion())
-	}
 	if token != nil {
 		resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
 		s.Nil(err)
@@ -512,11 +507,6 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if s.testClusterConfig.EnableEventsV2 {
-			s.Equal(int32(2), resp.GetEventStoreVersion())
-		} else {
-			s.Equal(int32(0), resp.GetEventStoreVersion())
-		}
 	}
 	// now, there shall be 3 batches of events:
 	// 1. start event and decision task scheduled;
@@ -537,11 +527,6 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if s.testClusterConfig.EnableEventsV2 {
-			s.Equal(int32(2), resp.GetEventStoreVersion())
-		} else {
-			s.Equal(int32(0), resp.GetEventStoreVersion())
-		}
 	}
 	// now, there shall be 5 batches of events:
 	// 1. start event and decision task scheduled;
@@ -564,11 +549,6 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if s.testClusterConfig.EnableEventsV2 {
-			s.Equal(int32(2), resp.GetEventStoreVersion())
-		} else {
-			s.Equal(int32(0), resp.GetEventStoreVersion())
-		}
 	}
 	// now, there shall be 7 batches of events:
 	// 1. start event and decision task scheduled;
@@ -591,11 +571,6 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
-		if s.testClusterConfig.EnableEventsV2 {
-			s.Equal(int32(2), resp.GetEventStoreVersion())
-		} else {
-			s.Equal(int32(0), resp.GetEventStoreVersion())
-		}
 	}
 	// should get the following events
 	// 1. decision task completed and activity task scheduled

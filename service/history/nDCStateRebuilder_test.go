@@ -160,8 +160,6 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 		events,
 		[]*shared.HistoryEvent(nil),
-		int32(nDCProtocolVersion),
-		int32(nDCProtocolVersion),
 		true,
 	).Return(nil, nil, nil, nil).Once()
 

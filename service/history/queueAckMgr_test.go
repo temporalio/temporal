@@ -47,7 +47,6 @@ type (
 
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockShardMgr        *mocks.ShardManager
-		mockHistoryMgr      *mocks.HistoryManager
 		mockShard           *shardContextImpl
 		mockService         service.Service
 		mockMessagingClient messaging.Client
@@ -65,7 +64,6 @@ type (
 
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockShardMgr        *mocks.ShardManager
-		mockHistoryMgr      *mocks.HistoryManager
 		mockShard           *shardContextImpl
 		mockService         service.Service
 		mockMessagingClient messaging.Client
@@ -101,7 +99,6 @@ func (s *queueAckMgrSuite) TearDownSuite() {
 func (s *queueAckMgrSuite) SetupTest() {
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardMgr = &mocks.ShardManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -124,7 +121,6 @@ func (s *queueAckMgrSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardMgr,
-		historyMgr:                s.mockHistoryMgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
@@ -142,7 +138,6 @@ func (s *queueAckMgrSuite) SetupTest() {
 func (s *queueAckMgrSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 }
@@ -307,7 +302,6 @@ func (s *queueFailoverAckMgrSuite) TearDownSuite() {
 func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardMgr = &mocks.ShardManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -330,7 +324,6 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardMgr,
-		historyMgr:                s.mockHistoryMgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
@@ -348,7 +341,6 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 }

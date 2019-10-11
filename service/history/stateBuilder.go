@@ -42,8 +42,6 @@ type (
 			execution shared.WorkflowExecution,
 			history []*shared.HistoryEvent,
 			newRunHistory []*shared.HistoryEvent,
-			eventStoreVersion int32,
-			newRunEventStoreVersion int32,
 			newRunNDC bool,
 		) (*shared.HistoryEvent, *decisionInfo, mutableState, error)
 		getTransferTasks() []persistence.Task
@@ -117,8 +115,6 @@ func (b *stateBuilderImpl) applyEvents(
 	execution shared.WorkflowExecution,
 	history []*shared.HistoryEvent,
 	newRunHistory []*shared.HistoryEvent,
-	eventStoreVersion int32,
-	newRunEventStoreVersion int32,
 	newRunNDC bool,
 ) (*shared.HistoryEvent, *decisionInfo, mutableState, error) {
 
@@ -176,11 +172,10 @@ func (b *stateBuilderImpl) applyEvents(
 
 			b.timerTasks = append(b.timerTasks, b.scheduleWorkflowTimerTask(event, b.msBuilder)...)
 			b.transferTasks = append(b.transferTasks, b.scheduleWorkflowStartTransferTask())
-			if eventStoreVersion == persistence.EventStoreVersionV2 {
-				err := b.msBuilder.SetHistoryTree(execution.GetRunId())
-				if err != nil {
-					return nil, nil, nil, err
-				}
+
+			err = b.msBuilder.SetHistoryTree(execution.GetRunId())
+			if err != nil {
+				return nil, nil, nil, err
 			}
 
 			// TODO remove after NDC is fully migrated
@@ -572,8 +567,6 @@ func (b *stateBuilderImpl) applyEvents(
 				newExecution,
 				newRunHistory,
 				nil,
-				newRunEventStoreVersion,
-				0,
 				false,
 			)
 			if err != nil {

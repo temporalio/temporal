@@ -678,11 +678,6 @@ func ArchivalRequestRunID(requestRunID string) Tag {
 	return newStringTag("archival-request-run-id", requestRunID)
 }
 
-// ArchivalRequestEventStoreVersion returns tag for RequestEventStoreVersion
-func ArchivalRequestEventStoreVersion(requestEventStoreVersion int32) Tag {
-	return newInt32("archival-request-event-store-version", requestEventStoreVersion)
-}
-
 // ArchivalRequestBranchToken returns tag for RequestBranchToken
 func ArchivalRequestBranchToken(requestBranchToken []byte) Tag {
 	return newObjectTag("archival-request-branch-token", requestBranchToken)

@@ -109,7 +109,6 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 		currentClusterName:   s.ShardContext.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:                s.ShardContext,
 		clusterMetadata:      s.ShardContext.GetClusterMetadata(),
-		historyMgr:           s.HistoryMgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
@@ -124,7 +123,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	s.engineImpl.txProcessor = newTransferQueueProcessor(
 		s.ShardContext, s.engineImpl, s.mockVisibilityMgr, nil, nil, s.logger,
 	)
-	s.engineImpl.replicatorProcessor = newReplicatorQueueProcessor(s.ShardContext, historyCache, nil, s.ExecutionManager, s.HistoryMgr, s.HistoryV2Mgr, s.logger)
+	s.engineImpl.replicatorProcessor = newReplicatorQueueProcessor(s.ShardContext, historyCache, nil, s.ExecutionManager, s.HistoryV2Mgr, s.logger)
 	s.engineImpl.timerProcessor = newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.mockMatchingClient, s.logger)
 	s.ShardContext.SetEngine(s.engineImpl)
 }
@@ -173,8 +172,8 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 
 	createState := createMutableState(builder)
 	info := createState.ExecutionInfo
-	task0, err0 := s.CreateWorkflowExecution(domainID, we, tl, info.WorkflowTypeName, info.WorkflowTimeout, info.DecisionTimeoutValue,
-		info.ExecutionContext, info.NextEventID, info.LastProcessedEvent, info.DecisionScheduleID, nil)
+	task0, err0 := s.CreateWorkflowExecutionWithBranchToken(domainID, we, tl, info.WorkflowTypeName, info.WorkflowTimeout, info.DecisionTimeoutValue,
+		info.ExecutionContext, info.NextEventID, info.LastProcessedEvent, info.DecisionScheduleID, info.BranchToken, nil)
 	s.NoError(err0, "No error expected.")
 	s.NotNil(task0, "Expected non empty task identifier.")
 

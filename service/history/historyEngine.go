@@ -66,7 +66,6 @@ type (
 		timeSource                clock.TimeSource
 		decisionHandler           decisionHandler
 		clusterMetadata           cluster.Metadata
-		historyMgr                persistence.HistoryManager
 		historyV2Mgr              persistence.HistoryV2Manager
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
@@ -152,7 +151,6 @@ func NewEngineWithShardContext(
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
-	historyManager := shard.GetHistoryManager()
 	historyV2Manager := shard.GetHistoryV2Manager()
 	historyCache := newHistoryCache(shard)
 	historyEngImpl := &historyEngineImpl{
@@ -160,7 +158,6 @@ func NewEngineWithShardContext(
 		shard:                shard,
 		clusterMetadata:      shard.GetClusterMetadata(),
 		timeSource:           shard.GetTimeSource(),
-		historyMgr:           historyManager,
 		historyV2Mgr:         historyV2Manager,
 		executionManager:     executionManager,
 		visibilityMgr:        visibilityMgr,
@@ -192,7 +189,6 @@ func NewEngineWithShardContext(
 			shard,
 			historyEngImpl.historyCache,
 			publisher, executionManager,
-			historyManager,
 			historyV2Manager,
 			logger,
 		)
@@ -202,7 +198,6 @@ func NewEngineWithShardContext(
 			historyEngImpl,
 			historyCache,
 			shard.GetDomainCache(),
-			historyManager,
 			historyV2Manager,
 			logger,
 		)
@@ -355,11 +350,10 @@ func (e *historyEngineImpl) createMutableState(
 ) (mutableState, error) {
 
 	domainName := domainEntry.GetInfo().Name
-	enableEventsV2 := e.config.EnableEventsV2(domainName)
 	enableNDC := e.config.EnableNDC(domainName)
 
 	var newMutableState mutableState
-	if enableEventsV2 && enableNDC {
+	if enableNDC {
 		// version history applies to both local and global domain
 		newMutableState = newMutableStateBuilderWithVersionHistories(
 			e.shard,
@@ -386,11 +380,10 @@ func (e *historyEngineImpl) createMutableState(
 		)
 	}
 
-	if enableEventsV2 {
-		if err := newMutableState.SetHistoryTree(runID); err != nil {
-			return nil, err
-		}
+	if err := newMutableState.SetHistoryTree(runID); err != nil {
+		return nil, err
 	}
+
 	return newMutableState, nil
 }
 
@@ -820,7 +813,6 @@ func (e *historyEngineImpl) getMutableState(
 		ClientImpl:                           common.StringPtr(executionInfo.ClientImpl),
 		IsWorkflowRunning:                    common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
 		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
-		EventStoreVersion:                    common.Int32Ptr(msBuilder.GetEventStoreVersion()),
 		CurrentBranchToken:                   currentBranchToken,
 		WorkflowState:                        common.Int32Ptr(int32(workflowState)),
 		WorkflowCloseState:                   common.Int32Ptr(int32(workflowCloseState)),

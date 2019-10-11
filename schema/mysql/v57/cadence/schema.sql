@@ -116,21 +116,6 @@ CREATE TABLE timer_tasks (
   PRIMARY KEY (shard_id, visibility_timestamp, task_id)
 );
 
--- Deprecated in favor of history eventsV2
-CREATE TABLE events (
-  domain_id      BINARY(16) NOT NULL,
-  workflow_id    VARCHAR(255) NOT NULL,
-  run_id         BINARY(16) NOT NULL,
-  first_event_id BIGINT NOT NULL,
-  --
-  batch_version  BIGINT,
-  range_id       BIGINT NOT NULL,
-  tx_id          BIGINT NOT NULL,
-  data MEDIUMBLOB NOT NULL,
-  data_encoding  VARCHAR(16) NOT NULL,
-	PRIMARY KEY (domain_id, workflow_id, run_id, first_event_id)
-);
-
 CREATE TABLE activity_info_maps (
 -- each row corresponds to one key of one map<string, ActivityInfo>
   shard_id INT NOT NULL,

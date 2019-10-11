@@ -71,7 +71,6 @@ type (
 	WorkflowHandler struct {
 		domainCache               cache.DomainCache
 		metadataMgr               persistence.MetadataManager
-		historyMgr                persistence.HistoryManager
 		historyV2Mgr              persistence.HistoryV2Manager
 		visibilityMgr             persistence.VisibilityManager
 		history                   history.Client
@@ -97,7 +96,6 @@ type (
 		IsWorkflowRunning bool
 		PersistenceToken  []byte
 		TransientDecision *gen.TransientDecisionInfo
-		EventStoreVersion int32
 		BranchToken       []byte
 		ReplicationInfo   map[string]*gen.ReplicationInfo
 	}
@@ -153,7 +151,6 @@ func NewWorkflowHandler(
 	sVice service.Service,
 	config *Config,
 	metadataMgr persistence.MetadataManager,
-	historyMgr persistence.HistoryManager,
 	historyV2Mgr persistence.HistoryV2Manager,
 	visibilityMgr persistence.VisibilityManager,
 	replicationMessageSink messaging.Producer,
@@ -164,7 +161,6 @@ func NewWorkflowHandler(
 		Service:         sVice,
 		config:          config,
 		metadataMgr:     metadataMgr,
-		historyMgr:      historyMgr,
 		historyV2Mgr:    historyV2Mgr,
 		visibilityMgr:   visibilityMgr,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
@@ -233,7 +229,6 @@ func (wh *WorkflowHandler) Stop() {
 	wh.domainCache.Stop()
 	wh.metadataMgr.Close()
 	wh.visibilityMgr.Close()
-	wh.historyMgr.Close()
 	wh.Service.Stop()
 }
 
@@ -569,8 +564,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, nil
 	}
 
-	eventStoreVersion := matchingResp.GetEventStoreVersion()
-	resp, err = wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, eventStoreVersion, matchingResp.GetBranchToken())
+	resp, err = wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, matchingResp.GetBranchToken())
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1442,8 +1436,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
-		eventStoreVersion := matchingResp.GetEventStoreVersion()
-		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, taskToken.DomainID, matchingResp, eventStoreVersion, matchingResp.GetBranchToken())
+		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, taskToken.DomainID, matchingResp, matchingResp.GetBranchToken())
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -1770,7 +1763,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		execution *gen.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) (int32, []byte, string, int64, int64, bool, error) {
+	) ([]byte, string, int64, int64, bool, error) {
 		response, err := wh.history.PollMutableState(ctx, &h.PollMutableStateRequest{
 			DomainUUID:          common.StringPtr(domainUUID),
 			Execution:           execution,
@@ -1779,18 +1772,11 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		})
 
 		if err != nil {
-			return 0, nil, "", 0, 0, false, err
+			return nil, "", 0, 0, false, err
 		}
 		isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusNone
 
-		// calculate event store version based on if branch token exist
-		eventStoreVersion := persistence.EventStoreVersionV2
-		if len(response.GetCurrentBranchToken()) == 0 {
-			eventStoreVersion = 0
-		}
-
-		return int32(eventStoreVersion),
-			response.CurrentBranchToken,
+		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),
 			response.GetNextEventId(),
@@ -1826,7 +1812,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			if !isCloseEventOnly {
 				queryNextEventID = token.NextEventID
 			}
-			token.EventStoreVersion, token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+			token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
 				queryHistory(domainID, execution, queryNextEventID, token.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
@@ -1839,7 +1825,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		token.EventStoreVersion, token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+		token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
 			queryHistory(domainID, execution, queryNextEventID, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -3110,37 +3096,21 @@ func (wh *WorkflowHandler) getHistory(
 
 	historyEvents := []*gen.HistoryEvent{}
 	var size int
-	if len(branchToken) != 0 {
-		shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, wh.config.NumHistoryShards)
-		var err error
-		historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.historyV2Mgr, &persistence.ReadHistoryBranchRequest{
-			BranchToken:   branchToken,
-			MinEventID:    firstEventID,
-			MaxEventID:    nextEventID,
-			PageSize:      int(pageSize),
-			NextPageToken: nextPageToken,
-			ShardID:       common.IntPtr(shardID),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-	} else {
-		response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID:      domainID,
-			Execution:     execution,
-			FirstEventID:  firstEventID,
-			NextEventID:   nextEventID,
-			PageSize:      int(pageSize),
-			NextPageToken: nextPageToken,
-		})
 
-		if err != nil {
-			return nil, nil, err
-		}
-		historyEvents = append(historyEvents, response.History.Events...)
-		nextPageToken = response.NextPageToken
-		size = response.Size
+	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, wh.config.NumHistoryShards)
+	var err error
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.historyV2Mgr, &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+		ShardID:       common.IntPtr(shardID),
+	})
+	if err != nil {
+		return nil, nil, err
 	}
+
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	if len(nextPageToken) == 0 && transientDecision != nil {
@@ -3289,7 +3259,6 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	scope metrics.Scope,
 	domainID string,
 	matchingResp *m.PollForDecisionTaskResponse,
-	eventStoreVersion int32,
 	branchToken []byte,
 ) (*gen.PollForDecisionTaskResponse, error) {
 
@@ -3350,7 +3319,6 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 				NextEventID:       nextEventID,
 				PersistenceToken:  persistenceToken,
 				TransientDecision: matchingResp.DecisionInfo,
-				EventStoreVersion: eventStoreVersion,
 				BranchToken:       branchToken,
 			})
 			if err != nil {

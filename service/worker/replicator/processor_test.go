@@ -326,10 +326,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 		History: &shared.History{
 			Events: []*shared.HistoryEvent{&shared.HistoryEvent{EventId: common.Int64Ptr(1)}},
 		},
-		NewRunHistory:           nil,
-		EventStoreVersion:       common.Int32Ptr(144),
-		NewRunEventStoreVersion: nil,
-		ResetWorkflow:           common.BoolPtr(true),
+		NewRunHistory: nil,
+		ResetWorkflow: common.BoolPtr(true),
 	}
 	replicationTask := &replicator.ReplicationTask{
 		TaskType:              replicator.ReplicationTaskTypeHistory.Ptr(),
@@ -356,10 +354,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 		History: &shared.History{
 			Events: []*shared.HistoryEvent{&shared.HistoryEvent{EventId: common.Int64Ptr(1)}},
 		},
-		NewRunHistory:           nil,
-		EventStoreVersion:       common.Int32Ptr(144),
-		NewRunEventStoreVersion: nil,
-		ResetWorkflow:           common.BoolPtr(true),
+		NewRunHistory: nil,
+		ResetWorkflow: common.BoolPtr(true),
 	}
 	replicationTask := &replicator.ReplicationTask{
 		TaskType:              replicator.ReplicationTaskTypeHistory.Ptr(),

@@ -194,9 +194,6 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 	var pendingRequest *history.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
 
-	// event store version, replication
-	// for each pendingRequest to history
-	var eventStoreVersion int32
 	var replicationInfo map[string]*shared.ReplicationInfo
 
 	var token []byte
@@ -206,7 +203,6 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 			return "", err
 		}
 
-		eventStoreVersion = response.GetEventStoreVersion()
 		replicationInfo = response.ReplicationInfo
 		token = response.NextPageToken
 
@@ -225,7 +221,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 			if err != nil {
 				return "", err
 			}
-			pendingRequest = c.createReplicationRawRequest(domainID, workflowID, runID, batch, eventStoreVersion, replicationInfo)
+			pendingRequest = c.createReplicationRawRequest(domainID, workflowID, runID, batch, replicationInfo)
 		}
 	}
 	// after this for loop, there shall be one request not sent yet
@@ -248,7 +244,6 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 		batch := response.HistoryBatches[0]
 
 		pendingRequest.NewRunHistory = batch
-		pendingRequest.NewRunEventStoreVersion = response.EventStoreVersion
 	}
 
 	return nextRunID, c.sendReplicationRawRequest(pendingRequest)
@@ -281,7 +276,6 @@ func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 func (c *historyRereplicationContext) createReplicationRawRequest(
 	domainID string, workflowID string, runID string,
 	historyBlob *shared.DataBlob,
-	eventStoreVersion int32,
 	replicationInfo map[string]*shared.ReplicationInfo,
 ) *history.ReplicateRawEventsRequest {
 
@@ -291,11 +285,9 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo:   replicationInfo,
-		History:           historyBlob,
-		EventStoreVersion: common.Int32Ptr(eventStoreVersion),
+		ReplicationInfo: replicationInfo,
+		History:         historyBlob,
 		// NewRunHistory this will be handled separately
-		// NewRunEventStoreVersion  this will be handled separately
 	}
 
 	return request

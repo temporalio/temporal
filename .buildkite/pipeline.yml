@@ -26,21 +26,6 @@ steps:
           run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
 
-  - label: ":golang: integration test events v2 with cassandra"
-    agents:
-      queue: "workers"
-      docker: "*"
-    command: "make cover_integration_profile EVENTSV2=true"
-    artifact_paths:
-      - "build/coverage/*.out"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-compose#v3.0.0:
-          run: integration-test-cassandra
-          config: docker/buildkite/docker-compose.yml
-
   - label: ":golang: integration xdc test with cassandra"
     agents:
       queue: "workers"
@@ -76,21 +61,6 @@ steps:
       queue: "workers"
       docker: "*"
     command: "make cover_integration_profile"
-    artifact_paths:
-      - "build/coverage/*.out"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-compose#v3.0.0:
-          run: integration-test-mysql
-          config: docker/buildkite/docker-compose.yml
-
-  - label: ":golang: integration test events v2 with mysql"
-    agents:
-      queue: "workers"
-      docker: "*"
-    command: "make cover_integration_profile EVENTSV2=true"
     artifact_paths:
       - "build/coverage/*.out"
     retry:

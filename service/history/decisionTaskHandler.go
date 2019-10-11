@@ -42,7 +42,6 @@ type (
 	decisionTaskHandlerImpl struct {
 		identity                string
 		decisionTaskCompletedID int64
-		eventStoreVersion       int32
 		domainEntry             *cache.DomainCacheEntry
 
 		// internal state
@@ -71,7 +70,6 @@ type (
 func newDecisionTaskHandler(
 	identity string,
 	decisionTaskCompletedID int64,
-	eventStoreVersion int32,
 	domainEntry *cache.DomainCacheEntry,
 	mutableState mutableState,
 	attrValidator *decisionAttrValidator,
@@ -86,7 +84,6 @@ func newDecisionTaskHandler(
 	return &decisionTaskHandlerImpl{
 		identity:                identity,
 		decisionTaskCompletedID: decisionTaskCompletedID,
-		eventStoreVersion:       eventStoreVersion,
 		domainEntry:             domainEntry,
 
 		// internal state
@@ -706,7 +703,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		handler.decisionTaskCompletedID,
 		parentDomainName,
 		attr,
-		handler.eventStoreVersion,
 	)
 	if err != nil {
 		return err
@@ -925,7 +921,6 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 		handler.decisionTaskCompletedID,
 		attr.GetParentWorkflowDomain(),
 		continueAsNewAttributes,
-		handler.eventStoreVersion,
 	)
 	if err != nil {
 		return err

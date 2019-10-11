@@ -87,21 +87,6 @@ type (
 		DeleteTask(request *DeleteTaskRequest) error
 	}
 
-	// HistoryStore is used to manage Workflow Execution HistoryEventBatch for Persistence layer
-	// DEPRECATED: use HistoryV2Store instead
-	HistoryStore interface {
-		Closeable
-		GetName() string
-		//The below two APIs are related to serialization/deserialization
-
-		//DEPRECATED in favor of V2 APIs-AppendHistoryNodes
-		AppendHistoryEvents(request *InternalAppendHistoryEventsRequest) error
-		//DEPRECATED in favor of V2 APIs-ReadHistoryBranch
-		GetWorkflowExecutionHistory(request *InternalGetWorkflowExecutionHistoryRequest) (*InternalGetWorkflowExecutionHistoryResponse, error)
-		//DEPRECATED in favor of V2 APIs-DeleteHistoryBranch
-		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
-	}
-
 	// HistoryV2Store is to manager workflow history events
 	HistoryV2Store interface {
 		Closeable
@@ -235,13 +220,11 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
-		// events V2 related
-		EventStoreVersion int32
-		BranchToken       []byte
-		CronSchedule      string
-		ExpirationSeconds int32
-		Memo              map[string][]byte
-		SearchAttributes  map[string][]byte
+		BranchToken        []byte
+		CronSchedule       string
+		ExpirationSeconds  int32
+		Memo               map[string][]byte
+		SearchAttributes   map[string][]byte
 
 		// attributes which are not related to mutable state at all
 		HistorySize int64

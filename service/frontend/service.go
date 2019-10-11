@@ -185,10 +185,6 @@ func (s *Service) Start() {
 		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 	)
 
-	history, err := pFactory.NewHistoryManager()
-	if err != nil {
-		log.Fatal("Creating history manager persistence failed", tag.Error(err))
-	}
 	historyV2, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
@@ -197,7 +193,6 @@ func (s *Service) Start() {
 	domainCache := cache.NewDomainCache(metadata, base.GetClusterMetadata(), base.GetMetricsClient(), base.GetLogger())
 
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryManager:   history,
 		HistoryV2Manager: historyV2,
 		Logger:           base.GetLogger(),
 		MetricsClient:    base.GetMetricsClient(),
@@ -241,7 +236,6 @@ func (s *Service) Start() {
 		base,
 		s.config,
 		metadata,
-		history,
 		historyV2,
 		visibility,
 		replicationMessageSink,
@@ -250,7 +244,7 @@ func (s *Service) Start() {
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 
-	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, history, historyV2, s.params)
+	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params)
 	adminHandler.RegisterHandler()
 
 	// must start base service first
