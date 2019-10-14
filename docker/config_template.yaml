@@ -21,7 +21,7 @@ persistence:
         visibility:
             cassandra:
                 hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
-                keyspace: {{ default .Env.VISIBILITY_KEYSPACE "cadence" }}
+                keyspace: {{ default .Env.VISIBILITY_KEYSPACE "cadence_visibility" }}
                 consistency: {{ default .Env.CASSANDRA_CONSISTENCY "One" }}
         {{- else if eq $db "mysql" }}
         default:
