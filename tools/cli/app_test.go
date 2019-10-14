@@ -29,6 +29,11 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/urfave/cli"
+	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	clientFrontendTest "go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
+	"go.uber.org/cadence/.gen/go/shared"
+
 	"github.com/uber/cadence/.gen/go/admin"
 	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	serverAdminTest "github.com/uber/cadence/.gen/go/admin/adminservicetest"
@@ -36,10 +41,6 @@ import (
 	serverFrontendTest "github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
 	serverShared "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/urfave/cli"
-	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	clientFrontendTest "go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
-	"go.uber.org/cadence/.gen/go/shared"
 )
 
 type cliAppSuite struct {
@@ -505,7 +506,7 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	resp := &admin.DescribeWorkflowExecutionResponse{
 		ShardId:                common.StringPtr("test-shard-id"),
 		HistoryAddr:            common.StringPtr("ip:port"),
-		MutableStateInDatabase: common.StringPtr("{}"),
+		MutableStateInDatabase: common.StringPtr("{\"ExecutionInfo\":{\"BranchToken\":\"WQsACgAAACQ2MzI5YzEzMi1mMGI0LTQwZmUtYWYxMS1hODVmMDA3MzAzODQLABQAAAAkOWM5OWI1MjItMGEyZi00NTdmLWEyNDgtMWU0OTA0ZDg4YzVhDwAeDAAAAAAA\"}}"),
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)

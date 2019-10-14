@@ -848,7 +848,7 @@ func (e *historyEngineImpl) getMutableState(
 func (e *historyEngineImpl) DescribeMutableState(
 	ctx ctx.Context,
 	request *h.DescribeMutableStateRequest,
-) (retResp *h.DescribeMutableStateResponse, retError error) {
+) (response *h.DescribeMutableStateResponse, retError error) {
 
 	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {
@@ -860,22 +860,34 @@ func (e *historyEngineImpl) DescribeMutableState(
 		RunId:      request.Execution.RunId,
 	}
 
-	cacheCtx, dbCtx, release, cacheHit, err := e.historyCache.getAndCreateWorkflowExecution(ctx, domainID, execution)
+	cacheCtx, dbCtx, release, cacheHit, err := e.historyCache.getAndCreateWorkflowExecution(
+		ctx, domainID, execution,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { release(retError) }()
-	retResp = &h.DescribeMutableStateResponse{}
+
+	response = &h.DescribeMutableStateResponse{}
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).msBuilder != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).msBuilder
-		retResp.MutableStateInCache, retError = e.toMutableStateJSON(msb)
+		response.MutableStateInCache, err = e.toMutableStateJSON(msb)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	msb, retError := dbCtx.loadWorkflowExecution()
-	retResp.MutableStateInDatabase, retError = e.toMutableStateJSON(msb)
+	msb, err := dbCtx.loadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	response.MutableStateInDatabase, err = e.toMutableStateJSON(msb)
+	if err != nil {
+		return nil, err
+	}
 
-	return
+	return response, nil
 }
 
 func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (*string, error) {

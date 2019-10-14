@@ -592,20 +592,20 @@ type (
 
 	// VersionHistoryItem contains the event id and the associated version
 	VersionHistoryItem struct {
-		eventID int64
-		version int64
+		EventID int64
+		Version int64
 	}
 
 	// VersionHistory provides operations on version history
 	VersionHistory struct {
-		branchToken []byte
-		items       []*VersionHistoryItem
+		BranchToken []byte
+		Items       []*VersionHistoryItem
 	}
 
 	// VersionHistories contains a set of VersionHistory
 	VersionHistories struct {
-		currentVersionHistoryIndex int
-		histories                  []*VersionHistory
+		CurrentVersionHistoryIndex int
+		Histories                  []*VersionHistory
 	}
 
 	// WorkflowMutableState indicates workflow related state

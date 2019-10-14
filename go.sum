@@ -232,7 +232,9 @@ github.com/uber-go/mapdecode v1.0.0/go.mod h1:b5nP15FwXTgpjTjeA9A2uTHXV5UJCl4arw
 github.com/uber-go/tally v3.3.1+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
 github.com/uber-go/tally v3.3.11+incompatible h1:b6xn/zbXCPFID3p2P9nUlHWyrNZ3e3U35Ra1/gDR63I=
 github.com/uber-go/tally v3.3.11+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
+github.com/uber/jaeger-client-go v2.15.0+incompatible h1:NP3qsSqNxh8VYr956ur1N/1C1PjvOJnJykCzcD5QHbk=
 github.com/uber/jaeger-client-go v2.15.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
+github.com/uber/jaeger-lib v1.5.0 h1:OHbgr8l656Ub3Fw5k9SWnBfIEwvoHQ+W2y+Aa9D1Uyo=
 github.com/uber/jaeger-lib v1.5.0/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
 github.com/uber/ringpop-go v0.8.5 h1:aBa/SHmmFRcAXA63k7uBheoTL8tCmH7L+OgktB1AF/o=
 github.com/uber/ringpop-go v0.8.5/go.mod h1:zVI6eGO6L7pG14GkntHsSOfmUAWQ7B4lvmzly4IT4ls=

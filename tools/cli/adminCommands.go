@@ -108,7 +108,6 @@ func AdminShowWorkflow(c *cli.Context) {
 func AdminDescribeWorkflow(c *cli.Context) {
 
 	resp := describeMutableState(c)
-
 	prettyPrintJSONObject(resp)
 
 	if resp != nil {
@@ -118,21 +117,29 @@ func AdminDescribeWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
 		}
-		if ms.ExecutionInfo != nil {
-			branchInfo := shared.HistoryBranch{}
-			thriftrwEncoder := codec.NewThriftRWEncoder()
-			err := thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
+		currentBranchToken := ms.ExecutionInfo.BranchToken
+		if ms.VersionHistories != nil {
+			// if VersionHistories is set, then all branch infos are stored in VersionHistories
+			currentVersionHistory, err := ms.VersionHistories.GetCurrentVersionHistory()
 			if err != nil {
-				ErrorAndExit("thriftrwEncoder.Decode err", err)
+				ErrorAndExit("ms.VersionHistories.GetCurrentVersionHistory err", err)
 			}
-			prettyPrintJSONObject(branchInfo)
-			if ms.ExecutionInfo.AutoResetPoints != nil {
-				fmt.Println("auto-reset-points:")
-				for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
-					createT := time.Unix(0, p.GetCreatedTimeNano())
-					expireT := time.Unix(0, p.GetExpiringTimeNano())
-					fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstDecisionCompletedId(), p.GetResettable(), createT, expireT)
-				}
+			currentBranchToken = currentVersionHistory.GetBranchToken()
+		}
+
+		branchInfo := shared.HistoryBranch{}
+		thriftrwEncoder := codec.NewThriftRWEncoder()
+		err = thriftrwEncoder.Decode(currentBranchToken, &branchInfo)
+		if err != nil {
+			ErrorAndExit("thriftrwEncoder.Decode err", err)
+		}
+		prettyPrintJSONObject(branchInfo)
+		if ms.ExecutionInfo.AutoResetPoints != nil {
+			fmt.Println("auto-reset-points:")
+			for _, p := range ms.ExecutionInfo.AutoResetPoints.Points {
+				createT := time.Unix(0, p.GetCreatedTimeNano())
+				expireT := time.Unix(0, p.GetExpiringTimeNano())
+				fmt.Println(p.GetBinaryChecksum(), p.GetRunId(), p.GetFirstDecisionCompletedId(), p.GetResettable(), createT, expireT)
 			}
 		}
 	}
@@ -161,7 +168,7 @@ func describeMutableState(c *cli.Context) *admin.DescribeWorkflowExecutionRespon
 	return resp
 }
 
-// AdminDeleteWorkflow describe a new workflow execution for admin
+// AdminDeleteWorkflow delete a workflow execution for admin
 func AdminDeleteWorkflow(c *cli.Context) {
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := c.String(FlagRunID)
@@ -184,22 +191,33 @@ func AdminDeleteWorkflow(c *cli.Context) {
 
 	branchInfo := shared.HistoryBranch{}
 	thriftrwEncoder := codec.NewThriftRWEncoder()
-	err = thriftrwEncoder.Decode(ms.ExecutionInfo.BranchToken, &branchInfo)
-	if err != nil {
-		ErrorAndExit("thriftrwEncoder.Decode err", err)
+	branchTokens := [][]byte{ms.ExecutionInfo.BranchToken}
+	if ms.VersionHistories != nil {
+		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+		branchTokens = [][]byte{}
+		for _, versionHistory := range ms.VersionHistories.ToThrift().Histories {
+			branchTokens = append(branchTokens, versionHistory.BranchToken)
+		}
 	}
-	fmt.Println("deleting history events for ...")
-	prettyPrintJSONObject(branchInfo)
-	histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
-	err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
-		BranchInfo: branchInfo,
-		ShardID:    shardIDInt,
-	})
-	if err != nil {
-		if skipError {
-			fmt.Println("failed to delete history, ", err)
-		} else {
-			ErrorAndExit("DeleteHistoryBranch err", err)
+
+	for _, branchToken := range branchTokens {
+		err = thriftrwEncoder.Decode(branchToken, &branchInfo)
+		if err != nil {
+			ErrorAndExit("thriftrwEncoder.Decode err", err)
+		}
+		fmt.Println("deleting history events for ...")
+		prettyPrintJSONObject(branchInfo)
+		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
+		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
+			BranchInfo: branchInfo,
+			ShardID:    shardIDInt,
+		})
+		if err != nil {
+			if skipError {
+				fmt.Println("failed to delete history, ", err)
+			} else {
+				ErrorAndExit("DeleteHistoryBranch err", err)
+			}
 		}
 	}
 
