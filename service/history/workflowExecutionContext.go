@@ -193,7 +193,9 @@ func (c *workflowExecutionContextImpl) unlock() {
 func (c *workflowExecutionContextImpl) clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	c.msBuilder = nil
-	c.stats = &persistence.ExecutionStats{}
+	c.stats = &persistence.ExecutionStats{
+		HistorySize: 0,
+	}
 }
 
 func (c *workflowExecutionContextImpl) getDomainID() string {
@@ -301,7 +303,13 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 	createMode persistence.CreateWorkflowMode,
 	prevRunID string,
 	prevLastWriteVersion int64,
-) error {
+) (retError error) {
+
+	defer func() {
+		if retError != nil {
+			c.clear()
+		}
+	}()
 
 	createRequest := &persistence.CreateWorkflowExecutionRequest{
 		// workflow create mode & prev run ID & version
@@ -312,6 +320,8 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		NewWorkflowSnapshot: *newWorkflow,
 	}
 
+	historySize += c.getHistorySize()
+	c.setHistorySize(historySize)
 	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistence.ExecutionStats{
 		HistorySize: historySize,
 	}
@@ -491,7 +501,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		)
 	}
 
-	c.clear()
+	c.clear() // TODO when 2DC is deprecated remove this line
 	return nil
 }
 

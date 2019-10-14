@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 
 	"github.com/uber/cadence/common"
@@ -181,6 +182,7 @@ func (t *sequentialTaskProcessorImpl) processTaskOnce(taskqueue SequentialTaskQu
 		if task.RetryErr(err) {
 			taskqueue.Add(task)
 		} else {
+			t.logger.Error("Unable to process task", tag.Error(err))
 			task.Nack()
 		}
 	} else {

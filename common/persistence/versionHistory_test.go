@@ -461,6 +461,55 @@ func (s *versionHistorySuite) TestGetLastItem_Failure() {
 	s.IsType(&shared.BadRequestError{}, err)
 }
 
+func (s *versionHistoriesSuite) TestGetVersion_Success() {
+	branchToken := []byte("some random branch token")
+	item1 := NewVersionHistoryItem(3, 0)
+	item2 := NewVersionHistoryItem(6, 8)
+	item3 := NewVersionHistoryItem(8, 12)
+	history := NewVersionHistory(branchToken, []*VersionHistoryItem{item1, item2, item3})
+
+	version, err := history.GetEventVersion(1)
+	s.NoError(err)
+	s.Equal(item1.GetVersion(), version)
+	version, err = history.GetEventVersion(2)
+	s.NoError(err)
+	s.Equal(item1.GetVersion(), version)
+	version, err = history.GetEventVersion(3)
+	s.NoError(err)
+	s.Equal(item1.GetVersion(), version)
+
+	version, err = history.GetEventVersion(4)
+	s.NoError(err)
+	s.Equal(item2.GetVersion(), version)
+	version, err = history.GetEventVersion(5)
+	s.NoError(err)
+	s.Equal(item2.GetVersion(), version)
+	version, err = history.GetEventVersion(6)
+	s.NoError(err)
+	s.Equal(item2.GetVersion(), version)
+
+	version, err = history.GetEventVersion(7)
+	s.NoError(err)
+	s.Equal(item3.GetVersion(), version)
+	version, err = history.GetEventVersion(8)
+	s.NoError(err)
+	s.Equal(item3.GetVersion(), version)
+}
+
+func (s *versionHistoriesSuite) TestGetVersion_Failure() {
+	branchToken := []byte("some random branch token")
+	item1 := NewVersionHistoryItem(3, 0)
+	item2 := NewVersionHistoryItem(6, 8)
+	item3 := NewVersionHistoryItem(8, 12)
+	history := NewVersionHistory(branchToken, []*VersionHistoryItem{item1, item2, item3})
+
+	_, err := history.GetEventVersion(0)
+	s.Error(err)
+
+	_, err = history.GetEventVersion(9)
+	s.Error(err)
+}
+
 func (s *versionHistorySuite) TestEquals() {
 	localBranchToken := []byte("local branch token")
 	localItems := []*VersionHistoryItem{

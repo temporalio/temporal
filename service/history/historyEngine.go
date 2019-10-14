@@ -84,6 +84,7 @@ type (
 		config                    *Config
 		archivalClient            warchiver.Client
 		resetor                   workflowResetor
+		workflowResetter          workflowResetter
 		replicationTaskProcessors []*ReplicationTaskProcessor
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           nDCEventsReapplier
@@ -208,8 +209,18 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
-	resetor := newWorkflowResetor(historyEngImpl)
-	historyEngImpl.resetor = resetor
+	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
+	historyEngImpl.workflowResetter = newWorkflowResetter(
+		shard,
+		historyCache,
+		newNDCTransactionMgr(
+			shard,
+			historyCache,
+			historyEngImpl.eventsReapplier,
+			historyEngImpl.logger,
+		),
+		historyEngImpl.logger,
+	)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
 	var replicationTaskProcessors []*ReplicationTaskProcessor
@@ -1950,87 +1961,135 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	resetRequest *h.ResetWorkflowExecutionRequest,
 ) (response *workflow.ResetWorkflowExecutionResponse, retError error) {
 
-	domainEntry, retError := e.getActiveDomainEntry(resetRequest.DomainUUID)
-	if retError != nil {
-		return
-	}
-	domainID := domainEntry.GetInfo().ID
-
 	request := resetRequest.ResetRequest
-	if request == nil || request.WorkflowExecution == nil || len(request.WorkflowExecution.GetRunId()) == 0 || len(request.WorkflowExecution.GetWorkflowId()) == 0 {
-		retError = &workflow.BadRequestError{
-			Message: "Require workflowId and runId.",
-		}
-		return
-	}
-	if request.GetDecisionFinishEventId() <= common.FirstEventID {
-		retError = &workflow.BadRequestError{
-			Message: "Decision finish ID must be > 1.",
-		}
-		return
-	}
-	baseExecution := workflow.WorkflowExecution{
-		WorkflowId: request.WorkflowExecution.WorkflowId,
-		RunId:      request.WorkflowExecution.RunId,
-	}
+	domainID := resetRequest.GetDomainUUID()
+	workflowID := request.WorkflowExecution.GetWorkflowId()
+	baseRunID := request.WorkflowExecution.GetRunId()
 
-	baseContext, baseRelease, retError := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, baseExecution)
-	if retError != nil {
-		return
+	baseContext, baseReleaseFn, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		domainID,
+		workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(baseRunID),
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
-	defer func() { baseRelease(retError) }()
+	defer func() { baseReleaseFn(retError) }()
 
-	baseMutableState, retError := baseContext.loadWorkflowExecution()
-	if retError != nil {
-		return
+	baseMutableState, err := baseContext.loadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	if request.GetDecisionFinishEventId() <= common.FirstEventID ||
+		request.GetDecisionFinishEventId() >= baseMutableState.GetNextEventID() {
+		return nil, &workflow.BadRequestError{
+			Message: "Decision finish ID must be > 1 && <= workflow next event ID.",
+		}
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
-	resp, retError := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: request.WorkflowExecution.GetWorkflowId(),
 	})
-	if retError != nil {
-		return
+	if err != nil {
+		return nil, err
 	}
 
-	var currMutableState mutableState
-	var currContext workflowExecutionContext
-	var currExecution workflow.WorkflowExecution
-	if resp.RunID == baseExecution.GetRunId() {
-		currContext = baseContext
-		currMutableState = baseMutableState
-		currExecution = baseExecution
+	currentRunID := resp.RunID
+	var currentContext workflowExecutionContext
+	var currentMutableState mutableState
+	var currentReleaseFn releaseWorkflowExecutionFunc
+	if currentRunID == baseRunID {
+		currentContext = baseContext
+		currentMutableState = baseMutableState
 	} else {
-		currExecution = workflow.WorkflowExecution{
-			WorkflowId: request.WorkflowExecution.WorkflowId,
-			RunId:      common.StringPtr(resp.RunID),
+		currentContext, currentReleaseFn, err = e.historyCache.getOrCreateWorkflowExecution(
+			ctx,
+			domainID,
+			workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(currentRunID),
+			},
+		)
+		if err != nil {
+			return nil, err
 		}
-		var currRelease func(err error)
-		currContext, currRelease, retError = e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, currExecution)
-		if retError != nil {
-			return
-		}
-		defer func() { currRelease(retError) }()
-		currMutableState, retError = currContext.loadWorkflowExecution()
-		if retError != nil {
-			return
+		defer func() { currentReleaseFn(retError) }()
+
+		currentMutableState, err = currentContext.loadWorkflowExecution()
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	// dedup by requestID
-	if currMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestId() {
-		response = &workflow.ResetWorkflowExecutionResponse{
-			RunId: currExecution.RunId,
-		}
+	if currentMutableState.GetExecutionInfo().CreateRequestID == request.GetRequestId() {
 		e.logger.Info("Duplicated reset request",
-			tag.WorkflowID(currExecution.GetWorkflowId()),
-			tag.WorkflowRunID(currExecution.GetRunId()),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(currentRunID),
 			tag.WorkflowDomainID(domainID))
-		return
+		return &workflow.ResetWorkflowExecutionResponse{
+			RunId: common.StringPtr(currentRunID),
+		}, nil
 	}
 
-	return e.resetor.ResetWorkflowExecution(ctx, request, baseContext, baseMutableState, currContext, currMutableState)
+	// TODO when NDC is rolled out, remove this block
+	if baseMutableState.GetVersionHistories() == nil {
+		return e.resetor.ResetWorkflowExecution(
+			ctx,
+			request,
+			baseContext,
+			baseMutableState,
+			currentContext,
+			currentMutableState,
+		)
+	}
+
+	resetRunID := uuid.New()
+	baseRebuildLastEventID := request.GetDecisionFinishEventId() - 1
+	baseVersionHistories := baseMutableState.GetVersionHistories()
+	baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+	if err != nil {
+		return nil, err
+	}
+	baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+	if err != nil {
+		return nil, err
+	}
+	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
+	baseNextEventID := baseMutableState.GetNextEventID()
+
+	if err := e.workflowResetter.resetWorkflow(
+		ctx,
+		domainID,
+		workflowID,
+		baseRunID,
+		baseCurrentBranchToken,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		baseNextEventID,
+		resetRunID,
+		request.GetRequestId(),
+		newNDCWorkflow(
+			ctx,
+			e.shard.GetDomainCache(),
+			e.shard.GetClusterMetadata(),
+			currentContext,
+			currentMutableState,
+			currentReleaseFn,
+		),
+		request.GetReason(),
+		nil,
+	); err != nil {
+		return nil, err
+	}
+	return &workflow.ResetWorkflowExecutionResponse{
+		RunId: common.StringPtr(resetRunID),
+	}, nil
 }
 
 func (e *historyEngineImpl) DeleteExecutionFromVisibility(

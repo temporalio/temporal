@@ -49,7 +49,8 @@ type (
 		getNewEvents() []*shared.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
-		getRequest() *h.ReplicateEventsV2Request
+		isWorkflowReset() bool
+
 		generateNewRunTask(taskStartTime time.Time) (nDCReplicationTask, error)
 	}
 
@@ -64,8 +65,6 @@ type (
 		events         []*shared.HistoryEvent
 		newEvents      []*shared.HistoryEvent
 		versionHistory *persistence.VersionHistory
-
-		request *h.ReplicateEventsV2Request
 
 		startTime time.Time
 		logger    log.Logger
@@ -151,8 +150,6 @@ func newNDCReplicationTask(
 		newEvents:      newEvents,
 		versionHistory: persistence.NewVersionHistoryFromThrift(versionHistory),
 
-		request: request,
-
 		startTime: taskStartTime,
 		logger:    logger,
 	}, nil
@@ -210,8 +207,20 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 	return t.versionHistory
 }
 
-func (t *nDCReplicationTaskImpl) getRequest() *h.ReplicateEventsV2Request {
-	return t.request
+func (t *nDCReplicationTaskImpl) isWorkflowReset() bool {
+	switch t.getFirstEvent().GetEventType() {
+	case shared.EventTypeDecisionTaskFailed:
+		decisionTaskFailedEvent := t.getFirstEvent()
+		attr := decisionTaskFailedEvent.DecisionTaskFailedEventAttributes
+		baseRunID := attr.GetBaseRunId()
+		baseEventVersion := attr.GetForkEventVersion()
+		newRunID := attr.GetNewRunId()
+
+		return len(baseRunID) > 0 && baseEventVersion != 0 && len(newRunID) > 0
+
+	default:
+		return false
+	}
 }
 
 func (t *nDCReplicationTaskImpl) generateNewRunTask(
@@ -270,8 +279,6 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 		events:         newHistoryEvents,
 		newEvents:      []*shared.HistoryEvent{},
 		versionHistory: newVersionHistory,
-
-		request: nil,
 
 		startTime: taskStartTime,
 		logger:    logger,

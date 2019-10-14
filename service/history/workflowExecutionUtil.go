@@ -26,13 +26,13 @@ import (
 
 func failDecision(
 	mutableState mutableState,
-	di *decisionInfo,
+	decision *decisionInfo,
 	decisionFailureCause workflow.DecisionTaskFailedCause,
 ) error {
 
-	_, err := mutableState.AddDecisionTaskFailedEvent(
-		di.ScheduleID,
-		di.StartedID,
+	if _, err := mutableState.AddDecisionTaskFailedEvent(
+		decision.ScheduleID,
+		decision.StartedID,
 		decisionFailureCause,
 		nil,
 		identityHistoryService,
@@ -40,8 +40,14 @@ func failDecision(
 		"",
 		"",
 		0,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+
+	if err := mutableState.FlushBufferedEvents(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func scheduleDecision(

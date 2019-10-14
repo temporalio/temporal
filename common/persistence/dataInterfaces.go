@@ -568,10 +568,12 @@ type (
 		FirstEventID        int64
 		NextEventID         int64
 		Version             int64
-		LastReplicationInfo map[string]*ReplicationInfo
 		BranchToken         []byte
-		ResetWorkflow       bool
 		NewRunBranchToken   []byte
+
+		// TODO when 2DC is deprecated remove these 2 attributes
+		ResetWorkflow       bool
+		LastReplicationInfo map[string]*ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters

@@ -283,7 +283,6 @@ func newHistoryReplicationV2Task(
 			VersionHistoryItems: attr.VersionHistoryItems,
 			Events:              attr.Events,
 			NewRunEvents:        attr.NewRunEvents,
-			ResetWorkflow:       attr.ResetWorkflow,
 		},
 	}
 }

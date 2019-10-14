@@ -104,7 +104,6 @@ struct HistoryTaskV2Attributes {
   50: optional shared.DataBlob events
   // new run events does not need version history since there is no prior events
   70: optional shared.DataBlob newRunEvents
-  80: optional bool resetWorkflow
 }
 
 struct ReplicationTask {

@@ -142,19 +142,19 @@ func (mr *MocknDCWorkflowMockRecorder) revive() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "revive", reflect.TypeOf((*MocknDCWorkflow)(nil).revive))
 }
 
-// suppressWorkflowBy mocks base method
-func (m *MocknDCWorkflow) suppressWorkflowBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error) {
+// suppressBy mocks base method
+func (m *MocknDCWorkflow) suppressBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "suppressWorkflowBy", incomingWorkflow)
+	ret := m.ctrl.Call(m, "suppressBy", incomingWorkflow)
 	ret0, _ := ret[0].(transactionPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// suppressWorkflowBy indicates an expected call of suppressWorkflowBy
-func (mr *MocknDCWorkflowMockRecorder) suppressWorkflowBy(incomingWorkflow interface{}) *gomock.Call {
+// suppressBy indicates an expected call of suppressBy
+func (mr *MocknDCWorkflowMockRecorder) suppressBy(incomingWorkflow interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "suppressWorkflowBy", reflect.TypeOf((*MocknDCWorkflow)(nil).suppressWorkflowBy), incomingWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "suppressBy", reflect.TypeOf((*MocknDCWorkflow)(nil).suppressBy), incomingWorkflow)
 }
 
 // flushBufferedEvents mocks base method

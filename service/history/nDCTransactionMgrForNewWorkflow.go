@@ -203,7 +203,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	targetWorkflow nDCWorkflow,
 ) error {
 
-	targetWorkflowPolicy, err := targetWorkflow.suppressWorkflowBy(
+	targetWorkflowPolicy, err := targetWorkflow.suppressBy(
 		currentWorkflow,
 	)
 	if err != nil {
@@ -256,7 +256,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	targetWorkflow nDCWorkflow,
 ) error {
 
-	currentWorkflowPolicy, err := currentWorkflow.suppressWorkflowBy(
+	currentWorkflowPolicy, err := currentWorkflow.suppressBy(
 		targetWorkflow,
 	)
 	if err != nil {

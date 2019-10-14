@@ -655,7 +655,6 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					VersionHistoryItems: versionHistoryItems,
 					Events:              eventsBlob,
 					NewRunEvents:        newRunEventsBlob,
-					ResetWorkflow:       common.BoolPtr(task.ResetWorkflow),
 				},
 			}
 			return replicationTask, nil

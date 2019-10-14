@@ -1390,7 +1390,6 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory),
 			Events:              s.toThriftDataBlob(eventBlob),
 			NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
-			ResetWorkflow:       common.BoolPtr(false),
 		})
 		s.Nil(err, "Failed to replicate history event")
 	}

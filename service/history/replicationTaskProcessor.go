@@ -386,8 +386,7 @@ func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(
 		VersionHistoryItems: attr.VersionHistoryItems,
 		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
-		NewRunEvents:  attr.NewRunEvents,
-		ResetWorkflow: attr.ResetWorkflow,
+		NewRunEvents: attr.NewRunEvents,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()

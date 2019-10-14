@@ -259,7 +259,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 		LastEventTaskID: incomingLastEventTaskID,
 	})
 
-	_, err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	_, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.Error(err)
 }
 
@@ -348,12 +348,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
-	policy, err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
-	policy, err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyActive, policy)
 }
@@ -424,12 +424,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()
-	policy, err := nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(true).Once()
-	policy, err = nDCWorkflow.suppressWorkflowBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)

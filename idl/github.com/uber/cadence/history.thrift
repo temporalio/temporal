@@ -307,7 +307,6 @@ struct ReplicateEventsV2Request {
   40: optional shared.DataBlob events
   // new run events does not need version history since there is no prior events
   60: optional shared.DataBlob newRunEvents
-  70: optional bool resetWorkflow
 }
 
 struct SyncShardStatusRequest {

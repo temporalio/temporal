@@ -36,6 +36,7 @@ import (
 )
 
 type (
+	// Deprecated: use workflowResetter instead when NDC is applies to all workflows
 	workflowResetor interface {
 		ResetWorkflowExecution(
 			ctx context.Context,

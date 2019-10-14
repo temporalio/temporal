@@ -248,7 +248,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	newWorkflow nDCWorkflow,
 ) error {
 
-	targetPolicy, err := targetWorkflow.suppressWorkflowBy(
+	targetPolicy, err := targetWorkflow.suppressBy(
 		currentWorkflow,
 	)
 	if err != nil {
@@ -264,7 +264,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	var newMutableState mutableState
 	var newTransactionPolicy *transactionPolicy
 	if newWorkflow != nil {
-		newWorkflowPolicy, err := newWorkflow.suppressWorkflowBy(
+		newWorkflowPolicy, err := newWorkflow.suppressBy(
 			currentWorkflow,
 		)
 		if err != nil {
@@ -308,7 +308,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 
 	currentWorkflowPolicy := transactionPolicyPassive
 	if currentWorkflow.getMutableState().IsWorkflowExecutionRunning() {
-		currentWorkflowPolicy, err = currentWorkflow.suppressWorkflowBy(
+		currentWorkflowPolicy, err = currentWorkflow.suppressBy(
 			targetWorkflow,
 		)
 		if err != nil {
@@ -377,7 +377,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	newWorkflow nDCWorkflow,
 ) error {
 
-	targetWorkflowPolicy, err := targetWorkflow.suppressWorkflowBy(
+	targetWorkflowPolicy, err := targetWorkflow.suppressBy(
 		currentWorkflow,
 	)
 	if err != nil {
@@ -392,7 +392,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	var newContext workflowExecutionContext
 	var newMutableState mutableState
 	if newWorkflow != nil {
-		newWorkflowPolicy, err := newWorkflow.suppressWorkflowBy(
+		newWorkflowPolicy, err := newWorkflow.suppressBy(
 			currentWorkflow,
 		)
 		if err != nil {

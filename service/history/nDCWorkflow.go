@@ -41,7 +41,7 @@ type (
 		getVectorClock() (int64, int64, error)
 		happensAfter(that nDCWorkflow) (bool, error)
 		revive() error
-		suppressWorkflowBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error)
+		suppressBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error)
 		flushBufferedEvents() error
 	}
 
@@ -148,7 +148,7 @@ func (r *nDCWorkflowImpl) revive() error {
 	)
 }
 
-func (r *nDCWorkflowImpl) suppressWorkflowBy(
+func (r *nDCWorkflowImpl) suppressBy(
 	incomingWorkflow nDCWorkflow,
 ) (transactionPolicy, error) {
 
@@ -222,6 +222,7 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 func (r *nDCWorkflowImpl) failDecision(
 	lastWriteVersion int64,
 ) error {
+
 	// do not persist the change right now, NDC requires transaction
 	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
 		return err

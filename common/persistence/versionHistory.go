@@ -323,13 +323,39 @@ func (v *VersionHistory) GetLastItem() (*VersionHistoryItem, error) {
 	return v.items[len(v.items)-1].Duplicate(), nil
 }
 
+// GetEventVersion return the corresponding event version of an event ID
+func (v *VersionHistory) GetEventVersion(
+	eventID int64,
+) (int64, error) {
+
+	lastItem, err := v.GetLastItem()
+	if err != nil {
+		return 0, err
+	}
+	if eventID < common.FirstEventID || eventID > lastItem.GetEventID() {
+		return 0, &shared.BadRequestError{Message: "input event ID is not in range."}
+	}
+
+	// items are sorted by eventID & version
+	// so the fist item with item event ID >= input event ID
+	// the item version is the result
+	for _, currentItem := range v.items {
+		if eventID <= currentItem.GetEventID() {
+			return currentItem.GetVersion(), nil
+		}
+	}
+	return 0, &shared.BadRequestError{Message: "input event ID is not in range."}
+}
+
 // IsEmpty indicate whether version history is empty
 func (v *VersionHistory) IsEmpty() bool {
 	return len(v.items) == 0
 }
 
 // Equals test if this version history and input version history are the same
-func (v *VersionHistory) Equals(input *VersionHistory) bool {
+func (v *VersionHistory) Equals(
+	input *VersionHistory,
+) bool {
 
 	if !bytes.Equal(v.branchToken, input.branchToken) {
 		return false
@@ -559,7 +585,9 @@ func (h *VersionHistories) IsRebuilt() (bool, error) {
 }
 
 // SetCurrentVersionHistoryIndex set the current branch index
-func (h *VersionHistories) SetCurrentVersionHistoryIndex(index int) error {
+func (h *VersionHistories) SetCurrentVersionHistoryIndex(
+	index int,
+) error {
 
 	if index < 0 || index >= len(h.histories) {
 		return &shared.BadRequestError{Message: "invalid current branch index."}

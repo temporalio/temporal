@@ -45,7 +45,8 @@ type (
 			now time.Time,
 			baseWorkflowIdentifier definition.WorkflowIdentifier,
 			baseBranchToken []byte,
-			baseNextEventID int64,
+			baseLastEventID int64,
+			baseLastEventVersion int64,
 			targetWorkflowIdentifier definition.WorkflowIdentifier,
 			targetBranchToken []byte,
 			requestID string,
@@ -94,7 +95,8 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	now time.Time,
 	baseWorkflowIdentifier definition.WorkflowIdentifier,
 	baseBranchToken []byte,
-	baseNextEventID int64,
+	baseLastEventID int64,
+	baseLastEventVersion int64,
 	targetWorkflowIdentifier definition.WorkflowIdentifier,
 	targetBranchToken []byte,
 	requestID string,
@@ -103,7 +105,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		baseWorkflowIdentifier,
 		common.FirstEventID,
-		baseNextEventID,
+		baseLastEventID+1,
 		baseBranchToken,
 	))
 
@@ -136,13 +138,26 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		}
 	}
 
-	if rebuiltMutableState.GetNextEventID() != baseNextEventID {
-		return nil, 0, &shared.InternalServiceError{
-			Message: fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v", baseNextEventID),
-		}
-	}
 	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {
 		return nil, 0, err
+	}
+	currentVersionHistory, err := rebuiltMutableState.GetVersionHistories().GetCurrentVersionHistory()
+	if err != nil {
+		return nil, 0, err
+	}
+	lastItem, err := currentVersionHistory.GetLastItem()
+	if err != nil {
+		return nil, 0, err
+	}
+	if !lastItem.Equals(persistence.NewVersionHistoryItem(
+		baseLastEventID,
+		baseLastEventVersion,
+	)) {
+		return nil, 0, &shared.InternalServiceError{Message: fmt.Sprintf(
+			"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v",
+			baseLastEventID,
+			baseLastEventVersion,
+		)}
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
