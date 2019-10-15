@@ -1851,15 +1851,14 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 				return ErrWorkflowCompleted
 			}
 
-			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
+			eventBatchFirstEventID := msBuilder.GetNextEventID()
+			return terminateWorkflow(
+				msBuilder,
+				eventBatchFirstEventID,
 				request.GetReason(),
 				request.GetDetails(),
 				request.GetIdentity(),
-			); err != nil {
-				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
-			}
-
-			return nil
+			)
 		})
 }
 

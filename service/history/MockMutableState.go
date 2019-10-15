@@ -902,13 +902,13 @@ func (_m *mockMutableState) AddStartChildWorkflowExecutionInitiatedEvent(_a0 int
 	return r0, r1, r2
 }
 
-// AddTimeoutWorkflowEvent provides a mock function with given fields:
-func (_m *mockMutableState) AddTimeoutWorkflowEvent() (*shared.HistoryEvent, error) {
-	ret := _m.Called()
+// AddTimeoutWorkflowEvent provides a mock function with given fields: _a0
+func (_m *mockMutableState) AddTimeoutWorkflowEvent(_a0 int64) (*shared.HistoryEvent, error) {
+	ret := _m.Called(_a0)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func() *shared.HistoryEvent); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(int64) *shared.HistoryEvent); ok {
+		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -916,8 +916,8 @@ func (_m *mockMutableState) AddTimeoutWorkflowEvent() (*shared.HistoryEvent, err
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(int64) error); ok {
+		r1 = rf(_a0)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1118,13 +1118,13 @@ func (_m *mockMutableState) AddWorkflowExecutionStartedEvent(_a0 shared.Workflow
 	return r0, r1
 }
 
-// AddWorkflowExecutionTerminatedEvent provides a mock function with given fields: _a0, _a1, _a2
-func (_m *mockMutableState) AddWorkflowExecutionTerminatedEvent(_a0 string, _a1 []byte, _a2 string) (*shared.HistoryEvent, error) {
-	ret := _m.Called(_a0, _a1, _a2)
+// AddWorkflowExecutionTerminatedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *mockMutableState) AddWorkflowExecutionTerminatedEvent(_a0 int64, _a1 string, _a2 []byte, _a3 string) (*shared.HistoryEvent, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(string, []byte, string) *shared.HistoryEvent); ok {
-		r0 = rf(_a0, _a1, _a2)
+	if rf, ok := ret.Get(0).(func(int64, string, []byte, string) *shared.HistoryEvent); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -1132,8 +1132,8 @@ func (_m *mockMutableState) AddWorkflowExecutionTerminatedEvent(_a0 string, _a1 
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(string, []byte, string) error); ok {
-		r1 = rf(_a0, _a1, _a2)
+	if rf, ok := ret.Get(1).(func(int64, string, []byte, string) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r1 = ret.Error(1)
 	}

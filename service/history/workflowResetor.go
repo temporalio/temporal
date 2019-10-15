@@ -376,7 +376,9 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 
 	if currMutableState.IsWorkflowExecutionRunning() {
 		terminateCurr = true
+		eventBatchFirstEventID := currMutableState.GetNextEventID()
 		if _, retError = currMutableState.AddWorkflowExecutionTerminatedEvent(
+			eventBatchFirstEventID,
 			reason,
 			nil,
 			identityHistoryService,

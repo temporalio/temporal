@@ -350,12 +350,12 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		workflow.EventTypeDecisionTaskScheduled,
 		workflow.EventTypeWorkflowExecutionSignaled,
 		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskFailed,
 		workflow.EventTypeWorkflowExecutionTerminated,
 	}
 	s.assertHistory(we, expectedHistory)
 }
 
-// TODO signals are left in buffer in this case, which will make reset losing signal
 func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStarted() {
 	id := uuid.New()
 	wt := "interation-workflow-transient-decision-test-type"
@@ -424,6 +424,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		workflow.EventTypeWorkflowExecutionStarted,
 		workflow.EventTypeDecisionTaskScheduled,
 		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskFailed,
+		workflow.EventTypeWorkflowExecutionSignaled,
 		workflow.EventTypeWorkflowExecutionTerminated,
 	}
 	s.assertHistory(we, expectedHistory)
@@ -615,12 +617,12 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		workflow.EventTypeWorkflowExecutionSignaled,
 		workflow.EventTypeDecisionTaskScheduled,
 		workflow.EventTypeDecisionTaskStarted,
+		workflow.EventTypeDecisionTaskFailed,
 		workflow.EventTypeWorkflowExecutionTerminated,
 	}
 	s.assertHistory(we, expectedHistory)
 }
 
-// TODO signals are left in buffer in this case, which will make reset losing signal
 func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionStarted() {
 	id := uuid.New()
 	wt := "interation-workflow-transient-decision-test-type"
@@ -717,6 +719,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		workflow.EventTypeDecisionTaskScheduled,
 		workflow.EventTypeDecisionTaskStarted,
 		workflow.EventTypeDecisionTaskFailed,
+		workflow.EventTypeWorkflowExecutionSignaled,
 		workflow.EventTypeWorkflowExecutionTerminated,
 	}
 	s.assertHistory(we, expectedHistory)

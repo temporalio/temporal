@@ -274,6 +274,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 			persistence.NewVersionHistoryItem(lastEventID, lastEventVersion),
 		},
 	))
+	s.mockMutableState.On("GetNextEventID").Return(lastEventID + 1)
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories)
 	s.mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
 		DomainID:        s.domainID,
@@ -344,7 +345,9 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	).Return(&shared.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.On("FlushBufferedEvents").Return(nil).Times(1)
 
-	s.mockMutableState.On("AddWorkflowExecutionTerminatedEvent", mock.Anything, mock.Anything, mock.Anything).Return(&shared.HistoryEvent{}, nil)
+	s.mockMutableState.On("AddWorkflowExecutionTerminatedEvent",
+		lastEventID+1, workflowTerminationReason, mock.Anything, workflowTerminationIdentity,
+	).Return(&shared.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.On("IsWorkflowExecutionRunning").Return(false).Once()

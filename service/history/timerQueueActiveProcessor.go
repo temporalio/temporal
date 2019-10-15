@@ -716,6 +716,8 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 		}
 	}
 
+	eventBatchFirstEventID := msBuilder.GetNextEventID()
+
 	timeoutReason := getTimeoutErrorReason(workflow.TimeoutTypeStartToClose)
 	backoffInterval := msBuilder.GetRetryBackoffDuration(timeoutReason)
 	continueAsNewInitiator := workflow.ContinueAsNewInitiatorRetryPolicy
@@ -728,7 +730,7 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 		continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 	}
 	if backoffInterval == backoff.NoBackoff {
-		if _, err := msBuilder.AddTimeoutWorkflowEvent(); err != nil {
+		if err := timeoutWorkflow(msBuilder, eventBatchFirstEventID); err != nil {
 			return err
 		}
 
@@ -757,9 +759,9 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 		FailureReason:                       common.StringPtr(timeoutReason),
 		CronSchedule:                        common.StringPtr(msBuilder.GetExecutionInfo().CronSchedule),
 	}
-	_, newMutableState, err := msBuilder.AddContinueAsNewEvent(
-		msBuilder.GetNextEventID(),
-		common.EmptyEventID,
+	newMutableState, err := retryWorkflow(
+		msBuilder,
+		eventBatchFirstEventID,
 		startAttributes.GetParentWorkflowDomain(),
 		continueAsnewAttributes,
 	)

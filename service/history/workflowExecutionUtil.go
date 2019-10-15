@@ -22,6 +22,7 @@ package history
 
 import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 )
 
 func failDecision(
@@ -63,4 +64,81 @@ func scheduleDecision(
 		return &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 	}
 	return nil
+}
+
+func retryWorkflow(
+	mutableState mutableState,
+	eventBatchFirstEventID int64,
+	parentDomainName string,
+	continueAsNewAttributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
+) (mutableState, error) {
+
+	if decision, ok := mutableState.GetInFlightDecision(); ok {
+		if err := failDecision(
+			mutableState,
+			decision,
+			workflow.DecisionTaskFailedCauseForceCloseDecision,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
+		eventBatchFirstEventID,
+		common.EmptyEventID,
+		parentDomainName,
+		continueAsNewAttributes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return newMutableState, nil
+}
+
+func timeoutWorkflow(
+	mutableState mutableState,
+	eventBatchFirstEventID int64,
+) error {
+
+	if decision, ok := mutableState.GetInFlightDecision(); ok {
+		if err := failDecision(
+			mutableState,
+			decision,
+			workflow.DecisionTaskFailedCauseForceCloseDecision,
+		); err != nil {
+			return err
+		}
+	}
+
+	_, err := mutableState.AddTimeoutWorkflowEvent(
+		eventBatchFirstEventID,
+	)
+	return err
+}
+
+func terminateWorkflow(
+	mutableState mutableState,
+	eventBatchFirstEventID int64,
+	terminateReason string,
+	terminateDetails []byte,
+	terminateIdentity string,
+) error {
+
+	if decision, ok := mutableState.GetInFlightDecision(); ok {
+		if err := failDecision(
+			mutableState,
+			decision,
+			workflow.DecisionTaskFailedCauseForceCloseDecision,
+		); err != nil {
+			return err
+		}
+	}
+
+	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
+		eventBatchFirstEventID,
+		terminateReason,
+		terminateDetails,
+		terminateIdentity,
+	)
+	return err
 }

@@ -531,10 +531,13 @@ Update_History_Loop:
 					return nil, err
 				}
 
-				if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
+				eventBatchFirstEventID := msBuilder.GetNextEventID()
+				if err := terminateWorkflow(
+					msBuilder,
+					eventBatchFirstEventID,
 					common.FailureReasonTransactionSizeExceedsLimit,
 					[]byte(updateErr.Error()),
-					"cadence-history-server",
+					identityHistoryService,
 				); err != nil {
 					return nil, err
 				}

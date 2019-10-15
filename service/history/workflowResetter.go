@@ -436,22 +436,14 @@ func (r *workflowResetterImpl) terminateWorkflow(
 	terminateReason string,
 ) error {
 
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := failDecision(
-			mutableState,
-			decision,
-			shared.DecisionTaskFailedCauseForceCloseDecision,
-		); err != nil {
-			return err
-		}
-	}
-
-	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
+	eventBatchFirstEventID := mutableState.GetNextEventID()
+	return terminateWorkflow(
+		mutableState,
+		eventBatchFirstEventID,
 		terminateReason,
 		nil,
 		identityHistoryService,
 	)
-	return err
 }
 
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(

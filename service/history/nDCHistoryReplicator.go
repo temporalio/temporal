@@ -38,7 +38,22 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
+var (
+	workflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
+	workflowTerminationIdentity = "worker-service"
+	workflowResetReason         = "Reset Workflow Due To Events Re-application."
+)
+
 type (
+	stateBuilderProvider func(
+		msBuilder mutableState,
+		logger log.Logger) stateBuilder
+
+	mutableStateProvider func(
+		domainEntry *cache.DomainCacheEntry,
+		logger log.Logger,
+	) mutableState
+
 	nDCBranchMgrProvider func(
 		context workflowExecutionContext,
 		mutableState mutableState,

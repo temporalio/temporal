@@ -354,11 +354,13 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		ScheduleID: 1234,
 		StartedID:  5678,
 	}
+	nextEventID := int64(666)
 	terminateReason := "some random terminate reason"
 
 	mutableState := &mockMutableState{}
 	defer mutableState.AssertExpectations(s.T())
 
+	mutableState.On("GetNextEventID").Return(nextEventID)
 	mutableState.On("GetInFlightDecision").Return(decision, true).Times(1)
 	mutableState.On("AddDecisionTaskFailedEvent",
 		decision.ScheduleID,
@@ -373,6 +375,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	).Return(&shared.HistoryEvent{}, nil).Times(1)
 	mutableState.On("FlushBufferedEvents").Return(nil).Once()
 	mutableState.On("AddWorkflowExecutionTerminatedEvent",
+		nextEventID,
 		terminateReason,
 		([]byte)(nil),
 		identityHistoryService,

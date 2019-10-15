@@ -258,6 +258,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 	incomingLastWriteVersion int64,
 ) error {
 
+	eventBatchFirstEventID := r.getMutableState().GetNextEventID()
 	if err := r.failDecision(lastWriteVersion); err != nil {
 		return err
 	}
@@ -268,6 +269,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 	}
 
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
+		eventBatchFirstEventID,
 		workflowTerminationReason,
 		[]byte(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		workflowTerminationIdentity,
