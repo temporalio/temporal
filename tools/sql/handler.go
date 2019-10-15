@@ -80,7 +80,7 @@ func createDatabase(cli *cli.Context) error {
 	}
 	database := cli.String(schema.CLIOptDatabase)
 	if database == "" {
-		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument "))
+		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument "))
 	}
 	err = doCreateDatabase(*params, database)
 	if err != nil {
