@@ -270,8 +270,10 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	// this is a transient error
+	// TODO remove this error check special case
+	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if t.timeSource.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+		if t.timeSource.Now().Sub(startTime) > 2*cache.DomainCacheRefreshInterval {
 			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
 			return nil
 		}

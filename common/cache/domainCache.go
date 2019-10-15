@@ -56,8 +56,9 @@ const (
 	domainCacheMaxSize     = 64 * 1024
 	domainCacheTTL         = 0 // 0 means infinity
 	// DomainCacheRefreshInterval domain cache refresh interval
-	DomainCacheRefreshInterval = 10 * time.Second
-	domainCacheRefreshPageSize = 200
+	DomainCacheRefreshInterval             = 10 * time.Second
+	DomainCacheRefreshFailureRetryInterval = 1 * time.Second
+	domainCacheRefreshPageSize             = 200
 
 	domainCacheInitialized int32 = 0
 	domainCacheStarted     int32 = 1
@@ -377,16 +378,17 @@ func (c *domainCache) GetDomainName(
 }
 
 func (c *domainCache) refreshLoop() {
-	timer := time.NewTimer(DomainCacheRefreshInterval)
+	timer := time.NewTicker(DomainCacheRefreshInterval)
 	defer timer.Stop()
+
 	for {
 		select {
 		case <-c.shutdownChan:
 			return
 		case <-timer.C:
-			timer.Reset(DomainCacheRefreshInterval)
-			if err := c.refreshDomains(); err != nil {
+			for err := c.refreshDomains(); err != nil; err = c.refreshDomains() {
 				c.logger.Error("Error refreshing domain cache", tag.Error(err))
+				time.Sleep(DomainCacheRefreshFailureRetryInterval)
 			}
 		}
 	}
