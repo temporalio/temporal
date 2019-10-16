@@ -387,8 +387,13 @@ func (c *domainCache) refreshLoop() {
 			return
 		case <-timer.C:
 			for err := c.refreshDomains(); err != nil; err = c.refreshDomains() {
-				c.logger.Error("Error refreshing domain cache", tag.Error(err))
-				time.Sleep(DomainCacheRefreshFailureRetryInterval)
+				select {
+				case <-c.shutdownChan:
+					return
+				default:
+					c.logger.Error("Error refreshing domain cache", tag.Error(err))
+					time.Sleep(DomainCacheRefreshFailureRetryInterval)
+				}
 			}
 		}
 	}
