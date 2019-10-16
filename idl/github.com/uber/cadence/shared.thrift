@@ -79,6 +79,13 @@ exception RetryTaskError {
 
 exception RetryTaskV2Error {
   1: required string message
+  2: optional string domainId
+  3: optional string workflowId
+  4: optional string runId
+  5: optional i64 (js.type = "Long") startEventId
+  6: optional i64 (js.type = "Long") startEventVersion
+  7: optional i64 (js.type = "Long") endEventId
+  8: optional i64 (js.type = "Long") endEventVersion
 }
 
 exception ClientVersionNotSupportedError {

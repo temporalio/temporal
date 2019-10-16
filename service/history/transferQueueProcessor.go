@@ -95,6 +95,15 @@ func newTransferQueueProcessor(
 				historyRereplicationTimeout,
 				logger,
 			)
+			nDCHistoryResender := xdc.NewNDCHistoryResender(
+				shard.GetDomainCache(),
+				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
+					return historyService.ReplicateEventsV2(ctx, request)
+				},
+				shard.GetService().GetPayloadSerializer(),
+				logger,
+			)
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
 				clusterName,
 				shard,
@@ -103,6 +112,7 @@ func newTransferQueueProcessor(
 				matchingClient,
 				taskAllocator,
 				historyRereplicator,
+				nDCHistoryResender,
 				logger,
 			)
 		}

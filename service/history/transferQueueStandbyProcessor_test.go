@@ -68,6 +68,7 @@ type (
 		mockQueueAckMgr          *MockQueueAckMgr
 		mockService              service.Service
 		mockHistoryRereplicator  *xdc.MockHistoryRereplicator
+		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
 		logger                   log.Logger
 		mockTxProcessor          *MockTransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
@@ -102,6 +103,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockHistoryRereplicator = &xdc.MockHistoryRereplicator{}
+	s.mockNDCHistoryResender = &xdc.MockNDCHistoryResender{}
 	s.mockDomainCache.On("GetDomainByID", testDomainID).Return(testGlobalDomainEntry, nil)
 	s.mockDomainCache.On("GetDomain", testDomainName).Return(testGlobalDomainEntry, nil)
 	s.mockDomainCache.On("GetDomainByID", testTargetDomainID).Return(testGlobalTargetDomainEntry, nil)
@@ -182,6 +184,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		s.mockMatchingClient,
 		newTaskAllocator(s.mockShard),
 		s.mockHistoryRereplicator,
+		s.mockNDCHistoryResender,
 		s.logger,
 	)
 	s.mockQueueAckMgr = &MockQueueAckMgr{}

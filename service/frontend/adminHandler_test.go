@@ -261,7 +261,40 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_GetEventRange_DefinedStartAndEnd() {
+func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID() {
+	ctx := context.Background()
+	s.domainCache.On("GetDomainID", s.domainName).Return(s.domainID, nil)
+	branchToken := []byte{1}
+	versionHistory := persistence.NewVersionHistory(branchToken, []*persistence.VersionHistoryItem{
+		persistence.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	rawVersionHistories := persistence.NewVersionHistories(versionHistory)
+	versionHistories := rawVersionHistories.ToThrift()
+	mState := &history.GetMutableStateResponse{
+		NextEventId:        common.Int64Ptr(11),
+		CurrentBranchToken: branchToken,
+		VersionHistories:   versionHistories,
+		ReplicationInfo:    make(map[string]*shared.ReplicationInfo),
+	}
+	s.historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
+
+	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&admin.GetWorkflowExecutionRawHistoryV2Request{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr("workflowID"),
+				RunId:      common.StringPtr(uuid.New()),
+			},
+			StartEventId:      common.Int64Ptr(10),
+			StartEventVersion: common.Int64Ptr(100),
+			MaximumPageSize:   common.Int32Ptr(1),
+			NextPageToken:     nil,
+		})
+	s.Nil(resp.NextPageToken)
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartAndEnd() {
 	inputStartEventID := int64(1)
 	inputStartVersion := int64(10)
 	inputEndEventID := int64(100)
@@ -284,7 +317,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_DefinedStartAndEnd() {
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.updateEventRange(
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -294,7 +327,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_DefinedStartAndEnd() {
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_GetEventRange_DefinedEndEvent() {
+func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedEndEvent() {
 	inputStartEventID := int64(1)
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
@@ -317,7 +350,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_DefinedEndEvent() {
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.updateEventRange(
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -327,7 +360,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_DefinedEndEvent() {
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_GetEventRange_DefinedStartEvent() {
+func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartEvent() {
 	inputStartEventID := int64(1)
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
@@ -350,7 +383,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_DefinedStartEvent() {
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.updateEventRange(
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -360,7 +393,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_DefinedStartEvent() {
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_GetEventRange_NonCurrentBranch() {
+func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonCurrentBranch() {
 	inputStartEventID := int64(1)
 	inputEndEventID := int64(100)
 	inputStartVersion := int64(10)
@@ -388,7 +421,7 @@ func (s *adminHandlerSuite) Test_GetEventRange_NonCurrentBranch() {
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.updateEventRange(
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)

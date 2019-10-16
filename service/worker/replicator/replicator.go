@@ -175,6 +175,15 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		replicationTimeout,
 		r.logger,
 	)
+	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
+		r.domainCache,
+		adminClient,
+		func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
+			return historyClient.ReplicateEventsV2(ctx, request)
+		},
+		r.historySerializer,
+		logger,
+	)
 	r.processors = append(r.processors, newReplicationTaskProcessor(
 		currentClusterName,
 		clusterName,
@@ -185,6 +194,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.metricsClient,
 		r.domainReplicator,
 		historyRereplicator,
+		nDCHistoryReplicator,
 		r.historyClient,
 		r.domainCache,
 		task.NewSequentialTaskProcessor(

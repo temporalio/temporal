@@ -244,7 +244,11 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissing
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
 	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
 
-	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, 150+1)
+	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
+		ctx.Background(),
+		incomingVersionHistory,
+		150+1,
+		300)
 	s.NoError(err)
 	s.True(doContinue)
 	s.Equal(0, index)
@@ -267,10 +271,20 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 	)
 	s.NoError(err)
 
+	execution := &persistence.WorkflowExecutionInfo{
+		DomainID:   s.domainID,
+		WorkflowID: s.workflowID,
+		RunID:      s.runID,
+	}
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
 	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
+	s.mockMutableState.On("GetExecutionInfo").Return(execution).Once()
 
-	_, _, err = s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, 150+2)
+	_, _, err = s.nDCBranchMgr.prepareVersionHistory(
+		ctx.Background(),
+		incomingVersionHistory,
+		150+2,
+		300)
 	s.IsType(&shared.RetryTaskV2Error{}, err)
 }
 
@@ -322,7 +336,12 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
 	}).Return(nil).Once()
 
-	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, baseBranchLCAEventID+1)
+	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
+		ctx.Background(),
+		incomingVersionHistory,
+		baseBranchLCAEventID+1,
+		baseBranchLCAEventVersion,
+	)
 	s.NoError(err)
 	s.True(doContinue)
 	s.Equal(1, index)
@@ -350,9 +369,20 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 		persistence.NewVersionHistoryItem(200, 400),
 	})
 
+	execution := &persistence.WorkflowExecutionInfo{
+		DomainID:   s.domainID,
+		WorkflowID: s.workflowID,
+		RunID:      s.runID,
+	}
 	s.mockMutableState.On("GetVersionHistories").Return(versionHistories).Maybe()
 	s.mockMutableState.On("HasBufferedEvents").Return(false).Once()
+	s.mockMutableState.On("GetExecutionInfo").Return(execution).Once()
 
-	_, _, err := s.nDCBranchMgr.prepareVersionHistory(ctx.Background(), incomingVersionHistory, baseBranchLCAEventID+2)
+	_, _, err := s.nDCBranchMgr.prepareVersionHistory(
+		ctx.Background(),
+		incomingVersionHistory,
+		baseBranchLCAEventID+2,
+		baseBranchLCAEventVersion,
+	)
 	s.IsType(&shared.RetryTaskV2Error{}, err)
 }

@@ -42,6 +42,7 @@ type (
 			ctx ctx.Context,
 			incomingVersionHistory *persistence.VersionHistory,
 			incomingFirstEventID int64,
+			incomingFirstEventVersion int64,
 		) (bool, int, error)
 	}
 
@@ -82,6 +83,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	ctx ctx.Context,
 	incomingVersionHistory *persistence.VersionHistory,
 	incomingFirstEventID int64,
+	incomingFirstEventVersion int64,
 ) (bool, int, error) {
 
 	versionHistoryIndex, lcaVersionHistoryItem, err := r.flushBufferedEvents(ctx, incomingVersionHistory)
@@ -97,7 +99,12 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 
 	// if can directly append to a branch
 	if versionHistory.IsLCAAppendable(lcaVersionHistoryItem) {
-		doContinue, err := r.verifyEventsOrder(ctx, versionHistory, incomingFirstEventID)
+		doContinue, err := r.verifyEventsOrder(
+			ctx,
+			versionHistory,
+			incomingFirstEventID,
+			incomingFirstEventVersion,
+		)
 		if err != nil {
 			return false, 0, err
 		}
@@ -110,7 +117,12 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 	}
 
 	// if cannot directly append to the new branch to be created
-	doContinue, err := r.verifyEventsOrder(ctx, newVersionHistory, incomingFirstEventID)
+	doContinue, err := r.verifyEventsOrder(
+		ctx,
+		newVersionHistory,
+		incomingFirstEventID,
+		incomingFirstEventVersion,
+	)
 	if err != nil || !doContinue {
 		return false, 0, err
 	}
@@ -177,6 +189,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 	ctx ctx.Context,
 	localVersionHistory *persistence.VersionHistory,
 	incomingFirstEventID int64,
+	incomingFirstEventVersion int64,
 ) (bool, error) {
 
 	lastVersionHistoryItem, err := localVersionHistory.GetLastItem()
@@ -190,7 +203,15 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 		return false, nil
 	}
 	if incomingFirstEventID > nextEventID {
-		return false, newNDCRetryTaskErrorWithHint()
+		executionInfo := r.mutableState.GetExecutionInfo()
+		return false, newNDCRetryTaskErrorWithHint(
+			executionInfo.DomainID,
+			executionInfo.WorkflowID,
+			executionInfo.RunID,
+			common.Int64Ptr(lastVersionHistoryItem.GetEventID()),
+			common.Int64Ptr(lastVersionHistoryItem.GetVersion()),
+			common.Int64Ptr(incomingFirstEventID),
+			common.Int64Ptr(incomingFirstEventVersion))
 	}
 	// task.getFirstEvent().GetEventId() == nextEventID
 	return true, nil

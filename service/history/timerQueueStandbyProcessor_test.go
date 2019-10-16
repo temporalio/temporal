@@ -63,6 +63,7 @@ type (
 		mockService              service.Service
 		mockClientBean           *client.MockClientBean
 		mockHistoryRereplicator  *xdc.MockHistoryRereplicator
+		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
 		logger                   log.Logger
 		mockTxProcessor          *MockTransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
@@ -94,6 +95,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockHistoryRereplicator = &xdc.MockHistoryRereplicator{}
+	s.mockNDCHistoryResender = &xdc.MockNDCHistoryResender{}
 	// ack manager will use the domain information
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testGlobalDomainEntry, nil)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -154,6 +156,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		s.clusterName,
 		newTaskAllocator(s.mockShard),
 		s.mockHistoryRereplicator,
+		s.mockNDCHistoryResender,
 		s.logger,
 	)
 

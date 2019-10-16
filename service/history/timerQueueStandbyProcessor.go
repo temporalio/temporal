@@ -52,6 +52,7 @@ type (
 		timerGate               RemoteTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		historyRereplicator     xdc.HistoryRereplicator
+		nDCHistoryResender      xdc.NDCHistoryResender
 	}
 )
 
@@ -61,6 +62,7 @@ func newTimerQueueStandbyProcessor(
 	clusterName string,
 	taskAllocator taskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
+	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
 
@@ -111,6 +113,7 @@ func newTimerQueueStandbyProcessor(
 			logger,
 		),
 		historyRereplicator: historyRereplicator,
+		nDCHistoryResender:  nDCHistoryResender,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
 	return processor
@@ -229,13 +232,26 @@ func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(
 	lastAttempt bool,
 ) error {
 
+	//TODO: deprecate this field when deprecating 2DC code
 	var nextEventID *int64
+	var lastEventID *int64
+	var lastEventVersion *int64
 	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(timerTask, nextEventID, t.processExpiredUserTimer)
+		return t.fetchHistoryAndVerifyOnce(
+			timerTask,
+			nextEventID,
+			lastEventID,
+			lastEventVersion,
+			t.processExpiredUserTimer,
+		)
 	}
 	if lastAttempt {
 		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(nextEventID, timerTask, t.logger)
+			return standbyTimerTaskPostActionTaskDiscarded(
+				nextEventID,
+				timerTask,
+				t.logger,
+			)
 		}
 	}
 
@@ -255,13 +271,28 @@ func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(
 				// standby cluster should just call ack manager to retry this task
 				// since we are stilling waiting for the fired event to be replicated
 				//
-				// we do not need to notity new timer to base, since if there is no new event being replicated
+				// we do not need to notify new timer to base, since if there is no new event being replicated
 				// checking again if the timer can be completed is meaningless
 
 				if t.discardTask(timerTask) {
-					// returning nil and set next event ID
-					// the post action function below shall take over
-					nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+
+					if msBuilder.GetVersionHistories() != nil {
+						currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+						if err != nil {
+							return err
+						}
+						lastItem, err := currentBranch.GetLastItem()
+						if err != nil {
+							return err
+						}
+						// set last event ID and version and use in post action func
+						lastEventID = common.Int64Ptr(lastItem.GetEventID())
+						lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
+					} else {
+						// returning nil and set next event ID
+						// the post action function below shall take over
+						nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+					}
 					return nil
 				}
 				return ErrTaskRetry
@@ -292,13 +323,26 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
 
+	//TODO: deprecate this field when deprecating 2DC code
 	var nextEventID *int64
+	var lastEventID *int64
+	var lastEventVersion *int64
 	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(timerTask, nextEventID, t.processActivityTimeout)
+		return t.fetchHistoryAndVerifyOnce(
+			timerTask,
+			nextEventID,
+			lastEventID,
+			lastEventVersion,
+			t.processActivityTimeout,
+		)
 	}
 	if lastAttempt {
 		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(nextEventID, timerTask, t.logger)
+			return standbyTimerTaskPostActionTaskDiscarded(
+				nextEventID,
+				timerTask,
+				t.logger,
+			)
 		}
 	}
 
@@ -315,9 +359,24 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 
 			if isExpired := tBuilder.IsTimerExpired(td, timerTask.VisibilityTimestamp); isExpired {
 				if t.discardTask(timerTask) {
-					// returning nil and set next event ID
-					// the post action function below shall take over
-					nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+
+					if msBuilder.GetVersionHistories() != nil {
+						currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+						if err != nil {
+							return err
+						}
+						lastItem, err := currentBranch.GetLastItem()
+						if err != nil {
+							return err
+						}
+						// set last event ID and version and use in post action func
+						lastEventID = common.Int64Ptr(lastItem.GetEventID())
+						lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
+					} else {
+						// returning nil and set next event ID
+						// the post action function below shall take over
+						nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+					}
 					return nil
 				}
 				return ErrTaskRetry
@@ -385,13 +444,26 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(
 		return nil
 	}
 
+	//TODO: deprecate this field when deprecating 2DC code
 	var nextEventID *int64
+	var lastEventID *int64
+	var lastEventVersion *int64
 	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(timerTask, nextEventID, t.processDecisionTimeout)
+		return t.fetchHistoryAndVerifyOnce(
+			timerTask,
+			nextEventID,
+			lastEventID,
+			lastEventVersion,
+			t.processDecisionTimeout,
+		)
 	}
 	if lastAttempt {
 		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(nextEventID, timerTask, t.logger)
+			return standbyTimerTaskPostActionTaskDiscarded(
+				nextEventID,
+				timerTask,
+				t.logger,
+			)
 		}
 	}
 
@@ -420,6 +492,19 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(
 			// returning nil and set next event ID
 			// the post action function below shall take over
 			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			if msBuilder.GetVersionHistories() != nil {
+				currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+				if err != nil {
+					return err
+				}
+				lastItem, err := currentBranch.GetLastItem()
+				if err != nil {
+					return err
+				}
+				// set last event ID and version and use in post action func
+				lastEventID = common.Int64Ptr(lastItem.GetEventID())
+				lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
+			}
 			return nil
 		}
 		return ErrTaskRetry
@@ -431,13 +516,26 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(
 	lastAttempt bool,
 ) error {
 
+	//TODO: deprecate this field when deprecating 2DC code
 	var nextEventID *int64
+	var lastEventID *int64
+	var lastEventVersion *int64
 	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(timerTask, nextEventID, t.processWorkflowBackoffTimer)
+		return t.fetchHistoryAndVerifyOnce(
+			timerTask,
+			nextEventID,
+			lastEventID,
+			lastEventVersion,
+			t.processWorkflowBackoffTimer,
+		)
 	}
 	if lastAttempt {
 		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(nextEventID, timerTask, t.logger)
+			return standbyTimerTaskPostActionTaskDiscarded(
+				nextEventID,
+				timerTask,
+				t.logger,
+			)
 		}
 	}
 
@@ -463,9 +561,23 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(
 		// checking again if the timer can be completed is meaningless
 
 		if t.discardTask(timerTask) {
-			// returning nil and set next event ID
-			// the post action function below shall take over
-			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			if msBuilder.GetVersionHistories() != nil {
+				currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+				if err != nil {
+					return err
+				}
+				lastItem, err := currentBranch.GetLastItem()
+				if err != nil {
+					return err
+				}
+				// set last event ID and version and use in post action func
+				lastEventID = common.Int64Ptr(lastItem.GetEventID())
+				lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
+			} else {
+				// returning nil and set next event ID
+				// the post action function below shall take over
+				nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			}
 			return nil
 		}
 		return ErrTaskRetry
@@ -477,13 +589,26 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
 	lastAttempt bool,
 ) error {
 
+	//TODO: deprecate this field when deprecating 2DC code
 	var nextEventID *int64
+	var lastEventID *int64
+	var lastEventVersion *int64
 	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(timerTask, nextEventID, t.processWorkflowTimeout)
+		return t.fetchHistoryAndVerifyOnce(
+			timerTask,
+			nextEventID,
+			lastEventID,
+			lastEventVersion,
+			t.processWorkflowTimeout,
+		)
 	}
 	if lastAttempt {
 		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(nextEventID, timerTask, t.logger)
+			return standbyTimerTaskPostActionTaskDiscarded(
+				nextEventID,
+				timerTask,
+				t.logger,
+			)
 		}
 	}
 
@@ -503,9 +628,23 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
 		}
 
 		if t.discardTask(timerTask) {
-			// returning nil and set next event ID
-			// the post action function below shall take over
-			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			if msBuilder.GetVersionHistories() != nil {
+				currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+				if err != nil {
+					return err
+				}
+				lastItem, err := currentBranch.GetLastItem()
+				if err != nil {
+					return err
+				}
+				// set last event ID and version and use in post action func
+				lastEventID = common.Int64Ptr(lastItem.GetEventID())
+				lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
+			} else {
+				// returning nil and set next event ID
+				// the post action function below shall take over
+				nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
+			}
 			return nil
 		}
 		return ErrTaskRetry
@@ -570,13 +709,15 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(
 func (t *timerQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(
 	timerTask *persistence.TimerTaskInfo,
 	nextEventID *int64,
+	lastEventID *int64,
+	lastEventVersion *int64,
 	verifyFn func(*persistence.TimerTaskInfo, bool) error,
 ) error {
 
 	if nextEventID == nil {
 		return nil
 	}
-	err := t.fetchHistoryFromRemote(timerTask, *nextEventID)
+	err := t.fetchHistoryFromRemote(timerTask, *nextEventID, lastEventID, lastEventVersion)
 	if err != nil {
 		// fail to fetch events from remote, just discard the task
 		return ErrTaskDiscarded
@@ -593,16 +734,33 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(
 func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	timerTask *persistence.TimerTaskInfo,
 	nextEventID int64,
+	lastEventID *int64,
+	lastEventVersion *int64,
 ) error {
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientLatency)
 	defer stopwatch.Stop()
-	err := t.historyRereplicator.SendMultiWorkflowHistory(
-		timerTask.DomainID, timerTask.WorkflowID,
-		timerTask.RunID, nextEventID,
-		timerTask.RunID, common.EndEventID, // use common.EndEventID since we do not know where is the end
-	)
+
+	var err error
+	if lastEventID != nil && lastEventVersion != nil {
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			timerTask.DomainID,
+			timerTask.WorkflowID,
+			timerTask.RunID,
+			lastEventID,
+			lastEventVersion,
+			nil,
+			nil,
+		)
+	} else {
+		err = t.historyRereplicator.SendMultiWorkflowHistory(
+			timerTask.DomainID, timerTask.WorkflowID,
+			timerTask.RunID, nextEventID,
+			timerTask.RunID, common.EndEventID, // use common.EndEventID since we do not know where is the end
+		)
+	}
+
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.WorkflowID(timerTask.WorkflowID),
