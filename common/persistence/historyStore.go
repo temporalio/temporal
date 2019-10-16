@@ -37,7 +37,7 @@ type (
 	// historyManagerImpl implements HistoryManager based on HistoryStore and PayloadSerializer
 	historyV2ManagerImpl struct {
 		historySerializer     PayloadSerializer
-		persistence           HistoryV2Store
+		persistence           HistoryStore
 		logger                log.Logger
 		thriftEncoder         codec.BinaryEncoder
 		pagingTokenSerializer *jsonHistoryTokenSerializer
@@ -50,14 +50,14 @@ const (
 	defaultLastTransactionID = int64(0)
 )
 
-var _ HistoryV2Manager = (*historyV2ManagerImpl)(nil)
+var _ HistoryManager = (*historyV2ManagerImpl)(nil)
 
 // NewHistoryV2ManagerImpl returns new HistoryManager
 func NewHistoryV2ManagerImpl(
-	persistence HistoryV2Store,
+	persistence HistoryStore,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
-) HistoryV2Manager {
+) HistoryManager {
 
 	return &historyV2ManagerImpl{
 		historySerializer:     NewPayloadSerializer(),

@@ -81,7 +81,7 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 }
 
 // NewHistoryV2Store returns a new history store
-func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
+func (f *Factory) NewHistoryV2Store() (p.HistoryStore, error) {
 	conn, err := f.dbConn.get()
 	if err != nil {
 		return nil, err

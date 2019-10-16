@@ -44,7 +44,7 @@ type (
 		historyCache          *historyCache
 		replicationTaskFilter queueTaskFilter
 		executionMgr          persistence.ExecutionManager
-		historyV2Mgr          persistence.HistoryV2Manager
+		historyV2Mgr          persistence.HistoryManager
 		replicator            messaging.Producer
 		metricsClient         metrics.Client
 		options               *QueueProcessorOptions
@@ -70,7 +70,7 @@ func newReplicatorQueueProcessor(
 	historyCache *historyCache,
 	replicator messaging.Producer,
 	executionMgr persistence.ExecutionManager,
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	logger log.Logger,
 ) ReplicatorQueueProcessor {
 
@@ -212,7 +212,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetCluster
 func GenerateReplicationTask(
 	targetClusters []string,
 	task *persistence.ReplicationTaskInfo,
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
 	history *shared.History,
 	shardID *int,
@@ -301,7 +301,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 
 // GetAllHistory return history
 func GetAllHistory(
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
 	byBatch bool,
 	firstEventID int64,
@@ -350,7 +350,7 @@ func GetAllHistory(
 
 // PaginateHistory return paged history
 func PaginateHistory(
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	byBatch bool,
 	branchToken []byte,
 	firstEventID int64,

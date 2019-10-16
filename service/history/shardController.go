@@ -47,7 +47,7 @@ type (
 		hServiceResolver    membership.ServiceResolver
 		membershipUpdateCh  chan *membership.ChangedEvent
 		shardMgr            persistence.ShardManager
-		historyV2Mgr        persistence.HistoryV2Manager
+		historyV2Mgr        persistence.HistoryManager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		domainCache         cache.DomainCache
 		engineFactory       EngineFactory
@@ -74,7 +74,7 @@ type (
 		status          historyShardsItemStatus
 		service         service.Service
 		shardMgr        persistence.ShardManager
-		historyV2Mgr    persistence.HistoryV2Manager
+		historyV2Mgr    persistence.HistoryManager
 		executionMgr    persistence.ExecutionManager
 		domainCache     cache.DomainCache
 		engineFactory   EngineFactory
@@ -94,7 +94,7 @@ const (
 )
 
 func newShardController(svc service.Service, host *membership.HostInfo, resolver membership.ServiceResolver,
-	shardMgr persistence.ShardManager, historyV2Mgr persistence.HistoryV2Manager, domainCache cache.DomainCache,
+	shardMgr persistence.ShardManager, historyV2Mgr persistence.HistoryManager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
 	config *Config, logger log.Logger, metricsClient metrics.Client) *shardController {
 	logger = logger.WithTags(tag.ComponentShardController)
@@ -119,7 +119,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 }
 
 func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence.ShardManager,
-	historyV2Mgr persistence.HistoryV2Manager, domainCache cache.DomainCache,
+	historyV2Mgr persistence.HistoryManager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
 	config *Config, logger log.Logger, throttledLog log.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
 

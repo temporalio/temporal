@@ -1077,68 +1077,6 @@ type (
 		NextPageToken []byte
 	}
 
-	// AppendHistoryEventsRequest is used to append new events to workflow execution history
-	// Deprecated: use v2 API-AppendHistoryNodes() instead
-	AppendHistoryEventsRequest struct {
-		DomainID          string
-		Execution         workflow.WorkflowExecution
-		FirstEventID      int64
-		EventBatchVersion int64
-		RangeID           int64
-		TransactionID     int64
-		Events            []*workflow.HistoryEvent
-		Overwrite         bool
-		Encoding          common.EncodingType // optional binary encoding type
-	}
-
-	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
-	// Deprecated: use v2 API-AppendHistoryNodes() instead
-	GetWorkflowExecutionHistoryRequest struct {
-		DomainID  string
-		Execution workflow.WorkflowExecution
-		// Get the history events from FirstEventID. Inclusive.
-		FirstEventID int64
-		// Get the history events upto NextEventID.  Not Inclusive.
-		NextEventID int64
-		// Maximum number of history append transactions per page
-		PageSize int
-		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
-		NextPageToken []byte
-	}
-
-	// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistoryRequest
-	// Deprecated: use V2 API instead-ReadHistoryBranch()
-	GetWorkflowExecutionHistoryResponse struct {
-		History *workflow.History
-		// Token to read next page if there are more events beyond page size.
-		// Use this to set NextPageToken on GetWorkflowExecutionHistoryRequest to read the next page.
-		NextPageToken []byte
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
-		// Size of history read from store
-		Size int
-	}
-
-	// GetWorkflowExecutionHistoryByBatchResponse is the response to GetWorkflowExecutionHistoryRequest
-	// Deprecated: use V2 API instead-ReadHistoryBranchByBatch()
-	GetWorkflowExecutionHistoryByBatchResponse struct {
-		History []*workflow.History
-		// Token to read next page if there are more events beyond page size.
-		// Use this to set NextPageToken on GetWorkflowExecutionHistoryRequest to read the next page.
-		NextPageToken []byte
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
-		// Size of history read from store
-		Size int
-	}
-
-	// DeleteWorkflowExecutionHistoryRequest is used to delete workflow execution history
-	// Deprecated: use v2 API-AppendHistoryNodes() instead
-	DeleteWorkflowExecutionHistoryRequest struct {
-		DomainID  string
-		Execution workflow.WorkflowExecution
-	}
-
 	// DomainInfo describes the domain entity
 	DomainInfo struct {
 		ID          string
@@ -1457,12 +1395,6 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
-	// AppendHistoryEventsResponse is response for AppendHistoryEventsRequest
-	// Deprecated: uses V2 API-AppendHistoryNodesRequest
-	AppendHistoryEventsResponse struct {
-		Size int
-	}
-
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	Closeable interface {
 		Close()
@@ -1539,8 +1471,8 @@ type (
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
 	}
 
-	// HistoryV2Manager is used to manager workflow history events
-	HistoryV2Manager interface {
+	// HistoryManager is used to manager workflow history events
+	HistoryManager interface {
 		Closeable
 		GetName() string
 

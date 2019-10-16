@@ -50,7 +50,7 @@ type (
 		shard           ShardContext
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
-		historyV2Mgr    persistence.HistoryV2Manager
+		historyV2Mgr    persistence.HistoryManager
 
 		context      workflowExecutionContext
 		mutableState mutableState
@@ -71,7 +71,7 @@ func newNDCBranchMgr(
 		shard:           shard,
 		domainCache:     shard.GetDomainCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryV2Manager(),
+		historyV2Mgr:    shard.GetHistoryManager(),
 
 		context:      context,
 		mutableState: mutableState,

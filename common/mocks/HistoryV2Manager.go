@@ -23,7 +23,7 @@ package mocks
 import "github.com/uber/cadence/common/persistence"
 import "github.com/stretchr/testify/mock"
 
-// HistoryV2Manager mock implementation
+// HistoryManager mock implementation
 type HistoryV2Manager struct {
 	mock.Mock
 }
@@ -211,4 +211,4 @@ func (_m *HistoryV2Manager) Close() {
 	_m.Called()
 }
 
-var _ persistence.HistoryV2Manager = (*HistoryV2Manager)(nil)
+var _ persistence.HistoryManager = (*HistoryV2Manager)(nil)

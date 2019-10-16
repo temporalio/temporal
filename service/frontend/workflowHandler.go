@@ -71,7 +71,7 @@ type (
 	WorkflowHandler struct {
 		domainCache               cache.DomainCache
 		metadataMgr               persistence.MetadataManager
-		historyV2Mgr              persistence.HistoryV2Manager
+		historyV2Mgr              persistence.HistoryManager
 		visibilityMgr             persistence.VisibilityManager
 		history                   history.Client
 		matching                  matching.Client
@@ -151,7 +151,7 @@ func NewWorkflowHandler(
 	sVice service.Service,
 	config *Config,
 	metadataMgr persistence.MetadataManager,
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	visibilityMgr persistence.VisibilityManager,
 	replicationMessageSink messaging.Producer,
 	domainReplicationQueue persistence.DomainReplicationQueue,

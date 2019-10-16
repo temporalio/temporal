@@ -75,7 +75,7 @@ type (
 	scannerContext struct {
 		taskDB        p.TaskManager
 		domainDB      p.MetadataManager
-		historyDB     p.HistoryV2Manager
+		historyDB     p.HistoryManager
 		cfg           Config
 		sdkClient     workflowserviceclient.Interface
 		clientBean    client.Bean

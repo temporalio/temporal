@@ -70,7 +70,7 @@ type (
 		historyIteratorState
 
 		request               *ArchiveHistoryRequest
-		historyV2Manager      persistence.HistoryV2Manager
+		historyV2Manager      persistence.HistoryManager
 		sizeEstimator         SizeEstimator
 		historyPageSize       int
 		targetHistoryBlobSize int
@@ -84,7 +84,7 @@ var (
 // NewHistoryIterator returns a new HistoryIterator
 func NewHistoryIterator(
 	request *ArchiveHistoryRequest,
-	historyV2Manager persistence.HistoryV2Manager,
+	historyV2Manager persistence.HistoryManager,
 	targetHistoryBlobSize int,
 ) HistoryIterator {
 	return newHistoryIterator(request, historyV2Manager, targetHistoryBlobSize)
@@ -93,7 +93,7 @@ func NewHistoryIterator(
 // NewHistoryIteratorFromState returns a new HistoryIterator with specified state
 func NewHistoryIteratorFromState(
 	request *ArchiveHistoryRequest,
-	historyV2Manager persistence.HistoryV2Manager,
+	historyV2Manager persistence.HistoryManager,
 	targetHistoryBlobSize int,
 	initialState []byte,
 ) (HistoryIterator, error) {
@@ -109,7 +109,7 @@ func NewHistoryIteratorFromState(
 
 func newHistoryIterator(
 	request *ArchiveHistoryRequest,
-	historyV2Manager persistence.HistoryV2Manager,
+	historyV2Manager persistence.HistoryManager,
 	targetHistoryBlobSize int,
 ) *historyIterator {
 	return &historyIterator{

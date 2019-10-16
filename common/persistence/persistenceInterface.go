@@ -87,8 +87,8 @@ type (
 		DeleteTask(request *DeleteTaskRequest) error
 	}
 
-	// HistoryV2Store is to manager workflow history events
-	HistoryV2Store interface {
+	// HistoryStore is to manager workflow history events
+	HistoryStore interface {
 		Closeable
 		GetName() string
 
@@ -436,33 +436,6 @@ type (
 	// InternalGetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest for Persistence Interface
 	InternalGetWorkflowExecutionResponse struct {
 		State *InternalWorkflowMutableState
-	}
-
-	// InternalGetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
-	InternalGetWorkflowExecutionHistoryRequest struct {
-		// an extra field passing from GetWorkflowExecutionHistoryRequest
-		LastEventBatchVersion int64
-
-		DomainID  string
-		Execution workflow.WorkflowExecution
-		// Get the history events from FirstEventID. Inclusive.
-		FirstEventID int64
-		// Get the history events upto NextEventID.  Not Inclusive.
-		NextEventID int64
-		// Maximum number of history append transactions per page
-		PageSize int
-		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
-		NextPageToken []byte
-	}
-
-	// InternalGetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistoryRequest for Persistence Interface
-	InternalGetWorkflowExecutionHistoryResponse struct {
-		History []*DataBlob
-		// Token to read next page if there are more events beyond page size.
-		// Use this to set NextPageToken on GetworkflowExecutionHistoryRequest to read the next page.
-		NextPageToken []byte
-		// an extra field passing to DataInterface
-		LastEventBatchVersion int64
 	}
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch

@@ -55,7 +55,7 @@ type (
 		shardManager            persistence.ShardManager
 		metadataMgr             persistence.MetadataManager
 		visibilityMgr           persistence.VisibilityManager
-		historyV2Mgr            persistence.HistoryV2Manager
+		historyV2Mgr            persistence.HistoryManager
 		executionMgrFactory     persistence.ExecutionManagerFactory
 		domainCache             cache.DomainCache
 		historyServiceClient    hc.Client
@@ -98,7 +98,7 @@ func NewHandler(
 	shardManager persistence.ShardManager,
 	metadataMgr persistence.MetadataManager,
 	visibilityMgr persistence.VisibilityManager,
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory,
 	domainCache cache.DomainCache,
 	publicClient workflowserviceclient.Interface,

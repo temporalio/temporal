@@ -45,7 +45,7 @@ type (
 		GetShardID() int
 		GetService() service.Service
 		GetExecutionManager() persistence.ExecutionManager
-		GetHistoryV2Manager() persistence.HistoryV2Manager
+		GetHistoryManager() persistence.HistoryManager
 		GetDomainCache() cache.DomainCache
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *Config
@@ -109,7 +109,7 @@ type (
 		service          service.Service
 		rangeID          int64
 		shardManager     persistence.ShardManager
-		historyV2Mgr     persistence.HistoryV2Manager
+		historyV2Mgr     persistence.HistoryManager
 		executionManager persistence.ExecutionManager
 		domainCache      cache.DomainCache
 		eventsCache      eventsCache
@@ -155,7 +155,7 @@ func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-func (s *shardContextImpl) GetHistoryV2Manager() persistence.HistoryV2Manager {
+func (s *shardContextImpl) GetHistoryManager() persistence.HistoryManager {
 	return s.historyV2Mgr
 }
 

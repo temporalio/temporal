@@ -48,7 +48,7 @@ type (
 
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
-		db       p.HistoryV2Manager
+		db       p.HistoryManager
 		client   historyserviceclient.Interface
 		hbd      ScavengerHeartbeatDetails
 		rps      int
@@ -86,7 +86,7 @@ const (
 //  - describe the corresponding workflow execution
 //  - deletion of history itself, if there are no workflow execution
 func NewScavenger(
-	db p.HistoryV2Manager,
+	db p.HistoryManager,
 	rps int,
 	client historyserviceclient.Interface,
 	hbd ScavengerHeartbeatDetails,

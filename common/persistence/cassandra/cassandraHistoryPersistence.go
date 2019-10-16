@@ -65,11 +65,11 @@ type (
 	}
 )
 
-// NewHistoryV2PersistenceFromSession returns new HistoryV2Store
+// NewHistoryV2PersistenceFromSession returns new HistoryStore
 func NewHistoryV2PersistenceFromSession(
 	session *gocql.Session,
 	logger log.Logger,
-) p.HistoryV2Store {
+) p.HistoryStore {
 
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
 }
@@ -78,7 +78,7 @@ func NewHistoryV2PersistenceFromSession(
 func newHistoryV2Persistence(
 	cfg config.Cassandra,
 	logger log.Logger,
-) (p.HistoryV2Store, error) {
+) (p.HistoryStore, error) {
 
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
 	cluster.Keyspace = cfg.Keyspace

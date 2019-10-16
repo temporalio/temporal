@@ -45,7 +45,7 @@ type (
 		// NewShardManager returns a new shard manager
 		NewShardManager() (p.ShardManager, error)
 		// NewHistoryV2Manager returns a new historyV2 manager
-		NewHistoryV2Manager() (p.HistoryV2Manager, error)
+		NewHistoryV2Manager() (p.HistoryManager, error)
 		// NewMetadataManager returns a new metadata manager
 		NewMetadataManager() (p.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager for a given shardID
@@ -65,7 +65,7 @@ type (
 		// NewShardStore returns a new shard store
 		NewShardStore() (p.ShardStore, error)
 		// NewHistoryV2Store returns a new historyV2 store
-		NewHistoryV2Store() (p.HistoryV2Store, error)
+		NewHistoryV2Store() (p.HistoryStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
 		// NewExecutionStore returns an execution store for given shardID
@@ -168,7 +168,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 }
 
 // NewHistoryManager returns a new history manager
-func (f *factoryImpl) NewHistoryV2Manager() (p.HistoryV2Manager, error) {
+func (f *factoryImpl) NewHistoryV2Manager() (p.HistoryManager, error) {
 	ds := f.datastores[storeTypeHistory]
 	store, err := ds.factory.NewHistoryV2Store()
 	if err != nil {

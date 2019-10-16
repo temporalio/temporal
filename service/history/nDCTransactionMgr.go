@@ -135,7 +135,7 @@ type (
 		domainCache     cache.DomainCache
 		historyCache    *historyCache
 		clusterMetadata cluster.Metadata
-		historyV2Mgr    persistence.HistoryV2Manager
+		historyV2Mgr    persistence.HistoryManager
 		serializer      persistence.PayloadSerializer
 		metricsClient   metrics.Client
 		eventsReapplier nDCEventsReapplier
@@ -160,7 +160,7 @@ func newNDCTransactionMgr(
 		domainCache:     shard.GetDomainCache(),
 		historyCache:    historyCache,
 		clusterMetadata: shard.GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryV2Manager(),
+		historyV2Mgr:    shard.GetHistoryManager(),
 		serializer:      shard.GetService().GetPayloadSerializer(),
 		metricsClient:   shard.GetMetricsClient(),
 		eventsReapplier: eventsReapplier,

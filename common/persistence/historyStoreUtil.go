@@ -64,7 +64,7 @@ that zombie history segments can remain under some rare failure cases. Consider 
 Under this rare case the section of parent history which was assumed to be common to child will be a zombie history section.
 
 */
-func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryV2Manager, branchToken []byte, shardID *int, logger log.Logger) error {
+func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryManager, branchToken []byte, shardID *int, logger log.Logger) error {
 	err := historyV2Mgr.DeleteHistoryBranch(&DeleteHistoryBranchRequest{
 		BranchToken: branchToken,
 		ShardID:     shardID,
@@ -126,10 +126,10 @@ func DeleteWorkflowExecutionHistoryV2(historyV2Mgr HistoryV2Manager, branchToken
 	return err
 }
 
-// ReadFullPageV2Events reads a full page of history events from HistoryV2Manager. Due to storage format of V2 History
+// ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2Events(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchRequest) ([]*shared.HistoryEvent, int, []byte, error) {
+func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*shared.HistoryEvent, int, []byte, error) {
 	historyEvents := []*shared.HistoryEvent{}
 	size := int(0)
 	for {
@@ -146,10 +146,10 @@ func ReadFullPageV2Events(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchR
 	}
 }
 
-// ReadFullPageV2EventsByBatch reads a full page of history events by batch from HistoryV2Manager. Due to storage format of V2 History
+// ReadFullPageV2EventsByBatch reads a full page of history events by batch from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryV2Manager, req *ReadHistoryBranchRequest) ([]*shared.History, int, []byte, error) {
+func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*shared.History, int, []byte, error) {
 	historyBatches := []*shared.History{}
 	eventsRead := 0
 	size := 0

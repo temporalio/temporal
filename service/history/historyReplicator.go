@@ -111,7 +111,7 @@ func newHistoryReplicator(
 	historyEngine *historyEngineImpl,
 	historyCache *historyCache,
 	domainCache cache.DomainCache,
-	historyV2Mgr persistence.HistoryV2Manager,
+	historyV2Mgr persistence.HistoryManager,
 	logger log.Logger,
 ) *historyReplicator {
 
@@ -795,7 +795,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		// this function should be only called when we drop start workflow execution
 		currentBranchToken, err := msBuilder.GetCurrentBranchToken()
 		if err == nil {
-			r.shard.GetHistoryV2Manager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			r.shard.GetHistoryManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 				BranchToken: currentBranchToken,
 				ShardID:     common.IntPtr(r.shard.GetShardID()),
 			})

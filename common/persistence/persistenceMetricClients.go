@@ -48,7 +48,7 @@ type (
 
 	historyV2PersistenceClient struct {
 		metricClient metrics.Client
-		persistence  HistoryV2Manager
+		persistence  HistoryManager
 		logger       log.Logger
 	}
 
@@ -74,7 +74,7 @@ type (
 var _ ShardManager = (*shardPersistenceClient)(nil)
 var _ ExecutionManager = (*workflowExecutionPersistenceClient)(nil)
 var _ TaskManager = (*taskPersistenceClient)(nil)
-var _ HistoryV2Manager = (*historyV2PersistenceClient)(nil)
+var _ HistoryManager = (*historyV2PersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
@@ -106,8 +106,8 @@ func NewTaskPersistenceMetricsClient(persistence TaskManager, metricClient metri
 	}
 }
 
-// NewHistoryV2PersistenceMetricsClient creates a HistoryV2Manager client to manage workflow execution history
-func NewHistoryV2PersistenceMetricsClient(persistence HistoryV2Manager, metricClient metrics.Client, logger log.Logger) HistoryV2Manager {
+// NewHistoryV2PersistenceMetricsClient creates a HistoryManager client to manage workflow execution history
+func NewHistoryV2PersistenceMetricsClient(persistence HistoryManager, metricClient metrics.Client, logger log.Logger) HistoryManager {
 	return &historyV2PersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,

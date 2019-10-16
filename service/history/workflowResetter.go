@@ -61,7 +61,7 @@ type (
 		shard             ShardContext
 		domainCache       cache.DomainCache
 		clusterMetadata   cluster.Metadata
-		historyV2Mgr      persistence.HistoryV2Manager
+		historyV2Mgr      persistence.HistoryManager
 		historyCache      *historyCache
 		transactionMgr    nDCTransactionMgr
 		newStateRebuilder nDCStateRebuilderProvider
@@ -81,7 +81,7 @@ func newWorkflowResetter(
 		shard:           shard,
 		domainCache:     shard.GetDomainCache(),
 		clusterMetadata: shard.GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryV2Manager(),
+		historyV2Mgr:    shard.GetHistoryManager(),
 		historyCache:    historyCache,
 		transactionMgr:  transactionMgr,
 		newStateRebuilder: func() nDCStateRebuilder {

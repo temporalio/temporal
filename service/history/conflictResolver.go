@@ -46,12 +46,12 @@ type (
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
 		context         workflowExecutionContext
-		historyV2Mgr    persistence.HistoryV2Manager
+		historyV2Mgr    persistence.HistoryManager
 		logger          log.Logger
 	}
 )
 
-func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyV2Mgr persistence.HistoryV2Manager,
+func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyV2Mgr persistence.HistoryManager,
 	logger log.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{

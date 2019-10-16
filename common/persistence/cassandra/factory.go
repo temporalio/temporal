@@ -66,7 +66,7 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 }
 
 // NewHistoryV2Store returns a new history store
-func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
+func (f *Factory) NewHistoryV2Store() (p.HistoryStore, error) {
 	return newHistoryV2Persistence(f.cfg, f.logger)
 }
 

@@ -44,7 +44,7 @@ type sqlHistoryV2Manager struct {
 func newHistoryV2Persistence(
 	db sqldb.Interface,
 	logger log.Logger,
-) (p.HistoryV2Store, error) {
+) (p.HistoryStore, error) {
 
 	return &sqlHistoryV2Manager{
 		sqlStore: sqlStore{

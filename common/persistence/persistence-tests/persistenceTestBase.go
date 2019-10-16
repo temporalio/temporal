@@ -65,7 +65,7 @@ type (
 		ExecutionMgrFactory    pfactory.Factory
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
-		HistoryV2Mgr           p.HistoryV2Manager
+		HistoryV2Mgr           p.HistoryManager
 		MetadataManager        p.MetadataManager
 		VisibilityMgr          p.VisibilityManager
 		DomainReplicationQueue p.DomainReplicationQueue

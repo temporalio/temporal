@@ -294,7 +294,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 
 	historyV2Manager, err := pFactory.NewHistoryV2Manager()
 	if err != nil {
-		s.logger.Fatal("failed to start archiver, could not create HistoryV2Manager", tag.Error(err))
+		s.logger.Fatal("failed to start archiver, could not create HistoryManager", tag.Error(err))
 	}
 
 	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{

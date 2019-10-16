@@ -58,7 +58,7 @@ type (
 		domainCache     cache.DomainCache
 		eventsCache     eventsCache
 		clusterMetadata cluster.Metadata
-		historyV2Mgr    persistence.HistoryV2Manager
+		historyV2Mgr    persistence.HistoryManager
 		taskRefresher   mutableStateTaskRefresher
 
 		rebuiltHistorySize int64
@@ -78,7 +78,7 @@ func newNDCStateRebuilder(
 		domainCache:     shard.GetDomainCache(),
 		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryV2Manager(),
+		historyV2Mgr:    shard.GetHistoryManager(),
 		taskRefresher: newMutableStateTaskRefresher(
 			shard.GetConfig(),
 			shard.GetDomainCache(),

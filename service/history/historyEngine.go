@@ -66,7 +66,7 @@ type (
 		timeSource                clock.TimeSource
 		decisionHandler           decisionHandler
 		clusterMetadata           cluster.Metadata
-		historyV2Mgr              persistence.HistoryV2Manager
+		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
@@ -152,7 +152,7 @@ func NewEngineWithShardContext(
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
-	historyV2Manager := shard.GetHistoryV2Manager()
+	historyV2Manager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard)
 	historyEngImpl := &historyEngineImpl{
 		currentClusterName:   currentClusterName,
