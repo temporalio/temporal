@@ -144,33 +144,6 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 	return m.persistence.DeleteHistoryBranch(req)
 }
 
-// CompleteForkBranch complete the forking process
-func (m *historyV2ManagerImpl) CompleteForkBranch(
-	request *CompleteForkBranchRequest,
-) error {
-
-	var branch workflow.HistoryBranch
-	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
-	if err != nil {
-		return err
-	}
-
-	shardID, err := getShardID(request.ShardID)
-	if err != nil {
-		m.logger.Error("shardID is not set in complete fork branch operation", tag.Error(err))
-		return &workflow.InternalServiceError{
-			Message: err.Error(),
-		}
-	}
-	req := &InternalCompleteForkBranchRequest{
-		BranchInfo: branch,
-		Success:    request.Success,
-		ShardID:    shardID,
-	}
-
-	return m.persistence.CompleteForkBranch(req)
-}
-
 // GetHistoryTree returns all branch information of a tree
 func (m *historyV2ManagerImpl) GetHistoryTree(
 	request *GetHistoryTreeRequest,

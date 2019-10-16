@@ -190,11 +190,6 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.newRunID),
 		ShardID:         common.IntPtr(s.mockShard.GetShardID()),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil).Times(1)
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", &persistence.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
-	}).Return(nil).Times(1)
 
 	rebuiltMutableState, err := s.nDCWorkflowResetter.resetWorkflow(
 		ctx,

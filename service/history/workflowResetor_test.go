@@ -743,17 +743,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		NewBranchToken: newBranchToken,
 	}
 
-	completeReq := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-	completeReqErr := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,
 	}
@@ -763,8 +752,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Times(2)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
@@ -780,7 +767,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	// 4. signal 2 :32
 	// 5. decisionTaskScheduled :33
 	calls := s.mockHistoryV2Mgr.Calls
-	s.Equal(5, len(calls))
+	s.Equal(4, len(calls))
 	appendCall := calls[3]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
 	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
@@ -1447,7 +1434,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gcurResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", mock.Anything).Return(nil).Maybe()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -2045,17 +2031,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		NewBranchToken: newBranchToken,
 	}
 
-	completeReq := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-	completeReqErr := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,
 	}
@@ -2065,8 +2040,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Times(2)
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
@@ -2082,7 +2055,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	// 4. signal 2
 	// 5. decisionTaskScheduled
 	calls := s.mockHistoryV2Mgr.Calls
-	s.Equal(5, len(calls))
+	s.Equal(4, len(calls))
 	appendCall := calls[3]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
 	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
@@ -2764,18 +2737,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		NewBranchToken: newBranchToken,
 	}
 
-	completeReqErr := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-
 	s.mockExecutionMgr.On("GetWorkflowExecution", forkGwmsRequest).Return(forkGwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gcurResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Once()
 	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -3374,17 +3340,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		NewBranchToken: newBranchToken,
 	}
 
-	completeReq := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-	completeReqErr := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-
 	appendV2Resp := &p.AppendHistoryNodesResponse{
 		Size: 200,
 	}
@@ -3394,8 +3349,6 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	response, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
@@ -3409,7 +3362,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	// 4. signal 2
 	// 5. decisionTaskScheduled
 	calls := s.mockHistoryV2Mgr.Calls
-	s.Equal(4, len(calls))
+	s.Equal(3, len(calls))
 	appendCall := calls[2]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
 	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
@@ -4009,17 +3962,6 @@ func (s *resetorSuite) TestApplyReset() {
 		NewBranchToken: newBranchToken,
 	}
 
-	completeReq := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-	completeReqErr := &p.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.shardID),
-	}
-
 	historyAfterReset := &workflow.History{
 		Events: []*workflow.HistoryEvent{
 			&workflow.HistoryEvent{
@@ -4094,8 +4036,6 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", currGwmsRequest).Return(currGwmsResponse, nil).Once()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", forkReq).Return(forkResp, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReq).Return(nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", completeReqErr).Return(nil).Maybe()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
 	err := s.resetor.ApplyResetEvent(context.Background(), request, domainID, wid, currRunID)
@@ -4108,7 +4048,7 @@ func (s *resetorSuite) TestApplyReset() {
 	// 4. signal 2
 	// 5. decisionTaskScheduled
 	calls := s.mockHistoryV2Mgr.Calls
-	s.Equal(4, len(calls))
+	s.Equal(3, len(calls))
 	appendCall := calls[2]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
 	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)

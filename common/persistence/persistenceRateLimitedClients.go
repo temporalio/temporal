@@ -236,15 +236,6 @@ func (p *workflowExecutionRateLimitedPersistenceClient) ResetWorkflowExecution(r
 	return err
 }
 
-// CompleteForkBranch complete forking process
-func (p *historyV2RateLimitedPersistenceClient) CompleteForkBranch(request *CompleteForkBranchRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-	err := p.persistence.CompleteForkBranch(request)
-	return err
-}
-
 func (p *workflowExecutionRateLimitedPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded

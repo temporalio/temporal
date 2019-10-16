@@ -20,7 +20,6 @@ CREATE TABLE history_tree (
   tree_id           uuid,
   branch_id         uuid,
   ancestors         list<frozen<branch_range>>,
-  in_progress       boolean, -- For fork operation to prevent race condition to leak event data when forking branches
   PRIMARY KEY ((tree_id), branch_id )
 ) WITH COMPACTION = {
   'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

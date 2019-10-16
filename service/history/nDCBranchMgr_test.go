@@ -154,11 +154,6 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	})).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", &persistence.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
-	}).Return(nil).Once()
 
 	newIndex, err := s.nDCBranchMgr.createNewBranch(ctx.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
 	s.Nil(err)
@@ -330,11 +325,6 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	})).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}, nil).Once()
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", &persistence.CompleteForkBranchRequest{
-		BranchToken: newBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
-	}).Return(nil).Once()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
 		ctx.Background(),

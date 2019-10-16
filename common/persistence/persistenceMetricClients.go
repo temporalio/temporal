@@ -1053,18 +1053,6 @@ func (p *historyV2PersistenceClient) DeleteHistoryBranch(request *DeleteHistoryB
 	return err
 }
 
-// CompleteForkBranch complete forking process
-func (p *historyV2PersistenceClient) CompleteForkBranch(request *CompleteForkBranchRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteForkBranchScope, metrics.PersistenceRequests)
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteForkBranchScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteForkBranch(request)
-	sw.Stop()
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteForkBranchScope, err)
-	}
-	return err
-}
-
 func (p *historyV2PersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceLatency)

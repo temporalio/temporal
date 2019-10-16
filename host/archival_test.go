@@ -178,7 +178,7 @@ func (s *integrationSuite) isHistoryDeleted(domainID string, execution *workflow
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)
 		s.Nil(err)
-		if len(resp.Branches) == 0 && len(resp.ForkingInProgressBranches) == 0 {
+		if len(resp.Branches) == 0 {
 			return true
 		}
 		time.Sleep(retryBackoffTime)

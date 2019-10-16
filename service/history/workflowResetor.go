@@ -110,19 +110,6 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 		ctx, domainEntry, baseMutableState, currMutableState,
 		request.GetReason(), request.GetDecisionFinishEventId(), request.GetRequestId(), resetNewRunID,
 	)
-	// complete the fork process at the end, it is OK even if this defer fails, because our timer task can still clean up correctly
-	defer func() {
-		if newMutableState != nil {
-			newBranchToken, err := newMutableState.GetCurrentBranchToken()
-			if err == nil && len(newBranchToken) > 0 {
-				w.eng.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
-					BranchToken: newBranchToken,
-					Success:     true,
-					ShardID:     common.IntPtr(w.eng.shard.GetShardID()),
-				})
-			}
-		}
-	}()
 	if retError != nil {
 		return response, retError
 	}
@@ -842,16 +829,6 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	if retError != nil {
 		return retError
 	}
-	defer func() {
-		newBranchToken, err := newMsBuilder.GetCurrentBranchToken()
-		if err == nil {
-			w.eng.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
-				BranchToken: newBranchToken,
-				Success:     true,
-				ShardID:     shardID,
-			})
-		}
-	}()
 	retError = newMsBuilder.SetCurrentBranchToken(forkResp.NewBranchToken)
 	if retError != nil {
 		return retError

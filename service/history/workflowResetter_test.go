@@ -243,12 +243,6 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		ShardID:         common.IntPtr(s.mockShard.GetShardID()),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
 
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", &persistence.CompleteForkBranchRequest{
-		BranchToken: resetBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
-	}).Return(nil).Times(1)
-
 	s.mockStateRebuilder.EXPECT().rebuild(
 		ctx,
 		gomock.Any(),
@@ -334,12 +328,6 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.resetRunID),
 		ShardID:         common.IntPtr(s.mockShard.GetShardID()),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
-
-	s.mockHistoryV2Mgr.On("CompleteForkBranch", &persistence.CompleteForkBranchRequest{
-		BranchToken: resetBranchToken,
-		Success:     true,
-		ShardID:     common.IntPtr(s.mockShard.GetShardID()),
-	}).Return(nil).Times(1)
 
 	newBranchToken, err := s.workflowResetter.generateBranchToken(
 		s.domainID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,

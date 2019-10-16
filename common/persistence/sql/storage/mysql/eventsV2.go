@@ -39,14 +39,12 @@ const (
 
 	// below are templates for history_tree table
 	addHistoryTreeQry = `INSERT INTO history_tree (` +
-		`shard_id, tree_id, branch_id, in_progress, data, data_encoding) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :in_progress, :data, :data_encoding) `
+		`shard_id, tree_id, branch_id, data, data_encoding) ` +
+		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) `
 
-	getHistoryTreeQry = `SELECT branch_id, in_progress, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
+	getHistoryTreeQry = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
 	deleteHistoryTreeQry = `DELETE FROM history_tree WHERE shard_id = ? AND tree_id = ? AND branch_id = ? `
-
-	updateHistoryTreeQry = `UPDATE history_tree set in_progress = :in_progress WHERE shard_id = :shard_id AND tree_id = :tree_id AND branch_id = :branch_id `
 )
 
 // For history_node table:
@@ -87,11 +85,6 @@ func (mdb *DB) SelectFromHistoryTree(filter *sqldb.HistoryTreeFilter) ([]sqldb.H
 	var rows []sqldb.HistoryTreeRow
 	err := mdb.conn.Select(&rows, getHistoryTreeQry, filter.ShardID, filter.TreeID)
 	return rows, err
-}
-
-// UpdateHistoryTree updates a row in history_tree table
-func (mdb *DB) UpdateHistoryTree(row *sqldb.HistoryTreeRow) (sql.Result, error) {
-	return mdb.conn.NamedExec(updateHistoryTreeQry, row)
 }
 
 // DeleteFromHistoryTree deletes one or more rows from history_tree table

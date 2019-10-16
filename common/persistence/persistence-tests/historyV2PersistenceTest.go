@@ -249,7 +249,6 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// fork from here
 	bi2, err := s.fork(bi, 13)
 	s.Nil(err)
-	s.completeFork(bi2, true)
 
 	events = s.genRandomEvents([]int64{13}, 4)
 	err = s.appendNewNode(bi2, events, 12)
@@ -561,11 +560,9 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			s.Nil(err)
 			s.Equal((concurrency)*2+1, len(events))
 
-			s.descInProgress(treeID)
 			if idx == 0 {
-				s.completeFork(bi, false)
-			} else {
-				s.completeFork(bi, true)
+				err = s.deleteHistoryBranch(bi)
+				s.Nil(err)
 			}
 
 		}(i)
@@ -597,7 +594,6 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			s.Nil(err)
 			level2Br.Store(idx, bi)
 
-			s.completeFork(bi, true)
 			// append second batch to second level
 			eids := make([]int64, 0)
 			for i := forkNodeID; i <= int64(concurrency)*3+1; i++ {
@@ -737,21 +733,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*workflow.HistoryB
 		ShardID: common.IntPtr(s.ShardInfo.ShardID),
 	})
 	s.Nil(err)
-	s.True(len(resp.ForkingInProgressBranches) == 0)
 	return resp.Branches
-}
-
-// persistence helper
-func (s *HistoryV2PersistenceSuite) descInProgress(treeID string) {
-	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
-		TreeID:  treeID,
-		ShardID: common.IntPtr(s.ShardInfo.ShardID),
-	})
-	s.Nil(err)
-	s.True(len(resp.ForkingInProgressBranches) > 0)
-	forkTime := p.UnixNanoToDBTimestamp(resp.ForkingInProgressBranches[0].ForkTime.UnixNano())
-	s.True(forkTime > defaultVisibilityTimestamp)
-	s.Equal(testForkRunID, resp.ForkingInProgressBranches[0].Info)
 }
 
 // persistence helper
@@ -859,14 +841,4 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 
 	err := backoff.Retry(op, historyTestRetryPolicy, isConditionFail)
 	return bi, err
-}
-
-// persistence helper
-func (s *HistoryV2PersistenceSuite) completeFork(forkBranch []byte, succ bool) {
-	err := s.HistoryV2Mgr.CompleteForkBranch(&p.CompleteForkBranchRequest{
-		BranchToken: forkBranch,
-		Success:     succ,
-		ShardID:     common.IntPtr(s.ShardInfo.ShardID),
-	})
-	s.Nil(err)
 }

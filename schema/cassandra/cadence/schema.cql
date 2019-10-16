@@ -350,7 +350,6 @@ CREATE TABLE history_tree (
   tree_id           uuid,
   branch_id         uuid,
   ancestors         list<frozen<branch_range>>,
-  in_progress       boolean, -- For fork operation to prevent race condition to leak event data when forking branches
   fork_time         timestamp, -- For fork operation to prevent race condition to leak event data when forking branches
   info              text, -- For background cleanup when fork operation cannot finish self cleanup due to crash
   PRIMARY KEY ((tree_id), branch_id )

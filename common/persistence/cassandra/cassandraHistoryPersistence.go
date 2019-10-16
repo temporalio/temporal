@@ -47,14 +47,12 @@ const (
 
 	// below are templates for history_tree table
 	v2templateInsertTree = `INSERT INTO history_tree (` +
-		`tree_id, branch_id, ancestors, in_progress, fork_time, info) ` +
-		`VALUES (?, ?, ?, ?, ?, ?) `
+		`tree_id, branch_id, ancestors, fork_time, info) ` +
+		`VALUES (?, ?, ?, ?, ?) `
 
-	v2templateReadAllBranches = `SELECT branch_id, ancestors, in_progress, fork_time, info FROM history_tree WHERE tree_id = ? `
+	v2templateReadAllBranches = `SELECT branch_id, ancestors, fork_time, info FROM history_tree WHERE tree_id = ? `
 
 	v2templateDeleteBranch = `DELETE FROM history_tree WHERE tree_id = ? AND branch_id = ? `
-
-	v2templateUpdateBranch = `UPDATE history_tree set in_progress = ? WHERE tree_id = ? AND branch_id = ? `
 
 	v2templateScanAllTreeBranches = `SELECT tree_id, branch_id, fork_time, info FROM history_tree `
 )
@@ -146,7 +144,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 		batch := h.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(v2templateInsertTree,
-			branchInfo.TreeID, branchInfo.BranchID, ancs, false, cqlNowTimestamp, request.Info)
+			branchInfo.TreeID, branchInfo.BranchID, ancs, cqlNowTimestamp, request.Info)
 		batch.Query(v2templateUpsertData,
 			branchInfo.TreeID, branchInfo.BranchID, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
 		err = h.session.ExecuteBatch(batch)
@@ -330,46 +328,14 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	}
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 
-	// NOTE: To prevent leaking event data caused by forking, we introduce this in_progress flag.
 	query := h.session.Query(v2templateInsertTree,
-		treeID, request.NewBranchID, ancs, true, cqlNowTimestamp, request.Info)
+		treeID, request.NewBranchID, ancs, cqlNowTimestamp, request.Info)
 
 	err := query.Exec()
 	if err != nil {
 		return nil, convertCommonErrors("ForkHistoryBranch", err)
 	}
 	return resp, nil
-}
-
-// UpdateHistoryBranch update a branch
-func (h *cassandraHistoryV2Persistence) CompleteForkBranch(
-	request *p.InternalCompleteForkBranchRequest,
-) error {
-
-	branch := request.BranchInfo
-	treeID := *branch.TreeID
-	branchID := *branch.BranchID
-
-	var query *gocql.Query
-	if request.Success {
-		query = h.session.Query(v2templateUpdateBranch,
-			false, treeID, branchID)
-		err := query.Exec()
-		if err != nil {
-			return convertCommonErrors("CompleteForkBranch", err)
-		}
-	} else {
-		batch := h.session.NewBatch(gocql.LoggedBatch)
-		batch.Query(v2templateDeleteBranch, treeID, branchID)
-		batch.Query(v2templateRangeDeleteData,
-			treeID, branchID, 1)
-		err := h.session.ExecuteBatch(batch)
-		if err != nil {
-			return convertCommonErrors("CompleteForkBranch", err)
-		}
-	}
-
-	return nil
 }
 
 // DeleteHistoryBranch removes a branch
@@ -392,15 +358,6 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	if err != nil {
 		return err
 	}
-	// We won't delete the branch if there is any branch forking in progress. We will return error.
-	if len(rsp.ForkingInProgressBranches) > 0 {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Some branch is in progress of forking"),
-		}
-	}
-
-	// If there is no branch forking in progress we see here, it means that we are safe to calculate the deleting ranges based on the current result,
-	// because all the forking branches in the future would fail.
 
 	batch := h.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(v2templateDeleteBranch, treeID, branch.BranchID)
@@ -505,7 +462,6 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 	pagingToken := []byte{}
 	branches := make([]*workflow.HistoryBranch, 0)
-	forkingBranches := make([]p.HistoryBranchDetail, 0)
 
 	var iter *gocql.Iter
 	for {
@@ -519,20 +475,10 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 		branchUUID := gocql.UUID{}
 		ancsResult := []map[string]interface{}{}
-		forkingInProgress := false
 		forkTime := time.Time{}
 		info := ""
 
-		for iter.Scan(&branchUUID, &ancsResult, &forkingInProgress, &forkTime, &info) {
-			if forkingInProgress {
-				br := p.HistoryBranchDetail{
-					TreeID:   treeID,
-					BranchID: branchUUID.String(),
-					ForkTime: forkTime,
-					Info:     info,
-				}
-				forkingBranches = append(forkingBranches, br)
-			}
+		for iter.Scan(&branchUUID, &ancsResult, &forkTime, &info) {
 			ancs := h.parseBranchAncestors(ancsResult)
 			br := &workflow.HistoryBranch{
 				TreeID:    &treeID,
@@ -543,7 +489,6 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 			branchUUID = gocql.UUID{}
 			ancsResult = []map[string]interface{}{}
-			forkingInProgress = false
 			forkTime = time.Time{}
 			info = ""
 		}
@@ -560,8 +505,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	}
 
 	return &p.GetHistoryTreeResponse{
-		Branches:                  branches,
-		ForkingInProgressBranches: forkingBranches,
+		Branches: branches,
 	}, nil
 }
 

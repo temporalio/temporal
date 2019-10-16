@@ -31,7 +31,6 @@ import (
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -416,19 +415,7 @@ func (r *workflowResetterImpl) generateBranchToken(
 		return nil, err
 	}
 
-	resetBranchToken := resp.NewBranchToken
-
-	if errComplete := r.historyV2Mgr.CompleteForkBranch(&persistence.CompleteForkBranchRequest{
-		BranchToken: resetBranchToken,
-		Success:     true, // past lessons learnt from Cassandra & gocql tells that we cannot possibly find all timeout errors
-		ShardID:     common.IntPtr(shardID),
-	}); errComplete != nil {
-		r.logger.WithTags(
-			tag.Error(errComplete),
-		).Error("workflowResetter unable to complete creation of new branch.")
-	}
-
-	return resetBranchToken, nil
+	return resp.NewBranchToken, nil
 }
 
 func (r *workflowResetterImpl) terminateWorkflow(

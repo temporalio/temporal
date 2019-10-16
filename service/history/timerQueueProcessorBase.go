@@ -599,15 +599,10 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(
 		if err != nil {
 			return err
 		}
-
-		logger := t.logger.WithTags(tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.WorkflowDomainID(task.DomainID),
-			tag.ShardID(t.shard.GetShardID()),
-			tag.TaskID(task.GetTaskID()),
-			tag.FailoverVersion(task.GetVersion()),
-			tag.TaskType(task.GetTaskType()))
-		return persistence.DeleteWorkflowExecutionHistoryV2(t.historyService.historyV2Mgr, branchToken, common.IntPtr(t.shard.GetShardID()), logger)
+		return t.historyService.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			BranchToken: branchToken,
+			ShardID:     common.IntPtr(t.shard.GetShardID()),
+		})
 
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
