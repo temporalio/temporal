@@ -112,13 +112,8 @@ type (
 		CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
-		DeleteActivity(int64) error
 		DeleteDecision()
-		DeletePendingChildExecution(int64)
-		DeletePendingRequestCancel(int64)
 		DeleteSignalRequested(requestID string)
-		DeletePendingSignal(int64)
-		DeleteUserTimer(string)
 		FailDecision(bool)
 		FlushBufferedEvents() error
 		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
@@ -218,7 +213,7 @@ type (
 		UpdateDecision(*decisionInfo)
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)
-		UpdateUserTimer(string, *persistence.TimerInfo)
+		UpdateUserTimer(string, *persistence.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
 

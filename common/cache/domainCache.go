@@ -56,7 +56,9 @@ const (
 	domainCacheMaxSize     = 64 * 1024
 	domainCacheTTL         = 0 // 0 means infinity
 	// DomainCacheRefreshInterval domain cache refresh interval
-	DomainCacheRefreshInterval             = 10 * time.Second
+	DomainCacheRefreshInterval = 10 * time.Second
+	// DomainCacheRefreshFailureRetryInterval is the wait time
+	// if refreshment encounters error
 	DomainCacheRefreshFailureRetryInterval = 1 * time.Second
 	domainCacheRefreshPageSize             = 200
 

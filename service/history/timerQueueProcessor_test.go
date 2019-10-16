@@ -200,8 +200,10 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 		timerInfos = append(timerInfos, ti)
 	}
 
-	if t := tBuilder.GetUserTimerTaskIfNeeded(builder); t != nil {
-		timerTasks = append(timerTasks, t)
+	timer, err := tBuilder.GetUserTimerTaskIfNeeded(builder)
+	s.NoError(err)
+	if timer != nil {
+		timerTasks = append(timerTasks, timer)
 	}
 
 	s.ShardContext.Lock()
@@ -250,9 +252,10 @@ func (s *timerQueueProcessorSuite) addUserTimer(domainID string, we workflow.Wor
 	_, _, err = builder.AddTimerStartedEvent(common.EmptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr(timerID), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 	s.Nil(err)
-	t := tb.GetUserTimerTaskIfNeeded(builder)
-	s.NotNil(t)
-	timerTasks := []persistence.Task{t}
+	timer, err := tb.GetUserTimerTaskIfNeeded(builder)
+	s.NoError(err)
+	s.NotNil(timer)
+	timerTasks := []persistence.Task{timer}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	return timerTasks
@@ -279,7 +282,8 @@ func (s *timerQueueProcessorSuite) addHeartBeatTimer(domainID string,
 	s.Nil(err)
 
 	// create a heart beat timeout
-	tt := tb.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tb.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
 
@@ -457,7 +461,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 	s.NotNil(activityScheduledEvent)
 
 	tBuilder := newTimerBuilder(&mockTimeSource{currTime: time.Now()})
-	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
 
@@ -505,7 +510,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 
 	// create a schedule to start timeout
 	tBuilder := newTimerBuilder(&mockTimeSource{currTime: time.Now()})
-	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
 
@@ -551,7 +557,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 	s.NotNil(activityScheduledEvent)
 
 	tBuilder := newTimerBuilder(&mockTimeSource{currTime: time.Now()})
-	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	s.Equal(workflow.TimeoutTypeScheduleToStart, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
 	timerTasks := []persistence.Task{tt}
@@ -599,7 +606,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 
 	// create a start to close timeout
 	tBuilder := newTimerBuilder(&mockTimeSource{currTime: time.Now()})
-	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
 
@@ -696,7 +704,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 
 	// create a schedule to close timeout
 	tBuilder := newTimerBuilder(&mockTimeSource{currTime: time.Now()})
-	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
 
@@ -744,7 +753,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 
 	// create a schedule to close timeout
 	tBuilder := newTimerBuilder(&mockTimeSource{currTime: time.Now()})
-	tt := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	tt, err := tBuilder.GetActivityTimerTaskIfNeeded(builder)
+	s.NoError(err)
 	s.NotNil(tt)
 	timerTasks := []persistence.Task{tt}
 
@@ -959,8 +969,9 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers_SameExpiry() {
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid2"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 	s.Nil(err)
 
-	t := tBuilder.GetUserTimerTaskIfNeeded(builder)
-	timerTasks = append(timerTasks, t)
+	timer, err := tBuilder.GetUserTimerTaskIfNeeded(builder)
+	s.NoError(err)
+	timerTasks = append(timerTasks, timer)
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
