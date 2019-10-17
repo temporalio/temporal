@@ -30,45 +30,16 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-var (
-	standbyTaskPostActionNoOp = func() error { return nil }
-
-	standbyTrensferTaskPostActionTaskDiscarded = func(nextEventID *int64, transferTask *persistence.TransferTaskInfo, logger log.Logger) error {
-		if nextEventID == nil {
-			return nil
-		}
-		logger.Error("Discarding standby transfer task due to task being pending for too long.",
-			tag.WorkflowID(transferTask.WorkflowID),
-			tag.WorkflowRunID(transferTask.RunID),
-			tag.WorkflowDomainID(transferTask.DomainID),
-			tag.TaskID(transferTask.TaskID),
-			tag.TaskType(transferTask.TaskType),
-			tag.FailoverVersion(transferTask.GetVersion()),
-			tag.Timestamp(transferTask.VisibilityTimestamp),
-			tag.WorkflowEventID(transferTask.ScheduleID))
-		return ErrTaskDiscarded
-	}
-
-	standbyTimerTaskPostActionTaskDiscarded = func(nextEventID *int64, timerTask *persistence.TimerTaskInfo, logger log.Logger) error {
-		if nextEventID == nil {
-			return nil
-		}
-		logger.Error("Discarding standby timer task due to task being pending for too long.",
-			tag.WorkflowID(timerTask.WorkflowID),
-			tag.WorkflowRunID(timerTask.RunID),
-			tag.WorkflowDomainID(timerTask.DomainID),
-			tag.TaskID(timerTask.TaskID),
-			tag.TaskType(timerTask.TaskType),
-			tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
-			tag.FailoverVersion(timerTask.GetVersion()),
-			tag.Timestamp(timerTask.VisibilityTimestamp),
-			tag.WorkflowEventID(timerTask.EventID))
-		return ErrTaskDiscarded
-	}
-)
-
 // verifyTaskVersion, will return true if failover version check is successful
-func verifyTaskVersion(shard ShardContext, logger log.Logger, domainID string, version int64, taskVersion int64, task interface{}) (bool, error) {
+func verifyTaskVersion(
+	shard ShardContext,
+	logger log.Logger,
+	domainID string,
+	version int64,
+	taskVersion int64,
+	task interface{},
+) (bool, error) {
+
 	if !shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {
 		return true, nil
 	}
@@ -92,7 +63,13 @@ func verifyTaskVersion(shard ShardContext, logger log.Logger, domainID string, v
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTransferTask(context workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger log.Logger) (mutableState, error) {
+func loadMutableStateForTransferTask(
+	context workflowExecutionContext,
+	transferTask *persistence.TransferTaskInfo,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) (mutableState, error) {
+
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
@@ -131,7 +108,13 @@ func loadMutableStateForTransferTask(context workflowExecutionContext, transferT
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger log.Logger) (mutableState, error) {
+func loadMutableStateForTimerTask(
+	context workflowExecutionContext,
+	timerTask *persistence.TimerTaskInfo,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) (mutableState, error) {
+
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
@@ -166,4 +149,36 @@ func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *p
 		}
 	}
 	return msBuilder, nil
+}
+
+func initializeLoggerForTask(
+	shardID int,
+	task queueTaskInfo,
+	logger log.Logger,
+) log.Logger {
+
+	taskLogger := logger.WithTags(
+		tag.ShardID(shardID),
+		tag.TaskID(task.GetTaskID()),
+		tag.FailoverVersion(task.GetVersion()),
+		tag.TaskType(task.GetTaskType()),
+		tag.WorkflowDomainID(task.GetDomainID()),
+		tag.WorkflowID(task.GetWorkflowID()),
+		tag.WorkflowRunID(task.GetRunID()),
+	)
+
+	switch task := task.(type) {
+	case *persistence.TimerTaskInfo:
+		taskLogger = taskLogger.WithTags(
+			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+		)
+	case *persistence.TransferTaskInfo:
+		// noop
+	case *persistence.ReplicationTaskInfo:
+		// noop
+	default:
+		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
+	}
+
+	return taskLogger
 }

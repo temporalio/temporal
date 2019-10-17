@@ -30,19 +30,19 @@ type MockProcessor struct {
 }
 
 // process is mock implementation for process of Processor
-func (_m *MockProcessor) process(task queueTaskInfo, shouldProcessTask bool) (int, error) {
-	ret := _m.Called(task, shouldProcessTask)
+func (_m *MockProcessor) process(task *taskInfo) (int, error) {
+	ret := _m.Called(task)
 
 	var r0 int
-	if rf, ok := ret.Get(0).(func(queueTaskInfo, bool) int); ok {
-		r0 = rf(task, shouldProcessTask)
+	if rf, ok := ret.Get(0).(func(*taskInfo) int); ok {
+		r0 = rf(task)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(queueTaskInfo, bool) error); ok {
-		r1 = rf(task, shouldProcessTask)
+	if rf, ok := ret.Get(1).(func(*taskInfo) error); ok {
+		r1 = rf(task)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -51,20 +51,20 @@ func (_m *MockProcessor) process(task queueTaskInfo, shouldProcessTask bool) (in
 }
 
 // complete is mock implementation for complete of Processor
-func (_m *MockProcessor) complete(timerTask queueTaskInfo) {
-	_m.Called(timerTask)
+func (_m *MockProcessor) complete(task *taskInfo) {
+	_m.Called(task)
 }
 
 // getTaskFilter is mock implementation for process of Processor
-func (_m *MockProcessor) getTaskFilter() queueTaskFilter {
+func (_m *MockProcessor) getTaskFilter() taskFilter {
 	ret := _m.Called()
 
-	var r0 queueTaskFilter
-	if rf, ok := ret.Get(0).(func() queueTaskFilter); ok {
+	var r0 taskFilter
+	if rf, ok := ret.Get(0).(func() taskFilter); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(queueTaskFilter)
+			r0 = ret.Get(0).(taskFilter)
 		}
 	}
 

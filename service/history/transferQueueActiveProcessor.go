@@ -48,7 +48,7 @@ type (
 		options                 *QueueProcessorOptions
 		historyClient           history.Client
 		cache                   *historyCache
-		transferTaskFilter      queueTaskFilter
+		transferTaskFilter      taskFilter
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		parentClosePolicyClient parentclosepolicy.Client
@@ -83,8 +83,8 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(qTask queueTaskInfo) (bool, error) {
-		task, ok := qTask.(*persistence.TransferTaskInfo)
+	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
+		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -173,8 +173,8 @@ func newTransferQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
-	transferTaskFilter := func(qTask queueTaskInfo) (bool, error) {
-		task, ok := qTask.(*persistence.TransferTaskInfo)
+	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
+		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -223,7 +223,7 @@ func newTransferQueueFailoverProcessor(
 	return updateTransferAckLevel, processor
 }
 
-func (t *transferQueueActiveProcessorImpl) getTaskFilter() queueTaskFilter {
+func (t *transferQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.transferTaskFilter
 }
 
@@ -231,16 +231,18 @@ func (t *transferQueueActiveProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
 }
 
-func (t *transferQueueActiveProcessorImpl) complete(qTask queueTaskInfo) {
-	t.queueProcessorBase.complete(qTask)
+func (t *transferQueueActiveProcessorImpl) complete(
+	taskInfo *taskInfo,
+) {
+
+	t.queueProcessorBase.complete(taskInfo.task)
 }
 
 func (t *transferQueueActiveProcessorImpl) process(
-	qTask queueTaskInfo,
-	shouldProcessTask bool,
+	taskInfo *taskInfo,
 ) (int, error) {
 
-	task, ok := qTask.(*persistence.TransferTaskInfo)
+	task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
 	if !ok {
 		return metrics.TransferActiveQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -248,55 +250,55 @@ func (t *transferQueueActiveProcessorImpl) process(
 	var err error
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processActivityTask(task)
 		}
 		return metrics.TransferActiveTaskActivityScope, err
 
 	case persistence.TransferTaskTypeDecisionTask:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processDecisionTask(task)
 		}
 		return metrics.TransferActiveTaskDecisionScope, err
 
 	case persistence.TransferTaskTypeCloseExecution:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processCloseExecution(task)
 		}
 		return metrics.TransferActiveTaskCloseExecutionScope, err
 
 	case persistence.TransferTaskTypeCancelExecution:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processCancelExecution(task)
 		}
 		return metrics.TransferActiveTaskCancelExecutionScope, err
 
 	case persistence.TransferTaskTypeSignalExecution:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processSignalExecution(task)
 		}
 		return metrics.TransferActiveTaskSignalExecutionScope, err
 
 	case persistence.TransferTaskTypeStartChildExecution:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processStartChildExecution(task)
 		}
 		return metrics.TransferActiveTaskStartChildExecutionScope, err
 
 	case persistence.TransferTaskTypeRecordWorkflowStarted:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processRecordWorkflowStarted(task)
 		}
 		return metrics.TransferActiveTaskRecordWorkflowStartedScope, err
 
 	case persistence.TransferTaskTypeResetWorkflow:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processResetWorkflow(task)
 		}
 		return metrics.TransferActiveTaskResetWorkflowScope, err
 
 	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processUpsertWorkflowSearchAttributes(task)
 		}
 		return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope, err

@@ -121,9 +121,9 @@ type (
 	}
 
 	taskExecutor interface {
-		process(task queueTaskInfo, shouldProcessTask bool) (int, error)
-		complete(task queueTaskInfo)
-		getTaskFilter() queueTaskFilter
+		process(taskInfo *taskInfo) (int, error)
+		complete(taskInfo *taskInfo)
+		getTaskFilter() taskFilter
 	}
 
 	processor interface {

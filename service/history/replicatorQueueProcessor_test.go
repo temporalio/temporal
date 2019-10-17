@@ -158,7 +158,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		nil,
 	), nil)
 
-	_, err := s.replicatorQueueProcessor.process(task, true)
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
 }
 
@@ -206,7 +206,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		nil,
 	), nil)
 
-	_, err := s.replicatorQueueProcessor.process(task, true)
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
 }
 
@@ -255,7 +255,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		nil,
 	), nil)
 
-	_, err := s.replicatorQueueProcessor.process(task, true)
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
 }
 
@@ -348,7 +348,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(task, true)
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
 }
 
@@ -440,7 +440,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(task, true)
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
 }
 

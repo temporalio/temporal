@@ -42,10 +42,11 @@ const (
 type (
 	timerQueueStandbyProcessorImpl struct {
 		shard                   ShardContext
+		config                  *Config
 		clusterMetadata         cluster.Metadata
 		historyService          *historyEngineImpl
 		cache                   *historyCache
-		timerTaskFilter         queueTaskFilter
+		timerTaskFilter         taskFilter
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		clusterName             string
@@ -73,8 +74,8 @@ func newTimerQueueStandbyProcessor(
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
-	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
-		timer, ok := qTask.(*persistence.TimerTaskInfo)
+	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
+		timer, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -95,6 +96,7 @@ func newTimerQueueStandbyProcessor(
 	)
 	processor := &timerQueueStandbyProcessorImpl{
 		shard:           shard,
+		config:          shard.GetConfig(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyService:  historyService,
 		cache:           historyService.historyCache,
@@ -142,7 +144,7 @@ func (t *timerQueueStandbyProcessorImpl) retryTasks() {
 	t.timerQueueProcessorBase.retryTasks()
 }
 
-func (t *timerQueueStandbyProcessorImpl) getTaskFilter() queueTaskFilter {
+func (t *timerQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
@@ -164,9 +166,9 @@ func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
 }
 
 func (t *timerQueueStandbyProcessorImpl) complete(
-	qTask queueTaskInfo,
+	taskInfo *taskInfo,
 ) {
-	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 	if !ok {
 		return
 	}
@@ -174,38 +176,37 @@ func (t *timerQueueStandbyProcessorImpl) complete(
 }
 
 func (t *timerQueueStandbyProcessorImpl) process(
-	qTask queueTaskInfo,
-	shouldProcessTask bool,
+	taskInfo *taskInfo,
 ) (int, error) {
-	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+
+	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 	if !ok {
 		return metrics.TimerStandbyQueueProcessorScope, errUnexpectedQueueTask
 	}
 
 	var err error
-	lastAttempt := false
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		if shouldProcessTask {
-			err = t.processExpiredUserTimer(timerTask, lastAttempt)
+		if taskInfo.shouldProcessTask {
+			err = t.processExpiredUserTimer(taskInfo)
 		}
 		return metrics.TimerStandbyTaskUserTimerScope, err
 
 	case persistence.TaskTypeActivityTimeout:
-		if shouldProcessTask {
-			err = t.processActivityTimeout(timerTask, lastAttempt)
+		if taskInfo.shouldProcessTask {
+			err = t.processActivityTimeout(taskInfo)
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope, err
 
 	case persistence.TaskTypeDecisionTimeout:
-		if shouldProcessTask {
-			err = t.processDecisionTimeout(timerTask, lastAttempt)
+		if taskInfo.shouldProcessTask {
+			err = t.processDecisionTimeout(taskInfo)
 		}
 		return metrics.TimerStandbyTaskDecisionTimeoutScope, err
 
 	case persistence.TaskTypeWorkflowTimeout:
 		// guarantee the processing of workflow execution history deletion
-		err = t.processWorkflowTimeout(timerTask, lastAttempt)
+		err = t.processWorkflowTimeout(taskInfo)
 		return metrics.TimerStandbyTaskWorkflowTimeoutScope, err
 
 	case persistence.TaskTypeActivityRetryTimer:
@@ -213,8 +214,8 @@ func (t *timerQueueStandbyProcessorImpl) process(
 		return metrics.TimerStandbyTaskActivityRetryTimerScope, err
 
 	case persistence.TaskTypeWorkflowBackoffTimer:
-		if shouldProcessTask {
-			err = t.processWorkflowBackoffTimer(timerTask, lastAttempt)
+		if taskInfo.shouldProcessTask {
+			err = t.processWorkflowBackoffTimer(taskInfo)
 		}
 		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope, err
 
@@ -228,94 +229,57 @@ func (t *timerQueueStandbyProcessorImpl) process(
 }
 
 func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(
-	timerTask *persistence.TimerTaskInfo,
-	lastAttempt bool,
+	taskInfo *taskInfo,
 ) error {
 
-	//TODO: deprecate this field when deprecating 2DC code
-	var nextEventID *int64
-	var lastEventID *int64
-	var lastEventVersion *int64
-	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(
-			timerTask,
-			nextEventID,
-			lastEventID,
-			lastEventVersion,
-			t.processExpiredUserTimer,
-		)
-	}
-	if lastAttempt {
-		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(
-				nextEventID,
-				timerTask,
-				t.logger,
-			)
-		}
-	}
+	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
 
-	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
+		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
 		tBuilder := t.getTimerBuilder()
 
 	ExpireUserTimers:
 		for _, td := range tBuilder.GetUserTimers(msBuilder) {
 			hasTimer, _ := tBuilder.GetUserTimer(td.TimerID)
 			if !hasTimer {
-				t.logger.Debug(fmt.Sprintf("Failed to find in memory user timer: %s", td.TimerID))
-				return fmt.Errorf("Failed to find in memory user timer: %s", td.TimerID)
+				errString := fmt.Sprintf("Failed to find in memory user timer: %v", td.TimerID)
+				t.logger.Error(errString)
+				return nil, &workflow.InternalServiceError{Message: errString}
 			}
 
 			if isExpired := tBuilder.IsTimerExpired(td, timerTask.VisibilityTimestamp); isExpired {
-				// active cluster will add an timer fired event and schedule a decision if necessary
-				// standby cluster should just call ack manager to retry this task
-				// since we are stilling waiting for the fired event to be replicated
-				//
-				// we do not need to notify new timer to base, since if there is no new event being replicated
-				// checking again if the timer can be completed is meaningless
-
-				if t.discardTask(timerTask) {
-
-					if msBuilder.GetVersionHistories() != nil {
-						currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
-						if err != nil {
-							return err
-						}
-						lastItem, err := currentBranch.GetLastItem()
-						if err != nil {
-							return err
-						}
-						// set last event ID and version and use in post action func
-						lastEventID = common.Int64Ptr(lastItem.GetEventID())
-						lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
-					} else {
-						// returning nil and set next event ID
-						// the post action function below shall take over
-						nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
-					}
-					return nil
-				}
-				return ErrTaskRetry
+				return getHistoryResendInfo(msBuilder)
 			}
 			// since the user timer are already sorted, so if there is one timer which will not expired
 			// all user timer after this timer will not expired
 			break ExpireUserTimers
 		}
 		// if there is no user timer expired, then we are good
-		return nil
-	}, postProcessingFn)
+		return nil, nil
+	}
+
+	return t.processTimer(
+		taskInfo,
+		actionFn,
+		getStandbyPostActionFn(
+			taskInfo,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
-	timerTask *persistence.TimerTaskInfo,
-	lastAttempt bool,
+	taskInfo *taskInfo,
 ) error {
 
 	// activity heartbeat timer task is a special snowflake.
 	// normal activity timer task on the passive side will be generated by events related to activity in history replicator,
 	// and the standby timer processor will only need to verify whether the timer task can be safely throw away.
 	//
-	// activity hearbeat timer task cannot be handled in the way mentioned above.
+	// activity heartbeat timer task cannot be handled in the way mentioned above.
 	// the reason is, there is no event driving the creation of new activity heartbeat timer.
 	// although there will be an task syncing activity from remote, the task is not an event,
 	// and cannot attempt to recreate a new activity timer task.
@@ -323,65 +287,23 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
 
-	//TODO: deprecate this field when deprecating 2DC code
-	var nextEventID *int64
-	var lastEventID *int64
-	var lastEventVersion *int64
-	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(
-			timerTask,
-			nextEventID,
-			lastEventID,
-			lastEventVersion,
-			t.processActivityTimeout,
-		)
-	}
-	if lastAttempt {
-		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(
-				nextEventID,
-				timerTask,
-				t.logger,
-			)
-		}
-	}
+	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
 
-	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
+		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
 		tBuilder := t.getTimerBuilder()
 
 	ExpireActivityTimers:
 		for _, td := range tBuilder.GetActivityTimers(msBuilder) {
 			_, ok := msBuilder.GetActivityInfo(td.ActivityID)
 			if !ok {
-				//  We might have time out this activity already.
-				continue ExpireActivityTimers
+				errString := fmt.Sprintf("Failed to find in memory activity timer: %v", td.ActivityID)
+				t.logger.Error(errString)
+				return nil, &workflow.InternalServiceError{Message: errString}
 			}
 
 			if isExpired := tBuilder.IsTimerExpired(td, timerTask.VisibilityTimestamp); isExpired {
-				if t.discardTask(timerTask) {
-
-					if msBuilder.GetVersionHistories() != nil {
-						currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
-						if err != nil {
-							return err
-						}
-						lastItem, err := currentBranch.GetLastItem()
-						if err != nil {
-							return err
-						}
-						// set last event ID and version and use in post action func
-						lastEventID = common.Int64Ptr(lastItem.GetEventID())
-						lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
-					} else {
-						// returning nil and set next event ID
-						// the post action function below shall take over
-						nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
-					}
-					return nil
-				}
-				return ErrTaskRetry
+				return getHistoryResendInfo(msBuilder)
 			}
-
 			// since the activity timer are already sorted, so if there is one timer which will not expired
 			// all activity timer after this timer will not expired
 			break ExpireActivityTimers
@@ -395,20 +317,21 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		doUpdate := false
 		lastWriteVersion, err := msBuilder.GetLastWriteVersion()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
 		if activityInfo, ok := msBuilder.GetActivityInfo(timerTask.EventID); isHeartBeatTask && ok {
 			doUpdate = true
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
 			if err := msBuilder.UpdateActivity(activityInfo); err != nil {
-				return err
+				return nil, err
 			}
 		}
-		newTimerTasks := []persistence.Task{}
+
+		var newTimerTasks []persistence.Task
 		newTimerTask, err := t.getTimerBuilder().GetActivityTimerTaskIfNeeded(msBuilder)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if newTimerTask != nil {
 			doUpdate = true
@@ -416,7 +339,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		}
 
 		if !doUpdate {
-			return nil
+			return nil, nil
 		}
 
 		now := t.getStandbyClusterTime()
@@ -424,7 +347,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
 		if err := msBuilder.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
-			return err
+			return nil, err
 		}
 
 		msBuilder.AddTimerTasks(newTimerTasks...)
@@ -432,123 +355,75 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		if err == nil {
 			t.notifyNewTimers(newTimerTasks)
 		}
-		return err
-	}, postProcessingFn)
+		return nil, err
+	}
+
+	return t.processTimer(
+		taskInfo,
+		actionFn,
+		getStandbyPostActionFn(
+			taskInfo,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(
-	timerTask *persistence.TimerTaskInfo,
-	lastAttempt bool,
+	taskInfo *taskInfo,
 ) error {
 
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if timerTask.TimeoutType == int(workflow.TimeoutTypeScheduleToStart) {
+	if taskInfo.task.(*persistence.TimerTaskInfo).TimeoutType == int(workflow.TimeoutTypeScheduleToStart) {
 		return nil
 	}
 
-	//TODO: deprecate this field when deprecating 2DC code
-	var nextEventID *int64
-	var lastEventID *int64
-	var lastEventVersion *int64
-	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(
-			timerTask,
-			nextEventID,
-			lastEventID,
-			lastEventVersion,
-			t.processDecisionTimeout,
-		)
-	}
-	if lastAttempt {
-		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(
-				nextEventID,
-				timerTask,
-				t.logger,
-			)
-		}
-	}
+	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
 
-	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
+		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+
 		decision, isPending := msBuilder.GetDecisionInfo(timerTask.EventID)
-
 		if !isPending {
-			return nil
+			return nil, nil
 		}
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, decision.Version, timerTask.Version, timerTask)
-		if err != nil {
-			return err
-		} else if !ok {
-			return nil
+		if err != nil || !ok {
+			return nil, err
 		}
 
-		// active cluster will add an decision timeout event and schedule a decision
-		// standby cluster should just call ack manager to retry this task
-		// since we are stilling waiting for the decision timeout event / decision completion to be replicated
-		//
-		// we do not need to notify new timer to base, since if there is no new event being replicated
-		// checking again if the timer can be completed is meaningless
+		return getHistoryResendInfo(msBuilder)
+	}
 
-		if t.discardTask(timerTask) {
-			// returning nil and set next event ID
-			// the post action function below shall take over
-			nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
-			if msBuilder.GetVersionHistories() != nil {
-				currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
-				if err != nil {
-					return err
-				}
-				lastItem, err := currentBranch.GetLastItem()
-				if err != nil {
-					return err
-				}
-				// set last event ID and version and use in post action func
-				lastEventID = common.Int64Ptr(lastItem.GetEventID())
-				lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
-			}
-			return nil
-		}
-		return ErrTaskRetry
-	}, postProcessingFn)
+	return t.processTimer(
+		taskInfo,
+		actionFn,
+		getStandbyPostActionFn(
+			taskInfo,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(
-	timerTask *persistence.TimerTaskInfo,
-	lastAttempt bool,
+	taskInfo *taskInfo,
 ) error {
 
-	//TODO: deprecate this field when deprecating 2DC code
-	var nextEventID *int64
-	var lastEventID *int64
-	var lastEventVersion *int64
-	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(
-			timerTask,
-			nextEventID,
-			lastEventID,
-			lastEventVersion,
-			t.processWorkflowBackoffTimer,
-		)
-	}
-	if lastAttempt {
-		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(
-				nextEventID,
-				timerTask,
-				t.logger,
-			)
-		}
-	}
-
-	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
+	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
 
 		if msBuilder.HasProcessedOrPendingDecision() {
 			// if there is one decision already been processed
 			// or has pending decision, meaning workflow has already running
-			return nil
+			return nil, nil
 		}
 
 		// Note: do not need to verify task version here
@@ -559,100 +434,60 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(
 
 		// active cluster will add first decision task after backoff timeout.
 		// standby cluster should just call ack manager to retry this task
-		// since we are stilling waiting for the first DecisionSchedueldEvent to be replicated from active side.
-		//
-		// we do not need to notity new timer to base, since if there is no new event being replicated
-		// checking again if the timer can be completed is meaningless
+		// since we are stilling waiting for the first DecisionScheduledEvent to be replicated from active side.
 
-		if t.discardTask(timerTask) {
-			if msBuilder.GetVersionHistories() != nil {
-				currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
-				if err != nil {
-					return err
-				}
-				lastItem, err := currentBranch.GetLastItem()
-				if err != nil {
-					return err
-				}
-				// set last event ID and version and use in post action func
-				lastEventID = common.Int64Ptr(lastItem.GetEventID())
-				lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
-			} else {
-				// returning nil and set next event ID
-				// the post action function below shall take over
-				nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
-			}
-			return nil
-		}
-		return ErrTaskRetry
-	}, postProcessingFn)
+		return getHistoryResendInfo(msBuilder)
+	}
+
+	return t.processTimer(
+		taskInfo,
+		actionFn,
+		getStandbyPostActionFn(
+			taskInfo,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
-	timerTask *persistence.TimerTaskInfo,
-	lastAttempt bool,
+	taskInfo *taskInfo,
 ) error {
 
-	//TODO: deprecate this field when deprecating 2DC code
-	var nextEventID *int64
-	var lastEventID *int64
-	var lastEventVersion *int64
-	postProcessingFn := func() error {
-		return t.fetchHistoryAndVerifyOnce(
-			timerTask,
-			nextEventID,
-			lastEventID,
-			lastEventVersion,
-			t.processWorkflowTimeout,
-		)
-	}
-	if lastAttempt {
-		postProcessingFn = func() error {
-			return standbyTimerTaskPostActionTaskDiscarded(
-				nextEventID,
-				timerTask,
-				t.logger,
-			)
-		}
-	}
+	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
 
-	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
-		// we do not need to notity new timer to base, since if there is no new event being replicated
+		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+
+		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
 
 		startVersion, err := msBuilder.GetStartVersion()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, startVersion, timerTask.Version, timerTask)
-		if err != nil {
-			return err
-		} else if !ok {
-			return nil
+		if err != nil || !ok {
+			return nil, err
 		}
 
-		if t.discardTask(timerTask) {
-			if msBuilder.GetVersionHistories() != nil {
-				currentBranch, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
-				if err != nil {
-					return err
-				}
-				lastItem, err := currentBranch.GetLastItem()
-				if err != nil {
-					return err
-				}
-				// set last event ID and version and use in post action func
-				lastEventID = common.Int64Ptr(lastItem.GetEventID())
-				lastEventVersion = common.Int64Ptr(lastItem.GetVersion())
-			} else {
-				// returning nil and set next event ID
-				// the post action function below shall take over
-				nextEventID = common.Int64Ptr(msBuilder.GetNextEventID())
-			}
-			return nil
-		}
-		return ErrTaskRetry
-	}, postProcessingFn)
+		return getHistoryResendInfo(msBuilder)
+	}
+
+	return t.processTimer(
+		taskInfo,
+		actionFn,
+		getStandbyPostActionFn(
+			taskInfo,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *timerQueueStandbyProcessorImpl) getStandbyClusterTime() time.Time {
@@ -669,11 +504,12 @@ func (t *timerQueueStandbyProcessorImpl) getTimerBuilder() *timerBuilder {
 }
 
 func (t *timerQueueStandbyProcessorImpl) processTimer(
-	timerTask *persistence.TimerTaskInfo,
-	action func(workflowExecutionContext, mutableState) error,
-	postAction func() error,
+	taskInfo *taskInfo,
+	actionFn standbyActionFn,
+	postActionFn standbyPostActionFn,
 ) (retError error) {
 
+	timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask),
 	)
@@ -689,10 +525,8 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(
 	}()
 
 	msBuilder, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
-	if err != nil {
+	if err != nil || msBuilder == nil {
 		return err
-	} else if msBuilder == nil {
-		return nil
 	}
 
 	if !msBuilder.IsWorkflowExecutionRunning() {
@@ -700,89 +534,71 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(
 		return nil
 	}
 
-	err = action(context, msBuilder)
+	historyResendInfo, err := actionFn(context, msBuilder)
 	if err != nil {
 		return err
 	}
 
 	release(nil)
-	err = postAction()
-	return err
-}
-
-func (t *timerQueueStandbyProcessorImpl) fetchHistoryAndVerifyOnce(
-	timerTask *persistence.TimerTaskInfo,
-	nextEventID *int64,
-	lastEventID *int64,
-	lastEventVersion *int64,
-	verifyFn func(*persistence.TimerTaskInfo, bool) error,
-) error {
-
-	if nextEventID == nil {
-		return nil
-	}
-	err := t.fetchHistoryFromRemote(timerTask, *nextEventID, lastEventID, lastEventVersion)
-	if err != nil {
-		// fail to fetch events from remote, just discard the task
-		return ErrTaskDiscarded
-	}
-	lastAttempt := true
-	err = verifyFn(timerTask, lastAttempt)
-	if err != nil {
-		// task still pending, just discard the task
-		return ErrTaskDiscarded
-	}
-	return nil
+	return postActionFn(taskInfo, historyResendInfo, taskInfo.logger)
 }
 
 func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
-	timerTask *persistence.TimerTaskInfo,
-	nextEventID int64,
-	lastEventID *int64,
-	lastEventVersion *int64,
+	taskInfo *taskInfo,
+	postActionInfo interface{},
+	log log.Logger,
 ) error {
+
+	if postActionInfo == nil {
+		return nil
+	}
+
+	timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientLatency)
 	defer stopwatch.Stop()
 
 	var err error
-	if lastEventID != nil && lastEventVersion != nil {
+	if resendInfo.lastEventID != nil && resendInfo.lastEventVersion != nil {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 			timerTask.DomainID,
 			timerTask.WorkflowID,
 			timerTask.RunID,
-			lastEventID,
-			lastEventVersion,
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
 			nil,
 			nil,
+		)
+	} else if resendInfo.nextEventID != nil {
+		err = t.historyRereplicator.SendMultiWorkflowHistory(
+			timerTask.DomainID,
+			timerTask.WorkflowID,
+			timerTask.RunID,
+			*resendInfo.nextEventID,
+			timerTask.RunID,
+			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
-		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			timerTask.DomainID, timerTask.WorkflowID,
-			timerTask.RunID, nextEventID,
-			timerTask.RunID, common.EndEventID, // use common.EndEventID since we do not know where is the end
-		)
+		err = &workflow.InternalServiceError{
+			Message: "timerQueueStandbyProcessor encounter empty historyResendInfo",
+		}
 	}
 
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
+			tag.ShardID(t.shard.GetShardID()),
+			tag.WorkflowDomainID(timerTask.DomainID),
 			tag.WorkflowID(timerTask.WorkflowID),
 			tag.WorkflowRunID(timerTask.RunID),
-			tag.WorkflowDomainID(timerTask.DomainID),
-			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNextEventID(nextEventID),
 			tag.ClusterName(t.clusterName))
 	}
-	return err
+
+	// return error so task processing logic will retry
+	return ErrTaskRetry
 }
 
-func (t *timerQueueStandbyProcessorImpl) discardTask(
-	timerTask *persistence.TimerTaskInfo,
-) bool {
-
-	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
-	// so discard will be true if task is delayed by 4*t.shard.GetConfig().StandbyClusterDelay()
-	now := t.shard.GetCurrentTime(t.clusterName)
-	return now.Sub(timerTask.GetVisibilityTimestamp()) > 3*t.shard.GetConfig().StandbyClusterDelay()
+func (t *timerQueueStandbyProcessorImpl) getCurrentTime() time.Time {
+	return t.shard.GetCurrentTime(t.clusterName)
 }

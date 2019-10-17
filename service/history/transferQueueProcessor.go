@@ -42,7 +42,7 @@ var (
 )
 
 type (
-	queueTaskFilter func(qTask queueTaskInfo) (bool, error)
+	taskFilter func(task *taskInfo) (bool, error)
 
 	transferQueueProcessorImpl struct {
 		isGlobalDomainEnabled bool

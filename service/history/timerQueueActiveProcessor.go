@@ -41,7 +41,7 @@ type (
 		shard                   ShardContext
 		historyService          *historyEngineImpl
 		cache                   *historyCache
-		timerTaskFilter         queueTaskFilter
+		timerTaskFilter         taskFilter
 		now                     timeNow
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -68,8 +68,8 @@ func newTimerQueueActiveProcessor(
 		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
-	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
-		timer, ok := qTask.(*persistence.TimerTaskInfo)
+	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
+		timer, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -154,8 +154,8 @@ func newTimerQueueFailoverProcessor(
 		tag.WorkflowDomainIDs(domainIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
-	timerTaskFilter := func(qTask queueTaskInfo) (bool, error) {
-		timer, ok := qTask.(*persistence.TimerTaskInfo)
+	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
+		timer, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -211,7 +211,7 @@ func (t *timerQueueActiveProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
 }
 
-func (t *timerQueueActiveProcessorImpl) getTaskFilter() queueTaskFilter {
+func (t *timerQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
@@ -232,9 +232,9 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
 }
 
 func (t *timerQueueActiveProcessorImpl) complete(
-	qTask queueTaskInfo,
+	taskInfo *taskInfo,
 ) {
-	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 	if !ok {
 		return
 	}
@@ -242,10 +242,10 @@ func (t *timerQueueActiveProcessorImpl) complete(
 }
 
 func (t *timerQueueActiveProcessorImpl) process(
-	qTask queueTaskInfo,
-	shouldProcessTask bool,
+	taskInfo *taskInfo,
 ) (int, error) {
-	timerTask, ok := qTask.(*persistence.TimerTaskInfo)
+
+	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
 	if !ok {
 		return metrics.TimerActiveQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -253,43 +253,43 @@ func (t *timerQueueActiveProcessorImpl) process(
 	var err error
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processExpiredUserTimer(timerTask)
 		}
 		return metrics.TimerActiveTaskUserTimerScope, err
 
 	case persistence.TaskTypeActivityTimeout:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processActivityTimeout(timerTask)
 		}
 		return metrics.TimerActiveTaskActivityTimeoutScope, err
 
 	case persistence.TaskTypeDecisionTimeout:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processDecisionTimeout(timerTask)
 		}
 		return metrics.TimerActiveTaskDecisionTimeoutScope, err
 
 	case persistence.TaskTypeWorkflowTimeout:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processWorkflowTimeout(timerTask)
 		}
 		return metrics.TimerActiveTaskWorkflowTimeoutScope, err
 
 	case persistence.TaskTypeActivityRetryTimer:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processActivityRetryTimer(timerTask)
 		}
 		return metrics.TimerActiveTaskActivityRetryTimerScope, err
 
 	case persistence.TaskTypeWorkflowBackoffTimer:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.processWorkflowBackoffTimer(timerTask)
 		}
 		return metrics.TimerActiveTaskWorkflowBackoffTimerScope, err
 
 	case persistence.TaskTypeDeleteHistoryEvent:
-		if shouldProcessTask {
+		if taskInfo.shouldProcessTask {
 			err = t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 		}
 		return metrics.TimerActiveTaskDeleteHistoryEventScope, err

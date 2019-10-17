@@ -227,10 +227,11 @@ func (p *queueProcessorBase) processBatch() {
 
 	for _, task := range tasks {
 		if shutdown := p.taskProcessor.addTask(
-			&taskInfo{
-				processor: p.processor,
-				task:      task,
-			},
+			newTaskInfo(
+				p.processor,
+				task,
+				initializeLoggerForTask(p.shard.GetShardID(), task, p.logger),
+			),
 		); shutdown {
 			return
 		}

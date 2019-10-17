@@ -132,6 +132,8 @@ var keys = map[Key]string{
 	EventsCacheTTL:                                        "history.eventsCacheTTL",
 	AcquireShardInterval:                                  "history.acquireShardInterval",
 	StandbyClusterDelay:                                   "history.standbyClusterDelay",
+	StandbyTaskMissingEventsResendDelay:                   "history.standbyTaskMissingEventsResendDelay",
+	StandbyTaskMissingEventsDiscardDelay:                  "history.standbyTaskMissingEventsDiscardDelay",
 	TimerTaskBatchSize:                                    "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                  "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                                "history.timerTaskMaxRetryCount",
@@ -386,8 +388,14 @@ const (
 	EventsCacheTTL
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval
-	// StandbyClusterDelay is the atrificial delay added to standby cluster's view of active cluster's time
+	// StandbyClusterDelay is the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay
+	// StandbyTaskMissingEventsResendDelay is the amount of time standby cluster's will wait (if events are missing)
+	// before calling remote for missing events
+	StandbyTaskMissingEventsResendDelay
+	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
+	// before discarding the task
+	StandbyTaskMissingEventsDiscardDelay
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
 	// TimerTaskWorkerCount is number of task workers for timer processor

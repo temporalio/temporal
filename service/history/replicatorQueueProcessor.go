@@ -42,7 +42,7 @@ type (
 		currentClusterNamer   string
 		shard                 ShardContext
 		historyCache          *historyCache
-		replicationTaskFilter queueTaskFilter
+		replicationTaskFilter taskFilter
 		executionMgr          persistence.ExecutionManager
 		historyV2Mgr          persistence.HistoryManager
 		replicator            messaging.Producer
@@ -91,7 +91,7 @@ func newReplicatorQueueProcessor(
 
 	logger = logger.WithTags(tag.ComponentReplicatorQueue)
 
-	replicationTaskFilter := func(qTask queueTaskInfo) (bool, error) {
+	replicationTaskFilter := func(taskInfo *taskInfo) (bool, error) {
 		return true, nil
 	}
 
@@ -122,16 +122,21 @@ func newReplicatorQueueProcessor(
 	return processor
 }
 
-func (p *replicatorQueueProcessorImpl) getTaskFilter() queueTaskFilter {
+func (p *replicatorQueueProcessorImpl) getTaskFilter() taskFilter {
 	return p.replicationTaskFilter
 }
 
-func (p *replicatorQueueProcessorImpl) complete(qTask queueTaskInfo) {
-	p.queueProcessorBase.complete(qTask)
+func (p *replicatorQueueProcessorImpl) complete(
+	taskInfo *taskInfo,
+) {
+	p.queueProcessorBase.complete(taskInfo.task)
 }
 
-func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo, shouldProcessTask bool) (int, error) {
-	task, ok := qTask.(*persistence.ReplicationTaskInfo)
+func (p *replicatorQueueProcessorImpl) process(
+	taskInfo *taskInfo,
+) (int, error) {
+
+	task, ok := taskInfo.task.(*persistence.ReplicationTaskInfo)
 	if !ok {
 		return metrics.ReplicatorQueueProcessorScope, errUnexpectedQueueTask
 	}

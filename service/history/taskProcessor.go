@@ -21,7 +21,6 @@
 package history
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -45,6 +44,14 @@ type (
 	taskInfo struct {
 		processor taskExecutor
 		task      queueTaskInfo
+
+		attempt   int
+		startTime time.Time
+		logger    log.Logger
+
+		// used by 2DC task life cycle
+		// TODO remove when NDC task life cycle is implemented
+		shouldProcessTask bool
 	}
 
 	taskProcessor struct {
@@ -66,6 +73,21 @@ type (
 		numOfWorker int
 	}
 )
+
+func newTaskInfo(
+	processor taskExecutor,
+	task queueTaskInfo,
+	logger log.Logger,
+) *taskInfo {
+	return &taskInfo{
+		processor:         processor,
+		task:              task,
+		attempt:           0,
+		startTime:         time.Now(), // used for metrics
+		logger:            logger,
+		shouldProcessTask: true,
+	}
+}
 
 func newTaskProcessor(
 	options taskProcessorOptions,
@@ -161,18 +183,7 @@ func (t *taskProcessor) processTaskAndAck(
 ) {
 
 	var scope int
-	var shouldProcessTask bool
 	var err error
-	startTime := t.timeSource.Now()
-	logger := t.initializeLoggerForTask(task.task)
-	attempt := 0
-	incAttempt := func() {
-		attempt++
-		if attempt >= t.config.TimerTaskMaxRetryCount() {
-			t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-			logger.Error("Critical error processing timer task, retrying.", tag.Error(err), tag.OperationCritical)
-		}
-	}
 
 FilterLoop:
 	for {
@@ -181,18 +192,25 @@ FilterLoop:
 			// this must return without ack
 			return
 		default:
-			shouldProcessTask, err = task.processor.getTaskFilter()(task.task)
+			task.shouldProcessTask, err = task.processor.getTaskFilter()(task)
 			if err == nil {
 				break FilterLoop
 			}
-			incAttempt()
 			time.Sleep(loadDomainEntryForTimerTaskRetryDelay)
 		}
 	}
 
 	op := func() error {
-		scope, err = t.processTaskOnce(notificationChan, task, shouldProcessTask, logger)
-		return t.handleTaskError(scope, startTime, notificationChan, err, logger)
+		scope, err = t.processTaskOnce(notificationChan, task)
+		err := t.handleTaskError(scope, task, notificationChan, err)
+		if err != nil {
+			task.attempt++
+			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
+				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
+				task.logger.Error("Critical error processing timer task, retrying.", tag.Error(err), tag.OperationCritical)
+			}
+		}
+		return err
 	}
 	retryCondition := func(err error) bool {
 		select {
@@ -211,10 +229,9 @@ FilterLoop:
 		default:
 			err = backoff.Retry(op, t.retryPolicy, retryCondition)
 			if err == nil {
-				t.ackTaskOnce(task, scope, shouldProcessTask, startTime, attempt)
+				t.ackTaskOnce(scope, task)
 				return
 			}
-			incAttempt()
 		}
 	}
 }
@@ -222,8 +239,6 @@ FilterLoop:
 func (t *taskProcessor) processTaskOnce(
 	notificationChan <-chan struct{},
 	task *taskInfo,
-	shouldProcessTask bool,
-	logger log.Logger,
 ) (int, error) {
 
 	select {
@@ -232,8 +247,8 @@ func (t *taskProcessor) processTaskOnce(
 	}
 
 	startTime := t.timeSource.Now()
-	scope, err := task.processor.process(task.task, shouldProcessTask)
-	if shouldProcessTask {
+	scope, err := task.processor.process(task)
+	if task.shouldProcessTask {
 		t.metricsClient.IncCounter(scope, metrics.TaskRequests)
 		t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
 	}
@@ -243,10 +258,9 @@ func (t *taskProcessor) processTaskOnce(
 
 func (t *taskProcessor) handleTaskError(
 	scope int,
-	startTime time.Time,
+	task *taskInfo,
 	notificationChan <-chan struct{},
 	err error,
-	logger log.Logger,
 ) error {
 
 	if err == nil {
@@ -273,7 +287,7 @@ func (t *taskProcessor) handleTaskError(
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if t.timeSource.Now().Sub(startTime) > 2*cache.DomainCacheRefreshInterval {
+		if t.timeSource.Now().Sub(task.startTime) > 2*cache.DomainCacheRefreshInterval {
 			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
 			return nil
 		}
@@ -284,61 +298,27 @@ func (t *taskProcessor) handleTaskError(
 	t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 
 	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-		logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
+		task.logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
-	logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	task.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
 }
 
 func (t *taskProcessor) ackTaskOnce(
-	task *taskInfo,
 	scope int,
-	reportMetrics bool,
-	startTime time.Time,
-	attempt int,
+	task *taskInfo,
 ) {
 
-	task.processor.complete(task.task)
-	if reportMetrics {
-		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
-		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime))
+	task.processor.complete(task)
+	if task.shouldProcessTask {
+		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
+		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(task.startTime))
 		t.metricsClient.RecordTimer(
 			scope,
 			metrics.TaskQueueLatency,
 			time.Since(task.task.GetVisibilityTimestamp()),
 		)
 	}
-}
-
-func (t *taskProcessor) initializeLoggerForTask(
-	task queueTaskInfo,
-) log.Logger {
-
-	logger := t.logger.WithTags(
-		tag.ShardID(t.shard.GetShardID()),
-		tag.TaskID(task.GetTaskID()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainID(task.GetDomainID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
-	)
-
-	switch task := task.(type) {
-	case *persistence.TimerTaskInfo:
-		logger = logger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
-		)
-		logger.Debug(fmt.Sprintf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
-
-	case *persistence.TransferTaskInfo:
-		logger.Debug(fmt.Sprintf("Processing transfer task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
-
-	case *persistence.ReplicationTaskInfo:
-		logger.Debug(fmt.Sprintf("Processing replication task: %v, type: %v", task.GetTaskID(), task.GetTaskType()))
-	}
-
-	return logger
 }
